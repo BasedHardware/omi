@@ -9323,9 +9323,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lainnya';
-  }
+  String get quoteShowSources => 'Tampilkan sumber';
 
   @override
   String get jumpToLatestMessage => 'Lompat ke pesan terbaru';
@@ -11069,7 +11067,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
+  String get captureRecoveryBannerTitle => 'Omi tidak mengirim audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11080,6 +11078,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
+
+  @override
+  String get captureBannerTryReconnect => 'Coba sambungkan kembali';
+
+  @override
+  String get captureBannerRetrySync => 'Coba sinkronkan lagi';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikasi tidak lagi bisa menerima audio dari perangkat Omi dan tidak dapat memulihkan koneksi secara otomatis. Putuskan lalu sambungkan kembali perangkat — dari pengaturan perangkat, atau dengan mematikan lalu menyalakannya. Audio yang tersimpan di perangkat akan disinkronkan nanti.';
 
   @override
   String get captureStillRecording => 'Masih merekam';
@@ -13668,7 +13683,30 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityRetryAll => 'Coba lagi semua';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Rekaman dijeda';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Unggahan terhenti';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman menunggu',
+      one: '1 rekaman menunggu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitas, perlu perhatian';
 
   @override
   String get connectAgentHeadline => 'Gunakan memori Omi Anda di ChatGPT dan agen AI Anda';
@@ -14354,4 +14392,7 @@ class AppLocalizationsId extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved dari $total audio tersimpan';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi masih merekam';
 }

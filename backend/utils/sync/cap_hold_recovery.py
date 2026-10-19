@@ -4,6 +4,7 @@ The async coordinator borrows leaf workers. Audio stays held until transcription
 content persistence and idempotent usage settlement succeed, including silence.
 """
 
+from functools import partial
 import logging
 import threading
 import time
@@ -11,7 +12,8 @@ import time
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.rate_card import recording_units_per_hour
+from config.stt_cap_dispatch import execution_admission_enabled as enabled, any_execution_admission_enabled, hold_lane
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage
@@ -19,7 +21,8 @@ from utils.executors import run_blocking, db_executor, sync_executor, storage_ex
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
+from utils import funded_processing
+from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -100,26 +103,29 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
     return saved
 
 
-def _new_dispatch_allowed(uid: str) -> bool:
-    if not sync_allowed(uid):
+def _new_dispatch_allowed(uid: str, lane: str) -> bool:
+    if not enabled(uid, lane) or not sync_allowed(uid, lane=lane):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)
 
 
 async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
-    if not enabled():
+    if not any_execution_admission_enabled(uid):
         return False
     if row.get('finalized'):
         return True
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
+    lane = hold_lane(meta)
+    if lane is None or not enabled(uid, lane):
+        return False
     if meta.get('content_id'):
         status = await run_blocking(db_executor, sync_cap_holds.recovery_status, uid, meta['content_id'], snapshot.id)
         if status in {'completed', 'settled'}:
             return await _save(uid, snapshot, row, {'finalized': True, 'ledger_already_settled': True})
         if status != 'ready':
             return False
-    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
         return False
     prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid) or {}
     private = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
@@ -199,7 +205,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     attempt = 2
             if receipt is None or receipt.get('state') == 'dispatched':
                 cached_result = (receipt or {}).get('provider_result')
-                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                     pending = True
                     continue
                 previous = receipt
@@ -262,6 +268,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         lineage_binding=context.get('lineage_binding'),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
+                        cap_dispatch_lane=lane,
                         deferred_outcome=outcome,
                         cap_recovery_service=service,
                         cap_recovery_checkpoint={
@@ -375,9 +382,25 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
+async def _selected_lane(uid: str, row: dict) -> str | None:
+    """The hold's original dispatch lane when this owner and lane are in scope, else None."""
+    if not any_execution_admission_enabled(uid):
+        return None
+    meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
+    lane = hold_lane(meta)
+    return lane if lane is not None and enabled(uid, lane) else None
+
+
+async def selected_for_recovery(uid: str, row: dict) -> bool:
+    return await _selected_lane(uid, row) is not None
+
+
 async def recover_selected(uid: str, snapshot: Any) -> bool:
     """One explicitly selected manifest, retaining existing claim/receipt fences."""
     row = snapshot.to_dict() or {}
+    lane = await _selected_lane(uid, row)
+    if lane is None:
+        return False
     if row.get('state') == 'completed':
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
         return True
@@ -396,13 +419,27 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
             # Legacy draining/dark: re-enter through batch admission (lane 8). Batch owns the
             # conversation and usage; the hold is handed off and erased, never settled as legacy.
             # The same new-dispatch gate as legacy recovery (funded allowance, hard restriction,
-            # daily ceiling): a gated owner's audio stays held.
-            if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+            # daily ceiling) on the hold's original lane: a gated owner's audio stays held.
+            if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                 return False
             # checkpoint() decrements the held-audio summary in this same transaction (held -> batch_admitted).
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
             if admitted.outcome not in ('admitted', 'already_admitted'):
                 return False
+            # Batch debits at projection, not here. Reserve the hold's units (the backlog worker's own
+            # candidate units) before the hand-off is durable, so the next candidate sees this spend
+            # (lane 6, Subscription ruling 10-19). Idempotent per hold; settled by the batch outcome.
+            await run_blocking(
+                db_executor,
+                partial(
+                    cap_hold_reservations.reserve,
+                    uid,
+                    snapshot.id,
+                    units=cap_hold.remaining_seconds(row) * float(recording_units_per_hour('batch')) / 3600,
+                    period=funded_processing.period_id(),
+                    batch_job_id=admitted.batch_job_id or '',
+                ),
+            )
             if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
                 return False
             await run_blocking(storage_executor, _erase, uid, snapshot, row)
@@ -420,5 +457,5 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
 async def recover(uid: str) -> None:
     # Legacy request/reset/resume hooks may wake an approved run, but never
     # create consent. Worker is imported lazily to avoid pipeline import cycles.
-    if enabled() and _backlog_runner is not None:
+    if any_execution_admission_enabled(uid) and _backlog_runner is not None:
         await _backlog_runner(uid)

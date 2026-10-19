@@ -9373,9 +9373,7 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count altri';
-  }
+  String get quoteShowSources => 'Mostra fonti';
 
   @override
   String get jumpToLatestMessage => 'Vai all\'ultimo messaggio';
@@ -11125,7 +11123,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openCall => 'Apri chiamata';
 
   @override
-  String get captureRecoveryBanner => 'Omi non invia audio — tocca per riconnetterti';
+  String get captureRecoveryBannerTitle => 'Omi non invia audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11136,6 +11134,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio salvato, trascritto più tardi';
+
+  @override
+  String get captureBannerTryReconnect => 'Prova a riconnettere';
+
+  @override
+  String get captureBannerRetrySync => 'Riprova sincronizzazione';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Il collegamento Bluetooth con il tuo Omi si è interrotto, quindi l\'audio non arriva all\'app. Omi continua a registrare sul dispositivo e si sincronizzerà non appena il collegamento si ripristina. Riprova riconnette il collegamento; se continua a non funzionare, controlla il dispositivo in Impostazioni > Dispositivo.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'L\'audio non raggiunge l\'app — riconnetti il tuo Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'L\'app non riesce più a ricevere audio dal dispositivo Omi e non è riuscita a ripristinare la connessione automaticamente. Scollega e ricollega il dispositivo — dalle impostazioni del dispositivo o spegnendolo e riaccendendolo. L\'audio salvato sul dispositivo verrà sincronizzato in seguito.';
 
   @override
   String get captureStillRecording => 'Registrazione in corso';
@@ -13729,7 +13744,30 @@ class AppLocalizationsIt extends AppLocalizations {
   String get activityRetryAll => 'Riprova tutto';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Impossibile verificare lo spazio';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Registrazioni in pausa';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Caricamento bloccato';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni in attesa',
+      one: '1 registrazione in attesa',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Impossibile riassumere questa conversazione';
+
+  @override
+  String get activityAttentionSemantics => 'Attività, richiede attenzione';
 
   @override
   String get connectAgentHeadline => 'Usa la tua memoria di Omi in ChatGPT e nei tuoi agenti IA';
@@ -14416,4 +14454,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Salvati $saved di $total di audio';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi continua a registrare';
 }

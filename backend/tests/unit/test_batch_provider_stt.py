@@ -12,6 +12,11 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline import provider_stt
+from unittest.mock import Mock
+
+from config.policy import BatchUnitPolicy
+from testing.pipeline_sim.trace import GOLDEN_CONFIGS
+from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
 from utils.batch_pipeline.provider_stt import (
     ABANDON_SECONDS,
     PENDING,
@@ -24,11 +29,11 @@ from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 OWNER = 'synthetic-owner'
-# Expected traces wait here until their sim configs exist: test_pipeline_characterization requires every
-# file in pipeline_sim_goldens/ to have a GOLDEN_CONFIGS entry. Slice 2 moves them in and drops the xfail.
-GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens_pending'
+# Traces of the C8 simulation configs (testing/pipeline_sim/trace.py GOLDEN_CONFIGS).
+GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 PROVIDER_GOLDENS = ('provider_stt_ja', 'provider_stt_unsupported', 'provider_stt_byok')
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
+POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100.0)
 
 
 # --- route decision -----------------------------------------------------------------------------
@@ -193,6 +198,8 @@ def test_provider_unit_is_admitted_outside_the_gpu_ring(world, monkeypatch):
         'provider_service': 'modulate',
         'language': 'ja',
     }
+    # The admission policy snapshot is recorded on provider units exactly as the GPU ring does (E1).
+    assert row['policy_source'] == 'admission' and row['policy']['policy_id']
     assert not [key for key in store.rows if key[0] in {'queues', 'control'}]
     assert Scheduler(store).pull(200.0, limit=4) == []
     assert store.get('owners', owner_key(OWNER))['revision'] == 1
@@ -203,15 +210,15 @@ def test_provider_enqueue_is_idempotent_and_immutable(world):
     _, store = world
     work = item('p1', 10)
     enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
-    assert store.run(lambda tx: enqueue(tx, work, 100.0)) is True
-    assert store.run(lambda tx: enqueue(tx, work, 101.0)) is False
+    assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY)) is True
+    assert store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY)) is False
     other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {})
     with pytest.raises(ValueError):
-        store.run(lambda tx: other(tx, work, 102.0))
+        store.run(lambda tx: other(tx, work, 102.0, policy=POLICY))
     with pytest.raises(ValueError):
-        store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0))
+        store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0, policy=POLICY))
     with pytest.raises(ValueError):
-        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'))
+        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
 
 
 # --- the stage ----------------------------------------------------------------------------------
@@ -379,12 +386,16 @@ def _golden(name):
 def test_provider_goldens_pin_one_paid_call_and_no_gpu_or_legacy(name):
     golden = _golden(name)
     assert golden['config'] == name and golden['schema'] == 'pipeline_sim.trace/v1'
+    assert golden['segments']
     for segment in golden['segments'].values():
         states = [entry.split(' ', 1)[1] for entry in segment['job_transitions']]
         assert states[0] == PENDING and 'leased' not in states and 'ready' not in states
         assert segment['paid_calls'] == 1
         assert segment['final_job']['state'] == 'committed'
-    assert golden['totals']['legacy_admissions'] == 0
+        assert segment['final_job']['stt_route']['stt_route'] == 'provider'
+    assert golden['totals']['paid_calls'] == len(golden['segments'])
+    # Every upload is admitted to batch and projected: no legacy fallback.
+    assert all(u['intake'] == 'admitted' and u['conversation']['projected'] for u in golden['uploads'])
 
 
 def test_byok_golden_pins_the_ordinary_gpu_route_and_no_vendor_spend():
@@ -393,16 +404,16 @@ def test_byok_golden_pins_the_ordinary_gpu_route_and_no_vendor_spend():
         states = [entry.split(' ', 1)[1] for entry in segment['job_transitions']]
         assert states[:2] == ['ready', 'leased'] and PENDING not in states
         assert segment['paid_calls'] == 0
-        assert segment['final_job']['stt_route']['provider_reason'] == 'byok'
-    assert golden['totals']['legacy_admissions'] == 0
+        assert 'stt_route' not in segment['final_job']
+        assert segment['final_job']['policy']['provider_reason'] == 'byok'
+        assert segment['final_job']['policy']['stt_route'] == 'parakeet'
+    assert golden['totals']['paid_calls'] == 0
 
 
-@pytest.mark.xfail(strict=True, reason='C8 sim configs land with the intake wiring (lane 8 slice 2)')
 @pytest.mark.parametrize('name', PROVIDER_GOLDENS)
 def test_provider_golden_is_pinned_by_the_simulation(name):
-    # test_pipeline_characterization requires a GOLDEN_CONFIGS entry and a trace match for every file in
-    # pipeline_sim_goldens/, so the expectation moving there is what proves the simulation reproduces it.
-    assert (GOLDEN_DIR.parent / 'pipeline_sim_goldens' / f'{name}.json').exists()
+    # test_pipeline_characterization re-runs every GOLDEN_CONFIGS entry and requires a byte-identical trace.
+    assert name in GOLDEN_CONFIGS and (GOLDEN_DIR / f'{name}.json').exists()
 
 
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
@@ -688,7 +699,7 @@ async def test_unsupported_language_takes_the_provider_route_and_wakes_after_com
     def enqueue_hook(route, outbox, wakes):
         seen['route'] = route
         wakes['row-1'] = 'wake-1'  # as if the admission transaction committed one row
-        return lambda *a: True
+        return lambda *a, **k: True
 
     monkeypatch.setattr(intake, 'provider_enqueue', enqueue_hook)
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
@@ -715,3 +726,91 @@ async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
     assert response.status_code == 202  # BYOK admitted like any upload; GPU route at 'on'
     ((items, kwargs),) = dark_intake.calls
     assert kwargs['enqueue'] is None and kwargs['adopt'] is None and items[0].requires_compute_admission is True
+
+
+# --- admission policy route stamp (contract (c)) ----------------------------------------------------
+
+ROUTE_FIELDS = ('stt_route', 'provider_reason', 'provider_service')
+
+
+def test_policy_route_fields_default_validate_and_fail_closed_on_read():
+    from dataclasses import replace
+
+    assert tuple(getattr(POLICY, key) for key in ROUTE_FIELDS) == ('parakeet', 'none', 'none')
+    byok = replace(POLICY, provider_reason='byok')
+    assert byok.policy_id != POLICY.policy_id
+    assert BatchUnitPolicy.from_dict(byok.to_dict()) == byok
+    for bad in ({'stt_route': 'provider'}, {'provider_reason': 'free'}, {'provider_service': 'modulate'}):
+        with pytest.raises(ValueError):
+            replace(POLICY, **bad)
+    # A row stamped before the fields existed, or a malformed one, reads as no BYOK funding claim.
+    stamped = byok.to_dict()
+    assert BatchUnitPolicy.from_dict({k: v for k, v in stamped.items() if k not in ROUTE_FIELDS}) == POLICY
+    assert BatchUnitPolicy.from_dict({**stamped, 'provider_service': 'modulate'}).provider_reason == 'none'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode_name,language,byok,expected',
+    [
+        ('DRAINING', 'en', False, ('parakeet', 'none', 'none')),
+        ('DRAINING', 'en', True, ('parakeet', 'byok', 'none')),
+        ('DRAINING', 'ja', False, ('provider', 'unsupported_language', 'modulate')),
+        ('DRAINING', 'ja', True, ('provider', 'byok', 'modulate')),
+        # legacy_sync 'on' never takes the provider route; only the BYOK funding decision is kept.
+        ('ON', 'ja', False, ('parakeet', 'none', 'none')),
+        ('ON', 'ja', True, ('parakeet', 'byok', 'none')),
+    ],
+)
+async def test_intake_records_the_route_it_takes_in_the_admission_policy(
+    dark_intake, mode_name, language, byok, expected
+):
+    from utils.sync.legacy_dark import LegacySyncMode
+
+    dark_intake.mode['value'] = LegacySyncMode[mode_name]
+    dark_intake.user['language'] = language
+    response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': byok})
+    assert response.status_code == 202
+    ((_, kwargs),) = dark_intake.calls
+    policy = kwargs['policy']
+    assert policy.batch_enabled and tuple(getattr(policy, key) for key in ROUTE_FIELDS) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('byok', [True, False])
+async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake, monkeypatch, byok):
+    """Lane 6's e2e: a BYOK upload's GPU unit is never re-held by the keyless dispatch re-check."""
+    from utils.sync.legacy_dark import LegacySyncMode
+
+    dark_intake.mode['value'] = LegacySyncMode.ON
+    # The real admission transaction; the fixture's synthetic staging writes no artifact reservation.
+    monkeypatch.setattr(
+        dark_intake.intake,
+        'admit',
+        lambda *a, **k: batch_pipeline_intake.admit(*a, **{**k, 'require_artifacts': False}),
+    )
+    response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': byok})
+    assert response.status_code == 202
+    store = dark_intake.store
+    (lease,) = Scheduler(store).pull(200.0, limit=4)
+    assert store.get('jobs', lease.item.segment_id)['policy']['provider_reason'] == ('byok' if byok else 'none')
+
+    # Main #22494 scopes dispatch by cohort and lane and code-fences the batch lane; open it as
+    # tests/unit/fixtures/cap_rollout.py does, so the non-BYOK unit meets the funded gate.
+    from config import stt_cap_dispatch as cap_policy
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
+    monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
+    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    monkeypatch.setattr(admission, 'get_hard_restriction_status', Mock(return_value=(False, None)))
+    monkeypatch.setattr(admission, 'is_daily_audio_ceiling_exceeded', Mock(return_value=False))
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=type('R', (), {'allowed': True})()))
+    receipt = admission.authorize(store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], now=201.0)
+    if byok:
+        assert receipt['allowed'] == [lease.item.segment_id]
+        gate.assert_not_called()
+    else:
+        assert receipt == {'allowed': [], 'retry_after': {lease.item.segment_id: 60}}

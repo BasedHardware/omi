@@ -170,3 +170,59 @@ async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, m
     response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
     assert response.status_code == 409
     assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,code', [(500, 409), (502, 409), (429, 409), (400, 500)])
+async def test_legacy_handler_retries_processing_dependency_failures_without_5xx(monkeypatch, status, code):
+    """Lane 4 staging replay 10-19: 51/63 sync-jobs deliveries answered 500 on HTTPException from processing."""
+    from fastapi import HTTPException
+    from routers import batch_pipeline
+
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(batch_pipeline, 'run_enrichment', Mock(side_effect=HTTPException(status_code=status)))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
+    assert response.status_code == code
+    if code == 409:
+        assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
+
+
+def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(rows):
+    from fastapi import HTTPException
+
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, Mock(side_effect=HTTPException(status_code=502)))
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
+    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0})
+    assert route.maintain(1000.0) == {
+        'rewoken': 2,
+        'discarded': 1,
+        'sweep_errors': 0,
+        'summary_debt_scanned': 5,
+        'summary_debt_admitted': 3,
+        'summary_debt_errors': 0,
+    }
+
+
+def test_maintenance_counts_a_summary_debt_failure_without_5xx(rows, client, monkeypatch):
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    monkeypatch.setattr(summary_debt_repair, 'tick', Mock(side_effect=RuntimeError('synthetic')))
+    response = client.post('/v2/enrichment/sweep')
+    assert response.status_code == 200
+    assert response.json()['counts']['summary_debt_errors'] == 1

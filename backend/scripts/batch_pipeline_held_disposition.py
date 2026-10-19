@@ -189,7 +189,7 @@ def main():
     from google.cloud.firestore_v1.base_query import FieldFilter
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.artifact_policy import create_artifact_store
-    from config.batch_pipeline import empty_asr_disposition_enabled, recovery_enabled_for
+    from config.batch_pipeline import empty_asr_disposition_enabled
 
     client = firestore.Client(project='based-hardware')
     store = FirestoreStore(f'batch_pipeline_{args.stage}', firestore_client=client)
@@ -258,7 +258,7 @@ def main():
         'firestore_writes': 0,
     }
     if args.apply:
-        require(empty_asr_disposition_enabled() and recovery_enabled_for(uid), 'disposition_or_owner_disabled')
+        # Per-unit mutation consumes its persisted recovery owner part.
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')
         silent = [(sid, key) for sid, key, decision in units if decision == 'silent'][: args.apply_limit]
         output['outcomes'] = dict(Counter(apply_silent(store, artifacts, sid, uid, key, digest) for sid, key in silent))

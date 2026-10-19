@@ -9321,9 +9321,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count nữa';
-  }
+  String get quoteShowSources => 'Hiện nguồn';
 
   @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
@@ -11065,7 +11063,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
+  String get captureRecoveryBannerTitle => 'Omi không gửi âm thanh';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11076,6 +11074,23 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Đã lưu âm thanh, phiên âm sau';
+
+  @override
+  String get captureBannerTryReconnect => 'Thử kết nối lại';
+
+  @override
+  String get captureBannerRetrySync => 'Thử đồng bộ lại';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Ứng dụng không còn nhận được âm thanh từ thiết bị Omi và không thể khôi phục kết nối tự động. Hãy ngắt kết nối rồi kết nối lại thiết bị — trong cài đặt thiết bị hoặc bằng cách tắt rồi bật nó. Âm thanh đã lưu trên thiết bị sẽ được đồng bộ sau.';
 
   @override
   String get captureStillRecording => 'Vẫn đang ghi âm';
@@ -13656,7 +13671,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityRetryAll => 'Thử lại tất cả';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi đang chờ',
+      one: '1 bản ghi đang chờ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
+
+  @override
+  String get activityAttentionSemantics => 'Hoạt động, cần chú ý';
 
   @override
   String get connectAgentHeadline => 'Dùng bộ nhớ Omi của bạn trong ChatGPT và các tác tử AI';
@@ -14341,4 +14379,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Đã lưu $saved trên $total âm thanh';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi vẫn đang ghi âm';
 }

@@ -9,7 +9,8 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for, live_record_enabled_for
+from config.batch_pipeline import priority_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
@@ -133,12 +134,15 @@ async def accept_upload(
     intake_context: dict | None = None,
     record_router=None,
     decode=None,
+    policy: BatchUnitPolicy | None = None,
+    usage_period: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
     ``decode(max_seconds)`` replaces WAL decoding of ``paths`` for server-held audio
     (the cap-hold adapter); it must yield the same ``AudioUnit`` shape.
     """
+    policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -215,6 +219,7 @@ async def accept_upload(
                 client_device_id=client_device_id,
                 byok_enabled=byok_enabled,
                 loaded_conversation=target,
+                policy=policy,
             )
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
@@ -234,11 +239,20 @@ async def accept_upload(
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
+        # Contract (c): admission records the route it actually takes. A unit that
+        # stays on Parakeet keeps only the BYOK funding decision (lane 6's dispatch
+        # re-check reads job['policy']['provider_reason']).
+        policy = replace(
+            policy,
+            stt_route='provider' if provider else 'parakeet',
+            provider_reason=route.provider_reason if provider else ('byok' if byok_enabled else 'none'),
+            provider_service=route.provider_service if provider else 'none',
+        )
         # legacy_sync 'on' keeps today's fallback exactly, including unknown and
         # 'multi' languages.
         if (
             mode is LegacySyncMode.ON
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and (route.stt_route == 'provider' or language in {'', 'multi'})
         ):
             # Keep the supported existing provider route. Never silently send
@@ -251,7 +265,7 @@ async def accept_upload(
             not provider
             and target
             and source == 'desktop'
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and not target.get('uses_custom_stt')
             and user.get('private_cloud_sync_enabled', True)
             and normalized_stt_language(target.get('language'))
@@ -296,6 +310,9 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
+                    # Resolved conversation/user STT language ('' when unknown).
+                    # The worker skips a Parakeet-only retry for other languages.
+                    'stt_language': language,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
@@ -327,6 +344,7 @@ async def accept_upload(
             binding,
             time.time(),
             namespace=store.namespace,
+            policy=policy,
             require_artifacts=True,
             intake={
                 'owner_id': uid,
@@ -337,6 +355,9 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                # Funded period the owner's choice was made in (cap-hold re-entry); projection
+                # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
+                **({'usage_period': usage_period} if usage_period else {}),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

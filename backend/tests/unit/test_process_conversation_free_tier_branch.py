@@ -956,7 +956,7 @@ def _load_finalizer():
 def test_retired_basic_flags_do_not_deny_first_open(monkeypatch, pc, legacy_value):
     from utils.conversations.processing_trigger import ProcessingTrigger
 
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     for key in (
         'FREE_TIER_LOCAL_PROCESSING',
         'FREE_TIER_LOCAL_PROCESSING_COHORT',
@@ -974,7 +974,7 @@ def test_retired_basic_flags_do_not_deny_first_open(monkeypatch, pc, legacy_valu
 
 
 def test_successful_explicit_enrichment_clears_retired_terminal_marker_without_overwriting_projection(monkeypatch, pc):
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     _spy_managed_effects(monkeypatch, pc)
     uid, conv_id = 'upgraded', 'old-terminal'
     path = ('users', uid, 'conversations', conv_id)

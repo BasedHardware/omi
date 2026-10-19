@@ -25,6 +25,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Callable, ClassVar, Iterator
 
+from fastapi import HTTPException
+
 from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
@@ -81,7 +83,7 @@ class EnrichmentConsumer:
         return enrich_conversation
 
     def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
-        from config.summary_guarantee import ADMITTED_OWNER, enabled as summary_enabled, preserves_admitted
+        from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
         from database.summary_processing import record_empty_failure
         from utils.conversations import summary_delivery
@@ -101,7 +103,7 @@ class EnrichmentConsumer:
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
             return Result(Outcome.DONE, ConsumerReason.PROCESSED)
 
-        summary_policy = summary_enabled(uid, include_admitted_context=False) or preserves_admitted(row)
+        summary_policy = rows.summary_policy_for(row)
         context = (
             {'owner': claim.lease_token, 'lease_until': claim.lease_until}
             if summary_policy and not row.get('summary_seen')
@@ -135,6 +137,12 @@ class EnrichmentConsumer:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except rows.FirstSummaryCallbackPending:
             return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+        except HTTPException as error:
+            # Processing's HTTP contract for a failed LLM/provider/app step: retry without a fast 5xx.
+            if not (error.status_code == 429 or error.status_code >= 500):
+                raise
+            logger.warning('event=enrichment_consumer outcome=retry reason=dependency status=%s', error.status_code)
+            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         except summary_delivery.SummaryRepairSuperseded as error:
             superseded, retry_revision = True, error.retry_revision
         except SyncConversationPersistenceFenced:

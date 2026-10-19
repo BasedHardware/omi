@@ -15,11 +15,13 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
+from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -188,6 +190,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
             metrics=metrics,
             batch_size=config.batch_size,
+            flights=worker_pipeline_depth(),
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds
             ),
@@ -212,7 +215,7 @@ def main() -> None:
     store = FirestoreStore(namespace)
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
-    store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    store = shadow_from_env(FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client()))
     # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
     # on admitted work items; bind the cached cohort resolver before pumping.
     configure_rollout_runtime()

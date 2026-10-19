@@ -5,6 +5,8 @@ from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from routers import sync as router
@@ -91,7 +93,9 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, u
     # full-WAV hold before VAD is tested in test_sync_cap_coordinator.
     monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
-    monkeypatch.setattr(router, 'batch_enabled_for', lambda _: False)
+    from config.policy import BatchUnitPolicy
+
+    monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
     monkeypatch.setattr(router, 'create_sync_job', Mock())

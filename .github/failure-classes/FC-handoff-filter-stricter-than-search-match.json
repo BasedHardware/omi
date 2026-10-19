@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-handoff-filter-stricter-than-search-match",
+  "violated_contract": "When a search result hands off to another view by applying the query as that view's filter, the filter must admit the result that was chosen. If the destination matches more strictly than the search that found the result, the chosen item is filtered out of the view it opens. Global Search finds a memory that holds any one word of the query (GET /memory/search), but opening one handed the whole query to the Memories page, which keeps only memories holding the entire phrase, so a search for two words opened Memories without the memory that was tapped.",
+  "canonical_prevention": "Derive the hand-off filter from the chosen result under the destination's own matching rule: keep the whole query only when the result satisfies it, otherwise narrow it to a part the result holds (for memories, the longest query word it contains). Prove it with a hermetic widget test that searches with a multi-word query whose hit holds only one word, taps that hit, and asserts the hit is listed in the destination view, plus a control that a hit holding the whole query keeps the whole query.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/search/global_search_memory_hit_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/search/global_search.dart"
+  ],
+  "status": "open"
+}

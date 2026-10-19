@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import database.conversations as conversations_db
 from database import conversation_tombstones
 from database._client import db as firestore_db
-from database.vector_db import delete_vector
+from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -257,7 +257,7 @@ def perform_merge_async(
         sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
 
         # 2. Merge raw data
-        merged_segments = _merge_transcript_segments(sorted_convs)
+        merged_segments, segment_placements = _merge_transcript_segments_with_placements(sorted_convs)
         merged_photos = _collect_all_photos(uid, sorted_convs)
 
         # 3. Generate new conversation ID and copy audio chunks
@@ -358,6 +358,8 @@ def perform_merge_async(
             conversations_db.store_conversation_photos(uid, new_conversation_id, new_conversation.photos)
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
+        # Its created webhook is held until a failure can no longer roll the record back.
+        created_webhook_sends: List[Callable[[], None]] = []
         if reprocess:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -366,6 +368,7 @@ def perform_merge_async(
                         new_conversation.language or "en",
                         new_conversation,
                         trigger=ProcessingTrigger.MERGE,
+                        created_webhook_observer=created_webhook_sends.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -378,9 +381,23 @@ def perform_merge_async(
 
         from database.review_overlay_merge import transfer
 
-        if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
+        if transfer(
+            uid,
+            [c['id'] for c in sorted_convs],
+            new_conversation_id,
+            placements=segment_placements,
+            firestore_client=firestore_db,
+        ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
+        # transfer() returns only once committed, so failure handling now keeps the merged
+        # record; had it raised, the rollback would have deleted it. Announce it only now.
+        for send_created_webhook in created_webhook_sends:
+            try:
+                send_created_webhook()
+            except Exception as e:
+                logger.error(f"Error sending created webhook for merged conversation {new_conversation_id}: {e}")
 
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
@@ -427,6 +444,11 @@ def perform_merge_async(
 
 
 def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
+    """The merged transcript of ``_merge_transcript_segments_with_placements``, without the placements."""
+    return _merge_transcript_segments_with_placements(conversations)[0]
+
+
+def _merge_transcript_segments_with_placements(conversations: List[Dict]) -> Tuple[List[Dict], List[List[int]]]:
     """
     Merge transcript segments from all conversations sequentially.
 
@@ -434,12 +456,15 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     - Sort conversations by started_at
     - Append segments sequentially
     - Adjust timestamps to account for gaps between conversations
+    - Sort the merged segments by start, so overlapping sources interleave
 
     Args:
         conversations: List of conversation dictionaries (already sorted by started_at)
 
     Returns:
-        List of merged transcript segment dictionaries
+        The merged transcript segment dictionaries, and the placements:
+        ``placements[k][i]`` is the merged index of segment ``i`` of ``conversations[k]``.
+        The correction transfer needs them because an interleaved source is not one block.
     """
     merged = []
     cumulative_offset = 0.0
@@ -529,8 +554,14 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
     # Origin-based offsets interleave overlapping sources; keep the transcript chronological
     # (stable, so equal starts keep their source order).
-    merged.sort(key=lambda seg: seg.get("start") or 0)
-    return merged
+    order = sorted(range(len(merged)), key=lambda index: merged[index].get("start") or 0)
+    position = {index: rank for rank, index in enumerate(order)}
+    placements, first = [], 0
+    for conv in conversations:
+        count = len(conv.get("transcript_segments") or [])
+        placements.append([position[index] for index in range(first, first + count)])
+        first += count
+    return [merged[index] for index in order], placements
 
 
 def _resolve_merged_finished_at(sorted_convs: List[Dict]) -> Optional[datetime]:
@@ -851,6 +882,14 @@ def _delete_conversation_and_related_data(
             _cancel_open_dated_task_reminders(uid, source_items)
         except Exception as e:
             logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        try:
+            if source_items:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
+        except Exception as e:
+            logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
 
     if retain_capture:
         # Sync bridges retain redirect tombstones and original audio: another

@@ -53,6 +53,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
+            - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
+            - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            - {name: LADDER_V1_BUDGET_ENFORCEMENT_ENABLED, value: {{ .Values.worker.ladderBudgetEnforcement | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:
@@ -67,6 +71,8 @@ spec:
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
+            # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
+            - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ .Values.worker.pipelineDepth | default 2 | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}

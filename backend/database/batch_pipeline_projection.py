@@ -4,12 +4,15 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 
 from google.cloud import firestore
 
-from config.batch_pipeline import projection_contention_enabled
+from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_shadow_hook import mirror_refresh
+from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -27,6 +30,24 @@ from database.batch_pipeline_projection_protocol import (
 )
 from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
 
+_USAGE_PERIOD = re.compile(r'(\d{4})-(\d{2})')
+
+
+def usage_stamp(now: datetime, usage_period: Any) -> datetime:
+    """Hour stamp for projection usage: ``now``, backdated into ``usage_period`` only across a rollover.
+
+    A cap-hold unit admitted under the owner's funded choice in month M is billed to M even when
+    projection completes in M+1 (lane 6, Subscription ruling B(a)). The stamp moves only backwards, to
+    the period's last second, and the hourly doc id/year/month/day/hour all derive from it, so the
+    month query reads it as M (transcription has no day rollup). Missing or malformed periods keep now.
+    """
+    match = _USAGE_PERIOD.fullmatch(usage_period) if isinstance(usage_period, str) else None
+    if match is None or not 1 <= int(match.group(2)) <= 12:
+        return now
+    start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
+    end = (start + timedelta(days=32)).replace(day=1)
+    return end - timedelta(seconds=1) if now >= end else now
+
 
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
@@ -39,23 +60,42 @@ class ProjectionStore:
     def ref(self, table: str, key: str):
         return self.client.collection(f'{self.store.namespace}_{table}').document(key)
 
+    def _mirror(self, binding: ProjectionBinding) -> None:
+        # A2 shadow: these transactions write batch docs outside Store.run; no-op unless shadow mode.
+        namespace = getattr(self.store, 'namespace', '')
+        mirror_refresh(namespace, [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')])
+
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
+        if job.get('projection_binding') and (job.get('policy_parts') or {}).get('projection') is None:
+            job, _ = load_stage_policy(self.store, segment_id, 'projection')
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
         return job, entry, normalized_binding(job['projection_binding'])
 
+    def projection_watermark(self, hashed_owner: str) -> str | None:
+        # A fetch hint only; assignment rereads the watermark transactionally.
+        return (self.ref('owners', hashed_owner).get().to_dict() or {}).get('projection_watermark')
+
+    def policy(self, segment_id: str) -> ProjectionPolicy:
+        _, policy = load_stage_policy(self.store, segment_id, 'projection')
+        if policy is None:
+            raise ProjectionBlocked('durable projection policy required')
+        return policy
+
     def session(self, segment_id: str, binding: ProjectionBinding, now: float, **part):
         return ProjectionSession(self, segment_id, binding, now, **part)
 
-    def ready(self, segment_id: str, binding: ProjectionBinding, now: float, *, part_index=None) -> dict:
+    def ready(self, segment_id: str, binding: ProjectionBinding, now: float, *, part_index=None, policy=None) -> dict:
         """Acknowledge a replayable post-persist mark; never append again."""
+
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now, part_index=part_index)
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
             session.prepare(transaction, replay=False)
             receipt = dict(session.receipt())
             if not receipt:
@@ -64,25 +104,31 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit)
+        receipt = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return receipt
 
     def check(self, session):
         @firestore.transactional
         def read(transaction):
             session.prepare(transaction)
 
-        self.run(read)
+        self.run(read, policy=session.policy)
 
-    def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float):
+    def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
+
+        policy = policy or self.policy(segment_id)
+
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if session.ledger.get('status') != 'completed':
                 raise ProjectionBlocked('client publication preceded durable completion')
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
-        self.run(commit)
+        self.run(commit, policy=policy)
+        self._mirror(binding)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -102,7 +148,15 @@ class ProjectionStore:
         return self.run(read)
 
     def mark_enrichment(
-        self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str, *, part_index=None
+        self,
+        segment_id: str,
+        binding: ProjectionBinding,
+        now: float,
+        canonical: str,
+        language: str,
+        *,
+        part_index=None,
+        policy=None,
     ):
         from config.sync_reprocess import settle_seconds
         from database.outbox_firestore import FirestoreEnrichmentOutbox
@@ -110,11 +164,12 @@ class ProjectionStore:
 
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
+        policy = policy or self.policy(segment_id)
         document_id = reprocess.key(binding.owner_id, canonical)
         outbox = FirestoreEnrichmentOutbox(self.client)
 
         def commit(transaction):
-            session = self.session(segment_id, binding, now, part_index=part_index)
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
             session.prepare(transaction, replay=False)
             session.guard(transaction, [canonical])
             receipt = dict(session.receipt())
@@ -131,14 +186,16 @@ class ProjectionStore:
                 tx=_ClientTransaction(self.client, transaction),
                 now=now,
                 new_dispatch=self._backfill_dispatch if backfill else None,
+                snapshot_summary=True,  # E1: the first-summary policy is snapshotted on the obligation
             )
             receipt.update(state='ready', conversation_id=canonical)
             session.write_receipt(transaction, receipt)
             return result
 
-        result = self.run(firestore.transactional(commit))
+        result = self.run(firestore.transactional(commit), policy=policy)
         if result is not None and result.wake_token:
             outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
     @staticmethod
     def _backfill_dispatch() -> dict[str, str] | None:
@@ -164,14 +221,14 @@ class ProjectionStore:
             raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
         return dispatch
 
-    def run(self, operation):
+    def run(self, operation, *, policy=None):
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
         import os
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
         if (
-            not projection_contention_enabled()
+            not (policy and policy.projection_contention)
             and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
         ):
             return run_transactional(self.client, operation)
@@ -181,12 +238,14 @@ class ProjectionStore:
             operation_name='batch_projection',
         )
 
-    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float) -> bool:
+    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None) -> bool:
         """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
+
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if session.receipt().get('state') != 'ready':
                 return False
@@ -205,7 +264,9 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit)
+        held = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return held
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -233,6 +294,8 @@ class ProjectionStore:
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
         if int(seconds) > 0 and ledger.get('status') != 'completed':
+            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+            stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
 
@@ -250,12 +313,15 @@ class ProjectionStore:
             'completed': ledger.get('status') == 'completed',
         }
 
-    def complete(self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict) -> dict | None:
+    def complete(
+        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict, *, policy=None
+    ) -> dict | None:
         """Complete only after every bound sibling persisted and marked enrichment."""
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             receipts = []
             live_siblings = []
@@ -378,7 +444,8 @@ class ProjectionStore:
             return result, True, captured_seconds
 
         with writing('usage_month_cache', binding.owner_id):
-            result, changed, seconds = self.run(commit)
+            result, changed, seconds = self.run(commit, policy=policy)
+        self._mirror(binding)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result

@@ -10,6 +10,7 @@ REAL product code exercised on the ``batch`` path (unmodified, imported):
   - ``utils.batch_pipeline.quarantine_recovery.QuarantineRecovery`` (sweep, dispatch, recover)
   - ``database.batch_pipeline_quarantine_recovery.RecoveryStore`` (prepare/start/settle fences)
   - ``database.batch_pipeline_privacy.assert_batch_write_allowed`` (privacy fence)
+  - ``utils.batch_pipeline.provider_stt`` (C8: route, admission ``enqueue`` hook, ProviderSttStage)
 
 Module attributes patched for the duration of a run (restored afterwards):
   ``pump.time``/``serving.time`` -> virtual clock; ``pump.run_blocking`` -> inline
@@ -31,9 +32,15 @@ import contextlib
 import hashlib
 import logging
 import math
-import os
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from unittest.mock import patch
+
+from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
+from config.policy.stages import STAGE_TYPES
+from database.batch_pipeline_shadow_hook import mirror_refresh
+from database import batch_pipeline_policy as policy_store
+from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
 from typing import Any
 
@@ -46,7 +53,9 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
+from utils.batch_pipeline.provider_stt import ProviderSttStage, provider_enqueue, resolve_route
 from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 from utils.batch_pipeline.scheduler import Scheduler, owns_lease
 from utils.batch_pipeline.serving import Serving
@@ -67,6 +76,7 @@ from testing.pipeline_sim.stt import (
     FakeSTT,
     ModulateProfile,
     PlannedWords,
+    ProviderUnavailable,
     SimSamples,
     STTProfile,
     vad_spans,
@@ -88,6 +98,8 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
+    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
+    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
@@ -158,12 +170,27 @@ class SimConfig:
     pump_restart_seconds: float = 60.0
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
+    policy: BatchUnitPolicy | None = None
+    role_environments: dict[str, dict[str, str]] = field(default_factory=dict)
+    stage_roles: dict[str, str] = field(default_factory=dict)
+    trace_policy: bool = False
+    policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
+    # C8 admission route (intake.accept_upload): stored language, BYOK, legacy_sync mode.
+    language: str = 'en'
+    byok: bool = False
+    legacy_sync: str = 'on'  # on | draining | dark
+
+    def __post_init__(self):
+        if isinstance(self.policy, dict):
+            self.policy = BatchUnitPolicy.from_dict(self.policy)
 
 
 @dataclass
 class UploadRecord:
     spec: UploadSpec
+    policy: BatchUnitPolicy | None = None
+    first_summary_policy: FirstSummaryPolicy | None = None
     status: str = 'pending'  # admitted | rejected_privacy | deduplicated | rejected_other
     accepted_at: float | None = None
     job_id: str | None = None
@@ -272,6 +299,13 @@ class SimWorker:
         return self.worker.process_batch(items, **kwargs)
 
 
+class _ProviderOutbox:
+    """Outbox stand-in for the admission ``enqueue`` hook: every new row asks for one wake."""
+
+    def enqueue(self, row_id, owner_id, payload, available_at, *, tx=None, now=None):
+        return SimpleNamespace(row_id=row_id, wake_token=f'wake-{row_id}')
+
+
 class Simulation:
     def __init__(self, config: SimConfig):
         self.config = config
@@ -307,6 +341,18 @@ class Simulation:
         self.serving: Serving | None = None
         self.recovery: QuarantineRecovery | None = None
         self.polls: list[tuple[float, str, int]] = []
+        self.provider_stage = (
+            None
+            if self.store is None
+            else ProviderSttStage(
+                self.store,
+                self.artifacts,
+                stt=self._provider_call,
+                allowed=lambda *_: True,
+                inspect=self._provider_inspect,
+                clock=self.clock.time,
+            )
+        )
         self._seed_customers()
 
     # ------------------------------------------------------------------ setup
@@ -334,11 +380,32 @@ class Simulation:
         source = upload.duplicate_of or upload.upload_id
         return 'sim-conv-' + hashlib.sha256(source.encode()).hexdigest()[:24]
 
+    def _policy_flags(self, stage):
+        role = self.config.stage_roles.get(stage, stage)
+        return {**DEFAULT_FLAGS, **self.config.flags, **self.config.role_environments.get(role, {})}
+
+    def _stage_policy(self, uid, stage):
+        raw = self.config.policy_parts.get(stage)
+        return (
+            STAGE_TYPES[stage].from_dict(raw)
+            if raw is not None
+            else resolve_stage_policy(uid, stage, flags=self._policy_flags(stage))
+        )
+
     # --------------------------------------------------------------- patching
     @contextlib.contextmanager
     def _patched(self):
-        saved_env = {key: os.environ.get(key) for key in {**DEFAULT_FLAGS, **self.config.flags}}
+        flags = {**DEFAULT_FLAGS, **self.config.flags}
+        # Only E1b worker dispositions and process/provider config use env.
+        # Per-unit E1 inputs are supplied exclusively through the resolver.
+        outside_scope = {
+            key: value
+            for key, value in flags.items()
+            if key not in SNAPSHOT_ENV_KEYS and not key.startswith(('FIRST_SUMMARY_', 'TRANSCRIPTION_FINAL_PASS_'))
+        }
+        env_patch = patch.dict('os.environ', outside_scope)
         patches = [
+            (policy_store, 'resolve_stage_policy', self._stage_policy),
             (pump_module, 'time', self.clock.module()),
             (pump_module, 'run_blocking', self._run_blocking),
             (serving_module, 'time', self.clock.module()),
@@ -349,18 +416,14 @@ class Simulation:
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
-            os.environ.update({**DEFAULT_FLAGS, **self.config.flags})
+            env_patch.start()
             for module, name, value in patches:
                 setattr(module, name, value)
             yield
         finally:
             for module, name, value in originals:
                 setattr(module, name, value)
-            for key, value in saved_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            env_patch.stop()
 
     async def _run_blocking(self, executor, fn, *args, **kwargs):
         owner = getattr(fn, '__self__', None)
@@ -437,6 +500,36 @@ class Simulation:
             self.serving.reconcile()
         self._live_tasks.discard(task_id)
         return outcome
+
+    async def _provider_delivery(self, segment_id: str) -> None:
+        """Mirrors ProviderSttConsumer.process: one REAL ProviderSttStage.run per delivery."""
+        job = self.store.get('jobs', segment_id)
+        if job.get('state') == 'provider_pending':
+            await self.modulate.occupy(job['duration_seconds'])
+        unit = self.provider_stage.run(segment_id)
+        self.counters[f'provider_stt_{unit.outcome}'] += 1
+        if unit.outcome in {'deferred', 'retry'}:
+            delay = max(self.config.task_hop_seconds, (unit.available_at or 0.0) - self.clock.now)
+            loop = asyncio.get_running_loop()
+            loop.call_later(delay, lambda: loop.create_task(self._provider_delivery(segment_id)))
+        elif self.serving is not None:
+            self.serving.reconcile()
+
+    def _provider_inspect(self, item, audio):
+        """Strict-VAD stand-in: the segment's synthetic speech spans (inspect_audio's shape)."""
+        samples = SimSamples.for_seconds(item.segment_id, self.truth[item.segment_id]['kind'], item.duration_seconds)
+        spans = [{'start': start, 'end': end} for start, end in vad_spans(samples)]
+        return b'', item.duration_seconds, spans
+
+    def _provider_call(self, item, language, inspected, *, service):
+        """The stage's vendor seam on the paid-provider model; errors map as ``transcribe`` maps them."""
+        try:
+            payload = self.modulate(item, None, b'')
+        except ProviderUnavailable:
+            raise RecoveryFailure('provider', 'provider_failed')
+        except MultilingualEmpty:
+            raise RecoveryFailure('response_validation', 'empty_asr')
+        return {**payload, 'words_provider': service, 'language': language}
 
     def _cancel_fenced_recovery(self, store, segment_id):
         """Model of cancel_fenced_recovery(): revocation-only write after the fence rejects."""
@@ -531,7 +624,7 @@ class Simulation:
         return {'allowed': allowed, 'retry_after': retries}
 
     # ------------------------------------------------------------- batch path
-    def _items_for(self, upload: UploadSpec, generation: int) -> list[WorkItem]:
+    def _items_for(self, upload: UploadSpec, generation: int, *, compute: bool = True) -> list[WorkItem]:
         base = self.clock.start + upload.at - upload.recording_age
         priority = priority_for(upload.lane, upload.recording_age)
         items, offset = [], 0.0
@@ -550,7 +643,7 @@ class Simulation:
                     unit_kind='conversation' if target else 'capture_span',
                     conversation_id=target or chunk_identity(upload.owner, 'omi', None, False, capture_at),
                     privacy_generation=generation,
-                    requires_compute_admission=True,
+                    requires_compute_admission=compute,
                 )
             )
         return items
@@ -558,10 +651,26 @@ class Simulation:
     def _accept_batch(self, record: UploadRecord) -> None:
         """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
         upload = record.spec
+        record.policy = self.config.policy or resolve_batch_policy(upload.owner, flags=self._policy_flags('admission'))
+        if not record.policy.batch_enabled:
+            record.status = 'rejected_other'
+            return
+        # C8, as intake: a language Parakeet cannot serve takes the provider stage once legacy is
+        # draining or dark; the admission policy records the route actually taken.
+        route = resolve_route(self.config.language, byok=self.config.byok)
+        provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
+        stamp = {
+            'stt_route': 'provider' if provider else 'parakeet',
+            'provider_reason': route.provider_reason if provider else ('byok' if self.config.byok else 'none'),
+            'provider_service': route.provider_service if provider else 'none',
+        }
+        if any(getattr(record.policy, key) != value for key, value in stamp.items()):
+            record.policy = replace(record.policy, **stamp)  # an explicit replay policy is kept as given
+        wakes: dict[str, str] = {}
         target = self._target_id(upload) if upload.target else None
         try:
             generation = self.customer.check(upload.owner, (target,) if target else ())
-            items = self._items_for(upload, generation)
+            items = self._items_for(upload, generation, compute=not provider)
             binding = ProjectionBinding(
                 owner_id=upload.owner,
                 job_id='bp_' + (upload.duplicate_of or upload.upload_id),
@@ -569,7 +678,7 @@ class Simulation:
                 segment_ids=tuple(item.segment_id for item in items),
                 target_conversation_id=target,
                 privacy_generation=generation,
-                language='en',
+                language=self.config.language,
             )
             outcome = batch_pipeline_intake.admit(
                 self.store,
@@ -577,6 +686,7 @@ class Simulation:
                 binding,
                 self.clock.now,
                 namespace=self.store.namespace,
+                policy=record.policy,
                 intake={
                     'owner_id': upload.owner,
                     'content_id': upload.content_id,
@@ -584,6 +694,7 @@ class Simulation:
                     'total_audio_seconds': sum(item.duration_seconds for item in items),
                     'lane': upload.lane,
                 },
+                enqueue=provider_enqueue(route, _ProviderOutbox(), wakes) if provider else None,
             )
         except BatchPrivacyBlocked:
             record.status = 'rejected_privacy'  # accept_upload -> 409 sync_batch_privacy_blocked
@@ -595,6 +706,11 @@ class Simulation:
             record.status = 'deduplicated'
             self.counters['duplicate_uploads_deduplicated'] += 1
             return
+        loop = asyncio.get_running_loop()
+        for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
+            loop.call_later(
+                self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
+            )
         record.status = 'admitted'
         record.accepted_at = self.clock.now
         record.job_id = binding.job_id
@@ -660,6 +776,7 @@ class Simulation:
                     break  # partially committed binding holds the cursor
 
     async def _project(self, record: UploadRecord) -> None:
+        policy_store.load_stage_policy(self.store, record.segment_ids[0], 'projection')
         try:
             audio = sum(self.truth[sid]['duration'] for sid in record.segment_ids)
             await self.sync_exec.run('projection', self.config.projection_seconds + 0.001 * audio)
@@ -686,6 +803,10 @@ class Simulation:
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
             )
+            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            mirror_refresh(
+                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
+            )
             record.projected_at = now
             if record.has_words:
                 await self._start_summary(record)
@@ -694,8 +815,22 @@ class Simulation:
 
     # ---------------------------------------------------------- first summary
     async def _start_summary(self, record: UploadRecord) -> None:
+        if record.first_summary_policy is None:
+            record.first_summary_policy = self._stage_policy(record.spec.owner, 'first_summary')
         if record.summary_pending_at is None:
             record.summary_pending_at = self.clock.now
+            for sid in record.segment_ids:
+                self.store.mutate(
+                    'jobs',
+                    sid,
+                    lambda row: row.update(
+                        policy_parts={
+                            **row.get('policy_parts', {}),
+                            'first_summary': record.first_summary_policy.to_dict(),
+                        }
+                    ),
+                )
+            mirror_refresh(getattr(self.store, 'namespace', ''), [('jobs', s) for s in record.segment_ids])
         record.summary_dispatches += 1
         record.summary_inflight = True
         mode = self.config.summary_dispatch

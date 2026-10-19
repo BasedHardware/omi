@@ -9319,9 +9319,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count til';
-  }
+  String get quoteShowSources => 'Vis kilder';
 
   @override
   String get jumpToLatestMessage => 'Gå til nyeste melding';
@@ -11066,7 +11064,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
-  String get captureRecoveryBanner => 'Omi sender ikke lyd — trykk for å koble til igjen';
+  String get captureRecoveryBannerTitle => 'Omi sender ikke lyd';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11077,6 +11075,23 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
+
+  @override
+  String get captureBannerTryReconnect => 'Prøv å koble til på nytt';
+
+  @override
+  String get captureBannerRetrySync => 'Prøv synkronisering igjen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Lyden når ikke appen — koble til Omi-enheten din på nytt';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Appen kan ikke lenger motta lyd fra Omi-enheten og klarte ikke å gjenopprette forbindelsen automatisk. Koble fra og til igjen enheten — fra enhetsinnstillingene eller ved å slå den av og på. Lyd som er lagret på enheten, synkroniseres senere.';
 
   @override
   String get captureStillRecording => 'Tar fortsatt opp';
@@ -13659,7 +13674,30 @@ class AppLocalizationsNo extends AppLocalizations {
   String get activityRetryAll => 'Prøv alle på nytt';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Opptak satt på pause';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Opplastingen har stoppet';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak venter',
+      one: '1 opptak venter',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitet, krever oppmerksomhet';
 
   @override
   String get connectAgentHeadline => 'Bruk Omi-minnet ditt i ChatGPT og AI-agentene dine';
@@ -14344,4 +14382,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved av $total lyd lagret';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi tar fortsatt opp';
 }

@@ -9267,9 +9267,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+อีก $count';
-  }
+  String get quoteShowSources => 'แสดงแหล่งที่มา';
 
   @override
   String get jumpToLatestMessage => 'ไปยังข้อความล่าสุด';
@@ -11004,7 +11002,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get openCall => 'เปิดการโทร';
 
   @override
-  String get captureRecoveryBanner => 'Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่';
+  String get captureRecoveryBannerTitle => 'Omi ไม่ส่งเสียง';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์';
@@ -11014,6 +11012,23 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'บันทึกเสียงแล้ว จะถอดความภายหลัง';
+
+  @override
+  String get captureBannerTryReconnect => 'ลองเชื่อมต่อใหม่';
+
+  @override
+  String get captureBannerRetrySync => 'ลองซิงค์อีกครั้ง';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์';
+
+  @override
+  String get captureIngressNeedsReconnect => 'เสียงไม่ถึงแอป — เชื่อมต่อ Omi ของคุณใหม่';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'แอปไม่สามารถรับเสียงจากอุปกรณ์ Omi ได้อีกต่อไปและไม่สามารถกู้คืนการเชื่อมต่อโดยอัตโนมัติ ให้ยกเลิกการเชื่อมต่อและเชื่อมต่ออุปกรณ์ใหม่ — จากการตั้งค่าอุปกรณ์หรือปิดแล้วเปิดใหม่ เสียงที่บันทึกไว้ในอุปกรณ์จะซิงก์ในภายหลัง';
 
   @override
   String get captureStillRecording => 'ยังบันทึกอยู่';
@@ -13590,7 +13605,30 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityRetryAll => 'ลองใหม่ทั้งหมด';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'ตรวจสอบพื้นที่เก็บข้อมูลไม่ได้';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'การบันทึกหยุดชั่วคราว';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'การอัปโหลดหยุดชะงัก';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count รายการกำลังรอ',
+      one: '1 รายการกำลังรอ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
+
+  @override
+  String get activityAttentionSemantics => 'กิจกรรม ต้องดำเนินการ';
 
   @override
   String get connectAgentHeadline => 'ใช้ความจำ Omi ของคุณใน ChatGPT และเอเจนต์ AI ของคุณ';
@@ -14268,4 +14306,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'บันทึกเสียงแล้ว $saved จาก $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi ยังคงบันทึกอยู่';
 }

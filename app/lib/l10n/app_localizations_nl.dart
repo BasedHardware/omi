@@ -9342,9 +9342,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count meer';
-  }
+  String get quoteShowSources => 'Bronnen tonen';
 
   @override
   String get jumpToLatestMessage => 'Naar nieuwste bericht springen';
@@ -11094,7 +11092,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
+  String get captureRecoveryBannerTitle => 'Omi verzendt geen audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11105,6 +11103,23 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
+
+  @override
+  String get captureBannerTryReconnect => 'Opnieuw proberen te verbinden';
+
+  @override
+  String get captureBannerRetrySync => 'Synchronisatie opnieuw proberen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'De Bluetooth-verbinding met je Omi is vastgelopen, dus audio komt de app niet meer binnen. Omi blijft opnemen op het apparaat en synchroniseert zodra de verbinding herstelt. Opnieuw proberen herstelt de verbinding; als het blijft mislukken, controleer je apparaat onder Instellingen > Apparaat.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Audio bereikt de app niet — verbind je Omi opnieuw';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'De app kan geen audio meer ontvangen van het Omi-apparaat en kon de verbinding niet automatisch herstellen. Koppel het apparaat los en opnieuw — via de apparaatinstellingen of door het uit en weer aan te zetten. Audio die op het apparaat is opgeslagen, wordt later gesynchroniseerd.';
 
   @override
   String get captureStillRecording => 'Neemt nog op';
@@ -13693,7 +13708,30 @@ class AppLocalizationsNl extends AppLocalizations {
   String get activityRetryAll => 'Alles opnieuw proberen';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Opslag kon niet worden gecontroleerd';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Opnames gepauzeerd';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Upload vastgelopen';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames wachten',
+      one: '1 opname wacht',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
+
+  @override
+  String get activityAttentionSemantics => 'Activiteit, aandacht nodig';
 
   @override
   String get connectAgentHeadline => 'Gebruik je Omi-geheugen in ChatGPT en je AI-agents';
@@ -14379,4 +14417,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved van $total audio opgeslagen';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi neemt nog steeds op';
 }

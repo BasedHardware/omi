@@ -12,6 +12,7 @@ from utils.batch_pipeline import cap_hold_admission as adapter
 from utils.batch_pipeline import intake
 from utils.sync import cap_hold, cap_hold_recovery
 from utils.sync.legacy_dark import LegacySyncMode
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 
 UID = 'synthetic-owner'
 
@@ -158,7 +159,12 @@ def hook(monkeypatch):
     monkeypatch.setattr(cap_hold_recovery, '_recover_row', legacy)
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda uid, snapshot, current: events.append(('erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_settle_and_erase', lambda *a: events.append(('settle_and_erase',)))
-    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid: True)
+    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: True)
+
+    async def selected_lane(uid, current):
+        return 'sync'  # main #22494: recovery follows the hold's original lane (missing legacy origin = sync)
+
+    monkeypatch.setattr(cap_hold_recovery, '_selected_lane', selected_lane)
     snapshot = SimpleNamespace(id='hold-1', reference=object(), to_dict=lambda: dict(row))
     return SimpleNamespace(events=events, snapshot=snapshot, row=row)
 
@@ -171,8 +177,15 @@ async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monk
         return adapter.HeldAdmission('admitted', 'bp_job')
 
     monkeypatch.setattr(adapter, 'admit_held', admit)
+    # The funded-capacity reservation (lane 6) lands before the hand-off is durable.
+    monkeypatch.setattr(
+        cap_hold_recovery.cap_hold_reservations,
+        'reserve',
+        lambda uid, hold_id, **kwargs: hook.events.append(('reserve', hold_id, kwargs['batch_job_id'])),
+    )
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert hook.events == [
+        ('reserve', 'hold-1', 'bp_job'),
         ('save', {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}),
         ('erase',),
         ('release', 'lease'),
@@ -201,7 +214,7 @@ async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
 @pytest.mark.asyncio
 async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch):
     monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
-    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid: False)
+    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: False)
     monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('gated owner admitted'))
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
     assert hook.events == [('release', 'lease')]

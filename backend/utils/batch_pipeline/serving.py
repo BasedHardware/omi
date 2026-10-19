@@ -7,8 +7,9 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import live_record_admission_enabled, async_projection_enabled
+from config.batch_pipeline import owner_chain_projection_enabled
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
@@ -67,10 +68,17 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time()) is None:
                 break
 
-    async def reconcile_async(self, *, recover_quarantine=False, periodic=False):
-        await run_blocking(sync_executor, self.reconcile, recover_quarantine=recover_quarantine, periodic=periodic)
-        if async_projection_enabled() and self.projector:
-            await self.projector.start_followups()
+    async def reconcile_async(self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None):
+        priority = await run_blocking(
+            sync_executor,
+            self.reconcile,
+            recover_quarantine=recover_quarantine,
+            periodic=periodic,
+            owner_id=owner_id,
+            recovered=recovered,
+        )
+        if self.projector and (priority or self.projector.has_async_followups):
+            await self.projector.start_followups(priority or ())
 
     def _leads(self, periodic: bool) -> bool:
         # Explicit RPC callers (POST /reconcile, post-recovery drain) always
@@ -78,9 +86,22 @@ class Serving:
         # one serving instance per lease TTL; the lease fails open.
         return not periodic or self.leader is None or self.leader.acquire()
 
-    def reconcile(self, *, recover_quarantine=False, periodic=False):
+    def reconcile(self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None) -> list[str]:
+        """Returns async follow-ups an owner-chain wake wants run first."""
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
+        priority = []
+        if owner_id is not None and self.projector and owner_chain_projection_enabled():
+            # A settled recovery commits at this owner's log tail. Walk the
+            # owner's chain now instead of waiting for the global cursor. The
+            # wake is only a hint: on failure the generic sweep still runs.
+            try:
+                self.drain_owner(owner_id)
+                priority = self.projector.project_owner(owner_id, recovered=recovered)
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_projection action=owner_chain outcome=retry exception_type=%s', type(error).__name__
+                )
         # Projection and the local gauges stay per instance: projection is
         # throughput (ordered and fenced in its own transactions) and every
         # instance exports its own queue sample.
@@ -88,6 +109,7 @@ class Serving:
             self.projector.sweep()
         if self.metrics:
             self.metrics.refresh(self.store, time.time())
+        return priority
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
@@ -117,7 +139,7 @@ class Serving:
 def serving_for_stage(stage: str) -> Serving:
     if stage != current_stage():
         raise ValueError('worker and serving stages must match')
-    store = FirestoreStore(f'batch_pipeline_{stage}')
+    store = shadow_from_env(FirestoreStore(f'batch_pipeline_{stage}'))
     artifacts = artifacts_for(store)
     projector = Projector(store, artifacts.load_result, fetch_audio=artifacts.fetch_audio)
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
@@ -151,8 +173,7 @@ def start_serving_from_env():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
                 await service.reconcile_async(recover_quarantine=True, periodic=True)
-                if live_record_admission_enabled():
-                    await drain_recordings(service.store)
+                await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

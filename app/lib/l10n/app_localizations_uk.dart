@@ -9340,9 +9340,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ ще $count';
-  }
+  String get quoteShowSources => 'Показати джерела';
 
   @override
   String get jumpToLatestMessage => 'Перейти до останнього повідомлення';
@@ -11089,7 +11087,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get openCall => 'Відкрити дзвінок';
 
   @override
-  String get captureRecoveryBanner => 'Omi не передає звук — натисніть, щоб підключитися знову';
+  String get captureRecoveryBannerTitle => 'Omi не передає звук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Зупиніть Transcribe Later на підвісці перед записом на телефоні.';
@@ -11099,6 +11097,23 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудіо збережено, транскрипція пізніше';
+
+  @override
+  String get captureBannerTryReconnect => 'Спробувати підключити знову';
+
+  @override
+  String get captureBannerRetrySync => 'Повторити синхронізацію';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Зв\'язок Bluetooth із вашим Omi перервався, тому звук не потрапляє в застосунок. Omi продовжує запис на пристрої та синхронізується, коли зв\'язок відновиться. Повторна спроба знову встановлює зв\'язок; якщо він і далі не працює, перевірте пристрій у розділі Налаштування > Пристрій.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Звук не доходить до застосунку — перепід\'єднайте Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Застосунок більше не може отримувати звук із пристрою Omi і не зміг автоматично відновити з\'єднання. Від\'єднайте та знову під\'єднайте пристрій — у налаштуваннях пристрою або вимкнувши та ввімкнувши його. Звук, збережений на пристрої, синхронізується пізніше.';
 
   @override
   String get captureStillRecording => 'Запис триває';
@@ -13689,7 +13704,30 @@ class AppLocalizationsUk extends AppLocalizations {
   String get activityRetryAll => 'Повторити все';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Не вдалося перевірити памʼять';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Записи призупинено';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Завантаження зупинилося';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Очікують $count записи',
+      one: 'Очікує 1 запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
+
+  @override
+  String get activityAttentionSemantics => 'Активність, потребує уваги';
 
   @override
   String get connectAgentHeadline => 'Використовуйте пам\'ять Omi у ChatGPT і своїх ШІ-агентах';
@@ -14371,4 +14409,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Збережено $saved з $total аудіо';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi продовжує запис';
 }

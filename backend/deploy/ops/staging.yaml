@@ -12,8 +12,8 @@ cloud_run:
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
-    max_instances: 80
-    min_instances: 1
+    # Replica counts are on contract (i)'s staging allowlist: lane 2's deploy.sh sizes staging.
+    max_instances: 20
   backend-sync-backfill-staging:
     env:
       SYNC_TASKS_QUEUE: staging-sync-backfill-fresh
@@ -23,7 +23,6 @@ cloud_run:
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
-    min_instances: 1
 
 cloud_tasks:
   staging-batch-quarantine-recovery:

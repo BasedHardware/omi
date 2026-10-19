@@ -144,6 +144,10 @@
     {
       "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:run_sync_job/503",
       "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
+      "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
     }
   ]
 }

@@ -74,10 +74,29 @@ def _anonymous_google_credentials(
 google.auth.default = _anonymous_google_credentials
 
 
+def _free_ports(count: int) -> list[int]:
+    """Reserve and return `count` distinct ephemeral ports on loopback.
+
+    Holding all probe sockets open simultaneously guarantees that the kernel
+    allocates non-conflicting, unique port numbers across the stack's services (#20322).
+    """
+    probes = []
+    ports = []
+    try:
+        for _ in range(count):
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(('127.0.0.1', 0))
+            probes.append(probe)
+            ports.append(int(probe.getsockname()[1]))
+        return ports
+    finally:
+        for probe in probes:
+            probe.close()
+
+
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(('127.0.0.1', 0))
-        return int(probe.getsockname()[1])
+    return _free_ports(1)[0]
 
 
 def _wait_for_port(port: int, *, label: str, timeout: float = 30.0) -> None:
@@ -131,6 +150,10 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def postgres_requested() -> bool:
+    return os.getenv('OMI_STACK_POSTGRES', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 class Stack:
     def __init__(
         self,
@@ -149,9 +172,10 @@ class Stack:
         self.evidence_dir = state_dir / 'evidence'
         self.storage_dir = state_dir / 'local-storage'
         self.gate_dir = state_dir / 'processor-gate' if hold_processor else None
-        self.redis_port = _free_port()
-        self.admission_port = _free_port()
-        self.worker_port = _free_port()
+        ports = _free_ports(3)
+        self.redis_port = ports[0]
+        self.admission_port = ports[1]
+        self.worker_port = ports[2]
         self.task_ack_failures = task_ack_failures
         self.worker_failures = worker_failures
         self.pre_ledger_failures = pre_ledger_failures
@@ -300,6 +324,17 @@ class Stack:
         # can exceed 20s). Give the strong check the generous budget.
         _wait_until(healthy, label=f'Sync {role} health endpoint', timeout=60.0)
 
+    def _start_postgres(self) -> None:
+        """Opt-in (``OMI_STACK_POSTGRES=1``): a private-socket Postgres 16 with the job-store schema, for roles
+        that select the Postgres job store. Its DSN reaches children as ``JOBSTORE_POSTGRES_DSN``. Nothing in
+        the default stack reads it, so the stack is unchanged unless asked."""
+        from testing.store_fixtures import BackendUnavailable, postgres_dsn
+
+        try:
+            self.env['JOBSTORE_POSTGRES_DSN'] = postgres_dsn()
+        except BackendUnavailable as exc:
+            raise StackFailure(f'OMI_STACK_POSTGRES=1 but Postgres is unavailable: {exc}') from exc
+
     def start(self) -> None:
         redis_binary = shutil.which('redis-server')
         if not redis_binary:
@@ -322,6 +357,8 @@ class Stack:
         )
         _wait_for_port(self.redis_port, label='isolated Redis')
         redis.Redis(host='127.0.0.1', port=self.redis_port).ping()
+        if postgres_requested():
+            self._start_postgres()
         self._start(
             'worker',
             [
@@ -371,6 +408,10 @@ class Stack:
     def close(self) -> None:
         for name in list(self.children):
             self.stop(name)
+        if postgres_requested():
+            from testing.store_fixtures import stop_local_postgres
+
+            stop_local_postgres()
         for port, label in (
             (self.redis_port, 'isolated Redis'),
             (self.worker_port, 'Sync worker'),

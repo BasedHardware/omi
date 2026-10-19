@@ -64,23 +64,26 @@ DATA_LOSS_TOKENS = frozenset(
     {'stuck_job_over_30m', 'obligation_over_15m', 'projection_error', 'projection_stalled', 'parity_row_5'}
 )
 PRIVACY_TOKENS = frozenset({'parity_row_7'})
-# GATE_FAIL lines that are not a verdict on the cohort: the gate could not read or was misinvoked
-# (fleet_gate.sh GateError tokens), or ran out of time before its sample was complete. These HOLD
-# instead of rolling back; pending captain sign-off on the board (lane 6 status, issue C1).
-GATE_EXECUTION_TOKENS = frozenset(
+# Ordinary cohort verdicts (fleet_gate.sh verdict(), plus composed parity): ROLLBACK_ONE. This is a closed
+# list on purpose: every other GATE_FAIL token is a fleet_gate GateError (a read failed, a log page was
+# truncated, a record had an unexpected shape, ro_dev/ro_prod credentials were missing) or a misinvocation,
+# i.e. the gate could not judge the cohort. C1 ruling: those HOLD and escalate, never roll back.
+COHORT_FAIL_TOKENS = frozenset(
     {
-        'ro_prod_unavailable',
-        'ro_prod_required',
-        'invalid_arguments',
-        'since_must_be_iso_utc_Z',
-        'interrupted',
-        'unexpected_read_or_parse_failure',
-        'gate_output_unparsed',
-        'gate_timeout',
-        'gate_not_run',
-        'parity_not_run',
+        'pre_existing_debt_growing',
+        'projection_transient_rate',
+        'unrecovered_quarantine',
+        'recovery_spend_over_0_005_per_worn_hour',
+        'recovery_spend_unknown',
+        'quarantine_projection_p95_unknown',
+        'quarantine_projection_p95_over_5m',
+        'first_summary_dispatch_contract',
+        'first_summary_completion_outlier',
+        'http_5xx_regression',
+        'parity_fail',
     }
 )
+COHORT_FAIL_PREFIXES = ('parity_row_',)
 INCOMPLETE_SAMPLE_TOKENS = frozenset({'timeout_incomplete'})
 # Preconditions for any env leaving legacy_sync='on' (contract (h) entry gate, plus lead/Subscription rulings).
 # The controller never writes legacy_sync; ramp_set refuses `--legacy-sync draining|dark` until every id here is
@@ -152,15 +155,15 @@ def required_hold_seconds(current: float, hold_scale: float = 1.0) -> float:
 
 def classify_fail(reason: str) -> tuple[Action | None, RampReason]:
     """Map a GATE_FAIL token to the rollback it requires; (None, ...) means HOLD (not a cohort verdict)."""
-    if reason in GATE_EXECUTION_TOKENS or reason.startswith('usage_'):
-        return None, RampReason.GATE_FAIL
     if reason in INCOMPLETE_SAMPLE_TOKENS:
         return None, RampReason.GATE_PENDING
     if reason in PRIVACY_TOKENS:
         return Action.ROLLBACK_ZERO, RampReason.PRIVACY
     if reason in DATA_LOSS_TOKENS or reason.startswith(DATA_LOSS_PREFIXES):
         return Action.ROLLBACK_ZERO, RampReason.DATA_LOSS
-    return Action.ROLLBACK_ONE, RampReason.GATE_FAIL
+    if reason in COHORT_FAIL_TOKENS or reason.startswith(COHORT_FAIL_PREFIXES):
+        return Action.ROLLBACK_ONE, RampReason.GATE_FAIL
+    return None, RampReason.GATE_FAIL
 
 
 def decide(
@@ -694,7 +697,7 @@ def main(
     parity_cmd = shlex.split(args.parity_cmd) if args.parity_cmd else None
     state_path = Path(args.state_file)
     effects = Effects(
-        read_document=lambda: store.read_ramp(firestore_client=client),
+        read_document=lambda: store.read_ramp(firestore_client=client, timeout=store.OPERATOR_READ_TIMEOUT_SECONDS),
         read_history=lambda revisions: store.read_ramp_history(revisions, firestore_client=client),
         write=lambda env, change, **kw: write_ramp(env, change, firestore_client=client, **kw),
         gate=lambda since, percent: run_fleet_gate(

@@ -215,6 +215,72 @@ Found 1 screenshot(s) matching "Discord":
     assert payload["result_count"] == 1
     assert payload["results"][0]["screenshot_id"] == 42
     assert payload["results"][0]["ocr_preview"] == "Status update preview"
+    assert payload["results"][0]["similarity"] == 0.87
+    assert payload["results"][0]["matched_by"] is None
+
+
+def test_search_screen_structures_on_device_hybrid_results(config_path: Path, cli_runner) -> None:
+    """Desktop's on-device search labels hits ``hybrid: keyword|vector|both``
+    instead of a similarity score. JSON mode must still return them as results
+    rather than treat the search as empty and run the exact-text SQL fallback."""
+    _configure_local_profile(config_path)
+    response = """
+Found 3 screenshot(s) matching "budget":
+
+1. [2026-09-09 2:13:20 PM PDT (America/Los_Angeles)] Editor - Plan (screenshot_id: 3, hybrid: both)
+   Content: budget review
+
+2. [2026-09-09 2:12:40 PM PDT (America/Los_Angeles)] Notes (screenshot_id: 2, hybrid: keyword)
+   Content: budget notes
+
+3. [2026-09-09 2:10:05 PM PDT (America/Los_Angeles)] Safari - Q3 plan (screenshot_id: 1, hybrid: vector)
+""".strip()
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(response)))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "budget"])
+
+    assert result.exit_code == 0, result.output
+    assert len(route.calls) == 1
+    payload = json.loads(result.stdout)
+    assert payload["result_count"] == 3
+    assert [hit["screenshot_id"] for hit in payload["results"]] == [3, 2, 1]
+    assert [hit["matched_by"] for hit in payload["results"]] == ["both", "keyword", "vector"]
+    assert [hit["similarity"] for hit in payload["results"]] == [None, None, None]
+    assert [hit["window_title"] for hit in payload["results"]] == ["Plan", None, "Q3 plan"]
+    assert payload["results"][0]["timestamp"] == "2026-09-09 2:13:20 PM PDT (America/Los_Angeles)"
+    assert payload["results"][1]["ocr_preview"] == "budget notes"
+    assert "exact_fallback" not in payload
+
+
+def test_search_screen_structures_exact_text_match_results(config_path: Path, cli_runner) -> None:
+    """Before new frames are embedded, Desktop answers from its exact-text index
+    and labels hits ``match: text``. JSON mode must return those hits too."""
+    _configure_local_profile(config_path)
+    response = """
+Found 1 screenshot(s) matching "riddle" (exact text match; newest frames may not be embedded yet):
+
+1. [2026-09-09 2:13:20 PM PDT (America/Los_Angeles)] Safari - Puzzles (screenshot_id: 7, match: text)
+   Content: The riddle on the first page
+""".strip()
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(response)))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "riddle"])
+
+    assert result.exit_code == 0, result.output
+    assert len(route.calls) == 1
+    payload = json.loads(result.stdout)
+    assert payload["results"] == [
+        {
+            "rank": 1,
+            "timestamp": "2026-09-09 2:13:20 PM PDT (America/Los_Angeles)",
+            "app_name": "Safari",
+            "window_title": "Puzzles",
+            "screenshot_id": 7,
+            "similarity": None,
+            "matched_by": "text",
+            "ocr_preview": "The riddle on the first page",
+        }
+    ]
 
 
 def test_search_screen_no_results_is_structured_in_json(config_path: Path, cli_runner) -> None:
