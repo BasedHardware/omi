@@ -26,6 +26,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]  # firestore transactional decorator is untyped
 
 from utils.memory.index_window_cursor import BookmarkDict, decode_cursor, query_scope
+from utils.observability.fallback import record_fallback
 
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from config import firestore_read_levers
@@ -418,7 +419,14 @@ def _stream_memory_list_index_window(
         try:
             position = decode_cursor(cursor, query_scope({"uid": uid, "order": order_field})) if cursor else None
         except ValueError:
-            pass  # Invalid/expired bookmarks keep the released window query.
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
         else:
             query = memories_ref if full_documents else memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS))
             query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by("__name__")
