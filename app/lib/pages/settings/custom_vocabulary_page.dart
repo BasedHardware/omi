@@ -195,10 +195,18 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     if (words.isEmpty) return;
 
-    _vocabularyController.clear();
-
     final success = await userProvider.addVocabularyWords(words);
-    if (success && mounted) {
+    if (!mounted) return;
+
+    // Keep the typed words until they are saved, so a failed save can be retried. False with every word already in
+    // the list only means there was nothing new to save.
+    if (!success && !words.every(userProvider.transcriptionVocabulary.contains)) {
+      OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+      return;
+    }
+
+    _vocabularyController.clear();
+    if (success) {
       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
     }
   }
