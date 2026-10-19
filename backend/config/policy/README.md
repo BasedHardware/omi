@@ -77,6 +77,10 @@ that stamp. The emulator persists admission and stage parts on actual job rows.
 
 When workstream B supplies a canonical stage profile, these parts can move to
 admission without changing their consumers. E1 adds no RPC or env/config/IAM
-mutation. Rollback is a code revert: old readers ignore additive fields and old
-rows remain readable through the fallback path. Deployment belongs to the lead's
-two-lane train.
+mutation. Rollback reverts decision wiring while retaining the additive policy
+value type, `ProjectionBinding.policy` and binding decoder until E1 jobs drain.
+The predecessor's strict `ProjectionBinding(**raw)` cannot read a new binding
+without that reader compatibility; an unmodified predecessor artifact is safe
+only after E1 bindings have drained. E1 readers handle pre-E1 rows through the
+recorded fallback path. No durable policy fields are deleted for rollback.
+Deployment belongs to the lead's two-lane train.
