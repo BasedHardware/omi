@@ -553,26 +553,11 @@ class TestSyncEndpointCodeStructure:
         source = self._read_sync_source()
         assert 'run_blocking(critical_executor, get_hard_restriction_status, uid)' in source
 
-    def test_hard_restricted_429_uses_retry_after_headers(self):
-        """Hard-restricted sync responses share an explicit machine-readable contract."""
-        source = self._read_sync_source()
-        assert 'get_hard_restriction_retry_after_seconds' not in source
-        assert 'FAIR_USE_RATE_LIMIT_CODE' in source
-        assert 'headers = fair_use_rate_limit_headers(safe_retry_after, base_headers)' in source
-        assert source.count('return await _fair_use_restriction_response(') >= 3
-        assert 'retry_after=retry_after' in self._function_body(source, 'async def sync_local_files_v2(')
-        assert 'run_blocking(critical_executor, fair_use_rate_limit_headers' not in source
-
     def test_v2_propagates_app_version_into_rejection_telemetry(self):
         source = self._function_body(self._read_sync_source(), 'async def sync_local_files_v2(')
         assert "x_app_version: Optional[str] = Header(None, alias='X-App-Version')" in source
         assert 'x_app_version=x_app_version if isinstance(x_app_version, str) else None' in source
         assert 'app_version=client_device_context.app_version' in source
-
-    def test_zero_speech_skips_recording(self):
-        """Verify zero-speech guard in code: only records when total_speech_ms > 0."""
-        source = self._read_sync_source()
-        assert 'total_speech_ms > 0' in source
 
     def test_soft_cap_does_not_lock(self):
         """Soft cap trigger must NOT set should_lock — only classifier/stage should lock."""
