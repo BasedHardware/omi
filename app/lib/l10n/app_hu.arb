@@ -4119,6 +4119,7 @@
     "reviewProposalGeneric": "Alkalmazod ezt a javasolt javítást?",
     "reviewProposalApply": "Alkalmaz",
     "reviewProposalSuggested": "Javasolt",
+    "reviewQuestionOutOfDate": "Ez a kérdés már nem aktuális, ezért semmi sem változott.",
     "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.",
     "itemLinkListTitle": "{count, plural, =0{Nincsenek elemek} =1{1 elem} other{{count} elem}}",
     "paywallRecommended": "Ajánlott",

@@ -13113,6 +13113,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewProposalSuggested => 'پیشنهادی';
 
   @override
+  String get reviewQuestionOutOfDate => 'این پرسش دیگر به‌روز نیست، بنابراین چیزی تغییر نکرد.';
+
+  @override
   String get reviewProposalConflict => 'این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.';
 
   @override
