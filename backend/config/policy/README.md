@@ -131,7 +131,7 @@ new conversations after their current recorded session ends, rather than
 changing the current arm. All `STT_ROUTING_*` and window allocation raw reads are
 rejected outside `config/policy/` by the existing local/CI AST guard.
 
-Listen also records failover recovery, connect shedding/probes/account cooldown,
+Listen also records paid-spillover admission and its three provider caps, failover recovery, connect shedding/probes/account cooldown,
 no-text diagnostics/rescue, language hint/learning cohort and demand-routing
 admission/dwell controls. Parakeet-window uses `cohort_bucket(..., bits=64)` with
 its original `parakeet-window:` salt and first eight sha256 bytes. E1's batch
@@ -140,7 +140,7 @@ UIDs and eight percentage boundaries, including fractional percentages.
 
 The registry still marks `PARAKEET_WINDOW_ALLOCATION_PERCENT` as `rollout`, so
 it is frozen rather than promoted to a live kill switch by this change. E1's
-registry-checked ops_kill allowlist is unchanged. Rollback is a revert: old code
+registry-checked ops_kill allowlist also includes #22514's live `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`, retaining its original false/0/off semantics and logging the policy ID. Rollback is a revert: old code
 ignores the additive Redis namespace and state fields; sessions without a usable
 record fall back to deterministic resolution. No env or deployment changes are
 part of E2; the lead owns the canary/deploy train.

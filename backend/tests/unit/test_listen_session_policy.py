@@ -348,3 +348,27 @@ def test_disruption_gate_preserves_legacy_validation(monkeypatch, raw):
     else:
         with pytest.raises(ValueError):
             disruption_gate()
+
+
+@pytest.mark.parametrize(
+    'raw,enabled', [('true', True), ('false', False), ('0', False), ('off', False), (' FALSE ', False), ('other', True)]
+)
+def test_new_main_ops_kill_remains_live_and_keeps_semantics(monkeypatch, raw, enabled):
+    from config.policy import kill_switch
+
+    policy = resolve_listen_policy('owner', flags={})
+    current_listen_policy.set(policy)
+    name = 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED'
+    monkeypatch.setenv(name, raw)
+    assert kill_switch(name, policy_id=policy.policy_id) is enabled
+
+
+def test_paid_spillover_settings_stay_recorded_after_flip(monkeypatch):
+    from utils.stt import paid_admission
+
+    flags = {'STT_PAID_SPILLOVER_BUDGET_ENABLED': 'true', 'STT_PAID_SPILLOVER_SONIOX_PER_MINUTE': '17'}
+    policy = resolve_listen_policy('owner', flags=flags)
+    current_listen_policy.set(policy)
+    monkeypatch.setenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'false')
+    monkeypatch.setenv('STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', '0')
+    assert paid_admission.enabled() and paid_admission.limit('soniox') == 17

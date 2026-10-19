@@ -39,6 +39,10 @@ class ListenSessionPolicy(PolicyPart):
     window_allocated: bool = False
     service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
     failover_recovery_enabled: bool = False
+    paid_spillover_budget_enabled: bool = False
+    paid_spillover_soniox_per_minute: int = 30
+    paid_spillover_modulate_per_minute: int = 30
+    paid_spillover_deepgram_per_minute: int = 30
     shed_connect_failures: int = 3
     circuit_half_open_probes: int = 1
     account_circuit_cooldown_seconds: float = 1800.0
@@ -264,6 +268,17 @@ def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, m
     probes = max(1, number('STT_CIRCUIT_HALF_OPEN_PROBES', 'circuit_half_open_probes', 1, integer=True))
     account_cooldown = number('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', 'account_circuit_cooldown_seconds', 1800.0)
     no_text = max(1.0, number('STT_NO_TEXT_SECONDS', 'no_text_seconds', 30.0))
+    paid_limits = {
+        provider: int(
+            number(
+                f'STT_PAID_SPILLOVER_{provider.upper()}_PER_MINUTE',
+                f'paid_spillover_{provider}_per_minute',
+                30,
+                integer=True,
+            )
+        )
+        for provider in ('soniox', 'modulate', 'deepgram')
+    }
     mode = env.get('STT_ROUTING_MODE', 'off')
     try:
         percent, percent_valid = _routing_percent(env), True
@@ -316,6 +331,10 @@ def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, m
         window_allocated=bool(uid) and cohort_bucket(uid, 'parakeet-window', bits=64) < window,
         service_models=configured,
         failover_recovery_enabled=enabled('STT_FAILOVER_RECOVERY_ENABLED'),
+        paid_spillover_budget_enabled=enabled('STT_PAID_SPILLOVER_BUDGET_ENABLED'),
+        paid_spillover_soniox_per_minute=paid_limits['soniox'],
+        paid_spillover_modulate_per_minute=paid_limits['modulate'],
+        paid_spillover_deepgram_per_minute=paid_limits['deepgram'],
         shed_connect_failures=shed,
         circuit_half_open_probes=int(probes),
         account_circuit_cooldown_seconds=account_cooldown,
