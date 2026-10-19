@@ -242,3 +242,24 @@ def publish_concurrency() -> int:
     except ValueError:
         return 1
     return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+RECOVERY_WAKE_LEASE_DEFAULT = 600
+RECOVERY_WAKE_LEASE_MAX = 3600
+
+
+def recovery_wake_lease_seconds() -> int:
+    """Ship-on: one outstanding recovery delivery task per prepared intent.
+
+    The lease bounds how long an undelivered wake is trusted before the sweep
+    repairs it with a new one. ``0`` is the kill switch: the legacy 120s
+    time-bucketed wake on every sweep. Malformed or out-of-range values keep the
+    default.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', str(RECOVERY_WAKE_LEASE_DEFAULT)))
+    except ValueError:
+        return RECOVERY_WAKE_LEASE_DEFAULT
+    if value == 0:
+        return 0
+    return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
