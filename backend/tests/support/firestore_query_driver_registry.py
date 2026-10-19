@@ -1665,7 +1665,9 @@ _add(
         setup=_memory_window_bookmark,
         patchers=(
             _stub('config.firestore_read_levers.lever_enabled', True),
-            _stub('utils.memory.index_window_cursor.time.time', int(T0.timestamp())),
+            lambda client: unittest.mock.patch(
+                'utils.memory.index_window_cursor.time.time', return_value=int(T0.timestamp())
+            ),
             lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
         ),
     )
