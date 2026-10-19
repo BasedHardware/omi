@@ -40,6 +40,7 @@ from google.cloud import firestore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
+from utils.observability.reasons import RampReason  # noqa: E402
 from utils.rollout.runtime_percent import RampSnapshot, clamp_nesting, write_ramp  # noqa: E402
 
 logger = logging.getLogger('ramp_controller')
@@ -81,20 +82,6 @@ GATE_EXECUTION_TOKENS = frozenset(
     }
 )
 INCOMPLETE_SAMPLE_TOKENS = frozenset({'timeout_incomplete'})
-
-
-class RampReason(StrEnum):
-    """Mirror of contract (e) RampReason; replaced by utils.observability.reasons once lane 14 lands it."""
-
-    UNKNOWN = 'unknown'
-    GATE_PASS = 'gate_pass'
-    GATE_PENDING = 'gate_pending'
-    GATE_FAIL = 'gate_fail'
-    HOLD_INCOMPLETE = 'hold_incomplete'
-    LOCKED_BY_OPERATOR = 'locked_by_operator'
-    AT_CEILING = 'at_ceiling'
-    DATA_LOSS = 'data_loss'
-    PRIVACY = 'privacy'
 
 
 class Action(StrEnum):
