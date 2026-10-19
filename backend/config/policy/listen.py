@@ -39,6 +39,7 @@ class ListenSessionPolicy(PolicyPart):
     window_allocated: bool = False
     service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
     failover_recovery_enabled: bool = False
+    fallback_liveness_grace_seconds: float = 0.3
     paid_spillover_budget_enabled: bool = False
     paid_spillover_soniox_per_minute: int = 30
     paid_spillover_modulate_per_minute: int = 30
@@ -229,6 +230,15 @@ def listen_value(field, key, default):
     return os.environ.get(key, default)
 
 
+def fallback_liveness_grace(default: float) -> float:
+    policy = current_listen_policy.get()
+    if policy is None:
+        return default
+    if 'fallback_liveness_grace_seconds' in policy.invalid_fields:
+        raise ValueError('invalid recorded fallback liveness grace')
+    return policy.fallback_liveness_grace_seconds
+
+
 def account_circuit_cooldown() -> float:
     return float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
 
@@ -252,7 +262,9 @@ def _hintable_percent(env):
         return 0.0
 
 
-def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, models=None) -> ListenSessionPolicy:
+def resolve_listen_policy(
+    uid: str, *, flags: Mapping[str, str] | None = None, models=None, liveness_grace_seconds=None
+) -> ListenSessionPolicy:
     from config.live_demand import resolve_live_demand
     from config.stt_provider_policy import STTServingSurface, default_models_for_surface
 
@@ -268,6 +280,11 @@ def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, m
 
     # Keep invalid numeric parsing at its original use boundary. An unused
     # failover knob must not reject an otherwise healthy session at admission.
+    grace = (
+        number('STT_FALLBACK_LIVENESS_GRACE_SECONDS', 'fallback_liveness_grace_seconds', 0.3)
+        if liveness_grace_seconds is None
+        else liveness_grace_seconds
+    )
     gate = number('STT_ROUTING_DISRUPTION_GATE', 'routing_disruption_gate', 0.08)
     probes = max(1, number('STT_CIRCUIT_HALF_OPEN_PROBES', 'circuit_half_open_probes', 1, integer=True))
     account_cooldown = number('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', 'account_circuit_cooldown_seconds', 1800.0)
@@ -335,6 +352,7 @@ def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, m
         window_allocated=bool(uid) and cohort_bucket(uid, 'parakeet-window', bits=64) < window,
         service_models=configured,
         failover_recovery_enabled=enabled('STT_FAILOVER_RECOVERY_ENABLED'),
+        fallback_liveness_grace_seconds=grace,
         paid_spillover_budget_enabled=enabled('STT_PAID_SPILLOVER_BUDGET_ENABLED'),
         paid_spillover_soniox_per_minute=paid_limits['soniox'],
         paid_spillover_modulate_per_minute=paid_limits['modulate'],

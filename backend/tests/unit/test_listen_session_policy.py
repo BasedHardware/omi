@@ -382,3 +382,12 @@ def test_invalid_spillover_cap_only_affects_its_provider():
     assert paid_admission.limit('deepgram') == 30
     with pytest.raises(ValueError):
         paid_admission.limit('soniox')
+
+
+def test_fallback_liveness_grace_is_pinned_but_nonlisten_getter_stays_process_owned():
+    from config.policy.listen import fallback_liveness_grace
+
+    assert fallback_liveness_grace(0.7) == 0.7
+    policy = resolve_listen_policy('owner', flags={'STT_FALLBACK_LIVENESS_GRACE_SECONDS': '0.2'})
+    current_listen_policy.set(policy)
+    assert fallback_liveness_grace(0.7) == 0.2

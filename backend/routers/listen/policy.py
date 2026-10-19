@@ -9,11 +9,11 @@ from functools import lru_cache
 import hashlib
 import json
 import logging
+import os
 
 import redis.asyncio as aioredis
 
 from config.policy.listen import ListenSessionPolicy, resolve_listen_policy
-from database.redis_connection import redis_connection_kwargs
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -57,10 +57,12 @@ async def _client(injected=None):
     if injected is not None:
         yield injected
     else:
-        kwargs = redis_connection_kwargs()
-        kwargs['host'] = kwargs.get('host') or 'localhost'
         async with aioredis.Redis(
-            **kwargs,
+            host=os.getenv('REDIS_DB_HOST') or 'localhost',
+            port=int(os.getenv('REDIS_DB_PORT', '6379')),
+            username='default',
+            password=os.getenv('REDIS_DB_PASSWORD'),
+            health_check_interval=30,
             socket_connect_timeout=REDIS_TIMEOUT_SECONDS,
             socket_timeout=REDIS_TIMEOUT_SECONDS,
             retry_on_timeout=False,
@@ -129,6 +131,7 @@ async def persist_conversation_policy(host, conversation_id):
 
 async def initialize_session_policy(host):
     from utils.stt import streaming
+    from utils.stt.provider_resilience import STT_FALLBACK_LIVENESS_GRACE_SECONDS
 
     identity = host.client_conversation_id or host.recording_session_id
     # Legacy clients lack a recording ID. Reuse prepare()'s authoritative row,
@@ -168,7 +171,11 @@ async def initialize_session_policy(host):
     policy, source = await load_listen_policy(
         host.request.uid,
         identity,
-        resolver=lambda: resolve_listen_policy(host.request.uid, models=streaming.stt_service_models),
+        resolver=lambda: resolve_listen_policy(
+            host.request.uid,
+            models=streaming.stt_service_models,
+            liveness_grace_seconds=STT_FALLBACK_LIVENESS_GRACE_SECONDS,
+        ),
     )
     host.state.listen_policy = policy
     host.state.policy_source = source
