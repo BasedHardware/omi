@@ -361,7 +361,9 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
-    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    # B4: the worker's queues come from the ops file in prod (sync-backfill only outside prod).
+    assert 'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}' in action
+    assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
