@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-name-capture-class-narrower-than-alphabet",
+  "violated_contract": "A pattern that reads a person's name out of transcript text in a supported language must accept every letter that language writes names with. The Latin-script introduction patterns captured [A-Z][a-zA-Z]* and the Russian one [А-Я][а-я]*. The trailing word boundary cannot fall inside a word, so one accented letter anywhere in the name (\"Me llamo José\", \"Ich heiße Jürgen\", \"Меня зовут Фёдор\") made the whole introduction match nothing. Live never suggested, resolved or created the person, sync never resolved one, and nothing reported that the language only worked for ASCII names.",
+  "canonical_prevention": "Build name classes from the script's letters, not ASCII ranges: a capital initial spelled out from the script's uppercase letters (Python's re has no Unicode property classes), followed by any letters. Pin an accented name for each pattern family, with and without the language hint, plus lowercase accented words after a lead-in that must stay unmatched.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_speaker_id_pipeline.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/speaker_identification.py"
+  ],
+  "status": "open"
+}
