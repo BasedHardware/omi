@@ -78,11 +78,9 @@ def setup_people(world, monkeypatch, count=30):
     return reads
 
 
-@pytest.mark.parametrize(
-    'pending,retained,before,after',
-    [(0, 0, 30, 30), (1, 1, 36, 36), (30, 30, 2820, 123), (0, 30, 1020, 63), (1, 30, 1080, 65)],
-)
-def test_get_people_reconciles_each_ledger_once(world, monkeypatch, pending, retained, before, after):
+@pytest.fixture
+def people_reconciliation_case(request, world, monkeypatch):
+    pending, retained, before, after = request.param
     reads = setup_people(world, monkeypatch)
     for i in range(retained):
         assign(person_id=f'p{i}', segment_ids=[f's{i}'])
@@ -90,6 +88,16 @@ def test_get_people_reconciles_each_ledger_once(world, monkeypatch, pending, ret
         if i >= pending:
             ledger._transition_terminal(job, 'text_mismatch')
     reads.clear()
+    return pending, retained, before, after, reads
+
+
+@pytest.mark.parametrize(
+    'people_reconciliation_case',
+    [(0, 0, 30, 30), (1, 1, 36, 36), (30, 30, 2820, 123), (0, 30, 1020, 63), (1, 30, 1080, 65)],
+    indirect=True,
+)
+def test_get_people_reconciles_each_ledger_once(people_reconciliation_case):
+    pending, retained, before, after, reads = people_reconciliation_case
     people = users_db.get_people(UID)
     assert len(people) == 30
     print(f'READ_COUNT pending={pending} retained={retained} people=30 total={len(reads)}')

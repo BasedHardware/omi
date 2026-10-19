@@ -22,6 +22,7 @@ from typing import Any, Callable, ClassVar, Literal
 from uuid import uuid4
 import wave
 
+from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -100,7 +101,7 @@ def resolve_route(language: str | None, *, byok: bool = False) -> SttRoute:
     return SttRoute('provider', 'byok' if byok else 'unsupported_language', 'modulate', normalized[:16])
 
 
-def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -> bool:
+def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute, policy: BatchUnitPolicy) -> bool:
     """Write a provider unit outside the GPU ring; the admission ``enqueue`` hook.
 
     Mirrors ``Scheduler.enqueue_in_transaction``'s immutable-work check, owner
@@ -128,6 +129,8 @@ def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -
     watermark = owner.get('watermark')
     job = {
         **immutable,
+        'policy': policy.to_dict(),
+        'policy_source': 'admission',
         'protocol_version': 1,
         'owner_key': key,
         'enqueued_at': now,
@@ -149,7 +152,7 @@ def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -
     return True
 
 
-def provider_enqueue(route: SttRoute, outbox: Any, wakes: dict[str, str]) -> Callable[[Any, WorkItem, float], bool]:
+def provider_enqueue(route: SttRoute, outbox: Any, wakes: dict[str, str]) -> Callable[..., bool]:
     """The admit() ``enqueue`` hook: the job row and its outbox row commit together.
 
     ``wakes`` collects ``row_id -> wake_token``; the caller calls ``outbox.wake``
@@ -157,8 +160,8 @@ def provider_enqueue(route: SttRoute, outbox: Any, wakes: dict[str, str]) -> Cal
     A retried transaction body overwrites the same keys.
     """
 
-    def enqueue(tx: Any, item: WorkItem, now: float) -> bool:
-        created = enqueue_in_transaction(tx, item, now, route=route)
+    def enqueue(tx: Any, item: WorkItem, now: float, *, policy: BatchUnitPolicy) -> bool:
+        created = enqueue_in_transaction(tx, item, now, route=route, policy=policy)
         if created:
             result = outbox.enqueue(
                 item.segment_id, item.owner_id, {'segment_id': item.segment_id}, now, tx=tx, now=now

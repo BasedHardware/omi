@@ -355,6 +355,9 @@ def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeyp
     monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
     assert queue.pull(10, capacity=capacity) == []
     monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    assert queue.pull(10, capacity=capacity) == []  # admitted policy remains off
+    queue = Scheduler(MemoryStore(), pool='live')
+    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
     assert [v.item.segment_id for v in queue.pull(10, 32, capacity=capacity)] == ['short']
     assert queue.pull(10, capacity=capacity) == []
     from dataclasses import replace
