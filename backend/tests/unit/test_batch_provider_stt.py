@@ -379,11 +379,10 @@ def test_byok_golden_pins_the_ordinary_gpu_route_and_no_vendor_spend():
 
 @pytest.mark.xfail(strict=True, reason='C8 sim configs land with the intake wiring (lane 8 slice 2)')
 @pytest.mark.parametrize('name', PROVIDER_GOLDENS)
-def test_provider_golden_matches_simulation(name):
-    from testing.pipeline_sim.trace import GOLDEN_CONFIGS, dumps, golden_trace
-
-    assert name in GOLDEN_CONFIGS
-    assert dumps(golden_trace(name)) == (GOLDEN_DIR / f'{name}.json').read_text()
+def test_provider_golden_is_pinned_by_the_simulation(name):
+    # test_pipeline_characterization requires a GOLDEN_CONFIGS entry and a trace match for every file in
+    # pipeline_sim_goldens/, so the expectation moving there is what proves the simulation reproduces it.
+    assert (GOLDEN_DIR.parent / 'pipeline_sim_goldens' / f'{name}.json').exists()
 
 
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
