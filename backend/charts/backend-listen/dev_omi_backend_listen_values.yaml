@@ -106,6 +106,12 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED

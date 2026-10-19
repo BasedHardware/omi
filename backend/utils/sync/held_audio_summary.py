@@ -5,7 +5,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.stt_cap_dispatch import any_execution_admission_enabled as enabled, execution_admission_enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
 from utils.stt_cap_dispatch import funded_allowance
 from utils.sync.cap_hold import holds, whole_seconds, ensure_summary, remaining_seconds
@@ -85,11 +85,11 @@ def client_held_audio(
     With the flag on and a positive summary count, the reads are the summary
     document plus one ordered query of at most ``LIST_LIMIT`` holds.
     """
-    if not enabled():
+    if not enabled(uid):
         return None
     if allowance is None:
         allowance = funded_allowance(uid)
-    retain_live = not getattr(allowance, 'managed', True)
+    retain_live = execution_admission_enabled(uid, 'live') and not getattr(allowance, 'managed', True)
     injected_rows = rows is not None
     total = 0
     count = 0
@@ -119,6 +119,6 @@ def client_held_audio(
 
 def attach_subscription_held_audio(response: Any, uid: str, allowance: Any, subscription: Any = None) -> None:
     """Attach the summary without starting recovery. No-op, and no field, when dispatch enforcement is off."""
-    if not enabled():
+    if not enabled(uid):
         return
     response.held_audio = client_held_audio(uid, allowance=allowance, subscription=subscription)

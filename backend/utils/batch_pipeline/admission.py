@@ -48,9 +48,9 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 continue
             job, binding, intake = snapshot
             if (
-                cap_dispatch_enabled()
+                cap_dispatch_enabled(job['owner_id'], 'batch')
                 and not admitted_as_byok(job)
-                and not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet')
+                and not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet', lane='batch')
             ):
                 retries[segment] = 60
                 continue

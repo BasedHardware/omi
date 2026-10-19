@@ -1,4 +1,4 @@
-from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 import asyncio
 import hashlib
 import math
@@ -959,7 +959,7 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
-    if generated_compute_enabled() and not await run_blocking(
+    if generated_compute_configured() and not await run_blocking(
         db_executor, generated_compute_allowed, persona['uid'], 'persona_clone', allow_byok=False
     ):
         return

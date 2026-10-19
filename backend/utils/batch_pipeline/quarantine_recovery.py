@@ -162,7 +162,7 @@ class QuarantineRecovery:
                         log_failure(failure)
                 return 'held'
             disposition = empty_asr_disposition_enabled()
-            if not disposition and not sync_allowed(owner_id, item.duration_seconds):
+            if not disposition and not sync_allowed(owner_id, item.duration_seconds, lane='batch'):
                 return 'held'
             audio = self.artifacts.fetch_audio(item)
             local_payload, inspection_failure = None, None
@@ -179,7 +179,7 @@ class QuarantineRecovery:
             if (
                 local_payload is None
                 and inspection_failure is None
-                and not sync_allowed(owner_id, item.duration_seconds)
+                and not sync_allowed(owner_id, item.duration_seconds, lane='batch')
             ):
                 return 'held'
             multilingual = policy.speech_empty_multilingual
@@ -211,13 +211,13 @@ class QuarantineRecovery:
                     )
                 )
                 result_outcome(payload)
-                if cap_enabled() and payload.get('outcome') != 'silence':
+                if cap_enabled(owner_id, 'batch') and payload.get('outcome') != 'silence':
                     record_audio(
                         'sync',
                         'accepted',
                         'modulate' if multilingual else 'unknown',
                         item.duration_seconds,
-                        funded_allowance(owner_id).reason == 'plan_allowance_exhausted',
+                        funded_allowance(owner_id, lane='batch').reason == 'plan_allowance_exhausted',
                     )
             except BatchPrivacyBlocked:
                 raise
