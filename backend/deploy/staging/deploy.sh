@@ -163,6 +163,10 @@ log "fence: negative tests + staging-mirrors-prod on the exported tree"
 
 log "redis: apply in-cluster staging-redis"
 kubectl_staging apply -f "$WORK/src/backend/deploy/staging/redis.yaml" >/dev/null
+# A StatefulSet never replaces a Pending pod from an older template; recreate it so the new one schedules.
+if [[ "$(kubectl_staging get pod staging-redis-0 -o jsonpath='{.status.phase}' 2>/dev/null || true)" == Pending ]]; then
+  kubectl_staging delete pod staging-redis-0 --wait=false >/dev/null
+fi
 kubectl_staging rollout status statefulset/staging-redis --timeout=300s >/dev/null
 REDIS_HOST=""
 for _ in $(seq 1 60); do
