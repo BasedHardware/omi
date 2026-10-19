@@ -25,6 +25,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Callable, ClassVar, Iterator
 
+from fastapi import HTTPException
+
 from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
@@ -135,6 +137,12 @@ class EnrichmentConsumer:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except rows.FirstSummaryCallbackPending:
             return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+        except HTTPException as error:
+            # Processing's HTTP contract for a failed LLM/provider/app step: retry without a fast 5xx.
+            if not (error.status_code == 429 or error.status_code >= 500):
+                raise
+            logger.warning('event=enrichment_consumer outcome=retry reason=dependency status=%s', error.status_code)
+            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         except summary_delivery.SummaryRepairSuperseded as error:
             superseded, retry_revision = True, error.retry_revision
         except SyncConversationPersistenceFenced:
