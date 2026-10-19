@@ -1593,6 +1593,23 @@ count, and is bounded to 10,000 recent UIDs. Every socket still increments
 `omi_live_session_transcript_outcome_total{outcome="no_transcript"}` before
 coalescing; that Prometheus series remains the authoritative outage signal.
 
+### Listen loop health metrics
+
+Four process-level series gate the listen HPA retune (CPU 70%, more sockets per pod):
+
+- `omi_listen_event_loop_lag_seconds` (histogram): `asyncio.sleep` drift beyond the probe interval, one probe per process.
+- `omi_listen_frame_processing_seconds{codec}` (histogram): wall time from receiving one client audio frame to being ready for the next receive. `codec` is a closed set: `opus`, `aac`, `lc3`, `pcm8`, `pcm16`, `multi_channel`, `other`; anything else maps to `other`.
+- `omi_vad_windows_total` (counter): Silero windows inferred by the streaming VAD gate.
+- `omi_vad_inference_seconds_total` (counter): wall seconds inside VAD gate inference, including conversion and buffering calls that complete no window.
+
+No series carries uid, session or conversation labels.
+
+`LISTEN_LOOP_METRICS_ENABLED` is the kill switch. It is on by default; `false`, `0`, `off` or `no` disables it. It is read when the probe starts, once per session for frame timing and once per VAD gate, so a change takes effect at the next process start.
+
+The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
+
+D0b gate: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h before the HPA retune proceeds.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted
@@ -2565,6 +2582,65 @@ an active worker, override standby, or replace a concurrent completed result.
 Inline coordinators retain their own terminal-write authority. The recovery
 and retained-audio limits are documented in the
 [two-lane sync runbook](runbooks/sync-two-lane.md).
+
+### Sync backfill handler-budget deferral (Cloud Run request timeout)
+
+`backend-sync-backfill` runs each Cloud Tasks sync job inside one
+`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
+cancelling the downstream pipeline, so an over-budget job would hold the ASGI
+request until Cloud Run kills it at the platform's maximum request timeout.
+The handler therefore ends the attempt itself: one budget
+(`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit strictly below
+the route cap, the Cloud Tasks dispatch deadline, and the run lock's TTL minus
+`SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps payload parsing, lock admission,
+staged-file downloads, and the pipeline as a single deadline. For sequenced
+deliveries the deadline is captured before the wrapper's `begin_job` and
+prior-job reads and rides the attempt state into the body's timeout as
+remaining time, so a stalled setup read cannot buy the attempt a fresh full
+budget after it.
+
+On expiry the handler defers instead of failing: it persists the chain count
+on the sequencer owner FIRST (`budget_deferrals` in the task payload,
+`active_budget_deferrals` on the owner) — required before anything schedules
+a replacement, because the sweep's lease-expiry redrive re-dispatches the
+owner's original payload and a write that fails first returns the
+queue-owned 409 (`owner_write_failed`) with no replacement left orphaned —
+then writes a `deferred_until` marker on the Redis job (replacement time +
+`QUEUED_DISPATCH_STALE_SECONDS`), enqueues one delayed replacement task past
+the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), and acks 200
+with status `deferred_handler_budget`. One absolute post-budget deadline
+bounds the owner-count write, run-lock acquire drain, marker write, and
+enqueue together; a mid-flight executor leaf (lock acquire or marker CAS) is
+drained or fenced rather than racing the cleanup clear, and an acquire that
+cannot be settled returns the queue-owned 409 (`acquire_unsettled`) because
+no replacement schedule can be proven past the lock. When the enqueue
+definitively failed, the compensating marker clear is best-effort: a clear
+that also fails or times out records its own fallback (`marker_clear_failed`)
+on top of the enqueue failure, because the surviving marker keeps
+suppressing stale recovery after the queue-owned retries exhaust.
+
+Status polling honors the marker: a deferred job — `processing` or `queued`,
+direct or sequenced-excluded — is not stale until `deferred_until` passes
+(polls must not terminalize the planned silent window). Once the marker is
+overdue the job resumes normal staleness so a lost replacement self-heals
+through the poll's run-lease finalizer; for a queued job the overdue marker
+is itself the recovery signal even when earlier retryable failures left
+`attempt`/`started_at` populated. When the chain spends the whole attempt
+contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
+409, and the UID sequencer's sweep terminalizes the abandoned Redis job
+(reason `sync_budget_chain_exhausted`) before releasing its owner. The
+persisted count denotes a successfully scheduled next attempt, not a
+completed one, and the replacement is deliberately delayed past the lease —
+so a still-future `deferred_until` marker keeps the owner until its horizon
+instead of terminalizing the final paid-for delivery as a stale epoch. A
+fence job whose content ledger durably completed before the terminal write
+converges that result instead of failing (`ledger_converged`). The terminal
+handoff is required before the lane advances, retried on transient Redis
+failures and on a terminalization CAS whose re-read still shows a nonterminal
+job, and fenced by an atomically acquired run lock (an unacquirable lock
+retains the owner — the holder's own terminal write always wins) so the
+finalization never races a live attempt.
 
 ### Conversation playback artifact
 
