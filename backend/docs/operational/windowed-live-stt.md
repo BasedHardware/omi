@@ -478,6 +478,31 @@ signature `posts_since_anchor=1 empty_posts_since_anchor=0 cut_pending=1
 post_in_flight=0`). `omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`
 counts these settlements. `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`
 (default on; `false` is the kill switch) restores the held anchor.
+
+Non-window replacement legs (Soniox, Modulate) inherit the session's replay
+obligation once a demand-eligible session starts the window ring. They have no
+POST anchor: any VAD-positive chunk (noise, a cough, hangover) extends their
+tracked speech, and only text segments that carry a capture end sample advance
+their emitted boundary. Before 2026-10-20 a blip the provider correctly ignored
+held the ring until it overflowed into a `replay_ring_overflow` failover
+(about 110–120 per 10 min in prod, 75% Soniox, 25% Modulate). Placement alone
+cannot fix this: in prod about 62% of Soniox segments are refused as
+`outside_accepted_sends`/`after_last_send` and carry no capture end, while
+Modulate utterances are placed (8,311 mapped versus 80 refused per hour on
+2026-10-20). Now, when the ring would overflow, the leg settles capture older
+than the ring horizon like an answered-empty window if all of these hold: the
+leg is serving, the provider owes no output (`has_pending_provider_output()`:
+Soniox has no non-final or unflushed final token; Modulate has no partial
+newer than its last final, empty or not), and every speech send before the
+horizon is at least 15 s old, so a replay burst the provider has not answered
+keeps its obligation. Providers without that hook keep the old behavior.
+Speech inside the horizon stays pending and ages out at the ring horizon.
+`omi_stt_nonwindow_replay_settles_total{provider}` counts settle episodes.
+`LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on; `false`/`0`/`off` is the
+kill switch) restores overflow failover. A non-window overflow's diagnostics
+line adds `leg=nonwindow speech_unemitted_seconds text_segments
+placed_text_segments provider_output_pending` (`-1` when the provider has no
+hook).
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

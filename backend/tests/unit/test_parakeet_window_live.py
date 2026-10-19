@@ -25,7 +25,7 @@ from utils.stt import (
     streaming as st,
     vad_gate,
 )
-from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.resilient_stream import ResilientAudio, trim_window_replay_to_anchor, window_replay_action
 from utils.observability.fallback import record_fallback
 from utils.observability.routing_cohort import COHORT_WINDOW_FIRST_TEXT, RoutingCohort, current_routing_cohort
 from utils.stt.live_metrics import (
@@ -36,6 +36,7 @@ from utils.stt.live_metrics import (
     WINDOW_REPLAY_SAFE_TRIMS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_STRANDED_FLUSHES,
+    NONWINDOW_REPLAY_SETTLES,
 )
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
@@ -3138,6 +3139,162 @@ async def test_non_window_vad_fails_open_and_honours_override(monkeypatch):
     managed = await LiveChainSession(recv).connect(16000)
     assert managed.gate is None
     assert managed.window is False
+
+
+class _QuietProvider:
+    """A connected non-window provider that never transcribes a VAD blip."""
+
+    def __init__(self):
+        self.is_connection_dead = False
+        self.death_reason = self.typed_death_reason = None
+        self.pending_output = False
+        self.sent = []
+
+    def send(self, data):
+        self.sent.append(data)
+        return True
+
+    def finish(self):
+        self.is_connection_dead = True
+
+    def finalize(self):
+        pass
+
+    def has_pending_provider_output(self):
+        return self.pending_output
+
+
+def _nonwindow_replay_leg(monkeypatch, service=st.STTService.soniox):
+    from utils.stt import live_session
+
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    raw = _QuietProvider()
+    leg = LiveLegSocket(raw, None, LiveChainSession(receiver()), service, 16000, False, False)
+    leg.enable_window_replay_tracking()
+    return leg, raw, ResilientAudio(16000, ring_seconds=90, strict_replay=True), clock
+
+
+def _stream_nonwindow(leg, ring, clock, seconds, speech):
+    """Feed one second per packet in real time; returns the failover second."""
+    pcm = b'\x01\x00' * 16000
+    for second in range(seconds):
+        clock[0] = float(second)
+        sample = second * 16000
+        if window_replay_action(ring, leg, pcm, sample) == 'failover':
+            return second
+        if speech(second):
+            assert leg.send(pcm, start_sample=sample)
+        ring.append(pcm, sample)
+    return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('service', [st.STTService.soniox, st.STTService.modulate])
+async def test_near_silent_nonwindow_leg_settles_at_ring_horizon(monkeypatch, service):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch, service)
+    before = NONWINDOW_REPLAY_SETTLES.labels(provider=service.value)._value.get()
+    # One VAD-positive cough the provider correctly ignores, then a quiet room.
+    assert _stream_nonwindow(leg, ring, clock, 240, speech=lambda second: second == 0) is None
+    assert not leg.is_connection_dead and leg.death_reason is None
+    assert not leg.has_untranscribed_speech()
+    first, end = ring.capture_bounds
+    assert end == 240 * 16000 and end - first <= 90 * 16000
+    assert NONWINDOW_REPLAY_SETTLES.labels(provider=service.value)._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_noise_without_text_keeps_only_the_ring_horizon(monkeypatch):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    before = NONWINDOW_REPLAY_SETTLES.labels(provider='soniox')._value.get()
+    # Continuous VAD-positive noise: the obligation survives but ages out at
+    # the ring horizon, exactly like answered-empty window capture.
+    assert _stream_nonwindow(leg, ring, clock, 200, speech=lambda _second: True) is None
+    first, end = ring.capture_bounds
+    assert leg.has_untranscribed_speech() and leg.window_replay_pending_sample() == first
+    assert end - first == 90 * 16000
+    assert NONWINDOW_REPLAY_SETTLES.labels(provider='soniox')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('speech', ['cough', 'continuous'])
+async def test_nonwindow_leg_with_pending_provider_output_still_fails_over(monkeypatch, caplog, speech):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    raw.pending_output = True  # The provider still owes text for received audio.
+    talking = (lambda second: second == 0) if speech == 'cough' else (lambda _second: True)
+    assert _stream_nonwindow(leg, ring, clock, 120, speech=talking) == 90
+    assert leg.is_connection_dead and leg.death_reason == 'replay_ring_overflow'
+    diagnostics = raw.replay_lag_diagnostics
+    assert diagnostics.leg == 'nonwindow' and diagnostics.provider_output_pending is True
+    assert diagnostics.text_segments == diagnostics.placed_text_segments == 0
+    assert diagnostics.speech_unemitted_seconds == (1.0 if speech == 'cough' else 90.0)
+    record_fallback(
+        component='stt_live_session',
+        from_mode='soniox',
+        to_mode='parakeet',
+        reason='replay_ring_overflow',
+        outcome='degraded',
+        replay_diagnostics=diagnostics,
+    )
+    line = [r.message for r in caplog.records if 'reason=replay_ring_overflow' in r.message][-1]
+    assert ' leg=nonwindow' in line and ' provider_output_pending=1' in line and ' text_segments=0' in line
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_settle_kill_switch_restores_overflow_failover(monkeypatch):
+    monkeypatch.setenv('LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED', 'false')
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    assert _stream_nonwindow(leg, ring, clock, 120, speech=lambda second: second == 0) == 90
+    assert leg.death_reason == 'replay_ring_overflow'
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_settle_waits_for_recent_replay_sends(monkeypatch):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    pcm = b'\x01\x00' * 16000
+    # A replay burst sends 100 s of old capture in one instant; the provider
+    # has not had time to answer it even though it owes nothing yet.
+    for second in range(100):
+        assert leg.send(pcm, start_sample=second * 16000)
+    clock[0] = 1.0
+    assert not leg.window_replay_settle_through(10 * 16000)
+    assert leg.window_replay_pending_sample() == 0
+    clock[0] = 16.0
+    assert leg.window_replay_settle_through(10 * 16000)
+    assert leg.window_replay_pending_sample() == 10 * 16000
+    raw.is_connection_dead = True
+    assert not leg.window_replay_settle_through(20 * 16000)
+
+
+@pytest.mark.asyncio
+async def test_modulate_utterances_carry_capture_end_and_advance_emitted(monkeypatch):
+    from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+
+    leg, _, _, _ = _nonwindow_replay_leg(monkeypatch, st.STTService.modulate)
+    pcm = b'\x01\x00' * 32000
+    timeline = CaptureTimeline(sample_rate=16000)
+    timeline.accept(pcm, 1000.0, 1.0)
+    epoch = ProviderEpochTranslator(timeline, 16000)
+    epoch.provider_label = 'modulate'
+    epoch.note_accepted(0, 32000)
+    assert leg.send(pcm, start_sample=0) and leg.has_untranscribed_speech()
+    translated = []
+
+    def deliver(segments):
+        translated.extend(epoch.translate(segments))
+        leg.note_selection_transcript(translated)
+
+    ws = AsyncMock()
+    modulate = st.SafeModulateSocket(ws, deliver, asyncio.get_running_loop())
+    modulate._recv_task.cancel()
+    modulate._send_task.cancel()
+    modulate._handle_partial_utterance({'text': 'hello', 'start_ms': 100})
+    assert modulate.has_pending_provider_output()
+    modulate._handle_utterance({'text': 'hello there', 'start_ms': 100, 'duration_ms': 1900})
+    assert not modulate.has_pending_provider_output()
+    assert translated[0]['_capture_end_sample'] == 32000
+    assert leg._emitted_capture_sample == 32000 and not leg.has_untranscribed_speech()
+    assert leg.window_replay_pending_sample() is None
 
 
 def _wav_duration(kwargs: dict, sample_rate: int = 16000) -> float:

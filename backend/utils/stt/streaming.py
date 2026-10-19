@@ -42,6 +42,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.committed_words import remember_provider_word
+from utils.stt.failure_diagnostics import connection_loss_cause
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_IDS, Target
@@ -1478,6 +1479,10 @@ class SafeModulateSocket(STTSocket):
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
+        # A partial newer than the last final utterance (even an empty one) is
+        # output the provider still owes for audio it already received.
+        self._partial_after_final = False
+        self._connection_cause: Optional[str] = None
         self._prev_partial_word_count: int = 0
         # Velma rejects any s16le frame that is not a whole number of samples with
         # {"type":"error","error":"Invalid input audio"} and then closes the socket, so a
@@ -1528,11 +1533,20 @@ class SafeModulateSocket(STTSocket):
         """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
         return self._typed_death_reason
 
-    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
+    @property
+    def connection_cause(self) -> Optional[str]:
+        """Content-free transport cause behind an untyped death, if one was seen."""
+        return self._connection_cause
+
+    def has_pending_provider_output(self) -> bool:
+        return self._partial_after_final
+
+    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None, *, cause: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._connection_cause = cause
                 self._dead = True  # Metadata must precede the latch read by death observers.
 
     def send(self, data: bytes) -> bool:
@@ -1720,9 +1734,9 @@ class SafeModulateSocket(STTSocket):
         except AudioDeliveryExpired:
             self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws send closed: {e}')
+            self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
         except Exception as e:
-            self._mark_dead(f'ws send error: {e}')
+            self._mark_dead(f'ws send error: {e}', cause=connection_loss_cause(e))
 
     async def _recv_loop(self) -> None:
         try:
@@ -1786,11 +1800,11 @@ class SafeModulateSocket(STTSocket):
             # must latch terminal so the listen loop propagates it without waiting
             # for another client audio frame (#10028).
             if not self._closed and not self._done_event.is_set():
-                self._mark_dead('modulate ws closed cleanly without terminal frame')
+                self._mark_dead('modulate ws closed cleanly without terminal frame', cause='clean_eof')
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws recv closed: {e}')
+            self._mark_dead(f'ws recv closed: {e}', cause=connection_loss_cause(e))
         except Exception as e:
-            self._mark_dead(f'ws recv error: {e}')
+            self._mark_dead(f'ws recv error: {e}', cause=connection_loss_cause(e))
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
         # Modulate sends cumulative partial_utterance messages during streaming
@@ -1809,6 +1823,7 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
+        self._partial_after_final = True
         start_ms = msg.get('start_ms', 0)
         self._prev_partial_text = text
         self._prev_partial_start_ms = start_ms
@@ -1843,6 +1858,7 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
     def _handle_utterance(self, msg: Dict[str, Any]) -> None:
+        self._partial_after_final = False
         text = msg.get('text', '').strip()
         if not text:
             return

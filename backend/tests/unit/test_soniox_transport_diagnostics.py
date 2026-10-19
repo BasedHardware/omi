@@ -1,6 +1,7 @@
 """Transport diagnostics retain useful close evidence without provider text."""
 
 import asyncio
+import json
 import logging
 from types import SimpleNamespace
 
@@ -11,7 +12,7 @@ from websockets.frames import Close
 from websockets.legacy.protocol import CloseCode, State, WebSocketCommonProtocol
 
 from utils.stt import soniox
-from utils.stt.failure_diagnostics import transport_failure_fields
+from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES, connection_loss_cause, transport_failure_fields
 
 
 def test_websockets_12_keepalive_timeout_preserves_local_sent_close_code():
@@ -115,6 +116,7 @@ def test_real_provider_websocket_close_is_logged_once_without_private_reason(cap
                     await asyncio.wait_for(socket._recv_task, timeout=3)
                     assert socket.is_connection_dead
                     assert socket.typed_death_reason == 'connection_lost'
+                    assert socket.connection_cause == 'remote_close_error'
                     # A send-loop race must not produce another close diagnostic.
                     socket._mark_dead('second death', transport_error=TimeoutError('private'), operation='send')
                 finally:
@@ -155,6 +157,7 @@ def test_generic_transport_exception_uses_same_bounded_diagnostic(operation, cap
             task = socket._send_task if operation == 'send' else socket._recv_task
             await asyncio.wait_for(task, timeout=3)
             assert socket.is_connection_dead
+            assert socket.connection_cause == 'reset'
         finally:
             socket._send_task.cancel()
             socket._recv_task.cancel()
@@ -165,3 +168,70 @@ def test_generic_transport_exception_uses_same_bounded_diagnostic(operation, cap
     assert 'exception_class=ConnectionResetError' in caplog.text
     assert 'received_close_code=-1 sent_close_code=-1' in caplog.text
     assert 'private' not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'error,cause',
+    [
+        (ConnectionClosedError(Close(1000, 'private'), None), 'remote_close_normal'),
+        (ConnectionClosedError(Close(1011, 'private'), None), 'remote_close_error'),
+        (
+            SimpleNamespace(rcvd=None, sent=SimpleNamespace(code=1011, reason='keepalive ping timeout')),
+            'keepalive_timeout',
+        ),
+        (ConnectionClosedError(None, None), 'abnormal_close'),
+        (BrokenPipeError('private'), 'reset'),
+        (TimeoutError('private'), 'timeout'),
+        (type('SSLError', (OSError,), {})('private'), 'tls'),
+        (type('gaierror', (OSError,), {})('private'), 'dns'),
+        (type('private_uid', (Exception,), {})('private'), 'other'),
+    ],
+)
+def test_connection_loss_cause_is_closed_and_content_free(error, cause):
+    assert connection_loss_cause(error) == cause
+    assert cause in CONNECTION_LOSS_CAUSES
+
+
+def test_soniox_pending_output_tracks_nonfinal_and_unflushed_tokens():
+    messages = [
+        {'tokens': [{'text': 'hel', 'is_final': False, 'start_ms': 100, 'end_ms': 200}]},
+        {'tokens': [{'text': 'hello', 'is_final': True, 'start_ms': 100, 'end_ms': 300}]},
+        {'tokens': [{'text': ' ', 'is_final': True, 'start_ms': 300, 'end_ms': 310}]},
+        {'tokens': []},
+    ]
+
+    async def run():
+        steps = [asyncio.Event() for _ in messages]
+        seen = []
+
+        class Provider:
+            async def send(self, data):
+                await asyncio.Event().wait()
+
+            def __aiter__(self):
+                async def receive():
+                    for step, message in zip(steps, messages):
+                        await step.wait()
+                        yield json.dumps(message)
+                    await asyncio.Event().wait()
+
+                return receive()
+
+        socket = soniox.SafeSonioxSocket(Provider(), seen.extend, asyncio.get_running_loop())
+        states = [socket.has_pending_provider_output()]
+        try:
+            for step in steps:
+                step.set()
+                for _ in range(5):
+                    await asyncio.sleep(0)
+                states.append(socket.has_pending_provider_output())
+        finally:
+            socket._send_task.cancel()
+            socket._recv_task.cancel()
+            await asyncio.gather(socket._send_task, socket._recv_task, return_exceptions=True)
+        return states, seen
+
+    states, seen = asyncio.run(run())
+    # Idle, non-final text, final-but-unflushed word, flushed, empty response.
+    assert states == [False, True, True, False, False]
+    assert [segment['text'] for segment in seen] == ['hello']

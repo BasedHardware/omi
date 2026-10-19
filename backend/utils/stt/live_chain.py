@@ -613,6 +613,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 close_rejected_socket(socket)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
@@ -853,6 +855,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 await abort_replay_socket(socket, timeout=cleanup_budget())
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
