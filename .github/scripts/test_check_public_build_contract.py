@@ -8,6 +8,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -1735,7 +1736,7 @@ class RuntimeServiceAccountPreflightTests(unittest.TestCase):
 class RepositoryBetaRoutingConfig(unittest.TestCase):
     """Keep the public web Beta build on the same development serving plane as other Beta clients."""
 
-    def test_web_development_build_is_beta_and_deploys_remain_manual(self) -> None:
+    def test_web_development_build_is_beta_and_app_deploys_are_scoped(self) -> None:
         contract = json.loads((ROOT / "config/public-build-contract.json").read_text(encoding="utf-8"))
         values = json.loads((ROOT / "config/public-build-values.json").read_text(encoding="utf-8"))
         app_inputs = {item["name"] for item in contract["targets"]["app"]["inputs"]}
@@ -1752,11 +1753,51 @@ class RepositoryBetaRoutingConfig(unittest.TestCase):
 
         workflow = (ROOT / ".github/workflows/gcp_app.yml").read_text(encoding="utf-8")
         personas_workflow = (ROOT / ".github/workflows/gcp_personas.yml").read_text(encoding="utf-8")
-        self.assertNotIn("\n  push:", workflow)
+        # The app auto-deploys from main/development only, behind the reviewed
+        # path filter; personas remain manual-only deployments.
+        self.assertIn('push:\n    branches: ["main", "development"]', workflow)
         self.assertNotIn("\n  push:", personas_workflow)
         self.assertIn("  workflow_dispatch:\n    inputs:", workflow)
         self.assertIn("  workflow_dispatch:\n    inputs:", personas_workflow)
         self.assertIn("environment: ${{ github.event_name == 'workflow_dispatch'", workflow)
+
+        # The app image builds from the repository root (build_context "."),
+        # so the root .dockerignore is a build input and must retrigger the
+        # deploy when its context rules change.
+        self.assertEqual(contract["targets"]["app"]["deployment"]["build_context"], ".")
+        self.assertIn("'.dockerignore'", workflow)
+
+        # Every repository script the shared deploy pipeline executes — plus
+        # each helper those scripts import from .github/scripts — must be in
+        # the push path filter, so a helper fix on main redeploys the app.
+        executed: set[str] = set()
+        for action in (
+            ".github/actions/deploy-public-build/action.yml",
+            ".github/actions/prepare-public-build/action.yml",
+            ".github/actions/public-build-candidate-promotion/action.yml",
+        ):
+            executed.update(
+                re.findall(
+                    r"python3 (\S+\.py)",
+                    (ROOT / action).read_text(encoding="utf-8"),
+                )
+            )
+        scripts = {script for script in executed if (ROOT / script).is_file()}
+        for script in sorted(scripts):
+            self.assertIn(
+                f"'{script}'",
+                workflow,
+                f"gcp_app.yml push paths must cover executed script {script}",
+            )
+            body = (ROOT / script).read_text(encoding="utf-8")
+            for match in re.findall(r"^from (\w+) import", body, re.MULTILINE) + re.findall(r"^import (\w+)$", body, re.MULTILINE):
+                helper = f".github/scripts/{match}.py"
+                if (ROOT / helper).is_file():
+                    self.assertIn(
+                        f"'{helper}'",
+                        workflow,
+                        f"gcp_app.yml push paths must cover {script} dependency {helper}",
+                    )
 
 
 if __name__ == "__main__":
