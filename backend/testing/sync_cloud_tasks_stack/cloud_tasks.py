@@ -21,7 +21,9 @@ from .events import write_event
 
 RECOVERY_ROUTE = '/v2/batch-pipeline/recover-quarantine'
 _RECOVERY_TASK_ID = re.compile(r'bpr-(prod|dev)-[0-9a-f]{64}-[0-9a-f]{32}-[0-9]{1,12}')
-_REPROCESS_TASK_ID = re.compile(r'sr-[A-Za-z0-9_.:-]{1,400}-[0-9a-f]{32}(-repair-[0-9]{1,12})?')
+_REPROCESS_TASK_ID = re.compile(r'sr-[0-9a-f]{64}-[0-9a-f]{32}(-repair-[0-9]{1,12})?')
+_REPROCESS_KEY = re.compile(r'[0-9a-f]{64}')
+_REPROCESS_TOKEN = re.compile(r'[0-9a-f]{32}')
 
 
 @dataclass(frozen=True)
@@ -224,9 +226,19 @@ class CloudTasksRecorder:
         return task
 
     def _capture_reprocess_task(self, parent: str, task: tasks_v2.Task, body: dict[str, Any]) -> tasks_v2.Task:
-        """Projection enrichment obligation; recorded, never delivered here."""
+        """Projection enrichment obligation; recorded, never delivered here.
+
+        Mirrors the production handler's binding: ``run_enrichment`` only
+        accepts a 64-hex ``key`` and a 32-hex ``task_token`` (400 otherwise),
+        and the producer names the task after those exact values.
+        """
         if set(body) != {'kind', 'key', 'task_token'}:
             raise RuntimeError('sync reprocess task body has unexpected keys')
+        key, task_token = body['key'], body['task_token']
+        if not isinstance(key, str) or not _REPROCESS_KEY.fullmatch(key):
+            raise RuntimeError('sync reprocess task key is not the 64-hex enrichment document id')
+        if not isinstance(task_token, str) or not _REPROCESS_TOKEN.fullmatch(task_token):
+            raise RuntimeError('sync reprocess task token is not the 32-hex obligation token')
         project = os.getenv('SYNC_TASKS_PROJECT', '')
         location = os.getenv('SYNC_TASKS_LOCATION', '')
         if not parent.startswith(f'projects/{project}/locations/{location}/queues/'):
@@ -236,8 +248,11 @@ class CloudTasksRecorder:
         if parsed.scheme != 'https' or not parsed.path.endswith('/v2/sync-jobs/run'):
             raise RuntimeError('sync reprocess task targeted an unexpected handler')
         task_id = str(task.name).rsplit('/', 1)[-1]
-        if not _REPROCESS_TASK_ID.fullmatch(task_id):
-            raise RuntimeError('sync reprocess task name does not bind its obligation token')
+        match = _REPROCESS_TASK_ID.fullmatch(task_id)
+        # ``-repair-{wake_generation}`` is the producer's only sanctioned suffix.
+        suffix = match.group(1) or '' if match else ''
+        if match is None or task_id != f'sr-{key}-{task_token}{suffix}':
+            raise RuntimeError('sync reprocess task name does not bind its key and obligation token')
         self._common_contract(
             task,
             audience=task.http_request.oidc_token.audience,

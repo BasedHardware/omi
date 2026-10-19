@@ -35,6 +35,8 @@ import redis
 from google.auth import credentials as google_auth_credentials
 from google.cloud import firestore
 
+from .local_oidc import local_oidc_token
+
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 PYTHON = BACKEND / '.venv' / 'bin' / 'python'
@@ -42,7 +44,7 @@ PROJECT = 'demo-omi-sync-cloud-tasks-stack'
 ADMIN_KEY = 'omi-sync-cloud-tasks-stack-admin-'
 LOCAL_OIDC_AUDIENCE = 'https://sync-stack.local/v2/sync-jobs/run'
 LOCAL_INVOKER_SA = 'sync-stack-invoker@demo-omi-sync-cloud-tasks-stack.iam.gserviceaccount.com'
-LOCAL_OIDC_TOKEN = f'local-sync-oidc:{LOCAL_INVOKER_SA}'
+LOCAL_OIDC_TOKEN = local_oidc_token(LOCAL_OIDC_AUDIENCE, LOCAL_INVOKER_SA)
 SYNC_QUEUE = 'sync-jobs'
 SENSITIVE_UID = 'sync-stack-sensitive-uid'
 TRANSCRIPT_TOKEN = 'Sync stack transcript verified.'

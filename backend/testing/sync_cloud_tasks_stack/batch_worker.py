@@ -75,6 +75,7 @@ def main() -> int:
     from utils.rollout_cohorts import configure_rollout_runtime
 
     from .batch_providers import ModeRoutingWorker
+    from .local_oidc import local_oidc_token
 
     lease_seconds = os.getenv('OMI_BATCH_STACK_LEASE_SECONDS', '').strip()
     heartbeat_seconds = os.getenv('OMI_BATCH_STACK_HEARTBEAT_SECONDS', '').strip()
@@ -101,7 +102,9 @@ def main() -> int:
         def __init__(self, worker: Any, synchronize: Any = None, on_fatal: Any = None, memory_probe: Any = None):
             super().__init__(worker, synchronize=lambda: None, on_fatal=on_fatal, memory_probe=None)
 
-    token = f"local-sync-oidc:{os.environ['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']}"
+    token = local_oidc_token(
+        os.environ['BATCH_PIPELINE_WORKER_AUDIENCE'], os.environ['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']
+    )
     runtime.load_worker = load_worker
     runtime.SynchronizedWorker = CpuSynchronizedWorker
     runtime.ChainMemoryProbe = lambda: None

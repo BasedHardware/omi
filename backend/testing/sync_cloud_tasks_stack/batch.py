@@ -31,6 +31,7 @@ from typing import Any, Callable
 import httpx
 import redis
 
+from .local_oidc import local_oidc_token
 from .run import (
     BACKEND,
     DEVICE_HASH,
@@ -325,7 +326,7 @@ class BatchStack(Stack):
             response = self.http.post(
                 self.serving_url + '/v2/batch-pipeline/reconcile',
                 json={'stage': 'dev'},
-                headers={'Authorization': f'Bearer local-sync-oidc:{WORKER_SA}'},
+                headers={'Authorization': f'Bearer {local_oidc_token(WORKER_AUDIENCE, WORKER_SA)}'},
                 timeout=60.0,
             )
         except httpx.HTTPError:
@@ -353,7 +354,7 @@ class BatchStack(Stack):
                 self.serving_url + path,
                 json=task['body'],
                 headers={
-                    'Authorization': f'Bearer local-sync-oidc:{LOCAL_INVOKER_SA}',
+                    'Authorization': f'Bearer {local_oidc_token(SERVING_ORIGIN, LOCAL_INVOKER_SA)}',
                     'X-CloudTasks-TaskRetryCount': str(retry_count),
                 },
             )
@@ -489,6 +490,10 @@ def _assert_projected(stack: BatchStack, upload: Upload, status: dict[str, Any],
     if len(ids) != 1:
         raise StackFailure(f'batch result did not name exactly one projected conversation: {len(ids)}')
     conversation = _conversation(stack, upload.uid, ids[0])
+    if ids[0] != upload.conversation_id:
+        raise StackFailure(
+            f'projection named conversation {ids[0]!r} instead of updating the capture {upload.conversation_id!r}'
+        )
     segments = conversation.get('transcript_segments') or []
     words = ' '.join(segment.get('text', '') for segment in segments).lower().split()
     if not segments or words.count('batch') != 1 or words.count('words') != 1:
@@ -507,7 +512,7 @@ def _assert_projected(stack: BatchStack, upload: Upload, status: dict[str, Any],
         {
             'event': 'batch_projection_verified',
             'job_id': upload.job_id,
-            'conversation_matches_capture': ids[0] == upload.conversation_id,
+            'conversation_is_capture': True,
             'segments': len(segments),
             'provider': provider,
             'ledger_status': 'completed',
@@ -683,6 +688,8 @@ def _serving_replacement_mid_paid_call(stack: BatchStack) -> None:
     old = stack.serving_name
     stack.signal(old, signal.SIGTERM)
     code = stack.wait_exit(old, timeout=45.0)
+    if code is None:
+        raise StackFailure('batch serving revision did not exit after SIGTERM within 45 s')
     thread.join(timeout=10.0)
     stack.forget(old)
     first = responses[0] if responses else None
@@ -735,6 +742,11 @@ def _serving_killed_mid_paid_call(stack: BatchStack) -> None:
     redelivered = stack.deliver_recovery(task, retry_count=1)
     stack.reconcile()
     job = stack.doc('jobs', upload.segment_ids[0])
+    if redelivered.status_code != 200 or redelivered.json().get('status') != 'held':
+        raise StackFailure(
+            f'killed-revision redelivery returned HTTP {redelivered.status_code} {redelivered.text[:120]}, '
+            'expected the held acknowledgement Cloud Tasks relies on'
+        )
     if stack.paid_calls(upload.pcm_digest) != 1:
         raise StackFailure('replacement serving re-issued a paid call whose outcome was unknown')
     if job.get('recovery_state') != 'running' or job.get('state') != 'quarantined':
@@ -830,6 +842,13 @@ def _burst_drain(stack: BatchStack) -> None:
         if event.get('event') == 'worker_item_started'
         and event.get('segment_id') in {upload.segment_ids[0] for upload in uploads}
     ]
+    expected_order = [upload.segment_ids[0] for upload in uploads]
+    if order != expected_order:
+        raise StackFailure(
+            'one-owner burst was not drained in admission order '
+            f'(got {[(segment or "?")[:8] for segment in order]}, '
+            f'expected {[(segment or "?")[:8] for segment in expected_order]})'
+        )
     _record_job_event(
         {
             'event': 'batch_burst_drained',
@@ -837,7 +856,7 @@ def _burst_drain(stack: BatchStack) -> None:
             'admission_ms': admitted_ms,
             'drain_ms': int((time.monotonic() - started) * 1000),
             'worker_starts': len(order),
-            'compute_order_matches_upload': order == [upload.segment_ids[0] for upload in uploads],
+            'drain_order_verified': True,
         }
     )
 

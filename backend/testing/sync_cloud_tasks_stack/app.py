@@ -42,6 +42,7 @@ ROLE = _role()
 # ``cloud_tasks`` imports the production task helper, so load it only after
 # the no-egress guard is active.
 from .cloud_tasks import CloudTasksRecorder  # noqa: E402
+from .local_oidc import local_oidc_token  # noqa: E402
 
 
 def _local_oidc_bindings() -> set[tuple[str, str]]:
@@ -60,12 +61,13 @@ def _local_oidc_bindings() -> set[tuple[str, str]]:
 def _verify_local_oidc(token: str, _request: Any, *, audience: str | None = None, **_kwargs: Any) -> dict[str, Any]:
     """Accept one exact local token per configured audience/identity binding.
 
-    The production dependency still compares the returned identity with the
-    route's configured invoker, so a token minted for one route's audience or
-    identity is rejected by every other route.
+    The token binds both the audience and the service-account identity, and the
+    production dependency still compares the returned identity with the route's
+    configured invoker, so a token minted for one route's audience or identity
+    is rejected by every other route.
     """
     for expected_audience, expected_identity in _local_oidc_bindings():
-        if audience == expected_audience and token == f'local-sync-oidc:{expected_identity}':
+        if audience == expected_audience and token == local_oidc_token(expected_audience, expected_identity):
             write_event(
                 'worker' if ROLE == 'worker' else 'serving',
                 {'event': 'local_oidc_verified', 'audience': audience, 'identity_verified': True},
