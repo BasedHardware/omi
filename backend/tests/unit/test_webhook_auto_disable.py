@@ -323,6 +323,9 @@ class TestDevWebhookAutoDisable:
     @pytest.mark.parametrize("status_code", [400, 401, 404, 410, 422])
     async def test_post_dev_webhook_does_not_retry_deterministic_4xx(self, status_code):
         # Deterministic 4xx retains the final-response DLQ path without retries.
+        # Distinct URL per case: a deterministic 4xx arms the URL's rejection
+        # hold (admission skipped for the cooldown), so sharing one URL would
+        # make later parametrized cases a skip instead of a dial.
         from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
 
         mock_client = AsyncMock()
@@ -344,7 +347,7 @@ class TestDevWebhookAutoDisable:
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
-                "https://example.com/webhook",
+                f"https://example.com/webhook-{status_code}",
                 json={"hello": "world"},
                 retry_delays=(0.1, 0.2),
                 idempotency_key="event-4xx",
@@ -385,7 +388,7 @@ class TestDevWebhookAutoDisable:
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
-                "https://example.com/webhook",
+                f"https://example.com/webhook-{transient_status}",
                 json={"hello": "world"},
                 retry_delays=(0.1, 0.2),
             )
@@ -411,7 +414,7 @@ class TestDevWebhookAutoDisable:
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
-                "https://example.com/webhook",
+                "https://example.com/webhook-exhausted-503",
                 retry_delays=(),
                 idempotency_key="event-123",
                 dlq_uid="uid-1",
@@ -424,7 +427,7 @@ class TestDevWebhookAutoDisable:
             db_executor,
             enqueue_dev_webhook_dlq,
             webhook_name="test_webhook",
-            webhook_url="https://example.com/webhook",
+            webhook_url="https://example.com/webhook-exhausted-503",
             status_code=503,
             error="HTTP 503",
             idempotency_key="event-123",

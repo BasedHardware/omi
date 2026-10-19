@@ -223,6 +223,7 @@ async def _post_dev_webhook(
     log_url = _redact_webhook_url(webhook_url)
 
     dial_attempts = 0
+    deterministic_answer = False
     cb = get_webhook_circuit_breaker(webhook_url)
     if not cb.allow_request():
         # The URL's circuit breaker is open. Skip the whole schedule and return
@@ -272,6 +273,7 @@ async def _post_dev_webhook(
                         response = None
                         continue
                     if 200 <= response.status_code < 300 or _is_deterministic_rejection(response.status_code):
+                        deterministic_answer = deterministic_answer or _is_deterministic_rejection(response.status_code)
                         break
                 if response is None:
                     # Every safe address failed to connect.
@@ -305,6 +307,18 @@ async def _post_dev_webhook(
             await asyncio.sleep(delay)
 
     if last_response is not None:
+        if deterministic_answer:
+            # A receiver (not the SSRF refusal — that one self-heals when the
+            # stored URL becomes resolvable again and arms nothing) answered a
+            # real dial with a deterministic 4xx. Arm the breaker's rejection
+            # hold so the next delivery for any subscriber is a counted,
+            # logged skip instead of another full schedule against a config
+            # error that cannot heal — the per-uid disable ladder still
+            # converges through those skips, and a real recovery probe runs
+            # once per cooldown window. This delivery's own evidence is still
+            # emitted below: DLQ, circuit breaker, and auto-disable all fire
+            # off the final response unchanged.
+            cb.record_deterministic_rejection()
         attempts_sent = max(dial_attempts, 1)
         logger.error(
             f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts_sent} url={log_url}'
@@ -338,6 +352,23 @@ async def _post_dev_webhook(
         payload=request_kwargs.get('json'),
     )
     raise last_exception
+
+
+def _log_dev_webhook_transport_failure(webhook_name: str, error: BaseException, uid: Optional[str] = None) -> None:
+    """One ERROR for an exhausted transport-failed delivery, with the sink named.
+
+    ``_post_dev_webhook`` has already logged the terminal line for the same
+    delivery (``delivery failed error=<Type> attempts=N``) and written the DLQ
+    entry; the caller's older f-string line repeated that signature a second
+    time with less information — no attempts count, and for the audio-bytes
+    loop no uid — so every exhausted delivery produced the paired
+    ``...delivery failed error=ConnectError attempts=4`` /
+    ``Error sending audio bytes to developer webhook: ConnectError`` ERROR
+    couplet in prod (pusher 2026-10: ×28 + ×28 per 30 minutes for one dead
+    endpoint). Downgrade the caller side to an INFO that names the webhook and
+    uid, so the delivery's terminal evidence stays in exactly one ERROR.
+    """
+    logger.info('%s: dev webhook delivery exhausted (%s) uid=%s', webhook_name, type(error).__name__, uid or 'unknown')
 
 
 async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):
@@ -420,7 +451,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 db_executor, record_dev_webhook_failure, uid, WebhookType.memory_created, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
-            logger.error(f"Error sending memory created to developer webhook: {type(e).__name__}")
+            _log_dev_webhook_transport_failure('memory_created_webhook', e, uid)
     else:
         return
 
@@ -479,7 +510,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                 db_executor, record_dev_webhook_failure, uid, WebhookType.day_summary, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
-            logger.error(f"Error sending day summary to developer webhook: {type(e).__name__}")
+            _log_dev_webhook_transport_failure('day_summary_webhook', e, uid)
     else:
         return
 
@@ -545,7 +576,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 db_executor, record_dev_webhook_failure, uid, WebhookType.realtime_transcript, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
-            logger.error(f"Error sending realtime transcript to developer webhook: {type(e).__name__}")
+            _log_dev_webhook_transport_failure('realtime_transcript_webhook', e, uid)
     else:
         return
 
@@ -632,7 +663,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                 db_executor, record_dev_webhook_failure, uid, WebhookType.audio_bytes, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
-            logger.error(f"Error sending audio bytes to developer webhook: {type(e).__name__}")
+            _log_dev_webhook_transport_failure('send_audio_bytes_developer_webhook', e, uid)
 
 
 async def button_event_webhook(
@@ -716,7 +747,7 @@ async def _button_event_webhook_serialized(
             db_executor, record_dev_webhook_failure, uid, WebhookType.button_event, 0, type(e).__name__
         )
         await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
-        logger.error(f'Error sending button_event developer webhook: {type(e).__name__}')
+        _log_dev_webhook_transport_failure('button_event_webhook', e, uid)
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:

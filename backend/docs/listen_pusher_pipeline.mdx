@@ -4983,6 +4983,17 @@ Disable latching is unchanged in kind — only its convergence is new — and th
 skip INFO line (`delivery skipped, circuit breaker open`) replaces the former
 silent outer skip.
 
+Since 2026-10-19 a final deterministic 4xx that came from a real receiver dial
+(the SSRF invalid-target refusal self-heals when the stored URL resolves again
+and arms nothing) also arms a deterministic-rejection hold on that breaker:
+admission stays blocked for
+`_WEBHOOK_DETERMINISTIC_REJECTION_COOLDOWN_SECONDS` (15 minutes) instead of the
+outage latch's 30-second probe window, so a configuration error is re-probed
+once per 15 minutes instead of about twice per minute. A hold-admitted skip
+still counts through the per-uid ladder, so auto-disable keeps converging; the
+hold clears on the first successful delivery and the outage latch remains
+independent (a 5xx ramp still opens the breaker on its own evidence).
+
 ### Realtime app-integration webhook transport resilience
 
 The app (third-party developer) realtime lanes — transcript segments
