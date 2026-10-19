@@ -13187,6 +13187,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Prijunkite savo Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Susiekite savo Omi ir jis fiksuos jūsų pokalbius laisvų rankų režimu, visą dieną.';
+
+  @override
+  String get firstCaptureConnect => 'Prijungti mano Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Dar neturiu Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

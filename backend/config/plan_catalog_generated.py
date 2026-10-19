@@ -28,8 +28,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '3405a7562debb81abfd7650927cb12e7701e585d46cc3b470f74042e7ed80b9c'
-CATALOG_REVISION: Final = 9
+CATALOG_SHA256: Final = '92a8140d796926c205e6546624439b4c67609d69f471f5eeb89e63c4619f9419'
+CATALOG_REVISION: Final = 10
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -44,7 +44,13 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
                              'unlimited_v2': 2999,
                              'unlimited': 2000,
                              'plus': 2000}}
-ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None,
+            'capabilities': {'basic': {'cloud_screen_vectors': False},
+                             'plus': {'cloud_screen_vectors': True},
+                             'unlimited': {'cloud_screen_vectors': True},
+                             'unlimited_v2': {'cloud_screen_vectors': True},
+                             'operator': {'cloud_screen_vectors': True},
+                             'architect': {'cloud_screen_vectors': True}}},
  'ladder_v1': {'rate_card_version': 'v1',
                'unit_usd_micros': 1000,
                'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
@@ -55,7 +61,11 @@ ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
                                    'operator': {'kind': 'units', 'value': 44090},
                                    'architect': {'kind': 'units', 'value': 189463}},
                'mcp_daily_caps': {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000},
-               'api_max_reads_per_request': {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000}}}
+               'api_max_reads_per_request': {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000},
+               'capabilities': {'basic': {'cloud_screen_vectors': False},
+                                'plus': {'cloud_screen_vectors': False},
+                                'operator': {'cloud_screen_vectors': True},
+                                'architect': {'cloud_screen_vectors': True}}}}
 LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {'ladder_v1_plus_month': {'plan_id': 'plus', 'interval': 'month', 'env_var': 'LADDER_V1_PLUS_MONTH_PRICE_ID'},
  'ladder_v1_plus_year': {'plan_id': 'plus', 'interval': 'year', 'env_var': 'LADDER_V1_PLUS_YEAR_PRICE_ID'},
  'ladder_v1_pro_month': {'plan_id': 'operator', 'interval': 'month', 'env_var': 'LADDER_V1_PRO_MONTH_PRICE_ID'},

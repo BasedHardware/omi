@@ -2055,8 +2055,8 @@ the document, so they are added only when its estimated size stays under the
 blank `user_title` is no override on read or in the processing persists that
 re-apply it; the user-facing title writes are unchanged. Clients then offer "Summary failed · Retry", which
 calls `/reprocess`. `recovery_structure_unavailable` never sets it, because the
-model ran and a retry gives the same answer. Enrichment and the free-tier
-terminal persist clear the marker with an explicit null.
+model ran and a retry gives the same answer. Successful enrichment clears the marker with an explicit null. Budget deferral
+retains the retry marker and any display projection until chosen funded work completes.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
@@ -5810,6 +5810,7 @@ resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
 
 
+
 ### Static-routing first-text comparison
 
 Ship the instrumented binary with prod listen on/100 first. After at least
@@ -5824,3 +5825,52 @@ unmanaged sockets do not contribute. Other providers' first-text timing remains
 outside this window metric. Existing histograms are unchanged. Stage gates,
 sample floors, inverse percentage direction, and same-image rollback are in
 [Live STT routing](runbooks/live-stt-routing.md#static-routing-cohort-ramp-stage-1).
+
+### Default-on free-tier capability fold (2026-10-18 ruling)
+
+`cloud_screen_vectors` is versioned in the plan catalog: ladder Free and Plus
+lack it; Pro/Architect and every recognized paid legacy price retain it. Legacy
+Plus is distinct from ladder Plus. The subscription response exposes the additive
+`cloud_screen_vectors` boolean from the real subscription, independent of the
+synthetic BYOK display plan and processing allowance. An unknown paid allowance
+still waits for server admission; capability is never a funding signal.
+
+The Gemini proxy refuses `embedContent`/`batchEmbedContents` with structured
+402 `plan_gated`, `trigger=screen_context`, `upgrade_plan=operator` only when
+`X-Omi-Local-Embeddings: 1` is present, the account lacks that capability, and
+`CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED` is not exact `false`. Absent or
+unknown headers preserve old-client behavior. Validated Gemini BYOK is exempt.
+Generate/stream gates retain their existing policy.
+
+When ladder budget admission or halt-at-cap denies processing, a valid schema-v1,
+transcript-hash-bound `client_processing` summary is a display projection only.
+The raw transcript and model-free title remain server-authored. The row is
+`processing_deferred=true`, `deferred=false`, `status=completed`: visible but
+waiting in the explicit-choice backlog, never a terminal deterministic minimum.
+No provider, canonical memory/task extraction, app fanout or first-open obligation
+is launched. Summary-vector indexing skips budget-waiting rows even after reset;
+automatic merges cannot consume them as donors or predecessors. No summary retains the same raw deferral. Unchosen retries, refresh
+and reset preserve both projection and backlog; only the existing month-scoped
+choice or fitting accepted upgrade intent permits funded processing.
+
+`CLIENT_SUMMARIES_AT_CAP_ENABLED` defaults on; exact `false` rejects new summaries
+on from-segments/finalize/late-bind ingress and keeps ordinary cap deferral.
+Stored projections survive rollback and processor persists omit them so a stale
+worker cannot overwrite a newer ingress mutation. The old basic embed/eager gates,
+local-processing flag and UID cohort are retired; their env values have no effect.
+Upstream retired memory suppression, leaving no backend cohort consumer;
+`FREE_TIER_EMERGENCY_STOP` and the unused backend control plane are retired too.
+The existing remote `free-tier-kill-switch-v1` still covers macOS local inference
+through its client adapter; it grants no cloud entitlement.
+
+### Terminal batch assignment supersession
+
+When sync assignment raises `SyncAssignmentSuperseded`, the batch projector
+persists a ready part receipt with `disposition=superseded` and zero speech usage.
+It writes no conversation content and schedules no playback or enrichment for
+that part. Multipart and sibling completion still use the ordered cursor and
+content ledger; successful parts retain their usage. Completed client results
+include `superseded_segments` with zero failures, rather than reporting silence.
+A fresh transaction rechecks privacy/deletion fences, immutable binding and
+ledger ownership before settlement; a concurrently committed assignment receipt
+wins. Account/protection revocation still follows the existing erasure path.

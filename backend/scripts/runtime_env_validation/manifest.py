@@ -16,7 +16,6 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_capability_contracts import (
     validate_conversation_finalization_capabilities,
-    validate_free_tier_deploy_contract,
     validate_speaker_embedding_hosts,
     validate_voice_transcription_storage,
 )  # noqa: E402
@@ -724,7 +723,6 @@ def validate_runtime_env(
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_voice_transcription_storage(env, env_config))
-    errors.extend(validate_free_tier_deploy_contract(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))

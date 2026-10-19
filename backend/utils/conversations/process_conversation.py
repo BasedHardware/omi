@@ -61,7 +61,6 @@ from models.conversation import (
     ExternalIntegrationCreateConversation,
 )
 from models.conversation_enums import (
-    ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
     ExternalIntegrationConversationSource,
@@ -142,13 +141,7 @@ from utils.subscription import (
     should_defer_desktop_processing,
     should_skip_omi_paid_postprocessing,
 )
-from utils.free_tier_basic_gates import basic_plan_gate_eager_extraction_enabled
-from utils.free_tier_processing_policy import (
-    FreeTierProcessingPlan,
-    free_tier_local_processing_enabled,
-    minimum_processing_state,
-    resolve_free_tier_processing_plan,
-)
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 
 # The injected ``decision_for`` closure and its funding-owner resolution live in
 # ``utils/managed_compute`` (next to ``authorize_managed_compute`` and the BYOK
@@ -2016,6 +2009,11 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    # Backlog consent outlives a reset: even a fresh available balance must not
+    # embed the raw placeholder or change its vector metadata while waiting.
+    if getattr(conversation, 'processing_deferred', False) is True:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+        return False
     if not update_only and conversation.discarded:
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_discarded').inc()
         return False
@@ -2138,7 +2136,12 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     # Model-free title only; preserve every transcript and external text field.
     structured = _build_deferred_structured(conversation)
     result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
-    _attach_client_projection(result, client_projection)
+    effective_projection = (
+        client_projection
+        if client_summaries_at_cap_enabled() and client_projection is not None
+        else getattr(conversation, 'client_processing', None)
+    )
+    _attach_client_projection(result, effective_projection)
     result.processing_deferred = True
     result.deferred = False
     result.discarded = False
@@ -2147,7 +2150,7 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     payload = omit_null_processing_state(strip_client_processing(result.model_dump()))
     payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if initial:
-        if client_projection is not None:
+        if client_summaries_at_cap_enabled() and client_projection is not None:
             payload.update(client_processing_mutation(client_projection))
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
@@ -2208,47 +2211,16 @@ def _store_deferred_conversation(
     return conversation
 
 
-def _terminal_persist_payload(conversation: Conversation) -> dict[str, Any]:
-    """Generic persist dict for a free-tier terminal store.
-
-    Always strips ``client_processing``. A processor holding a stale in-memory
-    projection must not last-writer-wins over a later ingest mutation. An
-    ingress create (``_store_deterministic_minimum`` /
-    ``_store_projected_conversation`` when ``_is_ingress_create``) stamps the
-    field back via ``client_processing_mutation`` after calling this. An
-    existing-conversation persist leaves the field omitted.
-
-    ``Conversation.dict()`` does not model the durable terminal-disposition
-    marker. The terminal marker must be written here too: a completed
-    minimum that then fails receipt/keyframe/fanout-completion is retried by
-    Cloud Tasks against ``status=completed``, which skips process_conversation
-    and would otherwise default the request-scoped disposition to RUN.
-
-    ``processing_state`` follows the dark discipline: a real value (the
-    flag-on minimum's ``local_pending``) passes through, but the modeled
-    field's None default is omitted — merge=True would stamp the explicit
-    null onto every conversation with both flags off.
-    """
-    payload = conversation.dict()
-    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
-    return clear_summary_retryable(omit_null_processing_state(strip_client_processing(payload)))
-
-
 def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker: bool) -> dict[str, Any]:
-    """Generic persist dict for a completed store that is not a free-tier terminal.
+    """Generic persist dict for completed funded enrichment.
 
     Always strips ``client_processing``. This is a processor result, not the
     projection's owner: a long-running worker's in-memory snapshot must not
     overwrite a later ingest mutation.
 
-    Write ``TERMINAL_NO_DERIVED_EFFECTS_FIELD=None`` only when the flag-on
-    desktop policy was consulted and returned process_normally. That is the
-    upgrade path (a prior free-tier minimum left the marker True;
-    ``Conversation.dict()`` does not model it; persist uses ``merge=True``)
-    whose write must clear the stale field so derived effects run. Flag-off,
-    non-desktop, and any path that never consulted the policy must omit the
-    key entirely: missing versus explicit-null is a real Firestore distinction,
-    and the dark rollout must not stamp a new field onto every conversation.
+    Successful explicit enrichment clears the durable no-effects marker,
+    including markers from the retired terminal policy. Unchosen budget-waiting
+    work returns before enrichment, so refresh and retry cannot grant consent.
 
     ``processing_state`` is the same distinction with the polarity reversed:
     the modeled field's None default is omitted (never stamped), while a real
@@ -2266,160 +2238,6 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     else:
         payload['processing_state'] = None
     return clear_summary_retryable(strip_client_processing(payload))
-
-
-def _store_deterministic_minimum(
-    uid: str,
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    plan: FreeTierProcessingPlan,
-    *,
-    client_projection: ClientProcessing | None = None,
-    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
-    user_kept: bool = False,
-) -> Tuple[Conversation, bool]:
-    """Persist a conversation at the no-LLM deterministic minimum, terminally.
-
-    ``structured`` is §1.7's deterministic minimum
-    (``build_deterministic_minimum_structured``): a title derived from the
-    transcript's first sentence with no model in the path, an empty overview,
-    category ``other``, and no action items or events. It is NOT
-    ``_build_deferred_structured`` — that one is the lazy first-open placeholder
-    and stays on the deferred path, where a later luna enrichment overwrites it.
-    Here nothing overwrites it, so the values have to be the spec's.
-
-    This does not set ``deferred=True`` or
-    ``status=processing`` — those are the first-open reprocess markers
-    ``get_conversation_by_id`` reads. This path emits no managed call, no memory extraction, no app fan-out,
-    and no folder assignment.
-    Typesense is not invoked from this persist path (keyword index is a
-    Firestore→Typesense sync, free of ``get_llm``); nothing that calls
-    ``get_llm`` runs here.
-
-    When this persist is the ingress create (``_is_ingress_create``) and
-    ``client_projection`` is present, it owns the display-only
-    ``client_processing`` field: the generic terminal payload strips it, then
-    ``client_processing_mutation`` stamps it back. An existing-conversation
-    persist always omits the field — even when a projection is attached
-    in-memory — so a stale processor snapshot cannot last-writer-wins over a
-    later ingest mutation. Existing-row callers (finalize, from-segments
-    session-id) persist the field via ``client_processing_mutation`` at the
-    ingest site, not through this persist.
-    """
-    is_initial_creation = _is_ingress_create(conversation)
-    decision = rules_only_relevance(
-        uid,
-        conversation,
-        trigger,
-        user_kept,
-        lambda: _calendar_overlap_retains_conversation(
-            uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
-        ),
-    )
-    structured = build_deterministic_minimum_structured(
-        conversation,
-        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
-    )
-    conversation = _get_conversation_obj(uid, structured, conversation)
-    conversation.deferred = False
-    conversation.status = ConversationStatus.completed
-    minimum_state = minimum_processing_state(
-        getattr(conversation, 'source', None), has_projection=client_projection is not None
-    )
-    conversation.processing_state = ConversationProcessingState(minimum_state) if minimum_state else None
-    _attach_client_projection(conversation, client_projection)
-    payload = _terminal_persist_payload(conversation)
-    conversation.summary_retryable = None  # a new processing pass answers the dead-letter retry
-    apply_relevance(conversation, payload, decision)
-    if is_initial_creation and client_projection is not None:
-        payload.update(client_processing_mutation(client_projection))
-    if is_initial_creation:
-        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
-    else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    kind = 'projected conversation' if client_projection is not None else 'deterministic minimum'
-    if not persisted:
-        logger.info(
-            'free-tier: %s persist fenced uid=%s conv=%s mode=%s reason=%s',
-            kind,
-            uid,
-            conversation.id,
-            plan.mode,
-            plan.reason,
-        )
-        return conversation, False
-    emit_recorded_decision(uid, conversation.id, decision)
-    logger.info(
-        'free-tier: stored %s uid=%s conv=%s mode=%s reason=%s',
-        kind,
-        uid,
-        conversation.id,
-        plan.mode,
-        plan.reason,
-    )
-    return conversation, True
-
-
-def _store_projected_conversation(
-    uid: str,
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    plan: FreeTierProcessingPlan,
-    *,
-    client_projection: ClientProcessing | None = None,
-    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
-    user_kept: bool = False,
-) -> Tuple[Conversation, bool]:
-    """Persist the untrusted display projection plus the deterministic-minimum structured.
-
-    Ingress create owns ``client_processing``: the generic terminal payload
-    strips it, then ``client_processing_mutation`` stamps it back. An
-    existing-conversation persist omits the field. Terminal:
-    ``deferred=False``, ``status=completed``, no managed seams. Shares the
-    persist path with ``_store_deterministic_minimum``.
-    """
-    return _store_deterministic_minimum(
-        uid, conversation, plan, client_projection=client_projection, trigger=trigger, user_kept=user_kept
-    )
-
-
-def _flag_off_identified_basic_deny(
-    uid: str,
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-    *,
-    client_projection: Optional[ClientProcessing],
-) -> Optional[FreeTierProcessingPlan]:
-    """Identified-basic deny for flag-off eager desktop enrichment.
-
-    Capture-side deferral (the legacy branch above) already keeps free-tier
-    desktop off managed providers at ingest; first-open (force_process) and
-    manual reprocess are the remaining eager spend. This reuses the S6 policy
-    — the same resolve_free_tier_processing_plan + managed-compute decision
-    the flag-on branch consults — so there is no second pipeline. Only an
-    *identified* basic deny is returned; identification failure and
-    authorization outages fail open to normal processing, matching
-    should_defer_desktop_processing's documented fail-open contract (a
-    Firestore blip must not strip a paid user's enrichment). A request that
-    carries a validated BYOK key for conv_structure's provider is allowed by
-    the same decision_for closure the flag-on path uses.
-    """
-    source = getattr(conversation, 'source', None)
-    source_value = getattr(source, 'value', source)
-    effective_projection = (
-        client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
-    )
-    plan = resolve_free_tier_processing_plan(
-        uid=uid,
-        source=str(source_value),
-        force_process=True,
-        is_reprocess=True,
-        has_projection=effective_projection is not None,
-        decision_for=_managed_compute_decision_for(uid),
-    )
-    decision = plan.decision
-    if plan.managed_calls_allowed or decision is None:
-        return None
-    if not decision.plan_resolved or decision.plan != 'basic':
-        return None
-    return plan
 
 
 def _calendar_overlap_retains_conversation(
@@ -2618,8 +2436,8 @@ def process_conversation(
 
     def _observe_owner_recognition_completion(completed: Conversation) -> None:
         # One observation per conversation, on every successful persist. The
-        # free-tier terminal stores and the eager-extraction denial return
-        # through report_persistence, so a new early return that reports a
+        # completed stores return through report_persistence, so a new
+        # early return that reports a
         # completed write is observed too. Telemetry must not fail the write.
         try:
             profile = None
@@ -2717,88 +2535,18 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
-    # Free-tier local processing (S6): when the rollout flag is on, desktop
-    # conversations consult the processing policy instead of the legacy
-    # should_defer_desktop_processing fail-open. Identified-basic and other
-    # denies land at the deterministic minimum (terminal; no first-open luna).
-    # Flag off leaves the legacy branch below byte-identical.
-    # The stale-marker clear below is applied only when this branch actually
-    # consulted the policy and continued to process_normally (paid upgrade).
-    clear_stale_terminal_marker = backlog_authorized
-    if (
-        # `uid` is required, not optional: the flag is necessary but never
-        # sufficient, and `free_tier_local_processing_enabled(None)` is answered
-        # False while the flag is on, by design, so a boolean alone lights
-        # nobody. Calling it bare made this whole branch unreachable in every
-        # environment regardless of the configured cohort.
-        free_tier_local_processing_enabled(uid)
-        and hasattr(conversation, 'source')
-        and conversation.source == ConversationSource.desktop
-        and not probe_uid
-    ):
-        source_value = getattr(conversation.source, 'value', conversation.source)
-        # Explicit ingest-time projection wins over a previously stored one.
-        # A stored Conversation.client_processing still counts: an idempotent
-        # retry with no kwarg must not fall through to the bare minimum.
-        effective_projection = (
-            client_projection if client_projection is not None else getattr(conversation, 'client_processing', None)
-        )
-        # Nothing before this call may raise: funding-owner resolution lives
-        # inside decision_for, which the policy runs under its exception guard.
-        plan = resolve_free_tier_processing_plan(
-            uid=uid,
-            source=str(source_value),
-            force_process=force_process,
-            is_reprocess=is_reprocess,
-            has_projection=effective_projection is not None,
-            decision_for=_managed_compute_decision_for(uid),
-        )
-        if plan.reason == 'plan_identification_fail_open':
-            # Policy is pure (no telemetry). An unresolved plan fail-opens onto
-            # managed processing; emit here so rollout monitoring can see it.
-            record_fallback(
-                component='other',
-                from_mode='unresolved_plan',
-                to_mode='managed_processing',
-                reason='policy',
-                outcome='degraded',
-                log=logger,
-            )
-        if plan.mode != 'process_normally':
-            stored, persisted = (
-                _store_projected_conversation(
-                    uid,
-                    conversation,
-                    plan,
-                    client_projection=effective_projection,
-                    trigger=trigger,
-                    user_kept=user_kept,
-                )
-                if plan.mode == 'store_projection'
-                else _store_deterministic_minimum(uid, conversation, plan, trigger=trigger, user_kept=user_kept)
-            )
-            report_persistence(
-                persisted,
-                completed=stored,
-                derived_effects=(
-                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
-                    if persisted
-                    else DerivedEffectsDisposition.RUN
-                ),
-            )
-            return stored
-        clear_stale_terminal_marker = True
+    # Denied/unchosen backlog work returned above. Successful explicit enrichment
+    # also clears no-effects markers left by the retired terminal policy.
+    clear_stale_terminal_marker = backlog_authorized or force_process or is_reprocess
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
     # enrichment (summary, action items, memories, embeddings, app results) is deferred until
     # they first OPEN the conversation (the FIRST_OPEN trigger). Paid desktop plans
     # (Operator / Architect), BYOK users, and all non-desktop sources are processed
     # normally here. Every trigger whose mode runs now or reprocesses bypasses this
-    # so the enrichment actually runs. Derived effects run in the same processing
-    # pass when this desktop deferral is not selected.
-    # Unreachable when FREE_TIER_LOCAL_PROCESSING is on (the branch above already
-    # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
-    elif (
+    # so the enrichment actually runs. Funded derived effects follow the same
+    # processing pass after upstream's first-open rollout retirement.
+    if (
         not force_process
         and not backlog_authorized
         and not is_reprocess
@@ -2816,51 +2564,14 @@ def process_conversation(
         # Do not change this onto the flag-off path — it must stay byte-identical.
         report_persistence(False)
         return deferred
-    # Eager-extraction gate (S14 proactivity half, flag-off): first-open
-    # (run now) and manual reprocess are the remaining eager managed
-    # spend for desktop conversations. Default off
-    # (``BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED``): no authorize call and
-    # no new terminal marker. When on, an identified-basic deny lands at the
-    # same deterministic minimum the flag-on branch uses — no second pipeline;
-    # identification failure fails open above it. Non-desktop sources never
-    # reach this branch (the summary flip is a separate, held decision).
-    elif (
-        (force_process or is_reprocess)
-        and hasattr(conversation, 'source')
-        and conversation.source == ConversationSource.desktop
-        and basic_plan_gate_eager_extraction_enabled()
-    ):
-        eager_basic_deny = _flag_off_identified_basic_deny(uid, conversation, client_projection=client_projection)
-        if eager_basic_deny is not None:
-            stored, persisted = _store_deterministic_minimum(
-                uid,
-                conversation,
-                eager_basic_deny,
-                client_projection=client_projection,
-                trigger=trigger,
-                user_kept=user_kept,
-            )
-            report_persistence(
-                persisted,
-                completed=stored,
-                derived_effects=(
-                    DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
-                    if persisted
-                    else DerivedEffectsDisposition.RUN
-                ),
-            )
-            return stored
-
     # Custom-STT skips managed-STT credits at listen connect. The LLM work that
     # follows (structure / summary / memory) still consults the processing
     # budget so those sessions cannot run uncapped on Omi's bill (#7690).
     # Paid unlimited plans and LLM BYOK stay allowed — this is not the
     # #10962 blanket skip that removed summaries for every custom-STT user.
     #
-    # After the unpaid desktop path (#14513): store_projection /
-    # deterministic_minimum already returned above. Consulting this gate
-    # earlier would complete a desktop custom-STT session without the
-    # on-device summary it would otherwise persist. Regular conversations
+    # Funded budget denial already returned above, preserving raw capture and
+    # any display projection. Regular conversations
     # never consult this gate — they are already bounded by STT credits at
     # listen connect. Keep that contract at the call site so a stubbed/truthy
     # helper cannot abort memory/task/goal fan-out.

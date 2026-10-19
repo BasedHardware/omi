@@ -23397,6 +23397,30 @@ abstract class AppLocalizations {
   /// **'Apple Watch'**
   String get firstCaptureWatch;
 
+  /// Onboarding device step title
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Omi'**
+  String get firstCaptureConnectTitle;
+
+  /// Onboarding device step description
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your Omi and it captures your conversations hands-free, all day.'**
+  String get firstCaptureConnectDescription;
+
+  /// Onboarding device step primary button
+  ///
+  /// In en, this message translates to:
+  /// **'Connect my Omi'**
+  String get firstCaptureConnect;
+
+  /// Onboarding device step secondary button, opens the store
+  ///
+  /// In en, this message translates to:
+  /// **'I don\'t have an Omi yet'**
+  String get firstCaptureNoDevice;
+
   /// No description provided for @firstCaptureSkip.
   ///
   /// In en, this message translates to:

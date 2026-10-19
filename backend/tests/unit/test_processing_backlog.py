@@ -536,3 +536,89 @@ async def test_worker_dispatch_carries_expiring_month_consent(monkeypatch):
     process_mock.assert_called_once()
     assert not job['reserved']
     assert funded.processing_allowed('synthetic')  # New capture has no expired job grant.
+
+
+@pytest.mark.parametrize('flag', ['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'STT_CAP_DISPATCH_ENFORCEMENT'])
+@pytest.mark.parametrize('summary_switch', [None, 'false'])
+def test_funded_cap_denial_stores_summary_as_waiting_never_terminal_or_derived(monkeypatch, flag, summary_switch):
+    from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
+    from utils.conversations.processing_trigger import ProcessingTrigger
+
+    for key in ('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'STT_CAP_DISPATCH_ENFORCEMENT'):
+        monkeypatch.setenv(key, 'true' if key == flag else 'false')
+    monkeypatch.delenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', raising=False)
+    if summary_switch is not None:
+        monkeypatch.setenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', summary_switch)
+    # Legacy rollout values cannot reactivate terminal minimum processing.
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING', 'true')
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'pct:100')
+    monkeypatch.setenv('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED', 'true')
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance(0, False))
+    now = datetime.now(timezone.utc)
+    projection = ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='Local display only'),
+        provenance=ProjectionProvenance(model_id='afm', runtime='local', device_class='mac', generated_at=now),
+    )
+    raw = CreateConversation(
+        source=ConversationSource.desktop,
+        started_at=now,
+        finished_at=now,
+        transcript_segments=[TranscriptSegment(text='Captured original', start=0, end=1, is_user=True)],
+    )
+    saved = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'create_completed_conversation', saved)
+    forbidden = Mock(side_effect=AssertionError('provider or derived work'))
+    for name in (
+        '_get_structured',
+        '_extract_memories',
+        '_save_action_items',
+        'submit_with_context',
+        'trigger_conversation_apps',
+        '_enrich_meeting_context',
+    ):
+        monkeypatch.setattr(pipeline, name, forbidden)
+    result = pipeline.process_conversation('synthetic', 'en', raw, client_projection=projection)
+    assert result.processing_deferred and not result.deferred
+    assert result.client_processing == (projection if summary_switch is None else None)
+    assert result.structured.title == 'Captured original'
+    payload = saved.call_args.args[1]
+    assert ('client_processing' in payload) is (summary_switch is None)
+    assert payload['processing_deferred'] is True
+    # Rollback preserves a stored display projection. Reset and ordinary reprocess
+    # never start work or consume consent.
+    monkeypatch.setenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', 'false')
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance(130, True))
+    persist = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
+    for trigger in (ProcessingTrigger.FIRST_OPEN, ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.SYNC_UPDATE):
+        retried = pipeline.process_conversation('synthetic', 'en', result, trigger=trigger)
+        assert retried.processing_deferred
+        assert retried.client_processing == result.client_processing
+        assert 'client_processing' not in persist.call_args.args[1]
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize('update_only', [False, True])
+def test_budget_waiting_vector_writer_never_calls_provider_after_reset(monkeypatch, update_only):
+    now = datetime.now(timezone.utc)
+    waiting = Conversation(
+        id='waiting',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=Structured(title='Raw placeholder'),
+        processing_deferred=True,
+    )
+    forbidden = Mock(side_effect=AssertionError('unchosen backlog vector work'))
+    for name in (
+        'generate_embedding',
+        'update_vector_metadata',
+        'upsert_vector2',
+        'retrieve_metadata_fields_from_structured',
+    ):
+        monkeypatch.setattr(pipeline, name, forbidden)
+    monkeypatch.setattr(funded, 'processing_allowed', lambda uid: True)
+    assert pipeline.save_structured_vector('synthetic', waiting, update_only=update_only) is False
+    forbidden.assert_not_called()

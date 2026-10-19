@@ -353,3 +353,70 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
         assert 'exception_type=ValueError' in text
     else:
         assert 'event=batch_projection_phase' not in text
+
+
+@pytest.mark.parametrize('finish', [False, True])
+@pytest.mark.parametrize('failure', ['superseded', 'conflict'])
+def test_assignment_supersession_settles_part_but_conflicts_still_retry(binding, monkeypatch, finish, failure):
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
+
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    payload = {
+        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'diarization': {'turns': []},
+    }
+    projector = projection.Projector(Mock(), Mock(return_value=payload))
+    projector.store = Mock()
+    session = projector.store.session.return_value
+    receipt = {'state': 'ready', 'disposition': 'superseded', 'conversation_id': None, 'speech_seconds': 0.0}
+    session.persist_empty.return_value = receipt
+    projector.finish_part = Mock()
+    monkeypatch.setattr(
+        projection,
+        'build_incoming',
+        lambda *a, **k: {
+            'started_at': Mock(timestamp=lambda: 0),
+            'finished_at': Mock(timestamp=lambda: 1),
+            'transcript_segments': [{'speaker_id_scope': 'sync:fixture'}],
+        },
+    )
+    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
+    error = (
+        SyncAssignmentSuperseded('private fixture reason')
+        if failure == 'superseded'
+        else SyncAssignmentConflict('fixture')
+    )
+    assign = Mock(side_effect=error)
+    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', assign)
+    if failure == 'conflict':
+        with pytest.raises(SyncAssignmentConflict):
+            projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, finish=finish)
+        session.persist_empty.assert_not_called()
+    else:
+        projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, finish=finish)
+        session.persist_empty.assert_called_once_with(superseded=True)
+        assert session.speech_seconds == session.total_speech_seconds == 1
+        assert projector.finish_part.call_count == int(finish)
+
+
+def test_supersession_losing_assignment_race_preserves_committed_receipt(binding):
+    from database.batch_pipeline_projection import ProjectionReplay
+
+    projector = projection.Projector(Mock(), Mock())
+    winner = {'state': 'persisted', 'conversation_id': 'synthetic-winner', 'speech_seconds': 4}
+    session = Mock()
+    session.persist_empty.side_effect = ProjectionReplay(winner)
+    assert projector.supersede(session) == winner
+
+
+def test_supersession_cannot_bypass_privacy_fence(binding):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    projector = projection.Projector(Mock(), Mock())
+    session = Mock()
+    session.persist_empty.side_effect = BatchPrivacyBlocked('privacy_generation_changed')
+    with pytest.raises(BatchPrivacyBlocked):
+        projector.supersede(session)
