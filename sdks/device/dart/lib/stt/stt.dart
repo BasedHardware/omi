@@ -14,6 +14,25 @@ abstract class StreamingTranscriber {
   Future<void> stop();
 }
 
+/// Thrown by [ParakeetTranscriber.appendPcm] and [ParakeetTranscriber.stop] when the server closed
+/// the stream before sending `ready`, e.g. 1013 `capacity_full` or `service_not_ready`. That stream
+/// never becomes ready, so callers can retry or switch engines instead of losing the session's audio.
+class SttStreamClosedException implements Exception {
+  const SttStreamClosedException({this.closeCode, this.closeReason, this.error});
+
+  /// The server's WebSocket close code, e.g. 1013 (try again later).
+  final int? closeCode;
+
+  /// The server's close reason, e.g. `capacity_full`.
+  final String? closeReason;
+
+  /// The stream error that ended the connection, when it failed without a close frame.
+  final Object? error;
+
+  @override
+  String toString() => 'SttStreamClosedException: stream closed before ready: ${error ?? '$closeCode $closeReason'}';
+}
+
 String deepgramWsUrl({int sampleRate = 16000}) {
   return 'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
       '&encoding=linear16&sample_rate=$sampleRate&channels=1';
@@ -37,7 +56,8 @@ class DeepgramTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
+    _channel =
+        channel ??
         IOWebSocketChannel.connect(
           Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
           headers: {'Authorization': 'Token $apiKey'},
@@ -105,8 +125,7 @@ class ParakeetTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
-        WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
+    _channel = channel ?? WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
     _sub = _channel.stream.listen(
       (event) {
         if (event is! String) return;
@@ -120,8 +139,8 @@ class ParakeetTranscriber implements StreamingTranscriber {
           if (text != null && text.isNotEmpty) onTranscript(text);
         } catch (_) {}
       },
-      onDone: _markDrained,
-      onError: (_) => _markDrained(),
+      onDone: _streamEnded,
+      onError: (Object error) => _streamEnded(error),
     );
   }
 
@@ -132,10 +151,24 @@ class ParakeetTranscriber implements StreamingTranscriber {
   StreamSubscription? _sub;
   bool _ready = false;
   bool _stopped = false;
+  SttStreamClosedException? _closedBeforeReady;
   final Completer<void> _drained = Completer<void>();
 
   void _markDrained() {
     if (!_drained.isCompleted) _drained.complete();
+  }
+
+  // The server can end the stream before ready, e.g. 1013 capacity_full or service_not_ready
+  // (backend/parakeet/main.py). Such a stream never becomes ready, so keep why it ended.
+  void _streamEnded([Object? error]) {
+    if (!_ready && !_stopped) {
+      _closedBeforeReady ??= SttStreamClosedException(
+        closeCode: _channel.closeCode,
+        closeReason: _channel.closeReason,
+        error: error,
+      );
+    }
+    _markDrained();
   }
 
   static String? _extract(Map<String, dynamic> data) {
@@ -146,7 +179,13 @@ class ParakeetTranscriber implements StreamingTranscriber {
 
   @override
   void appendPcm(Uint8List chunk) {
-    if (_stopped || !_ready) return;
+    if (_stopped) return;
+    if (!_ready) {
+      // PCM before ready is dropped, unless the server already ended the stream.
+      final closed = _closedBeforeReady;
+      if (closed != null) throw closed;
+      return;
+    }
     _channel.sink.add(chunk);
   }
 
@@ -169,6 +208,8 @@ class ParakeetTranscriber implements StreamingTranscriber {
     try {
       await _channel.sink.close();
     } catch (_) {}
+    final closed = _closedBeforeReady;
+    if (closed != null) throw closed;
   }
 }
 
