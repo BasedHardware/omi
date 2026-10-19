@@ -12,7 +12,14 @@ from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
 
-from check_public_build_contract import ROOT, load_contract
+from check_public_build_contract import (
+    DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    DEFAULT_RETRY_TIMEOUT_SECONDS,
+    ROOT,
+    SMOKE_RETRY_ATTEMPTS,
+    SMOKE_RETRY_SLEEP_SECONDS,
+    load_contract,
+)
 
 
 class BrowserSmokeError(RuntimeError):
@@ -58,16 +65,32 @@ def browser_candidates(environment: dict[str, str] | None = None) -> tuple[str, 
     )
 
 
-def render_candidate(*, browser: str, base_url: str) -> str:
-    for attempt in range(3):
+def render_candidate(
+    *,
+    browser: str,
+    base_url: str,
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS,
+) -> str:
+    browser_label = Path(browser).name or "browser"
+    for attempt in range(SMOKE_RETRY_ATTEMPTS):
+        started = time.monotonic()
         try:
-            # Keep the original first-attempt allowance. With at most five
-            # candidates, two 19s retries plus 5s sleeps add at most 240s.
-            return _render_candidate_once(browser=browser, base_url=base_url, timeout=45 if attempt == 0 else 19)
+            document = _render_candidate_once(
+                browser=browser,
+                base_url=base_url,
+                timeout=timeout_seconds if attempt == 0 else retry_timeout_seconds,
+            )
         except BrowserSmokeError:
-            if attempt == 2:
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            if attempt == SMOKE_RETRY_ATTEMPTS - 1:
                 raise
-            time.sleep(5)
+            time.sleep(SMOKE_RETRY_SLEEP_SECONDS)
+        else:
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            return document
 
 
 def _render_candidate_once(*, browser: str, base_url: str, timeout: int) -> str:
@@ -136,7 +159,12 @@ def smoke(
     errors: list[BrowserSmokeError] = []
     for browser in browser_candidates(environment):
         try:
-            document = render_candidate(browser=browser, base_url=url)
+            document = render_candidate(
+                browser=browser,
+                base_url=url,
+                timeout_seconds=selected.candidate_acceptance.timeout_seconds,
+                retry_timeout_seconds=selected.candidate_acceptance.retry_timeout_seconds,
+            )
         except BrowserSmokeError as exc:
             errors.append(exc)
             continue

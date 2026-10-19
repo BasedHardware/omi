@@ -25,6 +25,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "no_recoverable_speech"
@@ -172,6 +176,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -315,6 +323,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"

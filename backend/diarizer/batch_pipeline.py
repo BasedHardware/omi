@@ -308,6 +308,7 @@ class PipelineWorker:
         recover_words: Callable | None = None,
         gpu_lock=None,
         io_concurrency: int | None = None,
+        flight_models=None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -317,6 +318,9 @@ class PipelineWorker:
         self.live_words, self.single_speaker = live_words, single_speaker
         self.on_failure = on_failure
         self.recover_words = recover_words
+        # Optional packed pyannote stages (diarizer.batch_pipeline_flight).
+        # Absent or failed, every item takes the serial vad/diarize calls.
+        self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
@@ -334,6 +338,40 @@ class PipelineWorker:
             if self.io_concurrency > 1
             else None
         )
+
+    def _fatal(self, exc):
+        self._unavailable = True
+        raise FatalGpuError('fatal CUDA error; restart GPU chain') from exc
+
+    def _flight_segment(self, decoded):
+        if self.flight is None or not decoded:
+            return [None] * len(decoded)
+        try:
+            features = list(self.flight.segment([samples for _, samples in decoded]))
+            if len(features) != len(decoded):
+                raise ValueError('flight segmentation cardinality mismatch')
+            return features
+        except Exception as exc:
+            if is_fatal_cuda_error(exc):
+                self._fatal(exc)
+            logger.warning('event=batch_flight_fallback stage=segmentation exception_type=%s', type(exc).__name__)
+            return [None] * len(decoded)
+
+    def _flight_diarize(self, pending):
+        # Packed embeddings describe the full unit; speech-only diarization
+        # clusters a compacted waveform, so it keeps its own serial call.
+        if self.flight is None or not pending or diarize_speech_only_enabled():
+            return {}
+        try:
+            outcomes = list(self.flight.diarize_many([(s['samples'], s.get('flight_features')) for s in pending]))
+            if len(outcomes) != len(pending):
+                raise ValueError('flight diarization cardinality mismatch')
+            return {s['item'].segment_id: outcome for s, outcome in zip(pending, outcomes)}
+        except Exception as exc:
+            if is_fatal_cuda_error(exc):
+                self._fatal(exc)
+            logger.warning('event=batch_flight_fallback stage=diarization exception_type=%s', type(exc).__name__)
+            return {}
 
     def _diarize_unit(self, samples, evidence, words):
         """Diarize retained speech only; any doubt diarizes the full unit.
@@ -550,19 +588,41 @@ class PipelineWorker:
                 silence_records.append(item.segment_id)
 
         try:
-            for index, item in enumerate(items):
-                self.counts['items'] += 1
-                stage = 'fetch_decode'
+
+            def decoded_units():
+                for index, item in enumerate(items):
+                    self.counts['items'] += 1
+                    try:
+                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        shapes[item.segment_id]['samples'] = len(samples)
+                        duration = len(samples) / SAMPLE_RATE
+                        if (
+                            not 0 < duration <= self.config.max_unit_seconds
+                            or abs(duration - item.duration_seconds) > 0.1
+                        ):
+                            raise ValueError('decoded duration differs from admitted capture')
+                    except Exception as exc:
+                        fail(item, exc, 'fetch_decode')
+                        continue
+                    yield item, samples
+
+            if self.flight is None:
+                # Serial: VAD each unit as soon as it is decoded (prefetch overlap).
+                units = ((unit, None) for unit in decoded_units())
+            else:
+                # One packed segmentation pass shared by VAD and diarization; a
+                # None feature selects the unchanged serial VAD call for that unit.
+                decoded = list(decoded_units())
+                units = zip(decoded, self._flight_segment(decoded))
+            for (item, samples), features in units:
+                stage = 'vad_windows'
                 try:
-                    samples = prefetch.take(index) if prefetch is not None else self.decode(item)
-                    shapes[item.segment_id]['samples'] = len(samples)
                     duration = len(samples) / SAMPLE_RATE
-                    if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
-                        raise ValueError('decoded duration differs from admitted capture')
-                    stage = 'vad_windows'
                     silence = None
                     try:
-                        spans = list(self.vad(samples))
+                        spans = list(
+                            self.vad(samples) if features is None else self.flight.vad_spans(samples, features)
+                        )
                     except BatchValidationError as error:
                         if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
                             raise
@@ -591,6 +651,7 @@ class PipelineWorker:
                         'speech_seconds': sum(span['end'] - span['start'] for span in speech_spans),
                         'window_min_samples': min((len(w.samples) for w in clips), default=0),
                         'window_max_samples': max((len(w.samples) for w in clips), default=0),
+                        'flight_features': features,
                     }
                     states[item.segment_id] = state
                     if not clips:
@@ -670,11 +731,9 @@ class PipelineWorker:
                     except Exception as exc:
                         fail(states[window.segment_id]['item'], exc, 'word_clocks')
 
+            prepared = []
             for state in states.values():
                 item = state['item']
-                # Bound in-flight encrypted writes; settle outside any item handler.
-                while len(pending_persist) >= self.io_concurrency:
-                    settle_persist(pending_persist.pop(0))
                 if item.segment_id in held:
                     results.append(HeldWork(item.segment_id))
                     continue
@@ -774,6 +833,25 @@ class PipelineWorker:
                     # calibrated single label only once a prod-revision paired
                     # run qualifies it (see batch_pipeline_runtime.md).
                     short = not single and short_speech_single_enabled() and short_single_region(evidence)
+                    prepared.append((item, state, words, silence, duration, single, evidence, short))
+                except Exception as exc:
+                    fail(item, exc, stage)
+
+            # Speaker labels never pool across units: packing shares only model
+            # forwards. Missing outcomes take the serial diarize call below.
+            flight_diarized = self._flight_diarize(
+                [
+                    state
+                    for _, state, _, _, _, single, _, short in prepared
+                    if not state['silence'] and not single and not short
+                ]
+            )
+            for item, state, words, silence, duration, single, evidence, short in prepared:
+                # Bound in-flight encrypted writes; settle outside any item handler.
+                while len(pending_persist) >= self.io_concurrency:
+                    settle_persist(pending_persist.pop(0))
+                stage = 'assemble_words'
+                try:
                     if state['silence']:
                         diarization = {'turns': [], 'outcome': 'silence'}
                     elif single or short:
@@ -786,7 +864,11 @@ class PipelineWorker:
                             record_decision('skipped_short', unit_seconds=duration)
                     else:
                         stage = 'diarize'
-                        diarization = self._diarize_unit(state['samples'], evidence, words)
+                        diarization = flight_diarized.get(item.segment_id)
+                        if isinstance(diarization, BaseException):
+                            raise diarization
+                        if diarization is None:
+                            diarization = self._diarize_unit(state['samples'], evidence, words)
                     payload = {
                         'words': words,
                         'diarization': diarization,
