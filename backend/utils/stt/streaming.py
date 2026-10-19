@@ -1479,9 +1479,6 @@ class SafeModulateSocket(STTSocket):
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
-        # A partial newer than the last final utterance (even an empty one) is
-        # output the provider still owes for audio it already received.
-        self._partial_after_final = False
         self._connection_cause: Optional[str] = None
         self._prev_partial_word_count: int = 0
         # Velma rejects any s16le frame that is not a whole number of samples with
@@ -1539,7 +1536,9 @@ class SafeModulateSocket(STTSocket):
         return self._connection_cause
 
     def has_pending_provider_output(self) -> bool:
-        return self._partial_after_final
+        # A buffered partial is still owed: only a text utterance or a drain
+        # flush emits it, and an abrupt close drops it.
+        return bool(self._prev_partial_text)
 
     def _mark_dead(self, reason: str, typed_reason: Optional[str] = None, *, cause: Optional[str] = None) -> None:
         with self._lock:
@@ -1823,7 +1822,6 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
-        self._partial_after_final = True
         start_ms = msg.get('start_ms', 0)
         self._prev_partial_text = text
         self._prev_partial_start_ms = start_ms
@@ -1858,7 +1856,6 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
     def _handle_utterance(self, msg: Dict[str, Any]) -> None:
-        self._partial_after_final = False
         text = msg.get('text', '').strip()
         if not text:
             return

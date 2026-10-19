@@ -333,14 +333,14 @@ class TestUtteranceHandling(unittest.TestCase):
 
         return self.loop.run_until_complete(create())
 
-    def test_pending_provider_output_tracks_partials_until_any_final(self):
+    def test_pending_provider_output_tracks_partials_until_a_text_final(self):
         sock = self._make_socket()
         self.assertFalse(sock.has_pending_provider_output())
         sock._handle_partial_utterance({'text': 'hel', 'start_ms': 100})
         self.assertTrue(sock.has_pending_provider_output())
-        # An empty final settles the span even though the partial is kept for drain.
+        # An empty final leaves the partial buffered for drain: still owed.
         sock._handle_utterance({'text': '', 'start_ms': 100, 'duration_ms': 300})
-        self.assertFalse(sock.has_pending_provider_output())
+        self.assertTrue(sock.has_pending_provider_output())
         sock._handle_partial_utterance({'text': 'hello', 'start_ms': 900})
         sock._handle_utterance({'text': 'hello', 'start_ms': 900, 'duration_ms': 400})
         self.assertFalse(sock.has_pending_provider_output())

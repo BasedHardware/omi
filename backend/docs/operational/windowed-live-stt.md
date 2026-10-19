@@ -492,10 +492,11 @@ Modulate utterances are placed (8,311 mapped versus 80 refused per hour on
 2026-10-20). Now, when the ring would overflow, the leg settles capture older
 than the ring horizon like an answered-empty window if all of these hold: the
 leg is serving, the provider owes no output (`has_pending_provider_output()`:
-Soniox has no non-final or unflushed final token; Modulate has no partial
-newer than its last final, empty or not), and every speech send before the
-horizon is at least 15 s old, so a replay burst the provider has not answered
-keeps its obligation. Providers without that hook keep the old behavior.
+Soniox has no non-final or unflushed final token; Modulate has no buffered
+partial, which only a text utterance or drain flush emits), and every speech or
+replayed send before the horizon is at least 15 s old, so a replay the provider
+has not answered keeps its obligation even where this leg's VAD scores it
+silent. Providers without that hook keep the old behavior.
 Speech inside the horizon stays pending and ages out at the ring horizon.
 `omi_stt_nonwindow_replay_settles_total{provider}` counts settle episodes.
 `LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on; `false`/`0`/`off` is the

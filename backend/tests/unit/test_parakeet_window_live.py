@@ -3267,6 +3267,34 @@ async def test_nonwindow_settle_waits_for_recent_replay_sends(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_replay_scored_silent_by_replacement_vad_still_waits_for_grace(monkeypatch):
+    from utils.stt import live_session
+
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    raw = _QuietProvider()
+    silent = SimpleNamespace(audio_to_send=b'', is_speech=False, should_finalize=False, send_spans=())
+    gate = SimpleNamespace(
+        mode='active',
+        process_audio=lambda *a, **kw: silent,
+        consume_speech_ms_delta=lambda: 0,
+        remap_segments=lambda _s: None,
+    )
+    ring = ResilientAudio(16000, ring_seconds=90, strict_replay=True)
+    session = LiveChainSession(SimpleNamespace(**vars(receiver()), _window_ring=lambda: ring))
+    leg = LiveLegSocket(raw, gate, session, st.STTService.soniox, 16000, False, False)
+    pcm = b'\x01\x00' * 16000
+    # Window-origin replay at failover: this leg's VAD calls every span silent.
+    for second in range(100):
+        leg.replay_send(pcm, second * 16000)
+    assert leg.window_replay_pending_sample() == 0 and leg.has_untranscribed_speech()
+    clock[0] = 1.0
+    assert not leg.window_replay_settle_through(10 * 16000)
+    clock[0] = 16.0
+    assert leg.window_replay_settle_through(10 * 16000)
+
+
+@pytest.mark.asyncio
 async def test_modulate_utterances_carry_capture_end_and_advance_emitted(monkeypatch):
     from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 

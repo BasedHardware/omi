@@ -928,15 +928,19 @@ class LiveLegSocket(STTSocket):
             self._pending_capture_sample = max(start_sample, self._replay_accounted_sample())
             self._settling = False
         self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
-        if not self.window:
-            now = _replay_clock()
-            notes = self._replay_capture_notes
-            while notes and notes[0][2] <= now - NONWINDOW_SETTLE_GRACE_SECONDS:
-                notes.popleft()
-            if notes and now - notes[-1][1] < 1.0:
-                notes[-1][2] = now
-            else:
-                notes.append([start_sample, now, now])
+        self._note_replay_send(start_sample)
+
+    def _note_replay_send(self, start_sample: int) -> None:
+        if self.window:
+            return
+        now = _replay_clock()
+        notes = self._replay_capture_notes
+        while notes and notes[0][2] <= now - NONWINDOW_SETTLE_GRACE_SECONDS:
+            notes.popleft()
+        if notes and now - notes[-1][1] < 1.0:
+            notes[-1][2] = now
+        else:
+            notes.append([start_sample, now, now])
 
     def _send_unscored_replay_capture(self, data: bytes, start_sample: int | None = None) -> bool:
         self._note_replay_capture(data, start_sample)
@@ -1168,6 +1172,9 @@ class LiveLegSocket(STTSocket):
             if self._pending_capture_sample is None:
                 self._pending_capture_sample = start_sample
             self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+            # Record send time even when this leg's VAD scores the span silent:
+            # the settle grace must cover every replayed obligation.
+            self._note_replay_send(start_sample)
         self._replaying = True
         try:
             return self.send(data, start_sample=start_sample)
