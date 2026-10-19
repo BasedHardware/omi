@@ -78,7 +78,12 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-20.
+These rollout/experiment entries passed `review_by` without a recorded
+decision. Overdue is a warning, not a failure.
+
+- `STT_CAP_DISPATCH_COHORT` — review_by 2026-10-19 (dazheng)
+- `STT_CAP_DISPATCH_ENFORCEMENT` — review_by 2026-10-19 (dazheng)
+- `STT_CAP_DISPATCH_LANES` — review_by 2026-10-19 (dazheng)
 
 ## Flags
 
