@@ -257,7 +257,7 @@ def perform_merge_async(
         sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
 
         # 2. Merge raw data
-        merged_segments = _merge_transcript_segments(sorted_convs)
+        merged_segments, segment_placements = _merge_transcript_segments_with_placements(sorted_convs)
         merged_photos = _collect_all_photos(uid, sorted_convs)
 
         # 3. Generate new conversation ID and copy audio chunks
@@ -378,7 +378,13 @@ def perform_merge_async(
 
         from database.review_overlay_merge import transfer
 
-        if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
+        if transfer(
+            uid,
+            [c['id'] for c in sorted_convs],
+            new_conversation_id,
+            placements=segment_placements,
+            firestore_client=firestore_db,
+        ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
 
@@ -427,6 +433,11 @@ def perform_merge_async(
 
 
 def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
+    """The merged transcript of ``_merge_transcript_segments_with_placements``, without the placements."""
+    return _merge_transcript_segments_with_placements(conversations)[0]
+
+
+def _merge_transcript_segments_with_placements(conversations: List[Dict]) -> Tuple[List[Dict], List[List[int]]]:
     """
     Merge transcript segments from all conversations sequentially.
 
@@ -434,12 +445,15 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     - Sort conversations by started_at
     - Append segments sequentially
     - Adjust timestamps to account for gaps between conversations
+    - Sort the merged segments by start, so overlapping sources interleave
 
     Args:
         conversations: List of conversation dictionaries (already sorted by started_at)
 
     Returns:
-        List of merged transcript segment dictionaries
+        The merged transcript segment dictionaries, and the placements:
+        ``placements[k][i]`` is the merged index of segment ``i`` of ``conversations[k]``.
+        The correction transfer needs them because an interleaved source is not one block.
     """
     merged = []
     cumulative_offset = 0.0
@@ -529,8 +543,14 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
     # Origin-based offsets interleave overlapping sources; keep the transcript chronological
     # (stable, so equal starts keep their source order).
-    merged.sort(key=lambda seg: seg.get("start") or 0)
-    return merged
+    order = sorted(range(len(merged)), key=lambda index: merged[index].get("start") or 0)
+    position = {index: rank for rank, index in enumerate(order)}
+    placements, first = [], 0
+    for conv in conversations:
+        count = len(conv.get("transcript_segments") or [])
+        placements.append([position[index] for index in range(first, first + count)])
+        first += count
+    return [merged[index] for index in order], placements
 
 
 def _resolve_merged_finished_at(sorted_convs: List[Dict]) -> Optional[datetime]:
