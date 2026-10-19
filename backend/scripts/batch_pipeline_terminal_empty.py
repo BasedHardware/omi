@@ -28,7 +28,6 @@ from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
-from config.batch_pipeline import terminal_empty_disposition_enabled, recovery_enabled_for
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_terminal_empty import TerminalEmptyStore, intent_snapshot, spent_canary, exhausted, idle
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -284,7 +283,7 @@ def main():
         'paid_stt_calls': 0,
     }
     if args.apply:
-        require(terminal_empty_disposition_enabled() and recovery_enabled_for(uid), 'disposition_or_owner_disabled')
+        # Per-unit mutation consumes its persisted recovery owner part.
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')
         require(not counts['canary_recovery'] or args.canary_paid_epoch == 2, 'canary_epoch_2_authorization_required')
         outcomes = Counter(

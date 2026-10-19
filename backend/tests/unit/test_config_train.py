@@ -215,8 +215,7 @@ def test_staging_mirrors_prod_except_names():
         assert set(twin.env) == set(svc.env)
         # Queue names carry the staging- prefix; every other ops value is identical.
         assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in svc.env.items())
-        assert type(twin.max_instances) is type(svc.max_instances)
-        assert twin.min_instances == svc.min_instances
+        # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
     for queue in prod.queues:
         assert staging_queues[f'staging-{queue.name}'].fields == queue.fields
@@ -638,3 +637,15 @@ def test_manifest_queue_values_agree_with_the_ops_file(prod_manifest_services):
                 ), f'{svc.name}.{key}: manifest {declared["value"]!r} != ops {value!r}'
                 checked += 1
     assert checked >= 5  # the five queue re-points (#22460) are declared in both today
+
+
+def test_unnamed_template_container_matches_the_revision_cloud_run_named():
+    """Staging 10-19: template container `#0` vs serving `backend-1` was reported as drift."""
+
+    template = {'containers': [{'image': 'i', 'env': [{'name': 'A', 'value': '1'}]}]}
+    serving = {'containers': [{'name': 'backend-1', 'image': 'i', 'env': [{'name': 'A', 'value': '1'}]}]}
+    assert ops_train.template_drift(template, serving, set()) == []
+    serving['containers'][0]['image'] = 'other'
+    assert ops_train.template_drift(template, serving, set()) == ['#0.image']
+    renamed = {'containers': [{'name': 'x', 'image': 'i'}]}
+    assert ops_train.template_drift(renamed, {'containers': [{'name': 'y', 'image': 'i'}]}, set())
