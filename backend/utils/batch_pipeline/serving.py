@@ -7,7 +7,6 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import live_record_admission_enabled, async_projection_enabled
 from database.batch_pipeline_store import FirestoreStore
 from database.jobstore.dual_store import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -70,7 +69,7 @@ class Serving:
 
     async def reconcile_async(self, *, recover_quarantine=False, periodic=False):
         await run_blocking(sync_executor, self.reconcile, recover_quarantine=recover_quarantine, periodic=periodic)
-        if async_projection_enabled() and self.projector:
+        if self.projector and self.projector.has_async_followups:
             await self.projector.start_followups()
 
     def _leads(self, periodic: bool) -> bool:
@@ -152,8 +151,7 @@ def start_serving_from_env():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
                 await service.reconcile_async(recover_quarantine=True, periodic=True)
-                if live_record_admission_enabled():
-                    await drain_recordings(service.store)
+                await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

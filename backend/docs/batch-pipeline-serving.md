@@ -545,3 +545,19 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+## Per-unit policy snapshots
+
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

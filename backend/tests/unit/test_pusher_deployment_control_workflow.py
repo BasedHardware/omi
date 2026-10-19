@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import runpy
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,29 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 MANUAL = (ROOT / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
 AUTO = (ROOT / ".github/workflows/gcp_backend_pusher_auto_deploy.yml").read_text(encoding="utf-8")
+
+
+def test_dev_semantic_probe_uses_the_cluster_service_for_streaming_and_readback():
+    workflow = yaml.safe_load(AUTO)
+    step = next(
+        step
+        for step in workflow['jobs']['deploy']['steps']
+        if step.get('name') == 'Probe deployed development Pusher finalization semantics'
+    )
+    script = step['run']
+    commands = [shlex.split(line) for line in script.replace('\\\n', ' ').splitlines() if line.strip()]
+    probe = next(command for command in commands if 'backend/scripts/pusher_semantic_probe.py' in command)
+    assert probe[probe.index('--api-url') + 1] == 'http://127.0.0.1:18080'
+    assert '--allow-local-http' in probe
+    forward = next(command for command in commands if command[0] == 'kubectl' and 'port-forward' in command)
+    assert forward[:5] == ['kubectl', '--context', '$producer_context', '-n', 'dev-omi-backend']
+    assert 'service/dev-omi-backend-listen' in forward
+    assert '18080:8080' in forward
+    assert '--address=127.0.0.1' in forward
+    assert 'pods --subresource=portforward' in script
+    assert 'producer_environment_mismatch' in script
+    assert script.index('if [[ "$ready" != true ]]') < script.index('backend/scripts/firebase_release_probe_token.py')
+    assert 'kill "$port_forward_pid"' in script and 'wait "$port_forward_pid"' in script
 
 
 def _bash5() -> str | None:
@@ -159,7 +183,8 @@ def test_dev_qualification_runs_real_deployed_semantic_probe_before_recording_pa
     assert "@based-hardware.iam.gserviceaccount.com" in AUTO[signer_preflight:build]
     assert "firebase_release_probe_token.py" in probe_block
     assert "pusher_semantic_probe.py" in probe_block
-    assert "https://api.omiapi.com" in probe_block
+    assert "--api-url http://127.0.0.1:18080" in probe_block
+    assert "--allow-local-http" in probe_block
     assert "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}" in probe_block
     assert '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"' in probe_block
     assert "--firebase-project based-hardware" in probe_block
