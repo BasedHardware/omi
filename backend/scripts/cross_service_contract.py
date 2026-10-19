@@ -155,6 +155,28 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         audience_fallback=True,  # _account_deletion_oidc_audience(): audience or handler URL
         deadline_seconds=1500,
     ),
+    # Legacy-sync retirement (contracts (a)/(d)): outbox wakes for the workers role. Dispatch keys are
+    # declared by lane 7's ops file; until then they are known edge-declared gaps.
+    TaskEdge(
+        id='enrichment',
+        route='/v2/enrichment/run',
+        dispatch_when={'ENRICHMENT_DISPATCH_MODE': 'cloud_tasks'},
+        target_env='ENRICHMENT_TASKS_HANDLER_URL',
+        dispatch_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='ENRICHMENT_TASKS_HANDLER_URL',
+        deadline_seconds=1500,
+    ),
+    TaskEdge(
+        id='provider-stt',
+        route='/v2/batch-pipeline/provider-stt/run',
+        dispatch_when={'PROVIDER_STT_DISPATCH_MODE': 'cloud_tasks'},
+        target_env='PROVIDER_STT_TASKS_HANDLER_URL',
+        dispatch_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='PROVIDER_STT_TASKS_HANDLER_URL',
+        deadline_seconds=1500,
+    ),
 )
 
 # Flags whose effective value must agree on every listed deployment that exists in the environment. Use for
@@ -1275,6 +1297,29 @@ def _dedupe(violations: list[Violation]) -> list[Violation]:
     return list(seen.values())
 
 
+def _lane_check(module: str, function: str) -> Check:
+    """A check whose body lives in ``scripts/cross_service_checks/<module>.py`` (owned by another swarm lane).
+
+    Imported lazily so the module can import this one. Until the module lands, the check contributes nothing;
+    once it exists, a missing function is an error, never a silent skip.
+    """
+
+    def run(ctx: Context) -> list[Violation]:
+        import importlib
+
+        name = f'scripts.cross_service_checks.{module}'
+        try:
+            mod = importlib.import_module(name)
+        except ModuleNotFoundError as exc:
+            if exc.name != name:
+                raise
+            return []
+        return getattr(mod, function)(ctx)
+
+    run.__name__ = f'{module}.{function}'
+    return run
+
+
 INVARIANTS: tuple[tuple[str, Check], ...] = (
     ('renders', check_renders),
     ('config-map-source', check_config_map_sources),
@@ -1287,6 +1332,8 @@ INVARIANTS: tuple[tuple[str, Check], ...] = (
     ('kill-switch-reader', check_kill_switches),
     ('no-uid-literals', check_no_uid_literals),
     ('cross-env-url', check_cross_env_urls),
+    ('task-target-retry-semantics', _lane_check('task_targets', 'check_task_target_retry_semantics')),  # lane 4
+    ('staging-mirrors-prod', _lane_check('staging', 'check_staging_mirrors_prod')),  # lane 2
 )
 
 
