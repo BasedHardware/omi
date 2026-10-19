@@ -1348,6 +1348,84 @@ def _recover_empty_segment(
     return transcript_segments, recovered_language, _first_word_offset(words)
 
 
+def _record_sync_segment_exception(
+    error: Exception,
+    *,
+    phase: str,
+    provider: str,
+    model: str,
+    sync_lane: str,
+    deferred_outcome: dict[str, Any] | None,
+    job_id: str | None,
+    segment_key: str | None,
+    attempt_ref: str | None,
+    lock: threading.Lock,
+    errors: list[str],
+) -> None:
+    """Classify and report a failed segment without changing retry or custody policy."""
+    if phase == 'persistence':
+        # Keep diagnostics bounded: never expose paths, document IDs, or text.
+        logger.error(
+            'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
+            'job_ref=%s attempt_ref=%s',
+            _bounded_exception_type(error),
+            _firestore_error_class(error),
+            _firestore_doc_kind(error),
+            _bounded_correlation_ref(job_id),
+            _bounded_correlation_ref(attempt_ref),
+        )
+    if phase == 'finalize':
+        logger.error(
+            'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s',
+            _bounded_exception_type(error),
+            finalize_exception_site(error),
+            _firestore_error_class(error),
+        )
+    fingerprint = _persistence_failure_fingerprint(error, phase)
+    if phase in ('persistence', 'finalize'):
+        failure = TranscriptionFailure(
+            TranscriptionOutcome.UPSTREAM_ERROR,
+            provider=None,
+            retryable=fingerprint is None,
+        )
+        failure.error_code = 'sync_finalize_failed' if phase == 'finalize' else 'sync_persistence_failed'
+        model = 'unknown'
+    else:
+        failure = failure_from_exception(error, provider=provider)
+    _set_deferred_segment_outcome(
+        deferred_outcome,
+        outcome=failure.outcome,
+        provider=failure.provider,
+        model=model,
+        retryable=failure.retryable,
+        phase=phase,
+        exception_type=bounded_exception_class(error),
+        failure_subtype=_sync_assignment_failure_subtype(error),
+    )
+    if deferred_outcome is not None and fingerprint:
+        deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
+        deferred_outcome['repeat_failure_fingerprint'] = fingerprint
+    elif (
+        deferred_outcome is not None
+        and phase in ('provider_call', 'parse')
+        and failure.outcome == TranscriptionOutcome.INVALID_INPUT
+    ):
+        deferred_outcome['provider_invalid_input'] = True
+    _record_sync_segment_failure(
+        failure,
+        model=model,
+        lane=sync_lane,
+        lock=lock,
+        errors=errors,
+        record_metric=deferred_outcome is None,
+        job_id=job_id,
+        segment_key=segment_key,
+        phase=phase,
+        exception=error,
+        attempt_ref=attempt_ref,
+    )
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -1776,67 +1854,18 @@ def process_segment(
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
-        if phase == 'persistence':
-            # Preserve a bounded code-defined subtype for incident diagnosis;
-            # never log exception text, document IDs, paths, or transcript.
-            logger.error(
-                'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
-                'job_ref=%s attempt_ref=%s',
-                _bounded_exception_type(e),
-                _firestore_error_class(e),
-                _firestore_doc_kind(e),
-                _bounded_correlation_ref(job_id),
-                _bounded_correlation_ref(attempt_ref),
-            )
-        if phase == 'finalize':
-            logger.error(
-                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s',
-                _bounded_exception_type(e),
-                finalize_exception_site(e),
-                _firestore_error_class(e),
-            )
-        fingerprint = _persistence_failure_fingerprint(e, phase)
-        if phase in ('persistence', 'finalize'):
-            failure = TranscriptionFailure(
-                TranscriptionOutcome.UPSTREAM_ERROR,
-                provider=None,
-                retryable=fingerprint is None,
-            )
-            failure.error_code = 'sync_finalize_failed' if phase == 'finalize' else 'sync_persistence_failed'
-            model = 'unknown'
-        else:
-            failure = failure_from_exception(e, provider=provider)
-        _set_deferred_segment_outcome(
-            deferred_outcome,
-            outcome=failure.outcome,
-            provider=failure.provider,
-            model=model,
-            retryable=failure.retryable,
+        _record_sync_segment_exception(
+            e,
             phase=phase,
-            exception_type=bounded_exception_class(e),
-            failure_subtype=_sync_assignment_failure_subtype(e),
-        )
-        if deferred_outcome is not None and fingerprint:
-            deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
-            deferred_outcome['repeat_failure_fingerprint'] = fingerprint
-        elif (
-            deferred_outcome is not None
-            and phase in ('provider_call', 'parse')
-            and failure.outcome == TranscriptionOutcome.INVALID_INPUT
-        ):
-            deferred_outcome['provider_invalid_input'] = True
-        _record_sync_segment_failure(
-            failure,
+            provider=provider,
             model=model,
-            lane=sync_lane,
-            lock=lock,
-            errors=errors,
-            record_metric=deferred_outcome is None,
+            sync_lane=sync_lane,
+            deferred_outcome=deferred_outcome,
             job_id=job_id,
             segment_key=segment_key,
-            phase=phase,
-            exception=e,
             attempt_ref=attempt_ref,
+            lock=lock,
+            errors=errors,
         )
         return False
     finally:

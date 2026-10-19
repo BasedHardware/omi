@@ -688,3 +688,73 @@ def test_finalize_internal_failure_is_retryable_and_has_no_provider_label(pipeli
     assert outcome['retryable'] is True
     assert outcome['provider'] == 'unknown' and outcome['model'] == 'unknown'
     assert outcome['phase'] == 'finalize' and not outcome.get('provider_invalid_input')
+
+
+@pytest.mark.parametrize('phase', ['provider_select', 'provider_call', 'parse'])
+@pytest.mark.parametrize(
+    'error_type,code,retryable',
+    [
+        (ValueError, 'stt_invalid_input', False),
+        (httpx.ReadTimeout, 'stt_timeout', True),
+        (RuntimeError, 'stt_upstream_error', True),
+    ],
+)
+def test_segment_failure_phase_preserves_retry_labels_and_turnstile(
+    pipeline, monkeypatch, caplog, phase, error_type, code, retryable
+):
+    module, store = pipeline
+    error = error_type('private-provider-body-and-transcript')
+    module.get_prerecorded_service = MagicMock(return_value=('deepgram', None, 'nova-3'))
+    seam = {'provider_select': 'get_prerecorded_service', 'provider_call': 'prerecorded', 'parse': 'postprocess_words'}[
+        phase
+    ]
+    monkeypatch.setattr(module, seam, MagicMock(side_effect=error))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    turnstile = MagicMock()
+    assert (
+        module.process_segment(
+            '1700000000.wav',
+            'u',
+            response,
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            turnstile=turnstile,
+        )
+        is False
+    )
+    assert errors == [code]
+    assert outcome['retryable'] is retryable
+    assert outcome['phase'] == phase
+    assert outcome['provider'] == ('unknown' if phase == 'provider_select' else 'deepgram')
+    assert outcome['model'] == ('unknown' if phase == 'provider_select' else 'nova-3')
+    assert bool(outcome.get('provider_invalid_input')) is (error_type is ValueError and phase != 'provider_select')
+    assert 'repeat_failure_fingerprint' not in outcome
+    assert not store.rows and not response['new_memories'] and not response['updated_memories']
+    turnstile.complete.assert_called_once_with('1700000000.wav')
+    assert 'private-provider-body-and-transcript' not in caplog.text
+
+
+def test_destructive_fence_still_propagates_without_recording_a_provider_failure(pipeline):
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    module, store = pipeline
+    error = DestructiveOperationInProgress('private-account-fence')
+    module.prerecorded = MagicMock(side_effect=error)
+    errors, outcome = [], {}
+    turnstile = MagicMock()
+    with pytest.raises(DestructiveOperationInProgress) as caught:
+        module.process_segment(
+            '1700000000.wav',
+            'u',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            turnstile=turnstile,
+        )
+    assert caught.value is error
+    assert not errors and not outcome and not store.rows
+    turnstile.complete.assert_called_once_with('1700000000.wav')
