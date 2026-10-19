@@ -19,6 +19,8 @@ from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
@@ -164,13 +166,14 @@ async def recover_quarantine(body: RedriveRequest):
     """
     service = body.service()
     if not service.recovery or os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
-        raise HTTPException(status_code=503, detail='Recovery disabled on this host')
+        # Contract (d): a switched-off target answers 409, never 503 (fast 5xx throttles the queue).
+        return retry_response(RetryReason.KILL_SWITCH_OFF)
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
     outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
     if outcome == 'disabled':
-        raise HTTPException(status_code=503, detail='Recovery disabled for this owner')
+        return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
         await service.reconcile_async()
     return {'status': outcome}
@@ -232,6 +235,15 @@ async def enrichment_response(payload: dict):
     if not reprocess.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     try:
+        from config.enrichment import route
+
+        if route() == 'enrichment_queue':
+            # C3: one state machine. Rows still bound to /v2/sync-jobs/run drain through the same
+            # consumer as /v2/enrichment/run; the route lever flips both together.
+            from routers.enrichment import consume
+            from utils.workers.consumer import http_response
+
+            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

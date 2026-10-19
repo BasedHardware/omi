@@ -5,6 +5,7 @@ deliveries answer 200. Rows bound to the legacy ``/v2/sync-jobs/run`` handler an
 same payload and row, so both drain.
 """
 
+import json
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -156,3 +157,16 @@ def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noq
     response = TestClient(app).post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
     assert response.status_code == 200 and response.json() == {'status': 'deferred', 'reason': 'not_due'}
     assert state_rows[KEY]['task_token'] != token and tasks[-1]['task_token'] == state_rows[KEY]['task_token']
+
+
+@pytest.mark.asyncio
+async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, monkeypatch):
+    from routers import batch_pipeline
+
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _pending)
+    monkeypatch.setattr(batch_pipeline, 'run_enrichment', Mock(side_effect=AssertionError('legacy run used')))
+    token = rows[0][KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
