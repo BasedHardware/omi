@@ -19,7 +19,7 @@ from utils.executors import run_blocking, db_executor, sync_executor, storage_ex
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold, cap_recovery_plan
+from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -157,6 +157,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         processed = set(row.get('processed_paths') or [])
         pending = False
         for name in sorted(set(plan) | set(receipts)):
+            if cap_work_budget.exhausted():
+                pending = True
+                break
             if not await run_blocking(
                 db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
             ):
@@ -299,7 +302,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     pending = True
                     continue
                 receipt = {
-                    **intent,
+                    **{k: v for k, v in intent.items() if k != 'provider_result'},
                     'state': 'transcribed',
                     'response': _stored(response),
                     'seconds': intent['seconds'] if ok else 0,

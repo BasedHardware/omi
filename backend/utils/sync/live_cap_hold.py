@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import time
 import logging
+import hashlib
+import json
 from typing import Any
 import os
 from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication
@@ -35,6 +37,32 @@ MAX_PENDING_SECONDS = 15
 
 def fragments_enabled() -> bool:
     return os.getenv('CAP_HOLD_LIVE_FRAGMENT_ENABLED', 'true').lower() == 'true'
+
+
+def _publish_audio(
+    uid: str,
+    data: bytes,
+    rate: int,
+    start: float,
+    group: Publication | None,
+    source: Publication,
+    metadata: dict,
+    duration: float,
+) -> None:
+    """One executor leaf owns scratch until the actual upload has completed.
+
+    Cancelling the async waiter cannot run a finally that unlinks a file still
+    used by this thread. A queued cancelled call never creates any scratch.
+    """
+    with cap_hold.recovery_directory(uid) as directory:
+        path = str(Path(directory) / f'{start:.6f}.opus')
+        live_cap_codec.encode(
+            path, data, rate, **({'max_bytes': live_cap_staging.MAX_FRAGMENT_BYTES} if group is not None else {})
+        )
+        if group is None:
+            live_cap_manifest.publish(uid, path, source, metadata, duration)
+        else:
+            live_cap_staging.append(uid, path, group, source, metadata, duration)
 
 
 def reserve(
@@ -250,148 +278,132 @@ class LiveHeldAudio:
             while self.pending:
                 data, rate, start, owner, channel = self.pending[0]
                 month = datetime.fromtimestamp(start, timezone.utc).strftime('%Y-%m')
-                directory = await run_blocking(storage_executor, cap_hold.recovery_directory, self.host.request.uid)
-                try:
-                    path = str(Path(directory.name) / f'{start:.6f}.opus')
-                    await run_blocking(
-                        storage_executor,
-                        live_cap_codec.encode,
-                        path,
-                        data,
-                        rate,
-                        **({'max_bytes': live_cap_staging.MAX_FRAGMENT_BYTES} if self.fragmented else {}),
-                    )
-                    context = getattr(self.host, 'client_device_context', None)
-                    metadata = {
-                        'origin': 'live',
-                        'live_storage_month': month,
-                        'timestamp': start,
-                        'source': getattr(self.host.request.source, 'value', self.host.request.source) or 'omi',
-                        'target_conversation_id': owner,
-                        'recording_session_id': str(self.host.session_id),
-                        'client_device_id': getattr(context, 'client_device_id', None),
-                        'channel': channel,
-                        'file_name': f'{start:.6f}.wav',
-                        'full_capture': True,
-                        'audio_codec': 'ogg_opus',
-                        'sample_rate': rate,
-                        'source_frames': len(data) // 2,
-                        'live_custody_version': 4,
-                    }
-                    # Logical capture key retains one opaque Publication across
-                    # retries, independent of encoder randomness.
-                    import hashlib
-                    import json
-
-                    identity = hashlib.sha256(data + json.dumps(metadata, sort_keys=True).encode()).hexdigest()
-                    duration = len(data) / (rate * 2)
-                    key = (channel, rate, owner, month)
-                    if (
-                        self.fragmented
-                        and self._group is not None
-                        and (key != self._group_key or (self._group_parts > 0 and abs(start - self._group_end) > 0.1))
-                    ):
-                        await self._seal_group()
-                    if not self._summary_ready:
-                        await run_blocking(db_executor, cap_hold.ensure_summary, self.host.request.uid)
-                        self._summary_ready = True
-                    source = self._publications.setdefault(identity, Publication(self.host.request.uid))
-                    retry = identity in self._charged
-                    # Reconcile an ambiguous block rollover even when this
-                    # fragment already owns a retry marker.
-                    await self._reserve_capacity(month)
-                    if not retry:
-                        # Capacity is reserved before IO, consumed only once a
-                        # durable receipt is known. An uncertain attempt cannot
-                        # refund this slot on close until it is reconciled.
-                        self._capacity_uncertain = True
-                        self._charged.add(identity)
-                    capacity = self.capacity
-                    if capacity is None:
-                        raise RuntimeError('live held audio lacks reserved capacity')
-                    if self.fragmented:
-                        if self._group is None:
-                            self._group = Publication(self.host.request.uid)
-                            self._group_key = key
-                        try:
-                            await run_blocking(
-                                storage_executor,
-                                live_cap_staging.append,
-                                self.host.request.uid,
-                                path,
-                                self._group,
-                                source,
-                                metadata,
-                                duration,
-                            )
-                        except live_cap_staging.SourceSealed:
-                            # The periodic sweeper may have sealed an idle writer.
-                            # Only never-committed fragments roll into a fresh group;
-                            # duplicate IDs (even purged) were reconciled above.
-                            await self._seal_group()
-                            await self._reserve_capacity(month)
-                            capacity = self.capacity
-                            if capacity is None:
-                                raise RuntimeError('live held audio lacks reserved capacity')
-                            self._group = Publication(self.host.request.uid)
-                            self._group_key = key
-                            await run_blocking(
-                                storage_executor,
-                                live_cap_staging.append,
-                                self.host.request.uid,
-                                path,
-                                self._group,
-                                source,
-                                metadata,
-                                duration,
-                            )
-                        # Reserve one minute slot for the group's peak footprint.
-                        if self._group_parts == 0:
-                            capacity.consume()
-                        self._capacity_uncertain = False
-                        self._group_parts += 1
-                        self._group_seconds += duration
-                        self._group_end = start + duration
-                    else:
+                context = getattr(self.host, 'client_device_context', None)
+                metadata = {
+                    'origin': 'live',
+                    'live_storage_month': month,
+                    'timestamp': start,
+                    'source': getattr(self.host.request.source, 'value', self.host.request.source) or 'omi',
+                    'target_conversation_id': owner,
+                    'recording_session_id': str(self.host.session_id),
+                    'client_device_id': getattr(context, 'client_device_id', None),
+                    'channel': channel,
+                    'file_name': f'{start:.6f}.wav',
+                    'full_capture': True,
+                    'audio_codec': 'ogg_opus',
+                    'sample_rate': rate,
+                    'source_frames': len(data) // 2,
+                    'live_custody_version': 4,
+                }
+                # Logical capture key retains one opaque Publication across
+                # retries, independent of encoder randomness.
+                identity = hashlib.sha256(data + json.dumps(metadata, sort_keys=True).encode()).hexdigest()
+                duration = len(data) / (rate * 2)
+                key = (channel, rate, owner, month)
+                if (
+                    self.fragmented
+                    and self._group is not None
+                    and (key != self._group_key or (self._group_parts > 0 and abs(start - self._group_end) > 0.1))
+                ):
+                    await self._seal_group()
+                if not self._summary_ready:
+                    await run_blocking(db_executor, cap_hold.ensure_summary, self.host.request.uid)
+                    self._summary_ready = True
+                source = self._publications.setdefault(identity, Publication(self.host.request.uid))
+                retry = identity in self._charged
+                # Reconcile an ambiguous block rollover even when this
+                # fragment already owns a retry marker.
+                await self._reserve_capacity(month)
+                if not retry:
+                    # Capacity is reserved before IO, consumed only once a
+                    # durable receipt is known. An uncertain attempt cannot
+                    # refund this slot on close until it is reconciled.
+                    self._capacity_uncertain = True
+                    self._charged.add(identity)
+                capacity = self.capacity
+                if capacity is None:
+                    raise RuntimeError('live held audio lacks reserved capacity')
+                if self.fragmented:
+                    if self._group is None:
+                        self._group = Publication(self.host.request.uid)
+                        self._group_key = key
+                    try:
                         await run_blocking(
                             storage_executor,
-                            live_cap_manifest.publish,
+                            _publish_audio,
                             self.host.request.uid,
-                            path,
+                            data,
+                            rate,
+                            start,
+                            self._group,
                             source,
                             metadata,
                             duration,
                         )
-                        capacity.consume()
-                        self._capacity_uncertain = False
-                    # No await between durable publication and retiring bytes.
-                    if not self.fragmented:
-                        self.seconds += duration
-                    self.pending.popleft()
-                    self.pending_bytes -= len(data)
-                    self._charged.discard(identity)
-                    self._publications.pop(identity, None)
-                    if self.fragmented and (
-                        self._group_parts == live_cap_staging.MAX_FRAGMENTS or self._group_seconds >= CHUNK_SECONDS
-                    ):
+                    except live_cap_staging.SourceSealed:
+                        # The periodic sweeper may have sealed an idle writer.
+                        # Only never-committed fragments roll into a fresh group;
+                        # duplicate IDs (even purged) were reconciled above.
                         await self._seal_group()
-                    cap_hold.record_audio(
-                        'live',
-                        'held',
-                        'unknown',
-                        duration,
-                        getattr(getattr(self.host.state, 'stt_cap_admission', None), 'reason', '')
-                        == 'plan_allowance_exhausted',
-                    )
-                finally:
-                    try:
-                        await run_blocking(storage_executor, directory.cleanup)
-                    except Exception as error:
-                        logger.warning(
-                            'event=stt_cap_live_held outcome=scratch_cleanup_failed exception_type=%s',
-                            type(error).__name__,
+                        await self._reserve_capacity(month)
+                        capacity = self.capacity
+                        if capacity is None:
+                            raise RuntimeError('live held audio lacks reserved capacity')
+                        self._group = Publication(self.host.request.uid)
+                        self._group_key = key
+                        await run_blocking(
+                            storage_executor,
+                            _publish_audio,
+                            self.host.request.uid,
+                            data,
+                            rate,
+                            start,
+                            self._group,
+                            source,
+                            metadata,
+                            duration,
                         )
-
+                    # Reserve one minute slot for the group's peak footprint.
+                    if self._group_parts == 0:
+                        capacity.consume()
+                    self._capacity_uncertain = False
+                    self._group_parts += 1
+                    self._group_seconds += duration
+                    self._group_end = start + duration
+                else:
+                    await run_blocking(
+                        storage_executor,
+                        _publish_audio,
+                        self.host.request.uid,
+                        data,
+                        rate,
+                        start,
+                        None,
+                        source,
+                        metadata,
+                        duration,
+                    )
+                    capacity.consume()
+                    self._capacity_uncertain = False
+                # No await between durable publication and retiring bytes.
+                if not self.fragmented:
+                    self.seconds += duration
+                self.pending.popleft()
+                self.pending_bytes -= len(data)
+                self._charged.discard(identity)
+                self._publications.pop(identity, None)
+                if self.fragmented and (
+                    self._group_parts == live_cap_staging.MAX_FRAGMENTS or self._group_seconds >= CHUNK_SECONDS
+                ):
+                    await self._seal_group()
+                cap_hold.record_audio(
+                    'live',
+                    'held',
+                    'unknown',
+                    duration,
+                    getattr(getattr(self.host.state, 'stt_cap_admission', None), 'reason', '')
+                    == 'plan_allowance_exhausted',
+                )
             if self.fragmented and force and seal:
                 await self._seal_group()
 

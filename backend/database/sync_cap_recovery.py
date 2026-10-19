@@ -5,7 +5,26 @@ from typing import Any
 
 from database._client import get_firestore_client
 from google.cloud import firestore
+from google.cloud.firestore_v1 import _helpers
+from google.cloud.firestore_v1.types import Document
 from database.legal_holds import external_write_fence
+
+# Leave 256KiB for ingest proofs, usage/finalization and concurrent receipt fields.
+# This measures the whole encoded document, including earlier encrypted results.
+RESULT_DOCUMENT_BUDGET = 768 * 1024
+
+
+def bounded_provider_updates(row: dict, piece: str, updates: dict) -> dict:
+    if 'provider_result' not in updates:
+        return updates
+    receipts = dict(row.get('piece_receipts') or {})
+    receipts[piece] = {**receipts.get(piece, {}), **updates}
+    proposed = {**row, 'piece_receipts': receipts}
+    if Document.pb(Document(fields=_helpers.encode_dict(proposed))).ByteSize() <= RESULT_DOCUMENT_BUDGET:
+        return updates
+    # Never discard previously committed results. The usable response continues
+    # to ordinary ingestion; only this response's crash cache is omitted.
+    return {**{k: v for k, v in updates.items() if k != 'provider_result'}, 'provider_cache_omitted': True}
 
 
 class RecoveryIngestFenced(RuntimeError):
@@ -48,7 +67,7 @@ def ingest_hooks(uid: str, context: dict, incoming: dict):
         ):
             response['_merged'] = {cid: incoming.get('language')}
         current[piece] = {
-            **context['receipt'],
+            **{k: v for k, v in context['receipt'].items() if k != 'provider_result'},
             'state': 'transcribed',
             'has_content': True,
             'response': response,
@@ -80,6 +99,8 @@ def provider_checkpoint(uid: str, context: dict, updates: dict) -> bool:
     client = get_firestore_client()
     ref = client.collection('users').document(uid).collection('stt_cap_holds').document(context['hold_id'])
 
+    committed_updates = {}
+
     @firestore.transactional
     def commit(tx):
         with external_write_fence(uid, firestore_client=client, transaction=tx):
@@ -93,8 +114,13 @@ def provider_checkpoint(uid: str, context: dict, updates: dict) -> bool:
                 or receipt.get('attempt', 1) != context['attempt']
             ):
                 return False
-            receipts[context['piece']] = {**receipt, **updates}
+            committed_updates.clear()
+            committed_updates.update(bounded_provider_updates(row, context['piece'], updates))
+            receipts[context['piece']] = {**receipt, **committed_updates}
             tx.update(ref, {'piece_receipts': receipts})
             return True
 
-    return commit(client.transaction())
+    result = commit(client.transaction())
+    if result:
+        context.setdefault('receipt', {}).update(committed_updates)
+    return result

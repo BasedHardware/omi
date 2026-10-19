@@ -700,3 +700,56 @@ async def test_month_rollover_query_failure_does_not_continue_previous_month_upg
     assert harness.job['state'] == 'waiting_choice' and harness.job['token'] == 'choice'
     assert harness.job['remaining'] == 10 and harness.job['pending_upgrade'] == {}
     assert harness.scheduled == []
+
+
+async def test_owner_visit_drains_multiple_pages_without_self_respawn(monkeypatch, job_harness):
+    harness = job_harness
+    harness.job['remaining'] = 100
+    rows = [snapshot(str(i), started_at=100 - i, queued_at=1, units=1) for i in range(35)]
+
+    def page(uid, kind, cursor):
+        if kind == 'audio':
+            return []
+        offset = 0 if cursor is None else int(cursor['id']) + 1
+        return [('text', snap) for snap in rows[offset : offset + worker.PAGE]]
+
+    monkeypatch.setattr(worker, '_page', page)
+    await worker.run('synthetic', max_items=100, time_budget=900)
+    assert len(harness.processed) == 35
+    assert harness.job['state'] == 'waiting_choice' and not harness.scheduled
+
+
+async def test_monotonic_budget_stops_before_next_item_retaining_intent(monkeypatch, job_harness):
+    harness = job_harness
+    rows = [snapshot(str(i), started_at=90 - i, queued_at=1, units=1) for i in range(5)]
+    monkeypatch.setattr(
+        worker, '_page', lambda uid, kind, cursor: [('text', snap) for snap in rows] if kind == 'text' else []
+    )
+    now = [0.0]
+    monkeypatch.setattr(worker.cap_work_budget.time, 'monotonic', lambda: now[0])
+
+    async def process(uid, item):
+        harness.processed.append(item)
+        now[0] += 901
+        return worker.AttemptOutcome.COMPLETE
+
+    monkeypatch.setattr(worker, '_process', process)
+    await worker.run('synthetic', max_items=100, time_budget=900)
+    assert len(harness.processed) == 1
+    assert harness.job['state'] == 'processing' and harness.job['reserved'] == {}
+    assert harness.job['cursor_text']['id'] == '0' and not harness.finishes
+
+
+async def test_prechoice_staging_remains_authorized_until_seal(monkeypatch, job_harness):
+    harness = job_harness
+    row = {'state': 'staging', 'created_at': 90, 'listed_at': 80, 'seconds': 1}
+    snap = SimpleNamespace(id='live', to_dict=lambda: dict(row))
+    monkeypatch.setattr(
+        worker, '_page', lambda uid, kind, cursor: [('audio', snap)] if kind == 'audio' and not cursor else []
+    )
+    await worker.run('synthetic', max_items=100, time_budget=900)
+    assert not harness.finishes and not harness.processed and harness.job['state'] == 'processing'
+    row['state'] = 'held'  # seal retains created_at/listed_at, even after cutoff
+    await worker.run('synthetic', max_items=100, time_budget=900)
+    assert [p['id'] for p in harness.processed] == ['live']
+    assert harness.job['state'] == 'waiting_choice'

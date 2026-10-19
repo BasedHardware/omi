@@ -7,6 +7,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 ACTIVE: weakref.WeakSet[Any] = weakref.WeakSet()
+CLOSING: set[asyncio.Task[Any]] = set()
 
 
 async def flush_active(*, timeout: float = 30.0) -> None:
@@ -22,14 +23,18 @@ async def flush_active(*, timeout: float = 30.0) -> None:
             )
 
     tasks = [asyncio.create_task(close(hold), name='cap_hold_shutdown') for hold in list(ACTIVE)]
+    for task in tasks:
+        CLOSING.add(task)
+        task.add_done_callback(CLOSING.discard)
+        task.add_done_callback(observe_publication)
     if not tasks:
         return
     _, pending = await asyncio.wait(tasks, timeout=timeout)
     for task in pending:
         task.cancel()
-    # Observe every completion, including cancellation. Buffered PCM remains
-    # bounded; durable staging rows are sealed by the scheduler after expiry.
-    await asyncio.gather(*tasks, return_exceptions=True)
+    # Do not gather cancellation-resistant sinks here. Retained tasks observe
+    # completion; shielded publication owns its lock/scratch until IO finishes.
+    # Process termination can still lose the <=15s not yet durably staged.
     if pending:
         logger.error('event=stt_cap_live_held outcome=shutdown_flush_timeout sinks=%s', len(pending))
 

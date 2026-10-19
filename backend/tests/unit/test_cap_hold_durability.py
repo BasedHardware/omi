@@ -109,15 +109,13 @@ async def test_shutdown_flushes_partial_and_awaits_inflight_publication(fragment
 
 
 async def test_sweep_awaits_worker_and_does_not_create_consent(monkeypatch):
-    snap = SimpleNamespace(
-        id='current', reference=SimpleNamespace(parent=SimpleNamespace(parent=SimpleNamespace(id='owner')))
-    )
+    snap = SimpleNamespace(id='current', reference=SimpleNamespace(path='users/owner/processing_backlog/current'))
     monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: [snap] if kind == 'choices' else [])
     monkeypatch.setattr(cap_hold_redrive.funded_processing, 'enabled', lambda: True)
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def run(uid, **kwargs):
-        assert uid == 'owner' and kwargs == {'max_items': 1}
+        assert uid == 'owner' and kwargs == {'max_items': 100, 'time_budget': 900}
         entered.set()
         await release.wait()
 
@@ -330,3 +328,134 @@ async def test_lost_capacity_reply_after_expired_full_block_reconciles_on_retry(
     assert acquisitions == [acquisitions[0], acquisitions[0]]
     assert sink.seconds == 16 and len(sealed) == 2
     assert live.live_cap_capacity.release.call_args.args[0].used == 1
+
+
+@pytest.mark.parametrize('cancel_publication', [False, True])
+async def test_shutdown_parked_executor_keeps_scratch_until_upload_completion(
+    fragment_sink, monkeypatch, tmp_path, cancel_publication
+):
+    import threading
+    from pathlib import Path
+
+    sink, _, _ = fragment_sink
+    entered, release = threading.Event(), threading.Event()
+    paths = []
+    original = live_cap_staging.append.side_effect
+
+    def parked(uid, path, *args):
+        paths.append(Path(path))
+        entered.set()
+        assert release.wait(5)
+        assert Path(path).exists(), 'scratch was deleted while executor still owned it'
+        return original(uid, path, *args)
+
+    live_cap_staging.append.side_effect = parked
+    sink.append(b'\1\0' * 100, 100, 1000, 'conversation')
+    shutdown = asyncio.create_task(cap_hold_lifecycle.flush_active(timeout=0.05))
+    try:
+        while not entered.is_set():
+            await asyncio.sleep(0.001)
+        await asyncio.wait_for(shutdown, timeout=0.2)
+        assert paths[0].exists() and not sink._custody.done()
+        if cancel_publication:
+            # Event-loop shutdown may cancel even the shielded inner task.
+            # Its executor leaf must still retain scratch through real IO.
+            sink._custody.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await sink._custody
+            assert paths[0].exists()
+    finally:
+        release.set()
+        if not cancel_publication:
+            await sink._custody
+        else:
+
+            async def cleaned():
+                while paths[0].exists():
+                    await asyncio.sleep(0.001)
+
+            await asyncio.wait_for(cleaned(), timeout=2)
+    assert not paths[0].exists()
+    await sink.close()
+    assert sink.seconds == 1
+    assert live.live_cap_capacity.release.call_args.args[0].used == 1
+    assert len(paths) == (2 if cancel_publication else 1)
+
+
+async def test_shutdown_cancellation_resistant_close_cannot_extend_deadline(monkeypatch):
+    release = asyncio.Event()
+
+    class Sink:
+        async def close(self):
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                await release.wait()
+
+    sink = Sink()
+    monkeypatch.setattr(cap_hold_lifecycle, 'ACTIVE', {sink})
+    await asyncio.wait_for(cap_hold_lifecycle.flush_active(timeout=0.01), timeout=0.2)
+    assert cap_hold_lifecycle.CLOSING
+    release.set()
+    await asyncio.gather(*cap_hold_lifecycle.CLOSING)
+
+
+async def test_sweep_progresses_five_owners_concurrently(monkeypatch):
+    snaps = [SimpleNamespace(reference=SimpleNamespace(path=f'users/{i}/processing_backlog/current')) for i in range(5)]
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: snaps if kind == 'choices' else [])
+    monkeypatch.setattr(cap_hold_redrive.funded_processing, 'enabled', lambda: True)
+    entered = set()
+    all_entered = asyncio.Event()
+    completed = []
+
+    async def run(uid, *, max_items, time_budget):
+        assert (max_items, time_budget) == (100, 900)
+        entered.add(uid)
+        if len(entered) == 5:
+            all_entered.set()
+        await asyncio.wait_for(all_entered.wait(), timeout=1)
+        completed.append(uid)
+
+    monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
+    assert (await cap_hold_redrive.sweep())['visited'] == 5
+    assert len(completed) == 5
+
+
+@pytest.mark.parametrize('size', [900 * 1024, 100 * 1024])
+def test_oversized_and_aggregate_cache_budget_preserve_usable_result(monkeypatch, size):
+    from database import sync_cap_recovery as store
+    from utils.sync import cap_recovery_provider as provider
+
+    old = 'old-ciphertext' * 50000
+    receipt = {'state': 'dispatched', 'attempt': 1}
+    row = {'piece_receipts': {'old': {'provider_result': old}, 'p': receipt}}
+    context = {'receipt': receipt, 'piece': 'p'}
+
+    def checkpoint(uid, ctx, updates):
+        receipt.update(store.bounded_provider_updates(row, 'p', updates))
+        return True
+
+    monkeypatch.setattr(provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
+    words = [{'text': 'x' * size, 'timestamp': [0, 1]}]
+    dispatch = Mock(return_value=(words, 'en'))
+    assert provider.transcribe('synthetic', context, dispatch) == (words, 'en')
+    dispatch.assert_called_once()
+    assert receipt['provider_cache_omitted'] and 'provider_result' not in receipt
+    assert row['piece_receipts']['old']['provider_result'] == old
+
+
+def test_sweep_rejects_nested_or_unrelated_collection_group_owners():
+    for path in (
+        'other/u/processing_backlog/current',
+        'users/u/nested/x/processing_backlog/current',
+        'users/u/processing_backlog/not-current',
+    ):
+        assert (
+            cap_hold_redrive.owner(SimpleNamespace(reference=SimpleNamespace(path=path)), 'processing_backlog') is None
+        )
+    assert (
+        cap_hold_redrive.owner(
+            SimpleNamespace(reference=SimpleNamespace(path='users/u/stt_cap_holds/h')), 'stt_cap_holds'
+        )
+        == 'u'
+    )

@@ -45,12 +45,19 @@ fragment clock layout and is not a qualified reader rollback for those sources.
 A committed `processing_backlog/current` choice is the queue. The sweep never
 calls choose, creates upgrade intent, extends cutoff or adopts a new month. It
 visits existing `state=processing` summaries, then awaits the existing worker
-with a one-candidate page. Current reservations are retried before a new page;
+with up to five owners concurrently on existing executors. Each visit considers
+up to 100 candidates in ten-row audio/text pages, with a monotonic 900-second
+budget checked before each next candidate and frozen audio piece. A reserved
+item resumes first and also obeys the piece budget. No new compute is added. Current reservations are retried before a new page;
 the existing UID worker lease and per-hold/per-text leases deduplicate concurrent
 sweeps/client paths. The month, chosen estimate, reservation, cursors, allowance
 and abuse checks remain authoritative. A busy or killed worker's 30-minute lease
 must expire before another owner may run. There is no 60-second timer or
-fire-and-forget self-respawn. A productive page leaves its choice processing.
+fire-and-forget self-respawn. A productive bounded visit leaves its choice processing. Pre-cutoff staging/sealing
+sources are visible in the same bounded audio query and keep the choice open
+without advancing past that source. Sealing preserves the original creation and
+listing times; it does not move authorized audio beyond the cutoff. A source
+created after cutoff remains excluded. Waiting-choice users are never processed.
 
 Each of three independent discovery streams (choices, staging/sealing, cleanup)
 reads at most five rows per sweep, ordered by full document name with a durable
@@ -59,7 +66,20 @@ so a blocked owner cannot hide later existing users. A crash can defer that page
 until the next rotation; it cannot erase intent. For N queued owners, discovery
 latency is roughly `ceil(N/5)` successful scheduler executions; blocked choices
 also consume visits. A long request delays subsequent scheduler delivery. This
-is bounded fair recovery, not a per-user two-minute SLA. Endpoints await work;
+is bounded fair recovery, not a per-user two-minute SLA. A single owner's 100
+short items can now drain in one visit (plus a later no-op finish visit at an exact
+100-item boundary), rather than a minimum 200 minutes. Slow calls constrain this:
+900 seconds permits about three 300-second provider calls before the next-piece
+check stops the visit. Modulate has a 300-second read timeout (Parakeet 120),
+plus connect/write/pool timeouts; these are per-phase IO limits, not an absolute
+wall deadline for a trickling response. A call started just before budget expiry
+may still add its adapter timeouts plus URL download/codec/ingest/finalization IO. Concurrent owner visits
+avoid multiplying this provider tail by five; the 1710-second endpoint and
+1740-second scheduler deadlines remain outer guards, not guaranteed completion
+for arbitrary slow storage/LLM service. Existing executor queues can add latency;
+no throughput or two-minute SLA is claimed under saturation. Budget expiry does
+not cancel a billable call mid-flight or clear a reservation. A killed owner can
+still wait for its 30-minute lease plus a discovery rotation. Endpoints await work;
 failed requests may be retried and never acknowledge memory-only work as done.
 
 ## Provider spend and uncertainty
@@ -78,6 +98,26 @@ result before parsing/ingestion. A restart reuses this result and the original
 provider/model/usage identity, then uses the normal idempotent ingest proof and
 usage key. Empty responses retain existing reconciliation semantics; they are
 not cached as reusable completion or treated as proven silence.
+
+Caching measures the **whole proposed Firestore document** using the installed
+SDK protobuf encoding, including existing encrypted results, plan and receipts.
+A new cache may grow it to at most **768 KiB**, leaving 256 KiB of the 1 MiB
+Firestore limit for ingest proofs and subsequent receipt fields. Existing cached
+results are preserved. Ingest proofs omit duplicate result ciphertext, and a
+known successful transcription receipt retires that piece's cache only after
+ingestion succeeds. This is a cache-addition budget, not a new bound on arbitrary
+pre-existing plan/response metadata.
+
+An oversized single result or an aggregate budget miss records
+`provider_cache_omitted` under the same lease/attempt, emits shared degraded
+fallback telemetry, and immediately continues ordinary parsing/ingestion with
+the usable response. It neither raises a size error nor dispatches again for
+cache capacity. For these uncached responses the residual uncertainty window
+extends **through atomic ingest proof**, rather than ending at result checkpoint.
+A crash within it can spend once more under the same two-attempt bound. A marker
+alone cannot reconstruct the transcript; no data is silently acknowledged or
+left in an endless cached-empty loop. Cache-omitted results add no GCS objects,
+retention/delete authorities or storage quotas.
 
 The irreducible window is vendor acceptance through successful result checkpoint.
 After a kill there, recovery waits 30 minutes and checks the atomic ingest proof.
@@ -137,11 +177,23 @@ there is no lifetime retention cap.
 Socket close flushes/seals tails. Owner cancellation leaves the sink-owned
 publication task holding its scratch files and lock until the executor completes;
 subsequent close awaits that lock. Both lifespans give registered tails a 30-second
-flush window before their existing 10-second background drain. GKE listen/pusher
+flush window before their existing 10-second background drain. After the 30-second
+wait the coordinator cancels close waiters and returns without an unbounded
+cancellation gather, even if a waiter suppresses cancellation. It retains and
+observes their completion; the separately shielded publication keeps scratch,
+PCM and the sink lock during normal waiter cancellation. Scratch creation,
+encoding, upload and cleanup belong to one synchronous storage-executor leaf, so
+even direct event-loop cancellation of the publication task cannot unlink a file
+still used by the executor. A cancelled waiter leaves uncertain capacity reserved
+and stable publication IDs available for retry. It does not delete the upload's
+file to meet the coordinator deadline. GKE listen/pusher
 have 120-second termination grace and 15-second preStop; their uvicorn graceful
 session drain is bounded to 60 seconds, leaving at least 45 seconds for lifespan
 flush/drain. SIGKILL and a flush exceeding the grace can lose the last volatile
-fragment, while staging remains recoverable. Flush errors log and propagate to
+fragment, while staging remains recoverable after the 120-second writer expiry
+and its next bounded staging discovery rotation. The 30-second coordinator bound
+is not a guarantee that a parked upload finishes before process termination;
+Cloud Run hard termination may supply less grace than the GKE configuration. Flush errors log and propagate to
 socket close (1011); they never increment the published counter or report custody
 success. Closing clients does not authorize deleting undurable PCM.
 

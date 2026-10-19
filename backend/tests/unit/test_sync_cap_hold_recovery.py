@@ -491,3 +491,27 @@ async def test_legacy_wake_only_resumes_an_explicit_backlog_runner(monkeypatch):
     monkeypatch.setattr(recovery, '_backlog_runner', runner)
     await recovery.recover('synthetic')
     runner.assert_awaited_once_with('synthetic')
+
+
+async def test_owner_budget_stops_before_second_frozen_piece_and_resumes(state, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(recovery.cap_work_budget.time, 'monotonic', lambda: now[0])
+    state.row['piece_plan'] = {
+        'a.wav': {'audio_path': 'source-a', 'seconds': 20},
+        'b.wav': {'audio_path': 'source-b', 'seconds': 20},
+    }
+    original = recovery.process_segment.side_effect
+
+    def slow(*args, **kwargs):
+        result = original(*args, **kwargs)
+        now[0] += 901
+        return result
+
+    recovery.process_segment.side_effect = slow
+    with recovery.cap_work_budget.visit(900):
+        assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 1
+    assert state.row['processed_paths'] == ['a.wav'] and not state.row.get('finalized')
+    with recovery.cap_work_budget.visit(900):
+        assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 2 and state.row['finalized']

@@ -8,10 +8,12 @@ import time
 from types import SimpleNamespace
 import sys
 import tempfile
+import threading
+import wave
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock, AsyncMock
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -184,6 +186,65 @@ def prove_sigkill_resume(client, directory, prefix):
     print('PASS actual SIGKILL mid-sleep and mid-run, lease expiry, scheduler-only resume, no double chosen debit')
 
 
+def prove_pipeline_result_restart(client, directory, uid):
+    from utils.sync import pipeline
+
+    path = Path(directory) / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    ref = cap_hold.holds(uid).document('pipeline-result')
+    ref.set(
+        {
+            'lease_token': 'lease',
+            'lease_until': time.time() + 1800,
+            'piece_receipts': {'p': {'state': 'dispatched', 'attempt': 1, 'provider': 'modulate', 'model': 'velma-2'}},
+        }
+    )
+    post = Mock(return_value=([{'text': 'usable synthetic transcript', 'timestamp': [0, 1]}], 'en'))
+    parser = Mock(side_effect=RuntimeError('crash at first boundary after durable result'))
+    with ExitStack() as stack:
+        stack.enter_context(patch.dict(os.environ, {'STT_CAP_DISPATCH_ENFORCEMENT': 'true'}))
+        for name, value in {
+            'ambiguous_binding_pending': lambda *a: False,
+            'sync_allowed': lambda *a: True,
+            'funded_allowance': lambda *a: SimpleNamespace(reason='available'),
+            'get_syncing_file_temporal_signed_url': lambda *a: 'http://synthetic.invalid',
+            'schedule_syncing_temporal_file_deletion': Mock(),
+            'keyterms': AsyncMock(return_value=[]),
+            'prerecorded': post,
+            'postprocess_words': parser,
+        }.items():
+            stack.enter_context(patch.object(pipeline, name, value))
+        for _ in range(2):
+            # Restart receives only a fresh real Firestore snapshot, never the
+            # in-memory context mutated by the first process_segment call.
+            receipt = ref.get().to_dict()['piece_receipts']['p']
+            errors = []
+            assert not pipeline.process_segment(
+                str(path),
+                uid,
+                {},
+                threading.Lock(),
+                errors,
+                cap_recovery=True,
+                cap_recovery_service=('modulate', None, 'velma-2'),
+                cap_recovery_checkpoint={
+                    'hold_id': ref.id,
+                    'piece': 'p',
+                    'lease_token': 'lease',
+                    'attempt': 1,
+                    'receipt': receipt,
+                },
+            )
+            assert errors
+        assert parser.call_count == 2 and post.call_count == 1
+        assert 'provider_result' in ref.get().to_dict()['piece_receipts']['p']
+    print(
+        'PASS actual process_segment -> encrypted Firestore checkpoint -> crash boundary -> restart; one provider POST'
+    )
+
+
 def main():
     if not os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:')):
         raise RuntimeError('requires loopback Firestore emulator')
@@ -334,9 +395,44 @@ def main():
             uid, {**context, 'lease_token': 'stale'}, {'provider_result': 'bad'}
         )
         assert hold.get().to_dict()['piece_receipts']['p']['provider_result'] == 'encrypted-result'
+        # Aggregate checkpoint budget uses the real SDK document encoding and
+        # real transaction, preserves old ciphertext, and permits first ingestion.
+        old = 'opaque-prior-result' * 35000
+        hold.update({'piece_receipts.old': {'provider_result': old}})
+        context['receipt'] = {}
+        assert sync_cap_recovery.provider_checkpoint(uid, context, {'provider_result': 'x' * 200000})
+        saved = hold.get().to_dict()['piece_receipts']
+        assert saved['old']['provider_result'] == old
+        assert saved['p']['provider_result'] == 'encrypted-result'
+        assert saved['p']['provider_cache_omitted']
+        # Choice persisted while its final live source is still staging: the
+        # actual bounded query/worker must neither finish nor pass its cursor.
+        owner = uid + '-preseal'
+        group = Publication(owner)
+        staging.append(owner, str(path), group, Publication(owner), meta, 15)
+        created = cap_hold.holds(owner).document(group.identity).get().to_dict()['created_at']
+        processing_backlog.start(owner, period='2026-10', remaining=100, cutoff=time.time(), request_key=owner)
+        with ExitStack() as worker_stack:
+            worker = worker_patches(worker_stack, client)
+            processed = []
+
+            async def complete_sealed(uid, item):
+                assert cap_hold.holds(uid).document(item['id']).get().to_dict()['state'] == 'held'
+                processed.append(item['id'])
+                return worker.AttemptOutcome.COMPLETE
+
+            worker_stack.enter_context(patch.object(worker, '_process', complete_sealed))
+            asyncio.run(worker.run(owner, max_items=100, time_budget=900))
+            assert processing_backlog.read(owner)['state'] == 'processing' and not processed
+            assert staging.seal(owner, group.identity)
+            assert cap_hold.holds(owner).document(group.identity).get().to_dict()['created_at'] == created
+            asyncio.run(worker.run(owner, max_items=100, time_budget=900))
+            assert processed == [group.identity] and processing_backlog.read(owner)['state'] == 'waiting_choice'
+        print('PASS aggregate result budget and persisted pre-seal choice across actual query/transaction/seal')
         print(
             'PASS expired staging, immutable seal retry, bounded rotating discovery, concurrent lease claim, fenced provider result'
         )
+        prove_pipeline_result_restart(client, directory, uid)
         prove_sigkill_resume(client, directory, uid)
 
 

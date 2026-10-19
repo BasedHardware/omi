@@ -85,6 +85,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 'sample_rate': metadata['sample_rate'],
                 'started_at': row.get('started_at', metadata['timestamp']),
                 'created_at': row.get('created_at', time.time()),
+                'listed_at': row.get('listed_at', metadata['timestamp']),
                 'live_custody_version': 4,
             }
             tx.set(ref, updates)
@@ -192,7 +193,7 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                     'opus_fragments': [{'bytes': part['bytes'], 'frames': part['frames']} for part in parts],
                 },
                 row['seconds'],
-                time.time(),
+                row['created_at'],
                 int(row['started_at']),
             )
             tx.set(ref, {**body, 'live_custody_version': 4, 'stage_parts': parts, 'staging_cleanup': True})

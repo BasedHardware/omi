@@ -343,3 +343,85 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
     ]
     assert admission == {'reason': 'allowance_unavailable'}
     assert receipts['held']['reason'] == 'allowance_unavailable'
+
+
+@pytest.mark.parametrize('payload_bytes', [20, 100 * 1024, 900 * 1024])
+def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force_charge(
+    tmp_path, monkeypatch, payload_bytes
+):
+    from utils.conversations import lifecycle
+
+    path = tmp_path / '1792152000.wav'
+    with wave.open(str(path), 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes(b'\0' * 32000)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
+    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
+    monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
+    monkeypatch.setattr(pipeline, 'get_closest_conversation_to_timestamps', Mock(return_value=None))
+    monkeypatch.setattr(pipeline, 'sync_enabled_for', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', Mock())
+    monkeypatch.setattr(pipeline, 'apply_capture_evidence_dark_write', Mock())
+    monkeypatch.setattr(pipeline, 'record_capture_evidence_metric', Mock())
+    completed = Mock()
+    monkeypatch.setattr(pipeline, 'complete_sync_intake', completed)
+    ingest = Mock(side_effect=lambda uid, incoming, **kw: (incoming, True, incoming['transcript_segments']))
+    monkeypatch.setattr(lifecycle, 'ingest_sync_conversation', ingest)
+    words = [{'text': 'x' * payload_bytes, 'timestamp': [0, 1]}]
+    provider_post = Mock(return_value=(words, 'en'))
+    monkeypatch.setattr(pipeline, 'prerecorded', provider_post)
+    persisted = {'state': 'dispatched', 'attempt': 1, 'provider': 'modulate', 'model': 'velma-2'}
+    previous = {'provider_result': 'old-ciphertext' * 50000} if payload_bytes == 100 * 1024 else {}
+
+    def checkpoint(uid, ctx, updates):
+        row = {'piece_receipts': {'p': persisted, 'previous': previous}}
+        persisted.update(pipeline.cap_recovery_provider.sync_cap_recovery.bounded_provider_updates(row, 'p', updates))
+        ctx['receipt'].update(persisted)
+        return True
+
+    monkeypatch.setattr(pipeline.cap_recovery_provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
+    parser = Mock(side_effect=RuntimeError('crash after provider checkpoint'))
+    monkeypatch.setattr(pipeline, 'postprocess_words', parser)
+
+    def process():
+        errors = []
+        ok = pipeline.process_segment(
+            str(path),
+            'synthetic',
+            {},
+            threading.Lock(),
+            errors,
+            cap_recovery=True,
+            cap_recovery_service=('modulate', None, 'velma-2'),
+            cap_recovery_checkpoint={
+                'hold_id': 'h',
+                'piece': 'p',
+                'lease_token': 'l',
+                'attempt': 1,
+                'receipt': dict(persisted),
+            },
+        )
+        assert parser.call_args.args[0] == words
+        return ok, errors
+
+    if payload_bytes == 20:
+        # Crash at the next production boundary after a durable checkpoint.
+        assert process()[1] and persisted['provider_result']
+        ingest.assert_not_called()
+    parser.side_effect = None
+    parser.return_value = [
+        pipeline.TranscriptSegment(text='usable response', start=0, end=1, speaker='SPEAKER_00', is_user=False)
+    ]
+    ok, errors = process()
+    assert ok and not errors
+    ingest.assert_called_once()
+    completed.assert_called_once()
+    provider_post.assert_called_once()
+    if payload_bytes > 20:
+        assert persisted['provider_cache_omitted'] and 'provider_result' not in persisted
+        if previous:
+            assert previous['provider_result'] == 'old-ciphertext' * 50000
