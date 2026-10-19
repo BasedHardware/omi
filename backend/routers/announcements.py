@@ -360,6 +360,8 @@ def update_announcement_endpoint(
         raise HTTPException(status_code=400, detail="No fields to update")
 
     updated = update_announcement(announcement_id, updates)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Announcement not found")
     return updated
 
 
