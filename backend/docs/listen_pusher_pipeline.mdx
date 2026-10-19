@@ -5700,9 +5700,15 @@ double-empty segments even when recovery later fails; it is not ASR accuracy.
 ### Dark batch projection follow-ups
 
 `BATCH_PIPELINE_HEAD_PRIORITY_ENABLED` (default `false`) prioritizes a ready
-capture-order head within its existing scheduler class and bounded queue scan;
+capture-order head within its existing scheduler class using indexed pending-head
+and ready FIFO-predecessor queries (independent of backlog depth);
 duration, eligible unit kind and privacy are checked before any splice, so a
-head this pool cannot lease leaves FIFO intact. Strict ordered merge remains authoritative.
+head this pool cannot lease leaves FIFO intact. A 64-owner lookup budget bounds
+transaction work; it does not limit positions searched within an owner. The
+`head_not_found_total` and `head_budget_exhausted_total` counters plus
+`predecessor_ready_age_seconds` histogram use only priority/release/namespace
+labels. New ready-predecessor indexes must be READY before deploying this code.
+Strict ordered merge remains authoritative; compute remains concurrent per owner.
 `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
 owner claim to ordered multipart assignment. Persisted receipts then drive
 bounded tracked async bridge/playback/enrichment follow-ups, including a
@@ -5717,6 +5723,20 @@ client wire fields or live STT ownership rules.
 
 
 ### Paid quarantine recovery request lifetime
+
+Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
+candidates across cohorts (default 16, supported range 1–64; malformed values
+use 16). Held rows and dispatch errors consume the same budget. The global
+query cursor and rotating allowlisted cohorts keep later work discoverable.
+Set the value to 1 to restore the former all-admitted dispatch rate. This only
+changes discovery throughput: `RecoveryStore.start` still fences paid intent,
+and ordered merge still owns per-owner result order.
+
+A quarantined unit with recovery state `held`, `prepared`, or `running` polls
+as `processing` with `poll_after_ms: 3000`, including during admission rollback.
+Terminal quarantine states such as `failed_held` still report `failed`.
+Privacy-blocked polling returns HTTP 409 with `sync_batch_privacy_blocked`,
+using the same response as upload.
 
 `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
 serving reconciliation loop prepares the existing fenced recovery intent and

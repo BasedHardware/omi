@@ -15,6 +15,7 @@ from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
     recovery_owners,
+    recovery_dispatch_batch_size,
     recovery_tasks_enabled,
     recovery_enabled_for,
     recover_all_admitted,
@@ -127,6 +128,7 @@ class QuarantineRecovery:
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
+        self._cohort_offset = 0
 
     def recover(self, segment_id, owner_id):
         if not recovery_enabled_for(owner_id):
@@ -328,16 +330,22 @@ class QuarantineRecovery:
         counts = {}
         all_admitted = recover_all_admitted()
         owners = (None,) if all_admitted else recovery_owners()
-        for selected_owner in owners:
+        budget = recovery_dispatch_batch_size()
+        # Rotate allowlisted cohorts so a global pass bound cannot starve later
+        # owners. The all-admitted document cursor already rotates its page.
+        offset = self._cohort_offset % len(owners) if owners else 0
+        owners = owners[offset:] + owners[:offset]
+        for index, selected_owner in enumerate(owners):
             if all_admitted:
                 candidates = recovery_candidates(
-                    self.store.client, self.store.namespace, None, after_id=self._candidate_after
+                    self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
                 )
             else:
-                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner)
+                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner, limit=budget)
             if all_admitted and not candidates:
                 self._candidate_after = None  # Wrap next tick, without a second query.
             for segment_id, owner_id in candidates:
+                budget -= 1  # Held/error rows also consume bounded work this pass.
                 if all_admitted:
                     self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
                 try:
@@ -353,6 +361,7 @@ class QuarantineRecovery:
                     logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
                 except Exception:
                     pass
-                if outcome in {'queued', 'recovered', 'failed_held', 'result_held', 'cancelled'}:
-                    break  # One provider dispatch per queried cohort per sweep; continue at this cursor next tick.
+                if budget == 0:
+                    self._cohort_offset = offset + index + 1
+                    return counts
         return counts
