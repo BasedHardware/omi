@@ -4,6 +4,7 @@ import hashlib
 
 import pytest
 
+from database import _client
 from utils import staging_fence
 from utils.staging_fence import (
     PROD_DATA_PLANE_HASHES,
@@ -187,8 +188,6 @@ def _set_env(monkeypatch, env: dict[str, str]) -> None:
 
 
 def test_client_allows_staging_db_only_for_staging_in_dev_project(monkeypatch):
-    from database import _client
-
     _set_env(monkeypatch, _clean_env())
     assert _client._firestore_database_id('based-hardware-dev') == 'staging'
     with pytest.raises(RuntimeError, match='restricted'):
@@ -199,8 +198,6 @@ def test_client_allows_staging_db_only_for_staging_in_dev_project(monkeypatch):
 
 
 def test_client_refuses_staging_db_outside_staging(monkeypatch):
-    from database import _client
-
     monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
     staging_fence.reset_for_tests()
@@ -210,8 +207,6 @@ def test_client_refuses_staging_db_outside_staging(monkeypatch):
 
 
 def test_client_runs_fence_before_building_a_client(monkeypatch):
-    from database import _client
-
     env = _clean_env()
     env['OMI_CUSTOMER_DATA_PROJECT'] = 'based-hardware'
     _set_env(monkeypatch, env)

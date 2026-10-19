@@ -96,7 +96,7 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
         )
     except ValueError as exc:
         return [('compose', 'staging', line.strip()) for line in str(exc).splitlines()[1:] or [str(exc)]]
-    prod = composer.compose_manifest(base_path=base, runtime_env_dir=runtime_env_dir)['environments']['prod']
+    prod = composer.compose_environment('prod', base_path=base, runtime_env_dir=runtime_env_dir)
 
     problems: list[tuple[str, str, str]] = []
     prod_services = prod.get('cloud_run', {}).get('services', {})

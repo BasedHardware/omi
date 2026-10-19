@@ -19,6 +19,7 @@ DEFAULT_OUTPUT = ROOT / 'backend/deploy/runtime_env.yaml'
 GENERATED_HEADER = '# generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py\n'
 
 ConfigDict = dict[str, Any]
+_SafeLoader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 ENVIRONMENTS = ('dev', 'prod')
 _CLOUD_RUN_SERVICE_ORDER = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
@@ -26,7 +27,7 @@ _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
 
 def _load_yaml(path: Path) -> ConfigDict:
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        loaded = yaml.load(handle, Loader=_SafeLoader)  # noqa: S506 - a SafeLoader (libyaml when available)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
     return cast(ConfigDict, loaded)
@@ -140,6 +141,17 @@ def _compose_environment(
     env_config['gcp_project'] = compute_project
     env_config['runtime_gcp_project'] = data_plane_project
     return _stabilize_env_config(env_config)
+
+
+def compose_environment(
+    env: str,
+    *,
+    base_path: Path = DEFAULT_BASE,
+    runtime_env_dir: Path = RUNTIME_ENV_DIR,
+) -> ConfigDict:
+    """Compose one environment (as it appears under ``environments`` in runtime_env.yaml)."""
+    shared = _load_yaml(base_path).get('environment_shared', {})
+    return _compose_environment(shared, _load_yaml(_overlay_path(env, runtime_env_dir)), expected_env=env)
 
 
 def compose_manifest(
