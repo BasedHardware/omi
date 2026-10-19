@@ -559,6 +559,15 @@ verify() {
     echo "FAIL: cloudsql bindings for staging-runtime/worker: $sql_bound of 4"
     fail=1
   fi
+  # Both runtime and worker transact in the staging DB (10-19: the worker grant was missing and
+  # every batch lease failed closed). Each needs datastore.user conditioned to databases/staging.
+  local db_bound
+  db_bound="$(gcloud projects get-iam-policy "$DEV" --format=json |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(sorted({m.split(":")[-1].split("@")[0] for b in d.get("bindings",[]) if b["role"]=="roles/datastore.user" and "databases/staging" in (b.get("condition") or {}).get("expression","") for m in b["members"]} & {"staging-runtime","staging-worker"})))')"
+  if [[ "$db_bound" == "staging-runtime staging-worker" ]]; then echo "ok: datastore.user on databases/staging for staging-runtime and staging-worker"; else
+    echo "FAIL: datastore.user on databases/staging only for: ${db_bound:-none} (need staging-runtime and staging-worker)"
+    fail=1
+  fi
   gcloud firestore databases describe --database="$DB" --project="$DEV" >/dev/null 2>&1 &&
     echo "ok: firestore $DB" || {
     echo "FAIL: firestore $DB missing"
