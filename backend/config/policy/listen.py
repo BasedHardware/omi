@@ -269,15 +269,15 @@ def resolve_listen_policy(uid: str, *, flags: Mapping[str, str] | None = None, m
     account_cooldown = number('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', 'account_circuit_cooldown_seconds', 1800.0)
     no_text = max(1.0, number('STT_NO_TEXT_SECONDS', 'no_text_seconds', 30.0))
     paid_limits = {
-        provider: int(
-            number(
-                f'STT_PAID_SPILLOVER_{provider.upper()}_PER_MINUTE',
-                f'paid_spillover_{provider}_per_minute',
-                30,
-                integer=True,
-            )
-        )
-        for provider in ('soniox', 'modulate', 'deepgram')
+        'soniox': int(
+            number('STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', 'paid_spillover_soniox_per_minute', 30, integer=True)
+        ),
+        'modulate': int(
+            number('STT_PAID_SPILLOVER_MODULATE_PER_MINUTE', 'paid_spillover_modulate_per_minute', 30, integer=True)
+        ),
+        'deepgram': int(
+            number('STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE', 'paid_spillover_deepgram_per_minute', 30, integer=True)
+        ),
     }
     mode = env.get('STT_ROUTING_MODE', 'off')
     try:
