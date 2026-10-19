@@ -105,7 +105,14 @@ class _SectionSourcesList extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(width: 56, child: Text(OmiDuration.offset(source.start), style: timeStyle)),
+                        ConstrainedBox(
+                          // Fits m:ss and h:mm:ss; a longer offset widens the column instead of overflowing.
+                          constraints: const BoxConstraints(minWidth: 56),
+                          child: Padding(
+                            padding: const EdgeInsetsDirectional.only(end: OmiSpacing.xs),
+                            child: Text(OmiDuration.offset(source.start), style: timeStyle),
+                          ),
+                        ),
                         Expanded(
                           child: Text(
                             source.text.trim(),

@@ -111,6 +111,35 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('a heading-less section with sources still gets its control', (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [segment('s1', 42)]);
+    conversation.structured.sections = [
+      const Section(heading: '', bodyMarkdown: 'Body only', sourceSegmentIds: ['s1']),
+      const Section(heading: '', bodyMarkdown: 'Unsourced body'),
+    ];
+    final opened = <String>[];
+    await _pumpSummary(tester, conversation, onOpenSource: opened.add);
+    expect(find.byKey(const ValueKey('section-sources')), findsOneWidget);
+    await openSources(tester);
+    await tester.tap(find.byKey(const ValueKey('section-source-s1')));
+    await tester.pumpAndSettle();
+    expect(opened, ['s1']);
+  });
+
+  testWidgets('the sources control answers a single tap at once on an editable summary', (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [segment('s1', 42)]);
+    conversation.structured.sections = [
+      const Section(heading: 'Decisions', bodyMarkdown: 'Body', sourceSegmentIds: ['s1']),
+    ];
+    await _pumpSummary(tester, conversation, onOpenSource: (_) {}, onSaveSummarySelection: (_, __) {});
+    await tester.tap(find.byKey(const ValueKey('section-sources')));
+    // Well inside the 300ms double-tap timeout: a double-tap ancestor would still hold the tap.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const ValueKey('section-source-s1')), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('unresolvable sources render no sources control', (tester) async {
     final conversation = _conversationWithSections();
     conversation.structured.sections = [
