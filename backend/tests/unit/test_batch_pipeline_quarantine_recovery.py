@@ -588,10 +588,11 @@ def test_running_dispatch_only_reconciles_and_never_reissues_provider(setup, mon
     enqueue.assert_not_called()
 
 
-def test_default_sweep_queues_one_wake_and_inline_rollback_calls_recover(setup, monkeypatch):
+def test_sweep_batch_one_rollback_and_inline_calls_recover(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 
     _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '1')
     monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)] * 2))
     recovery.dispatch = Mock(return_value='queued')
     recovery.recover = Mock(return_value='recovered')
@@ -776,3 +777,50 @@ async def test_504_leaves_executor_running_and_retry_adopts_token(setup, monkeyp
         await asyncio.sleep(0.01)
     assert row(client)['recovery_state'] == 'recovered'
     stt.assert_called_once()
+
+
+@pytest.mark.parametrize('value,expected', [(None, 16), ('1', 1), ('64', 64), ('0', 16), ('65', 16), ('bad', 16)])
+def test_recovery_batch_config_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_dispatch_batch_size
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', value)
+    assert recovery_dispatch_batch_size() == expected
+
+
+def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    candidates = [(f'bad-{i:02}', binding.owner_id) for i in range(33)]
+
+    def page(client, namespace, owner, limit, *, after_id):
+        assert limit == 16
+        return [(sid, uid) for sid, uid in candidates if after_id is None or sid > after_id][:limit]
+
+    query = Mock(side_effect=page)
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    recovery.dispatch = Mock(return_value='queued')
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 1}
+    assert recovery.dispatch.call_count == 33
+    assert query.call_count == 3
+    assert recovery.sweep() == {}
+    assert recovery.sweep() == {'queued': 16}
+
+
+def test_sweep_bounds_held_errors_and_rotates_allowlisted_owners(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '2')
+    monkeypatch.setattr(module, 'recovery_owners', lambda: ('first', 'second'))
+    query = Mock(side_effect=lambda client, namespace, owner, limit: [(f'{owner}-{i}', owner) for i in range(limit)])
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    recovery.dispatch = Mock(side_effect=[RuntimeError('synthetic'), 'held', 'queued', 'queued'])
+    assert recovery.sweep() == {'held': 2}
+    assert recovery.sweep() == {'queued': 2}
+    assert [call.args[2] for call in query.call_args_list] == ['first', 'second']

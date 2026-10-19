@@ -187,6 +187,14 @@ priority, unit kind, optional conversation and pinned privacy generation.
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
 Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
 
+Inside one locked flight, artifact IO overlaps GPU work: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 3, `1` = serial, max 8) items
+fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
+writes run while later items diarize. Prefetch stays inside the existing
+two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
+ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
+fatal GPU error waits for outstanding IO before the flight raises.
+
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
 use the same contract. Production jobs require an OIDC compute-admission seal from the backend before

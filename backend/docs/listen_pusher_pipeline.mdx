@@ -5724,6 +5724,20 @@ client wire fields or live STT ownership rules.
 
 ### Paid quarantine recovery request lifetime
 
+Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
+candidates across cohorts (default 16, supported range 1–64; malformed values
+use 16). Held rows and dispatch errors consume the same budget. The global
+query cursor and rotating allowlisted cohorts keep later work discoverable.
+Set the value to 1 to restore the former all-admitted dispatch rate. This only
+changes discovery throughput: `RecoveryStore.start` still fences paid intent,
+and ordered merge still owns per-owner result order.
+
+A quarantined unit with recovery state `held`, `prepared`, or `running` polls
+as `processing` with `poll_after_ms: 3000`, including during admission rollback.
+Terminal quarantine states such as `failed_held` still report `failed`.
+Privacy-blocked polling returns HTTP 409 with `sync_batch_privacy_blocked`,
+using the same response as upload.
+
 `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
 serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
