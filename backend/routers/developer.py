@@ -83,6 +83,7 @@ from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.projection_payload import (
     client_processing_mutation,
     omit_null_processing_state,
@@ -2247,6 +2248,11 @@ def _create_conversation_from_segments(
     process_kwargs: dict = {}
     if client_projection is not None:
         process_kwargs['client_projection'] = client_projection
+    # A client-uploaded, already-final transcript is not a capture-time event. Run it now,
+    # like the sibling desktop finalize paths (/finalize, /v1/conversations pass
+    # CLIENT_FINALIZE), instead of letting the freemium desktop deferral store a cheap
+    # placeholder and skip enrichment entirely.
+    process_kwargs['trigger'] = ProcessingTrigger.CLIENT_FINALIZE
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
