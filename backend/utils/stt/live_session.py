@@ -7,6 +7,7 @@ from config.policy.listen import service_models, listen_value
 import asyncio
 import os
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 from starlette.websockets import WebSocketState
@@ -19,7 +20,7 @@ from utils.stt import streaming as st
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
-from utils.stt.live_metrics import MANAGED_LEGS_OPEN
+from utils.stt.live_metrics import MANAGED_LEGS_OPEN, NONWINDOW_REPLAY_SETTLES
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt import replay_delivery
@@ -34,7 +35,7 @@ from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
-from config.live_stt_replay import ReplayLimits
+from config.live_stt_replay import ReplayLimits, nonwindow_replay_settle_enabled
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
@@ -501,6 +502,13 @@ class LiveChainSession:
         return socket
 
 
+# A provider gets this long after the last send of a span before an empty,
+# fully-final answer for it counts as settled (real-time providers finalize
+# within seconds; replayed audio is sent faster than real time).
+NONWINDOW_SETTLE_GRACE_SECONDS = 15.0
+_replay_clock = time.monotonic
+
+
 class LiveLegSocket(STTSocket):
     manages_vad = True
 
@@ -605,8 +613,17 @@ class LiveLegSocket(STTSocket):
         self._replay_failure_reason: str | None = None
         self._replay_capacity_subtype: str | None = None
         self._emitted_capture_sample = 0
+        # Non-window legs: quiet capture settled at the replay horizon because
+        # the provider answered it with nothing (see window_replay_settle_through).
+        self._settled_capture_sample = 0
+        self._settling = False
         self._pending_capture_sample: int | None = None
         self._speech_capture_end = 0
+        # [first start sample, opened at, last noted at] per ~1 s of tracked speech sends.
+        self._replay_capture_notes: deque[list[float]] = deque()
+        self._last_text_at: float | None = None
+        self._text_segments = 0
+        self._placed_text_segments = 0
         self._tracks_window_replay = False
         self._replay_passthrough = False
         record_live_stt_socket_open(service.value)
@@ -659,6 +676,8 @@ class LiveLegSocket(STTSocket):
     def window_replay_diagnostics(self, first: int, end: int, projected_samples: int) -> ReplayLagDiagnostics | None:
         from utils.stt.parakeet_window import WindowedParakeetSocket
 
+        if not self.window:
+            return self._nonwindow_replay_diagnostics(first, end, projected_samples)
         if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
             return None
         send_map = self._send_tracker.send_map
@@ -666,9 +685,79 @@ class LiveLegSocket(STTSocket):
         rate = send_map.provider_sample_rate
         return self.raw.replay_diagnostics(projected_samples / rate, admitted / rate)
 
+    def _nonwindow_replay_diagnostics(
+        self, first: int, end: int, projected_samples: int
+    ) -> ReplayLagDiagnostics | None:
+        if not self._tracks_window_replay:
+            return None
+        rate = self.sample_rate
+        admitted = -1.0
+        if self._send_tracker is not None:
+            send_map = self._send_tracker.send_map
+            admitted = send_map.accepted_samples_in_capture_range(first, end) / send_map.provider_sample_rate
+        pending_output = getattr(self.raw, 'has_pending_provider_output', None)
+        return ReplayLagDiagnostics(
+            capture_seconds=projected_samples / rate,
+            admitted_seconds=admitted,
+            seconds_since_text=-1.0 if self._last_text_at is None else _replay_clock() - self._last_text_at,
+            posts_since_anchor=0,
+            empty_posts_since_anchor=0,
+            post_in_flight=False,
+            empty_streak=0,
+            cut_pending=False,
+            pacing_wait=False,
+            leg='nonwindow',
+            speech_unemitted_seconds=max(0, self._speech_capture_end - self._replay_accounted_sample()) / rate,
+            text_segments=self._text_segments,
+            placed_text_segments=self._placed_text_segments,
+            provider_output_pending=bool(pending_output()) if callable(pending_output) else None,
+        )
+
+    def _replay_accounted_sample(self) -> int:
+        return max(self._emitted_capture_sample, self._settled_capture_sample)
+
+    def window_replay_settle_through(self, floor: int) -> bool:
+        """Settle a non-window leg's quiet replay span once it ages past the ring.
+
+        VAD-positive noise, a cough or hangover that the provider correctly
+        ignores never gets a text segment, so on its own it would hold the
+        replay ring until it overflows into failover. Capture before ``floor``
+        settles like an answered-empty window only when the leg is serving,
+        the provider owes no partial or unflushed output, and every speech
+        send before ``floor`` is older than the grace. Spans with pending
+        provider output keep their replay obligation.
+        """
+        if self.window or not self._tracks_window_replay or not self.has_untranscribed_speech():
+            return False
+        pending = self._pending_capture_sample
+        if pending is not None and pending >= floor:
+            return False
+        if not nonwindow_replay_settle_enabled() or self.is_connection_dead:
+            return False
+        pending_output = getattr(self.raw, 'has_pending_provider_output', None)
+        if not callable(pending_output) or pending_output():
+            return False
+        notes = self._replay_capture_notes
+        cutoff = _replay_clock() - NONWINDOW_SETTLE_GRACE_SECONDS
+        while notes and notes[0][2] <= cutoff:
+            notes.popleft()
+        if notes and notes[0][0] < floor:
+            return False
+        if not self._settling:
+            # Count episodes, not the per-packet advance of a span already settled.
+            self._settling = True
+            NONWINDOW_REPLAY_SETTLES.labels(provider=self.service.value).inc()
+        self._settled_capture_sample = max(self._settled_capture_sample, floor)
+        self._pending_capture_sample = self._settled_capture_sample if self.has_untranscribed_speech() else None
+        return True
+
     @property
     def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
         return getattr(self.raw, 'replay_lag_diagnostics', None)
+
+    @property
+    def connection_cause(self) -> str | None:
+        return getattr(self.raw, 'connection_cause', None)
 
     @property
     def first_text_diagnostics(self) -> FirstTextDeadlineDiagnostics | None:
@@ -681,7 +770,7 @@ class LiveLegSocket(STTSocket):
     def has_untranscribed_speech(self) -> bool:
         if self.window:
             return bool(getattr(self.raw, 'has_untranscribed_speech')())
-        return self._speech_capture_end > self._emitted_capture_sample
+        return self._speech_capture_end > self._replay_accounted_sample()
 
     def fail(self, reason: str, *, capacity_subtype: str | None = None) -> None:
         if self.window:
@@ -780,12 +869,17 @@ class LiveLegSocket(STTSocket):
         if self._tracks_window_replay:
             for segment in segments:
                 end = segment.get('_capture_end_sample')
-                if isinstance(end, int) and str(segment.get('text') or '').strip():
-                    self._emitted_capture_sample = max(self._emitted_capture_sample, end)
+                if str(segment.get('text') or '').strip():
+                    self._last_text_at = _replay_clock()
+                    self._text_segments = min(1000000, self._text_segments + 1)
+                    if isinstance(end, int):
+                        self._placed_text_segments = min(1000000, self._placed_text_segments + 1)
+                        self._emitted_capture_sample = max(self._emitted_capture_sample, end)
             if not self.has_untranscribed_speech():
                 self._pending_capture_sample = None
+                self._settling = False
             elif self._pending_capture_sample is not None:
-                self._pending_capture_sample = max(self._pending_capture_sample, self._emitted_capture_sample)
+                self._pending_capture_sample = max(self._pending_capture_sample, self._replay_accounted_sample())
         if any(str(segment.get('text') or '').strip() for segment in segments) and self._transcript_outcome is None:
             deadline = max(1.0, float(listen_value('no_text_seconds', 'STT_NO_TEXT_SECONDS', '30')))
             if self._first_speech_at is not None and time.monotonic() - self._first_speech_at <= deadline:
@@ -837,8 +931,22 @@ class LiveLegSocket(STTSocket):
         if start_sample is None:
             return
         if self._pending_capture_sample is None:
-            self._pending_capture_sample = max(start_sample, self._emitted_capture_sample)
+            self._pending_capture_sample = max(start_sample, self._replay_accounted_sample())
+            self._settling = False
         self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+        self._note_replay_send(start_sample)
+
+    def _note_replay_send(self, start_sample: int) -> None:
+        if self.window:
+            return
+        now = _replay_clock()
+        notes = self._replay_capture_notes
+        while notes and notes[0][2] <= now - NONWINDOW_SETTLE_GRACE_SECONDS:
+            notes.popleft()
+        if notes and now - notes[-1][1] < 1.0:
+            notes[-1][2] = now
+        else:
+            notes.append([start_sample, now, now])
 
     def _send_unscored_replay_capture(self, data: bytes, start_sample: int | None = None) -> bool:
         self._note_replay_capture(data, start_sample)
@@ -1070,6 +1178,9 @@ class LiveLegSocket(STTSocket):
             if self._pending_capture_sample is None:
                 self._pending_capture_sample = start_sample
             self._speech_capture_end = max(self._speech_capture_end, start_sample + len(data) // 2)
+            # Record send time even when this leg's VAD scores the span silent:
+            # the settle grace must cover every replayed obligation.
+            self._note_replay_send(start_sample)
         self._replaying = True
         try:
             return self.send(data, start_sample=start_sample)

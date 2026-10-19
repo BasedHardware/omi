@@ -55,6 +55,8 @@ class LiveLegOutcome:
         self.pending: Any = None
         self.handed_off = False
         self.transport_released = False
+        # Content-free transport cause of an untyped (connection_lost) death.
+        self.connection_cause: str | None = None
 
     def observe_death(self) -> None:
         """Freeze whether this provider death was observed while serving was eligible."""
