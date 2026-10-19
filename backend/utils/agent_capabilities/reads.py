@@ -9,7 +9,7 @@ from database import conversations, action_items, users, candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus
+from models.product_memory import MemoryAccessPolicy, MemoryTier, ProcessingState, is_default_access_eligible
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.task_intelligence_control import get_task_workflow_control
 from utils.agent_capabilities.errors import AgentRecordUnavailable
@@ -134,14 +134,24 @@ def _read_memory_record(uid, key, *, require_available=False):
     """
     try:
         canonical = read_canonical_memory_item(uid, key)
-        if canonical and not filter_canonical_default_visible_items(
-            [canonical],
-            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
-            now=datetime.now(timezone.utc),
-        ):
-            if require_available and canonical.status not in {MemoryItemStatus.tombstoned, MemoryItemStatus.superseded}:
-                raise AgentRecordUnavailable('Dream memory temporarily hidden')
-            return None
+        if canonical:
+            # Review cannot use archive evidence, and explicit rejection is terminal.
+            if require_available and (
+                canonical.tier == MemoryTier.archive or (canonical.promotion or {}).get('user_review') is False
+            ):
+                return None
+            policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+            now = datetime.now(timezone.utc)
+            if not filter_canonical_default_visible_items([canonical], policy=policy, now=now):
+                # Only known processing delays are retryable; being filtered alone
+                # does not establish temporary unavailability. Locks are handled below.
+                if require_available:
+                    access = is_default_access_eligible(canonical, policy, now=now)
+                    if access.reason == 'processing_blocked' or (
+                        access.allowed and canonical.processing_state == ProcessingState.pending
+                    ):
+                        raise AgentRecordUnavailable('Dream memory processing unavailable')
+                return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
     except HTTPException as exc:
         if require_available and exc.status_code == 402:
@@ -150,8 +160,6 @@ def _read_memory_record(uid, key, *, require_available=False):
             return None
         raise
     if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
-        if require_available:
-            raise AgentRecordUnavailable('Dream memory temporarily hidden')
         return None
     if row.is_locked:
         if require_available:

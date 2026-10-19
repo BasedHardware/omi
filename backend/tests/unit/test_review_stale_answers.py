@@ -1,6 +1,6 @@
 """Stale Review questions settle durably; transactional races stay retryable."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -13,6 +13,8 @@ from models.agent_tools import HarnessQuestion
 from models.review import AgentProposalItem, EntitySummary, ReviewItem, ReviewItemV2, SamePersonItem
 from models.dream_edit import Term
 from models.memories import MemoryDB
+from models.product_memory import MemoryItem
+from utils.memory import canonical_memory_adapter
 from routers import review as router
 from tests.support.dream_firestore import DreamFirestore
 from utils import dream_review_policy, entity_pages, review
@@ -377,3 +379,51 @@ def test_vocabulary_capacity_releases_and_same_answer_succeeds_after_removing_a_
     assert response.status_code == 200, response.text
     assert response.json()['applied'] is True
     assert proposal(item_id).get().to_dict()['status'] == 'resolved'
+
+
+@pytest.mark.parametrize('condition', ['archive', 'user_rejected', 'locked', 'processing_pending'])
+def test_canonical_memory_unavailability_settles_only_terminal_reasons(harness, monkeypatch, condition):
+    client, db = harness
+    monkeypatch.setattr(canonical_memory_adapter, 'default_db_client', db)
+    memory = MemoryItem(
+        memory_id='toy',
+        uid=UID,
+        version=1,
+        tier='short_term',
+        status='active',
+        processing_state='processed',
+        content='Zarathion is a person',
+        source_state='active',
+        sensitivity_labels=[],
+        visibility='private',
+        user_asserted=True,
+        captured_at=NOW,
+        updated_at=NOW,
+        expires_at=NOW + timedelta(days=2),
+    )
+    ref = store.user(UID).collection('memory_items').document('toy')
+    ref.set(memory.model_dump(mode='python'))
+    # Real canonical read, default visibility filter, adapter and Review HTTP lifecycle.
+    snapshot = reads.read_record(UID, 'memory_items/toy')
+    assert snapshot is not None
+    item_id = offer_vocabulary(client, {'memory_items/toy': snapshot})
+    changed = {
+        'archive': {'tier': 'archive'},
+        'user_rejected': {'promotion': {'user_review': False}},
+        'locked': {'promotion': {'is_locked': True}},
+        'processing_pending': {'processing_state': 'pending'},
+    }[condition]
+    ref.set({**memory.model_dump(mode='python'), **changed})
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    if condition in {'archive', 'user_rejected'}:
+        assert proposal(item_id).get().to_dict()['status'] == 'resolved'
+        assert proposal(item_id).get().to_dict()['resolution'] == 'stale'
+        assert store.remaining_today(UID) == 3
+        assert client.get('/v2/review/items').json()['items'] == []
+    else:
+        assert_released(client, item_id)
+        ref.set(memory.model_dump(mode='python'))
+        response = accept_vocabulary(client, item_id)
+        assert response.status_code == 200, response.text
+        assert response.json()['applied'] is True
