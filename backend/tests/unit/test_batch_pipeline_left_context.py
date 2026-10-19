@@ -1,17 +1,22 @@
-"""Left ASR context from a unit's contiguous same-owner predecessor."""
+"""Left ASR context from a unit's contiguous predecessor in the same capture stream."""
 
 import numpy as np
 import pytest
 
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer.batch_pipeline import PipelineWorker
-from diarizer.batch_pipeline_context import LeftContextIndex, select_context, starts_in_speech
+from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, select_context, starts_in_speech
+from diarizer.batch_pipeline_models import StagedAudio
+from utils.batch_pipeline.audio import audio_unit, read_context, with_context
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.sync.capture import chunk_identity
 
 RATE = 16000
+STREAM = 'capture:stream-1'
 
 
-def item(key, capture_at, seconds, owner='owner-a', generation=1, conversation='stream-1'):
+def item(key, capture_at, seconds, owner='owner-a', generation=1, device='pendant-1', locked=False):
+    """A capture span exactly as intake builds it: a per-unit chunk identity."""
     return WorkItem(
         key,
         owner,
@@ -20,8 +25,25 @@ def item(key, capture_at, seconds, owner='owner-a', generation=1, conversation='
         seconds,
         Priority.FRESH,
         unit_kind='capture_span',
-        conversation_id=conversation,
+        conversation_id=chunk_identity(owner, 'omi', device, locked, capture_at),
         privacy_generation=generation,
+    )
+
+
+def staged(work, samples, device='pendant-1', locked=False):
+    """Intake's frozen staged WAV: PCM16 plus the authenticated intake context."""
+    pcm = np.round(samples * 32768).clip(-32768, 32767).astype('<i2').tobytes()
+    return with_context(
+        audio_unit(work.capture_at, pcm).wav,
+        {
+            'owner_id': work.owner_id,
+            'segment_id': work.segment_id,
+            'capture_at': work.capture_at,
+            'source': 'omi',
+            'should_lock': locked,
+            'client_device_id': device,
+            'conversation_id': None,
+        },
     )
 
 
@@ -45,43 +67,58 @@ def test_context_starts_at_the_onset_of_the_speech_run_crossing_the_seam():
 def test_index_matches_only_a_contiguous_same_owner_same_generation_predecessor():
     clock = [0.0]
     index = LeftContextIndex(max_seconds=8, max_units=4, ttl_seconds=60, clock=lambda: clock[0])
-    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)])
-    context = index.lookup(item('s', 110.2, 10), 10)
+    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)], STREAM)
+    context = index.lookup(item('s', 110.2, 10), 10, STREAM)
     assert context is not None and len(context) == int(5.5 * RATE)
     assert np.allclose(context, 0.25, atol=1 / 32768)
-    assert index.lookup(item('s', 112, 10), 10) is None  # gap > 1s
-    assert index.lookup(item('s', 110, 10, owner='owner-b'), 10) is None
-    assert index.lookup(item('s', 110, 10, conversation='stream-2'), 10) is None  # another device
-    assert index.lookup(item('s', 110, 10, conversation=None), 10) is None
+    assert index.lookup(item('s', 112, 10), 10, STREAM) is None  # gap > 1s
+    assert index.lookup(item('s', 110, 10, owner='owner-b'), 10, STREAM) is None
+    assert index.lookup(item('s', 110, 10), 10, 'capture:stream-2') is None  # another device
+    assert index.lookup(item('s', 110, 10), 10, None) is None
     # A unit never takes its own tail as context.
-    assert index.lookup(item('p', 100, 10), 10) is None
+    assert index.lookup(item('p', 100, 10), 10, STREAM) is None
     clock[0] = 61
-    assert index.lookup(item('s', 110, 10), 10) is None  # expired
+    assert index.lookup(item('s', 110, 10), 10, STREAM) is None  # expired
 
 
 def test_a_new_privacy_generation_drops_the_owners_older_tails():
     index = LeftContextIndex(max_seconds=8, max_units=8)
-    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)])
-    assert index.lookup(item('s', 110, 10, generation=2), 10) is None
-    assert index.lookup(item('s', 110, 10), 10) is None  # gone, not merely unmatched
+    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)], STREAM)
+    assert index.lookup(item('s', 110, 10, generation=2), 10, STREAM) is None
+    assert index.lookup(item('s', 110, 10), 10, STREAM) is None  # gone, not merely unmatched
 
 
 def test_an_overlapping_predecessor_is_trimmed_so_audio_is_never_replayed():
     index = LeftContextIndex(max_seconds=8, max_units=8)
-    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)])
-    context = index.lookup(item('s', 109.6, 10), 10)
+    index.remember(item('p', 100, 10), tone(10, 0.25), [(5, 10)], STREAM)
+    context = index.lookup(item('s', 109.6, 10), 10, STREAM)
     assert context is not None and len(context) == int(5.5 * RATE) - int(0.4 * RATE)
 
 
 def test_index_is_bounded():
     index = LeftContextIndex(max_seconds=8, max_units=2)
     for i in range(3):
-        index.remember(item(f'u{i}', 10 * i, 10), tone(10, 0.1), [(9, 10)])
-    assert index.lookup(item('n', 10, 10), 10) is None  # u0 evicted
-    assert index.lookup(item('n', 30, 10), 10) is not None
+        index.remember(item(f'u{i}', 10 * i, 10), tone(10, 0.1), [(9, 10)], STREAM)
+    assert index.lookup(item('n', 10, 10), 10, STREAM) is None  # u0 evicted
+    assert index.lookup(item('n', 30, 10), 10, STREAM) is not None
     disabled = LeftContextIndex(max_seconds=8, max_units=0)
-    disabled.remember(item('u', 0, 10), tone(10, 0.1), [(9, 10)])
-    assert disabled.lookup(item('n', 10, 10), 10) is None
+    disabled.remember(item('u', 0, 10), tone(10, 0.1), [(9, 10)], STREAM)
+    assert disabled.lookup(item('n', 10, 10), 10, STREAM) is None
+
+
+def test_capture_stream_ignores_the_per_unit_chunk_identity():
+    first, second = item('p', 100, 10), item('s', 110, 10)
+    # Intake's conversation_id differs for every unit of one upload stream...
+    assert first.conversation_id != second.conversation_id
+    # ...but the stream is source + device + lock from the staged intake context.
+    stream = capture_stream(first, read_context(staged(first, tone(1, 0.1))))
+    assert stream and stream == capture_stream(second, read_context(staged(second, tone(1, 0.1))))
+    other = capture_stream(second, read_context(staged(second, tone(1, 0.1), device='desktop-1')))
+    locked = capture_stream(second, read_context(staged(second, tone(1, 0.1), locked=True)))
+    assert len({stream, other, locked}) == 3
+    assert capture_stream(second, None) is None  # no authenticated context: no stream
+    record = WorkItem('r', 'owner-a', 0, 'record://r', 10, Priority.FRESH, conversation_id='conv-1')
+    assert capture_stream(record) == 'conversation:conv-1'
 
 
 def test_only_speech_starting_at_the_first_samples_counts_as_mid_utterance():
@@ -128,11 +165,14 @@ class Words:
         return result
 
 
-def run(units, audio, spans, *, worker=None, ctx=8, flights=None):
+def run(units, audio, spans, *, worker=None, ctx=8, flights=None, devices=None):
     saved, failures = {}, []
     words = Words()
+    blobs = {u.segment_id: staged(u, audio[u.segment_id], **(devices or {}).get(u.segment_id, {})) for u in units}
+    source = StagedAudio(lambda work: blobs[work.segment_id])
     worker = worker or PipelineWorker(
-        decode=lambda work: audio[work.segment_id],
+        decode=source.decode,
+        stream_of=source.stream,
         vad=lambda samples: spans[int(samples[0] * 100)],
         words_providers={'parakeet': words},
         diarizers={'pyannote': lambda samples: {'turns': []}},
@@ -172,17 +212,34 @@ def test_cache_carries_context_across_flights():
 
 
 @pytest.mark.parametrize(
-    'successor',
+    'successor,devices',
     [
-        item('s', 115, 10),  # not contiguous
-        item('s', 110, 10, owner='owner-b'),
-        item('s', 110, 10, generation=2),
-        item('s', 110, 10, conversation='stream-2'),  # another device, 0s gap
+        (item('s', 115, 10), None),  # not contiguous
+        (item('s', 110, 10, owner='owner-b'), None),
+        (item('s', 110, 10, generation=2), None),
+        (item('s', 110, 10, device='desktop-1'), {'s': {'device': 'desktop-1'}}),  # another device, 0s gap
+        (item('s', 110, 10, locked=True), {'s': {'locked': True}}),
     ],
 )
-def test_no_context_without_a_contiguous_same_owner_predecessor(successor):
-    worker, words, saved, _ = run([item('p', 100, 10), successor], AUDIO, SPANS)
+def test_no_context_without_a_contiguous_predecessor_in_the_same_stream(successor, devices):
+    worker, words, saved, _ = run([item('p', 100, 10), successor], AUDIO, SPANS, devices=devices)
     assert worker.counts['left_context'] == 0 and 's' not in saved
+
+
+def test_without_a_stream_identity_no_context_attaches():
+    units = [item('p', 100, 10), item('s', 110, 10)]
+    saved = {}
+    worker = PipelineWorker(
+        decode=lambda work: AUDIO[work.segment_id],  # no staged intake context
+        vad=lambda samples: SPANS[int(samples[0] * 100)],
+        words_providers={'parakeet': Words()},
+        diarizers={'pyannote': lambda samples: {'turns': []}},
+        persist=lambda work, payload: saved.__setitem__(work.segment_id, payload) or 'result://' + work.segment_id,
+        config=ProviderConfig(asr_left_context_seconds=8),
+        io_concurrency=1,
+    )
+    worker.process_batch(units)
+    assert worker.counts['left_context'] == 0
 
 
 def test_kill_switch_and_onset_start_take_no_context():
@@ -198,8 +255,11 @@ def test_prefix_only_words_leave_the_unit_empty_asr():
             return [[{'word': 'before', 'timestamp': [0.5, 1.0]}] for _ in batch]
 
     saved = {}
+    units = [item('p', 100, 10), item('s', 110, 10)]
+    source = StagedAudio(lambda work: staged(work, AUDIO[work.segment_id]))
     worker = PipelineWorker(
-        decode=lambda work: AUDIO[work.segment_id],
+        decode=source.decode,
+        stream_of=source.stream,
         vad=lambda samples: SPANS[int(samples[0] * 100)],
         words_providers={'parakeet': PrefixOnly()},
         diarizers={'pyannote': lambda samples: {'turns': []}},
@@ -207,7 +267,7 @@ def test_prefix_only_words_leave_the_unit_empty_asr():
         config=ProviderConfig(asr_left_context_seconds=8),
         io_concurrency=1,
     )
-    results = worker.process_batch([item('p', 100, 10), item('s', 110, 10)])
+    results = worker.process_batch(units)
     assert worker.counts['left_context'] == 1 and 's' not in saved
     failure = next(r for r in results if getattr(r, 'segment_id', None) == 's')
     assert failure.reason == 'empty_asr'

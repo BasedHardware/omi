@@ -18,7 +18,7 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
-from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
+from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
@@ -309,6 +309,7 @@ class PipelineWorker:
         gpu_lock=None,
         io_concurrency: int | None = None,
         flight_models=None,
+        stream_of: Callable | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -325,6 +326,9 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
+        # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
+        # Without it only conversation units have a stream.
+        self.stream_of = stream_of or capture_stream
         self.left_context = LeftContextIndex(
             max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
         )
@@ -452,7 +456,7 @@ class PipelineWorker:
             or not starts_in_speech(state.get('vad_raw') or [])
         ):
             return clips
-        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE, state.get('stream'))
         if context is None:
             return clips
         room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
@@ -654,6 +658,10 @@ class PipelineWorker:
                         'flight_features': features,
                     }
                     states[item.segment_id] = state
+                    try:
+                        state['stream'] = self.stream_of(item)
+                    except Exception:
+                        state['stream'] = None  # No stream identity: no left context.
                     if not clips:
                         self.counts['silence'] += 1
                         continue
@@ -683,7 +691,9 @@ class PipelineWorker:
             # earlier flights' tails persist in the bounded index.
             for state in states.values():
                 if state['item'].segment_id not in failed:
-                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+                    self.left_context.remember(
+                        state['item'], state['samples'], state.get('vad_raw') or [], state.get('stream')
+                    )
             attached = self.counts['left_context']
             for state in states.values():
                 clips = state.pop('asr_clips', None)
