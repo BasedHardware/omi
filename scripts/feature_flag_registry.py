@@ -36,6 +36,8 @@ DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
 # Static pages served into the mobile webview (web/paywall) read PostHog flags by a *_FLAG_KEY constant.
 WEB_PAGE_FLAG = re.compile(r"\b[A-Z_]*FLAG_KEY\s*=\s*['\"]([^'\"\n]+)['\"]")
+# PostHog keys on TypeScript clients: `static readonly enabledFlag = 'web-…'`.
+TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\"\n]+)['\"]")
 # Cataloged server-side Node switches are runtime env reads, not build defines.
 # Restrict discovery to known names so this does not re-inventory every legacy
 # private Node setting while registering a new runtime switch.
@@ -138,7 +140,7 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if kind == "posthog":
                     if entry.get("posthog") != {"row": "delete"}:
                         errors.append(f"{label}: retired posthog rows require posthog row: delete")
-                elif kind in {"hardcoded", "env"}:
+                elif kind in {"hardcoded", "env", "server_capability"}:
                     if "posthog" in entry:
                         errors.append(f"{label}: retired hardcoded/env entries must omit posthog")
                 else:
@@ -290,7 +292,9 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
                 if path.endswith(".swift")
                 else (DART_DEFINITION, DART_MASTER)
                 if path.endswith(".dart")
-                else (WEB_PAGE_FLAG,) if path.startswith("web/paywall/") else (BUILD_DEFINE, NODE_RUNTIME_ENV)
+                else (WEB_PAGE_FLAG,)
+                if path.startswith("web/paywall/")
+                else (BUILD_DEFINE, TS_POSTHOG_FLAG, NODE_RUNTIME_ENV)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):

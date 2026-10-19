@@ -5,9 +5,11 @@
  *       + OpenAI + Anthropic invoices (billing-mode legs)
  *       + STT: a measured FinOps vendor line when one exists for the day,
  *         otherwise a constant read from the Soniox console ("estimate")
- *       + SaaS at a fixed monthly estimate (labelled "fixed estimate").
- * Each constant carries the date it was read; past ESTIMATE_STALE_DAYS the
- * series flags it stale so the board can say so.
+ *       + SaaS: a complete, fresh Mercury daily aggregate when available,
+ *         otherwise a fixed monthly estimate.
+ * Each estimate carries the date it was read; past ESTIMATE_STALE_DAYS the
+ * series flags it stale so the board can say so unless the latest day is
+ * measured.
  * A line that cannot be sourced is reported in `missing`, never dropped silently.
  */
 import { isLlmService } from "./services/gcp-billing";
@@ -17,7 +19,7 @@ export const SAAS_AS_OF = "2026-10-16";
 /** Soniox console, October 2026 (read 2026-10-16): ≈ $174/day; the KB
  * transcription-cost note's ≈ $204/day agrees in order. The FinOps
  * `stt_vendor_low` model (~$10K/mo) overstated it and is no longer used.
- * Replace with an invoice or usage feed when one exists. */
+ * A measured FinOps line replaces this dated fallback on its own day. */
 export const STT_MONTHLY_USD = 5300;
 export const STT_AS_OF = "2026-10-16";
 export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
@@ -44,6 +46,8 @@ export interface CostDay {
   /** STT came from a measured FinOps vendor line, not the console constant. */
   sttMeasured: boolean;
   saas: number;
+  /** SaaS came from a complete, fresh Mercury FinOps aggregate. */
+  saasMeasured: boolean;
   oneTime: number;
   total: number;
 }
@@ -99,7 +103,10 @@ export interface EstimateStatus {
 }
 
 /** Age of each manual cost constant on `now` (UTC days). */
-export function estimateStatus(now: Date): EstimateStatus[] {
+export function estimateStatus(
+  now: Date,
+  measured: Partial<Record<EstimateStatus["line"], boolean>> = {}
+): EstimateStatus[] {
   const age = (asOf: string) =>
     Math.floor((now.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / 86_400_000);
   return (
@@ -107,27 +114,30 @@ export function estimateStatus(now: Date): EstimateStatus[] {
       ["STT", STT_MONTHLY_USD, STT_AS_OF],
       ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF],
     ] as const
-  ).map(([line, monthlyUsd, asOf]) => ({
-    line,
-    monthlyUsd,
-    asOf,
-    ageDays: age(asOf),
-    stale: age(asOf) > ESTIMATE_STALE_DAYS,
-  }));
+  ).map(([line, monthlyUsd, asOf]) => {
+    const ageDays = age(asOf);
+    return {
+      line,
+      monthlyUsd,
+      asOf,
+      ageDays,
+      stale: !measured[line] && ageDays > ESTIMATE_STALE_DAYS,
+    };
+  });
 }
 
-/** `sttMeasured`: date → measured STT vendor USD; such a day uses it in place
- * of the console constant. */
+/** Measured date maps replace their dated estimates for those days. */
 export function allInCost(
   days: BillingDay[],
   coverage: { openai?: boolean; anthropic?: boolean } = {},
-  sttMeasured: Record<string, number> = {}
+  sttMeasured: Record<string, number> = {},
+  saasMeasured: Record<string, number> = {}
 ) {
   const oneTime = oneTimeExcess(days);
   const missing: string[] = [];
   if (coverage.openai === false) missing.push("OpenAI invoice");
   if (coverage.anthropic === false) missing.push("Anthropic invoice");
-  const saas = SAAS_MONTHLY_USD / DAYS_PER_MONTH;
+  const saasEstimate = SAAS_MONTHLY_USD / DAYS_PER_MONTH;
   const sttUsd = STT_MONTHLY_USD / DAYS_PER_MONTH;
   const daily: CostDay[] = [...days]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -146,6 +156,8 @@ export function allInCost(
       const gcp = gcpNet - excess - vertexLlm;
       const measured = sttMeasured[d.date];
       const stt = measured ?? sttUsd;
+      const measuredSaas = saasMeasured[d.date];
+      const saas = measuredSaas ?? saasEstimate;
       const total =
         gcp + vertexLlm + (openai ?? 0) + (anthropic ?? 0) + stt + saas;
       return {
@@ -157,6 +169,7 @@ export function allInCost(
         stt,
         sttMeasured: measured != null,
         saas,
+        saasMeasured: measuredSaas != null,
         oneTime: excess,
         total,
       };

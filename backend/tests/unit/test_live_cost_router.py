@@ -49,7 +49,7 @@ def controls(monkeypatch):
     monkeypatch.setattr(live_router, '_target_circuits', {})
     monkeypatch.setattr(live_router, '_capacity_until', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: coroutine.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     monkeypatch.setattr(st, 'health', pod)
@@ -371,7 +371,7 @@ async def test_redis_down_local_health_and_no_independent_trials(monkeypatch):
             raise ConnectionError('down')
 
     pod = live_health.FleetHealth(redis_client=DownRedis(), clock=lambda: 1000)
-    monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: coroutine.close())
     for i in range(8):
         pod.record_session('parakeet-window', 'en', 'failover', reason='connection_lost', uid=str(i))
     mark_cost_read(pod)
@@ -1116,7 +1116,7 @@ async def test_local_bench_is_reconciled_before_redis_recovery_can_unbench(monke
     redis = MemoryRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
     pod._redis_retry_at = 1010
-    monkeypatch.setattr(pod, 'schedule', lambda coroutine: coroutine.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coroutine, **_labels: coroutine.close())
     for i in range(8):
         pod.record_session('parakeet-window', 'en', 'failover', reason='connection_lost', uid=str(i))
     mark_cost_read(pod)
@@ -1239,7 +1239,7 @@ async def test_static_out_of_cohort_sessions_cannot_accelerate_reentry(stage, re
     seed_cost_interest(pod, DEFAULT_TARGETS, 'en')
     await pod.refresh_cost_once()
     pending = []
-    pod.schedule = pending.append
+    pod.schedule = lambda coroutine, **_labels: pending.append(coroutine)
     inside = [str(i) for i in range(1000) if assigned(str(i), 'stt-reentry:parakeet-window', stage)][:20]
     outside = next(str(i) for i in range(1000) if not assigned(str(i), 'stt-reentry:parakeet-window', stage))
 
@@ -1499,7 +1499,7 @@ async def test_ten_minute_redis_outage_remains_usable_then_reconciles(monkeypatc
 
     redis = FlappingRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(redis_client=redis, clock=lambda: now[0])
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     for i in range(8):
         pod.record_session('modulate-velma-2', 'en', 'failover', reason='connection_lost', uid=str(i))
         await pod._write_cost_result('modulate-velma-2', 'en', True, None, f'{i:016x}')

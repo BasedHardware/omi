@@ -679,6 +679,10 @@ actor AgentBridge {
     return supplied
   }
 
+  func requestProviderAuth() async {
+    await runtime.requestProviderAuth()
+  }
+
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?
@@ -1509,7 +1513,6 @@ actor AgentBridge {
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     reasoningEffort: String? = nil,
-    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -1543,7 +1546,6 @@ actor AgentBridge {
       producingTurnId: producingTurnId,
       expectedContext: expectedContext,
       reasoningEffort: reasoningEffort,
-      jitCostEvidenceProjection: jitCostEvidenceProjection,
       authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
       onToolActivity: onToolActivity,
@@ -1565,7 +1567,6 @@ actor AgentBridge {
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     reasoningEffort: String? = nil,
-    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -1684,7 +1685,6 @@ actor AgentBridge {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
-        jitCostEvidenceProjection: jitCostEvidenceProjection,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
@@ -1730,7 +1730,6 @@ actor AgentBridge {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
-        jitCostEvidenceProjection: jitCostEvidenceProjection,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,

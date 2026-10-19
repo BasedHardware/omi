@@ -30,6 +30,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import (
     raw_transcript_bytes,
     recovery_audio_file_ids,
+    recovery_terminal_minimum_output,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -199,11 +200,19 @@ def _verify_pending_attempts(
             raw_transcript_bytes(conversation) >= int(job.get('selfheal_transcript_bytes') or 0)
             and recorded_ids <= current_ids
         )
-        valid_output = structured_is_rich(conversation.get('structured')) or verified_recovery_discard(
-            conversation.get('discarded'), conversation.get('relevance_decision')
+        terminal_minimum = recovery_terminal_minimum_output(conversation)
+        valid_output = (
+            structured_is_rich(conversation.get('structured'))
+            or verified_recovery_discard(conversation.get('discarded'), conversation.get('relevance_decision'))
+            or terminal_minimum
         )
         if preserved and valid_output:
-            _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
+            _log_action(
+                'verified',
+                reason='kept_minimum' if terminal_minimum else 'ok',
+                uid=uid,
+                conversation_id=conversation_id,
+            )
             counters['verified'] += 1
         else:
             _refuse_verification(

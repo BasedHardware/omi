@@ -22,6 +22,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   /// silent GATT link is distinct from a socket that sent nothing.
   static void Function(String deviceId, int byteCount)? ingressByteObserver;
 
+  bool savedReconnectEnabled = false;
+  bool hasRetryableConnectFailure = false;
+  Future<void>? _connectInFlight;
+
   final String _peripheralUuid;
   final bool requiresBond;
   final BleHostApi _hostApi;
@@ -91,7 +95,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   // MARK: - Connection
 
   @override
-  Future<void> connect() async {
+  Future<void> connect() => _connectInFlight ??= _connect().whenComplete(() => _connectInFlight = null);
+
+  Future<void> _connect() async {
+    hasRetryableConnectFailure = true;
     if (_state == DeviceTransportState.connected && await isConnected()) return;
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.connection)) {
@@ -133,6 +140,9 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   @override
   Future<void> disconnect() async {
+    if (_deviceReadyCompleter case final completer? when !completer.isCompleted) {
+      completer.completeError('unmanaged');
+    }
     _subscriptionGeneration++;
     if (_nativeReleased && _state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
@@ -355,6 +365,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   void _handleConnectionState(bool connected, String? error) {
     if (!connected) {
+      hasRetryableConnectFailure = error != 'pairing_lost' && error != 'unmanaged';
       _subscriptionGeneration++;
       // Guard against double-fire (didDisconnect + didFailToConnect both invoke this).
       // On the 2nd call _streamControllers is already empty; overwriting _activeSubscriptionKeys
@@ -388,6 +399,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       if (_readyWhileReleasing == null && _releasePending) _readyWhileReleasing = services;
       return;
     }
+    hasRetryableConnectFailure = false;
     _subscriptionGeneration++;
     _subscribedSubscriptionKeys.clear();
     subscriptionFailures.clear();

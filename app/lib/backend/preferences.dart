@@ -29,6 +29,8 @@ class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
   static FlutterSecureStorage? _secureStorage;
+  final _deviceChanges = StreamController<void>.broadcast(sync: true);
+  Stream<void> get deviceChanges => _deviceChanges.stream;
 
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
@@ -1515,7 +1517,12 @@ class SharedPreferencesUtil {
       ? _preferences?.getStringList(key) ?? defaultValue
       : _readOrDefault(key, defaultValue);
 
-  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async {
+    final changed = key == 'btDevice' && _preferences?.getString(key) != value;
+    final write = _preferences?.setString(key, value);
+    if (changed) _deviceChanges.add(null);
+    return await write ?? false;
+  }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 

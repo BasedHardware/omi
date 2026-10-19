@@ -84,6 +84,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/goals',
     '/v1/import',
     '/v1/integrations',
+    # Released JIT paths remain static 410 tombstones for client compatibility.
     '/v1/jit',
     '/v1/knowledge-graph',
     '/v1/mcp',

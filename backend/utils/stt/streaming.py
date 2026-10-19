@@ -875,14 +875,14 @@ def _requested_stt_language(
 
 
 def _models_with_preferred_service(
-    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str], prefer_window: bool = False
 ) -> Tuple[str, ...]:
     """Honor a recognized client engine preference within the serving policy."""
-    normalized_preference = (preferred_service or '').strip().lower()
-    if normalized_preference != STTService.parakeet.value:
+    normalized_preference = 'parakeet-window' if prefer_window else (preferred_service or '').strip().lower()
+    if not prefer_window and normalized_preference != STTService.parakeet.value:
         return tuple(models)
-    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
-        model for model in models if model.strip() != STTService.parakeet.value
+    return tuple(model for model in models if model.strip() == normalized_preference) + tuple(
+        model for model in models if model.strip() != normalized_preference
     )
 
 
@@ -895,8 +895,10 @@ def get_stt_service_for_language(
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
     language_profile: LiveLanguageProfile | None = None,
+    prefer_window: bool = False,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
+    prefer_window = bool(prefer_window and surface == STTServingSurface.STREAMING and window_uid)
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -910,7 +912,7 @@ def get_stt_service_for_language(
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
-        preferred_service=preferred_service,
+        preferred_service='parakeet' if prefer_window else preferred_service,
     ):
         return STTService.soniox, requested_language, 'soniox'
 
@@ -918,7 +920,9 @@ def get_stt_service_for_language(
         models: List[str] | Tuple[str, ...],
     ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
         parakeet_fallback_reason: Optional[str] = None
-        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
+        for model in _models_with_preferred_service(
+            models, preferred_service=preferred_service, prefer_window=prefer_window
+        ):
             model = model.strip()
             if provider_for_model_token(model) in exclude:
                 continue
@@ -960,7 +964,7 @@ def get_stt_service_for_language(
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
-    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+    prefers_parakeet = prefer_window or (preferred_service or '').strip().lower() == STTService.parakeet.value
 
     def record_selected_fallback(
         selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]

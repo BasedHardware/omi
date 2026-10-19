@@ -256,6 +256,39 @@ runs:
       shell: bash
       run: python3 -m pip install -q pyyaml
 
+    - name: Preflight required deployment secrets before mutations
+      id: preflight-required-secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-secrets
+
+    - name: Validate backend GMP config without Secret Manager
+      id: prepare-backend-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Validate sync GMP config without Secret Manager
+      id: prepare-sync-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml" >> "$GITHUB_OUTPUT"
+
     - name: Resolve production account-deletion task target
       if: ${{ inputs.runtime_env == 'prod' }}
       id: account-deletion-target
@@ -621,7 +654,7 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
@@ -644,6 +677,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --config-env
           --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
@@ -747,7 +781,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
@@ -812,6 +846,36 @@ runs:
             --max-concurrent-dispatches=16
         fi
 
+    - name: Configure production batch quarantine recovery queue
+      if: ${{ inputs.runtime_env == 'prod' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Isolate accepted-work recovery from saturated legacy sync retries.
+        # Listing must succeed: permission/transport errors never imply absence.
+        queue=batch-quarantine-recovery
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        # gcloud prints the queue's short id for value(name), not the full
+        # resource path, so accept either form of this exact queue.
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected recovery queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=4 \
+          --max-dispatches-per-second=4 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=60s
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
@@ -824,9 +888,10 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_flags }}
           --cpu=2
           --memory=2Gi
           --concurrency=40
@@ -858,7 +923,8 @@ runs:
             --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
             --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
             --ingress-container="$ingress"
-            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
+            --config-env
             --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
           )
           if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
@@ -937,6 +1003,17 @@ runs:
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           --check-live-cloud-run
+
+    - name: Report live Cloud Run env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
 
     - name: Gate candidate revisions with the acceptance manifest
       if: ${{ inputs.deploy_profile == 'auto-dev' }}

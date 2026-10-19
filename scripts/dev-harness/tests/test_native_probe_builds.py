@@ -26,7 +26,10 @@ class BuildAttributionTests(unittest.TestCase):
         relative = f"app/ios/test/{lane}/build.py"
         module = load("build_" + lane, relative)
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            # macOS exposes temporary paths through both /var and /private/var;
+            # resolve the fixture root so it matches the canonical paths returned
+            # by Path.resolve() in the copied phone probe builder.
+            root = Path(directory).resolve()
             here = root / f"app/ios/test/{lane}"
             here.mkdir(parents=True)
             (here / "build.py").write_bytes((ROOT / relative).read_bytes())

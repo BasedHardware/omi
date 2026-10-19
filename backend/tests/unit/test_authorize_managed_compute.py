@@ -592,6 +592,16 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
     monkeypatch.setattr(mc, 'get_all_configured_features', lambda: (_ for _ in ()).throw(RuntimeError('down')))
     collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
 
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    monkeypatch.setattr(mc, 'get_all_configured_features', lambda: {OFF_ALLOWLIST_FEATURE})
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: False)
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: True)
+    monkeypatch.setattr(mc.ladder_v1, 'budget_snapshot', lambda *args: {'budget_percent': 100})
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+    monkeypatch.setattr(mc.ladder_v1, 'budget_snapshot', lambda *args: {'budget_percent': 80})
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+
     assert produced <= set(mc.DECISION_REASONS)
     expected = {
         'unknown_feature',
@@ -602,6 +612,9 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
         'invalid_funding_owner',
         'uid_required',
         'plan_paid',
+        'ladder_pro_required',
+        'usage_budget_exhausted',
+        'ladder_budget_available',
         'byok',
         'byok_not_validated',
         'byok_not_enrolled',
@@ -754,3 +767,12 @@ def test_decision_log_failure_does_not_change_the_answer(monkeypatch, mc) -> Non
     monkeypatch.setattr(mc.logger, 'info', boom)
     decision = _authorize(mc, OFF_ALLOWLIST_FEATURE)
     assert (decision.allowed, decision.reason, decision.plan) == (True, 'plan_paid', PlanType.plus)
+
+
+def test_flagged_pro_gate_also_applies_to_byok_features(monkeypatch, mc):
+    _situate(monkeypatch, mc, plan=PlanType.basic, byok_enrolled=True, byok_validated=True, byok_key_provider='openai')
+    monkeypatch.setattr(mc, 'get_provider', lambda feature: 'openai')
+    monkeypatch.setattr(mc, 'get_all_configured_features', lambda: {OFF_ALLOWLIST_FEATURE})
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: False)
+    denied = _authorize(mc, OFF_ALLOWLIST_FEATURE, 'byok')
+    assert not denied.allowed and denied.reason == 'ladder_pro_required'

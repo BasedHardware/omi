@@ -231,7 +231,13 @@ def test_301_parked_empty_owners_do_not_hide_stuck_lease_on_real_query(state, mo
     assert all(not row['uid'].startswith(prefix) for row in page)
     assert all(row.get('active_job_id') or registry.has_pending(row['uid'], firestore_client=client) for row in page)
     uid_sequencer.sweep(limit=100)
-    assert any(job['job_id'] == jid and job['epoch'] > claim['epoch'] for job in dispatched)
+    # A dispatching retry preserves the epoch/task identity; only an expired
+    # running lease fences the previous executor with a higher epoch.
+    assert any(
+        job['job_id'] == jid
+        and (job['epoch'] == claim['epoch'] if state_name == 'dispatching' else job['epoch'] > claim['epoch'])
+        for job in dispatched
+    )
 
 
 def test_parking_and_admission_contend_without_losing_wakeup_or_epoch(state):
@@ -272,3 +278,31 @@ def test_repair_deadline_is_respected_by_real_claim_and_stale_deferral(state, mo
     assert registry.get_owner(uid, firestore_client=client)['reconcile_at'] == owner['reconcile_at']
     assert registry.claim_next(uid, now=now, firestore_client=client) is None
     assert registry.claim_next(uid, now=owner['reconcile_at'], firestore_client=client)['job_id'] == jid
+
+
+def test_dark_guard_atomic_custody_retains_exact_request_and_partial_ledger(state, monkeypatch):
+    from database import sync_redrive
+
+    client, uid, jid, ledger = state
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    original = client.collection(registry.PENDING_COLLECTION).document(jid).get().to_dict()['payload']
+    assert registry.retire_expired(uid, jid, firestore_client=client)
+    assert not client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
+    custody = client.collection(sync_redrive.COLLECTION).document(jid).get().to_dict()
+    assert custody['status'] == 'redrive_required'
+    assert custody['payload'] == original
+    assert ledger.get().to_dict()['partial_result'] == {'checkpoint': 'keep'}
+    assert ledger.get().to_dict()['status'] == 'retryable'
+    assert not registry.claim_next(uid, firestore_client=client)
+
+
+def test_dark_guard_completion_race_never_reopens_completed_ledger(state, monkeypatch):
+    from database import sync_redrive
+
+    client, uid, jid, ledger = state
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    result = {'total_segments': 0, 'failed_segments': 0, 'errors': [], 'outcome': 'expected_silence'}
+    ledger.set({'status': 'completed', 'job_id': jid, 'result': result})
+    assert registry.retire_expired(uid, jid, firestore_client=client)
+    assert ledger.get().to_dict()['status'] == 'completed'
+    assert not client.collection(sync_redrive.COLLECTION).document(jid).get().exists

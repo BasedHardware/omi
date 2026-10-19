@@ -40,6 +40,7 @@ from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     list_read_budget_for_request,
+    finish_list_budget,
 )
 from utils.notifications import (
     send_notification,
@@ -696,6 +697,8 @@ def list_action_item_ids(
         description="When present, return only non-deleted IDs in this completion bucket",
     ),
     uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """Return the user's action-item IDs (lightweight reconciliation).
 
@@ -711,12 +714,16 @@ def list_action_item_ids(
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
+    budget = list_read_budget_for_request(request, route='action-item-ids')
     if completed is None:
-        return {"ids": action_items_db.get_action_item_ids(uid)}
-    return {
-        "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed),
-        "completed_scope": completed,
-    }
+        result = {"ids": action_items_db.get_action_item_ids(uid, budget=budget)}
+    else:
+        result = {
+            "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed, budget=budget),
+            "completed_scope": completed,
+        }
+    finish_list_budget(response, budget)
+    return result
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])

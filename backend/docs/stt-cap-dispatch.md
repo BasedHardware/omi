@@ -4,7 +4,9 @@
 adds no deployment binding and does not enable it. Enabling changes the policy
 for existing capped paid plans: exhausted sync uploads wait as audio rather than
 being transcribed into locked conversations. Product approval is required before
-activation. No ladder-v1 code or prices change.
+activation. Ladder budget composition and its independent default-off execution
+admission are documented in [the listen pipeline](listen_pusher_pipeline.mdx#ladder-budget-refresh-and-execution-admission-default-off).
+No prices or deployment switches change.
 
 ## Boundaries
 
@@ -12,18 +14,23 @@ Live receiver creation installs one funded admission state for the session.
 Actual Deepgram, Soniox, Modulate, Parakeet and window-provider constructors use
 that state, including direct registry endpoints and fallback/recovery legs.
 The state debits accepted PCM seconds across channels, replay and successors.
-The existing 60-second usage flush refreshes it from ordinary funded allowance;
-root counters retain their received-audio semantics. Timestamp adapters suppress
+The existing 60-second usage flush refreshes legacy funded allowance; ladder
+units use the bounded cadence below.
+Root counters retain their received-audio semantics. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
-continue. Accepted provider queues drain. Nothing enables cloud audio retention
-for live users who did not already opt into it. Custom/on-device STT bypasses the
+continue. Accepted provider queues drain. When dispatch enforcement pauses managed live audio, the server retains that
+suppressed PCM for recovery independently of the optional private-cloud archive. Custom/on-device STT bypasses the
 new state. The existing Plus threshold event still uses its existing wire shape.
 
 Deepgram cloud with a request key is customer funded. Every other provider,
 including self-hosted Deepgram and an Omi-funded fallback from BYOK, uses the
 ordinary allowance with both BYOK quota and desktop-paywall exemptions disabled.
 No key or identity is a metric label.
+
+Known non-ladder accounts keep their monthly credit state and 900-second
+membership refresh when only ladder enforcement is enabled; subscription
+invalidation still refreshes immediately.
 
 Sync v1 intake and v2 execution hold decoded WAVs before VAD when denied. V2
 applies ordinary source-frame and safety-WAL coverage first, so already committed
@@ -72,12 +79,15 @@ another provider. A preparing/failed source job still owns its retry; its holds
 cannot race it into STT. Only settlement of every referenced hold completes the
 content ledger. Holds that were never acknowledged await the source job's retry.
 
-The existing `locked_content_recovery` authenticated-request path kicks an async
-recovery pass independently of its once-per-month unlock receipt and legacy reset
-flag. The flagged API sync router registers the recovery callback; auth-only and
-pusher images do not load the sync pipeline. A distributed 60-second cooldown
-bounds requests; token-fenced renewable leases prevent concurrent processing of
-a hold. At reset or upgrade, current
+Monthly reset and ordinary auth no longer start funded backlog work. Subscription
+reads resume only an already chosen, current-month run. The authenticated
+`POST /v1/users/processing-backlog/process` endpoint requires `Idempotency-Key`;
+a durable receipt prevents duplicate consent even after the original job finishes.
+A choice captures its month, cutoff and estimated remaining allowance. Renewable
+job and hold leases fence concurrent workers. Payment checkout/plan-change intent
+starts recovery only if the whole estimate fits; otherwise the same waiting-choice
+surface is shown. New recordings after reset process normally; older held audio
+and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
 the cap without another provider call. Recovery
@@ -120,9 +130,9 @@ source and frozen pieces only after content/usage settlement.
 `reconciled_ingested`, `redispatched`, and `failed`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
-its signals are inert when the dispatch flag is off. WS-only and inactive
+its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
 accounts wait for their next authenticated HTTP request; there is no new cron.
-Rolling back the dispatch flag pauses this new recovery, preserving its audio.
+Turning both admission switches off pauses recovery, preserving its audio.
 
 ## Launch configuration and measurement
 
@@ -150,22 +160,42 @@ Held sync quantities count durably retained audio; queue denials count attempted
 held quantities and can repeat across policy retries. They are not a distinct
 captured-content counter. Provider-internal retries/uncertain failures are not an
 exact vendor invoice ledger. Existing root counters and unit projections do not
-change, and no new provenance is emitted with the flag off.
+change, and no new provenance is emitted with both admission switches off.
 
 Admission checks are not distributed quota reservations. Concurrent already
-admitted work can drain across the cap; live refresh is bounded by its existing
-flush cadence. Do not interpret a zero violation metric as proof against every
+admitted work can drain across the cap; legacy live refresh uses its existing
+flush cadence; ladder refresh and local depletion are described below. Do not interpret a zero violation metric as proof against every
 cross-process admission race.
 
 ## What users see when the flag is on
 
 - **Mobile, on-device overflow flag off:** capture continues as main permits, but
   exhausted managed sessions stop producing new cloud transcripts. Existing Plus
-  threshold handling remains. Uploaded offline audio waits durably; this PR adds
-  no held-content card or automatic on-device processing of that backlog.
-- **Mobile, on-device overflow flag on:** eligible clients keep the existing
-  on-device offer/mode switch. Custom/on-device sessions continue normally.
-  Already-held server uploads still wait for reset/upgrade recovery.
+  threshold handling remains. Uploaded offline audio waits durably. The held-audio
+  card, rows, live banner and settings row stay hidden.
+- **Mobile, on-device overflow flag on:** the conversations list shows held uploads
+  with Upgrade and, when this phone can run the on-device engine, Transcribe on
+  this phone. That action switches new recordings to the existing on-device mode.
+  It does not download or transcribe audio the server already holds. A successful
+  upload marks the local WAL synced, but the phone can keep that copy: new installs
+  auto-remove synced copies after 30 days, and existing installs keep the setting
+  off unless the user opts in. The on-device runner does not transcribe those
+  synced copies. Transcribing the waiting backlog on the phone is a follow-up.
+  At cap the UI says processing is paused. After reset the server returns a
+  waiting choice with estimated allowance hours/percent. Process waiting recordings
+  requires explicit confirmation; Not now leaves them waiting. When the estimate
+  exceeds remaining allowance, the worker processes newest-first up to what fits
+  and leaves the rest waiting. Reset remains 00:00 UTC on the 1st, including legacy Plus. Live capture
+  keeps recording while cloud transcription pauses. The first suppressed live
+  packet emits a session-scoped `stt_cap_live_held` UI receipt. Its `session_id`,
+  `paused` and `held_seconds` fields report only durably published live seconds.
+  Periodic receipts update the count; a funded resume flushes the tail and sends
+  `paused=false`. Reconnects clear the client's receipt state. No WAL offsets,
+  sync marks or client retention policies change. Settings usage
+  adds the waiting row beside the existing meter, the existing paid on-phone
+  toggle when this phone can run the engine, and See plans. The held total is one
+  summary document, not a scan of every hold. The newest 20 rows are listed, with
+  a count of the rest.
 - **macOS:** the existing threshold handler can stop capture, as it does today.
   The backend also refuses new funded sends if the client continues; accepted work
   drains. There is no new macOS on-device overflow flow in this PR.
@@ -177,9 +207,185 @@ cross-process admission race.
 These visible gaps and the change from locked transcripts to held audio are the
 activation decision for David; default-off deployment preserves today's policy.
 
-## Follow-ups in #21488
+## Ladder-v1 admission in #21488
 
-Findings #6 and #7 remain outside this PR: budget-aware live refresh when ladder
-allowance returns `remaining_seconds=None`, and conservative admission when usage
-unit projection has coverage gaps. Carry this funded-dispatch/held-audio contract
-into that ladder cutover without changing the legacy meter here.
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
+suppression and sync hold/recovery paths. Ladder allowance comes from units;
+legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
+switches default off. Upload intake never raises the ladder budget 402: v1 holds
+the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
+Explicit-choice or fitting-upgrade recovery rechecks the current ladder budget before dispatch.
+
+Live sessions carry numeric remaining units, debited from accepted provider PCM
+at the pinned provider speech rate (silence is conservatively included). Shared
+channels, replacements and replay share this estimate. A packet exceeding the local estimate is suppressed; there is no packet-level I/O.
+Full snapshots refresh at session start, every 900 seconds, and on subscription
+invalidation. Near cap (>=90% used or <=120 seconds at the maximum managed
+speech rate), each 60-second refresh reads only the current hour, today's gateway
+day and today's API day. The session retains a closed-bucket sum, never monthly
+document lists. Hour/day rollover reads the closing buckets once before freezing
+them. Backdated writes reconcile at the next full scan. The subscription already
+read by the flush is reused; near-cap external spending is detected within one
+flush plus persistence latency. Far-away concurrent spending can remain unseen
+for 900 seconds; this is not a distributed reservation.
+
+A full ledger scan reads H hourly documents + 2D elapsed-day documents; future
+days are never read. With the unchanged one subscription read per minute, the
+steady ladder-only document cost is:
+
+| Budget used | Ordinary minute | 15-minute amortized cost |
+| --- | ---: | ---: |
+| 0% / 50% | 1 (full scan at 900 s) | 1 + (H+2D)/15 |
+| 95% | 4 | 1 + (H+2D+14*3)/15 |
+
+At H=408 / D=17, the averages are 30.47 / 30.47 / 33.27 reads/minute,
+versus 30.53 / 30.53 / 444 before this follow-up. The 900-second scan
+is a 443-read minute (442 ledger + 1 subscription); cold admission also resolves
+its subscription once. Hour rollover costs one additional read; day rollover adds
+two more, each once per boundary. Batch RPCs reduce latency, not billed reads.
+Redis invalidation/fair-use operations are outside these Firestore totals.
+
+An unavailable snapshot retries after 60, 120, 240, 480 and then at most once
+per 900 seconds. No ledger read occurs on intervening flushes. Invalidation
+bypasses backoff; a successful read resets it. Even a failure after all full-scan
+reads is bounded to 30.47 reads/minute in steady state at this ledger size, rather
+than 444; earlier failures cost less. Warm retries use the three open buckets
+until the full scan is due. A read failure still pauses funded STT and retains
+capture; historical coverage ambiguity alone never causes that denial.
+
+Hourly/day writers atomically record unpriced seconds/events separately from
+status counts. Only zero-unit missing quantities receive residual proxies;
+nonzero missing annotations are already charged. Newly attributed quantities and
+units remain separate from history. Each ambiguous historical leaf contributes
+`max(historical priced units, unknown-provider quantity proxy)` once, plus any
+separately attributed new units. A gateway proxy uses the standard-chat estimate.
+Ambiguity does not return 503 or deny an account until reset. Coverage histograms
+and the shared degraded/fallback metric remain visible; no history is rewritten.
+
+
+## Server custody of suppressed live audio (round 4 cost cut)
+
+The receive boundary retains decoded mono PCM only for denied, unique capture
+spans. Paid prefixes and replay spans never become holds; the capture observer
+and client WAL behavior are unchanged. Owner, rate, channel, UTC capture month
+and real clock-gap boundaries remain separate. Source timestamps and conversation
+ownership follow the existing recovery/ingestion path. Funded resume publishes
+the final tail before forwarding new audio, then schedules recovery after its
+existing cooldown. Close and cancellation use supervised, shielded publication.
+
+A contiguous mono minute now produces **one immutable Ogg Opus object**, at
+16 kbit/s constrained VBR. The existing Docker FFmpeg/libopus dependency encodes
+and decodes it; no dependency was added. CBR fallback enforces a **128 KiB encoded
+ceiling**, plus one 32-byte authenticated encryption frame. Explicit source-frame
+metadata trims padded short tails back to the exact capture clock. Opus is lossy;
+FLAC cannot bound noisy microphone input to this storage footprint. Recovery still
+runs VAD with short segments enabled; silence makes no STT call.
+
+Each minute is born sealed in one transaction: two account-deletion/destructive-
+operation authority reads, the existing encrypted owner-prefix upload, one hold
+create and one summary increment. Transaction read locks span the bounded GCS
+upload (`timeout=10`, no automatic GCS retry) and manifest commit. Nested storage
+fences reuse only the exact synchronous uid/client/transaction scope; there is no
+TTL authority cache. A deleter either precedes those reads and blocks publication,
+or serializes after publication and purges the existing prefix/subcollections.
+Recovery retains its existing 30-minute claim/renew/checkpoint lease. Live writers
+never append to a published group, so no stream lease-release write is needed.
+
+Capacity is reserved in idempotent blocks of 64 minute slots (four reads/two
+writes per block, including both authorities). Unused slots are refunded once on
+clean close or month switch (four reads/two writes). An ambiguous acquisition
+retains its identity, and an ambiguous publication retains its consumed slot.
+Crashes conservatively strand unused reservations. The new source ceiling is
+**8 GiB / 100,000 slots per user/capture UTC month**, shared by sessions/channels;
+failed reservations cannot bypass it. Legacy v3 captures retain their old-format
+recovery/reservation handling. Capacity/backpressure failures close with an error,
+never a successful custody receipt. No flag or retention policy changed.
+
+Accepted custody is bounded to 60 seconds across all channels/rates. Async receive
+entry points split a straddling ingress packet at the exact remaining sample,
+await publication, then accept its tail. They preserve full minute objects without
+accepting a 61st second or flushing an unnecessary short object. Synchronous
+capture callbacks retain the strict aggregate guard. The one-second updater
+flushes aged partial buffers; minute rollover starts a new tail timer.
+SIGKILL/pod loss can lose buffered/in-flight accepted audio; only published seconds
+are reported. There is no client acknowledgement protocol.
+
+Each pending source owns a fresh, opaque server UUID publication token. Callers
+cannot provide/reconstruct its identity or reset a `retry=False` flag. The token
+serializes attempts, consumes its fresh grant before IO, and every later attempt
+checks the durable hold before any upload. A failed commit cleans its uncommitted
+object with an exact generation precondition; a lost successful commit reply is
+protected by the durable receipt. Unknown upload replies use an exceptional
+metadata lookup before guarded cleanup. These failure reads do not affect the
+steady count. Pessimistic server transactions also block non-transactional
+writers; cleanup covers unsuccessful/optimistic publication as well.
+
+Successful recovery keeps a compact purged receipt, so a lost writer reply cannot
+recreate a source after deletion/recovery. Its frozen piece plan stores source
+pointer, exact sample offset/count and decoded PCM hash. Retries decode one local
+cached source and reconstruct those slices without rerunning VAD. **Recovery
+uploads no second audio copy for v4**; hash mismatch fails closed. Local decoded
+PCM is bounded to one minute and removed with the recovery directory. Existing
+account deletion removes all generations under `chunks/{uid}/` and recursively
+purges holds, receipts, summary and reservations.
+
+The real loopback Firestore emulator instruments every DocumentReference.get and
+transaction write, with the real nested privacy fence and a deterministic GCS
+adapter. For 64 continuous mono minutes including ready-summary startup and quota
+acquisition: **133 reads / 130 writes / 64 uploads**, or **2.078125 reads /
+2.03125 writes / 1 upload per capped minute**. A 60-minute socket including partial
+block refund is 129 reads / 124 writes / 60 uploads. A one-minute cold socket is
+11 reads / 6 writes / 1 upload; setup cannot be amortized over very short sockets.
+Summary migration, retries/contention and ownership/gap/seal/close/month boundary
+fragments are additional; steady-state figures do not claim otherwise. Existing
+allowance refresh and downstream conversation/usage work are separate.
+
+At illustrative colocated us-central1 Standard rates, capture operations cost
+$0.0004503/capped hour including hourly socket setup/refund. With a full billing
+month of retention, an 8 KiB per-hold document/index allowance plus quota receipts
+adds $0.00006974/hour. GCS source storage adds at most $0.00014652/hour at the
+object ceiling: **$0.00066656/capped hour for capture custody operations and
+storage**, excluding STT and subsequent recovery operations. This is a model,
+not a cloud invoice; no bucket settings or production data were read. Free tiers,
+discounts and network egress are not credited. Regional Standard/flat namespace,
+no cross-region transfer, backup/PITR or noncurrent copies are assumed. Soft-delete
+retention adds proportional byte-days after purge. Repeated retained months and
+compact receipts accumulate; there is no lifetime retention bound.
+
+A 31-day 24/7 mono month has 44,640 uploads and at most **5.45055 GiB** encrypted
+source audio (8 GiB is the conservative reservation ceiling). A local existing
+voice-fixture/silence experiment at the previously documented ~32% speech share
+measured 59,039 encoded bytes/minute: **2.45583 GiB** for 24/7, or **0.81861 GiB**
+for an explicit planning scenario of 8 capped hours/day for 31 days. The respective
+hard bounds are 5.45055 / 1.81685 GiB. This retains quiet audio, so upload counts
+are never multiplied by speech share. Ambient noise can approach the hard bound;
+these fixture bytes are not a measured fleet average. The rate-card evidence's
+32% proxy is incomplete for paths without accepted-speech metering.
+
+Sources: [Firestore pricing](https://cloud.google.com/firestore/pricing),
+[GCS pricing](https://cloud.google.com/storage/pricing),
+[transaction lock semantics](https://docs.cloud.google.com/firestore/native/docs/transaction-data-contention),
+[document/index accounting](https://docs.cloud.google.com/firestore/native/docs/storage-size).
+The workspace evidence/report records the speech-share citations, operation
+counting recipe, recovery overhead and retention sensitivity.
+
+Summary v2 lazily rebuilds older/missing totals under a short initializer lease
+in transactions of at most 400 rows. Each page fences the cursor and listing
+backfill; only the last page publishes v2. Concurrent publishers wait for that
+publication, and an expired initializer resumes at the last committed cursor.
+The loopback Firestore emulator exercises 805 legacy rows with concurrent
+rebuild/publish and deletion/retry fences. Afterwards transactional piece-level
+deltas maintain the total. It counts pending frozen-piece seconds, removes successful
+or silent receipts immediately, and retains failed-reconciliation seconds.
+Subscription HTTP serialization omits only an absent `held_audio`, preserving all
+other null fields. `held_audio` remains an additive compatibility view. The
+`processing_backlog` state is the authority for new clients: capped, waiting_choice,
+processing or none. A funded account with pending holds is waiting_choice until
+explicit consent, or a fitting checkout/plan-change intent, creates a run.
+
+Local migration verification (loopback Firestore only):
+
+```sh
+firebase emulators:exec --only firestore --project demo-held-audio \
+  'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
+```

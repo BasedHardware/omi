@@ -13,6 +13,8 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
+import '../../support/on_device_fakes.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 
@@ -343,6 +345,35 @@ void main() {
     } finally {
       await world.dispose();
       monitor.dispose();
+    }
+  });
+
+  test('phone-only overflow wins over an unexpired Standard batch authorization', () async {
+    final previous = OnDeviceTranscriptionController.instance;
+    final onPhone = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), manageNativeCustody: false);
+    onPhone.debugActivate();
+    onPhone.updateEntitlement(atCap: true, paid: true);
+    OnDeviceTranscriptionController.instance = onPhone;
+    final world = await CaptureReplayWorld.boot(
+        tempDir: directory, pendantCodec: BleAudioCodec.opus, initialPrefs: {'uid': 'owner'});
+    world.deviceConnection = ScriptedDeviceConnection();
+    world.controller.installMobileStandardBatch(lane);
+    try {
+      await world.controller
+          .streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
+      await world.settle();
+      world.socket!.emitServerMessage('{"type":"service_status","status":"ready","mobile_standard_batch":true}');
+      await lane.pendingInitialization;
+      world.deviceConnection!.emitAudio(value: 9);
+      await world.settle();
+      await buffer.pending;
+      expect(world.socket!.sentBinary, isEmpty);
+      expect(published, isEmpty);
+      expect(world.wal.syncs.phone.testFrames.single.payload, List.filled(80, 9));
+    } finally {
+      await world.dispose();
+      onPhone.dispose();
+      OnDeviceTranscriptionController.instance = previous;
     }
   });
 

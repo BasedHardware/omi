@@ -58,7 +58,7 @@ SENTINEL_TEXT = 'synthetic secret probe text never logged'
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
 
 

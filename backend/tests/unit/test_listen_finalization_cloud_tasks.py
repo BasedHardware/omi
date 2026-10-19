@@ -582,6 +582,37 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(('status', 'expected_code'), [('busy', 409), ('completed', 200)])
+@pytest.mark.parametrize('deadline', ['false', 'true'])
+async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_ids(
+    monkeypatch, caplog, status, expected_code, deadline
+):
+    from utils.batch_pipeline import enrichment
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args, **kwargs):
+        expected = finalization_router.postprocess_executor if deadline == 'true' else finalization_router.sync_executor
+        assert executor is expected
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', run)
+    monkeypatch.setattr(enrichment, 'run_enrichment', MagicMock(return_value=status))
+    caplog.set_level(logging.INFO, logger=finalization_router.__name__)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+        task_retry_count=0,
+    )
+
+    assert response.status_code == expected_code
+    assert json.loads(response.body) == {'status': status}
+    if status == 'busy':
+        messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+        assert messages == ['event=conversation_finalization_sync_reprocess outcome=busy']
+
+
+@pytest.mark.anyio
 async def test_worker_acknowledges_owner_contention_without_spending_retry_budget(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')

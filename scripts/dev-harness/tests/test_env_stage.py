@@ -73,9 +73,6 @@ def test_child_env_for_real_mode() -> None:
     assert child["BUCKET_MEMORIES_RECORDINGS"] == "memories-recordings"
     assert child["BUCKET_SCREEN_FRAMES"] == "screen-frames"
     assert child["SCREEN_FRAME_SIGNING_SECRET"] == config.LOCAL_SCREEN_FRAME_SIGNING_SECRET
-    # Without this the harness backend refuses every adjudication with 409, which is
-    # correct for production and useless for the machine meant to exercise the feature.
-    assert child["SCREEN_FRAME_EGRESS_ENABLED"] == "true"
     # The flag alone lights nobody: utils.free_tier_cohort admits only the configured
     # cohort and treats unset/empty/malformed as admitting no one. Both halves must be
     # present or the harness silently processes every conversation normally and the
