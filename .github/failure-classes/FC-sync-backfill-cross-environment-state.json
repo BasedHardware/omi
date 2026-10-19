@@ -8,9 +8,8 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "backend/database/sync_backfill_sequencer.py",
-    "backend/database/sync_jobs.py",
-    "backend/utils/sync/backfill_cutover.py"
+    "backend/utils/sync/legacy_dark.py",
+    "backend/database/sync_jobs.py"
   ],
   "status": "dormant",
   "dormant_since": "2026-10-19T17:37:30Z"

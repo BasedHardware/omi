@@ -8,8 +8,7 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "backend/database/sync_backfill_sequencer.py",
-    "backend/utils/sync/uid_sequencer.py",
+    "backend/utils/sync/legacy_dark.py",
     "backend/utils/cloud_tasks.py"
   ],
   "status": "dormant",
