@@ -41,20 +41,25 @@ class BatteryHistorySessionStoreTest {
         first.start("device", 1000, "build")
         disk["audio_outage_epoch_device"] = "7"
         disk["audio_outage_device"] = "1000"
-        // A later disconnect makes history readable and does not record this marker.
+        // A later disconnect does not prove this marker's row was absent.
         disk["disconnect_history_device"] = JSONArray()
             .put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000))
             .toString()
         val restarted = process()
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], disk["session_device"], 7L, 1000L, true),
+        )
         assertNull(restarted.openSince("device"))
-        assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
+        assertEquals("1000", disk["audio_outage_device"])
         restarted.start("device", 12000, "build")
         assertNull(restarted.openSince("device"))
+        assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
         assertTrue(disk["session_device"]!!.contains("12000"))
-        // A disconnect a few seconds before this session is a fast reconnect, not an echo.
+        // A few seconds before this session, with no row of its own, is not billed.
         disk["audio_outage_epoch_device"] = "7"
         disk["audio_outage_device"] = "9000"
-        assertEquals(9000L, restarted.openSince("device"))
+        assertNull(restarted.openSince("device"))
         assertEquals("9000", disk["audio_outage_device"])
     }
     @Test fun `pruned disconnect history keeps a genuine marker`() {
@@ -138,6 +143,10 @@ class BatteryHistorySessionStoreTest {
         disk["disconnect_history_device"] = history
         val store = BatteryHistorySessionStore(
             { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertEquals(
+            AudioOutageMarkerVerdict.GENUINE,
+            judgeAudioOutageMarker(history, session, 7L, 12003L, true),
+        )
         assertEquals(12003L, store.openSince("device"))
         assertEquals("12003", disk["audio_outage_device"])
         val echo = planAudioOutageCleanup("[]", session, 7L, 12000L, markerEpochMatches = true)
@@ -147,7 +156,11 @@ class BatteryHistorySessionStoreTest {
         assertFalse(planAudioOutageCleanup(supported, session, 7L, 12000L, markerEpochMatches = true).dropMarker)
         val later = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000)).toString()
         val oldSession = JSONObject().put("started_at", 1000).put("identity_epoch", 7).toString()
-        assertTrue(planAudioOutageCleanup(later, oldSession, 7L, 1000L, markerEpochMatches = true).dropMarker)
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(later, oldSession, 7L, 1000L, true),
+        )
+        assertFalse(planAudioOutageCleanup(later, oldSession, 7L, 1000L, markerEpochMatches = true).dropMarker)
     }
     @Test fun `recovery proofs keep genuine standalone resolutions`() {
         val now = 10_000_000L
@@ -218,7 +231,7 @@ class BatteryHistorySessionStoreTest {
         assertEquals(20000L, store.openSince("device"))
     }
 
-    @Test fun `older disconnect row does not delete a same-millisecond marker`() {
+    @Test fun `echo covered by an older disconnect row is dropped`() {
         val disk = mutableMapOf<String, String>()
         val session = JSONObject().put("device", "device").put("started_at", 20000).put("identity_epoch", 7).toString()
         disk["session_device"] = session
@@ -229,10 +242,13 @@ class BatteryHistorySessionStoreTest {
             .toString()
         val store = BatteryHistorySessionStore(
             { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertEquals(
+            AudioOutageMarkerVerdict.ECHO,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, 20000L, true),
+        )
         assertNull(store.openSince("device"))
-        assertEquals("20000", disk["audio_outage_device"])
-        assertEquals("7", disk["audio_outage_epoch_device"])
-        assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 20000L, true).dropMarker)
+        assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
+        assertTrue(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 20000L, true).dropMarker)
         store.start("device", 80000, "build")
         assertNull(store.openSince("device"))
         assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
@@ -295,7 +311,30 @@ class BatteryHistorySessionStoreTest {
         assertNull(plan.rewrittenHistory)
     }
 
-    @Test fun `orphan marker without a covering row is not billed and start keeps it`() {
+    @Test fun `later row does not bill a historical marker that is not an echo`() {
+        val disk = mutableMapOf<String, String>()
+        disk["session_device"] = JSONObject().put("device", "device").put("started_at", 30000)
+            .put("identity_epoch", 7).toString()
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = "1000"
+        disk["disconnect_history_device"] = JSONArray()
+            .put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000))
+            .toString()
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], disk["session_device"], 7L, 1000L, true),
+        )
+        assertNull(store.openSince("device"))
+        assertEquals("1000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        assertFalse(planAudioOutageCleanup(
+            disk["disconnect_history_device"], disk["session_device"], 7L, 1000L, true,
+        ).dropMarker)
+    }
+
+    @Test fun `orphan marker without a supporting row is not billed and start keeps it`() {
         val disk = mutableMapOf<String, String>()
         disk["session_device"] = JSONObject().put("device", "device").put("started_at", 1000)
             .put("identity_epoch", 7).toString()

@@ -161,27 +161,30 @@ internal fun parsedDisconnectHistory(historyJson: String?): JSONArray? = try {
 }
 
 /**
- * True when a disconnect row shows history still reaches this marker's period.
- * The row may be up to [AUDIO_OUTAGE_MATCH_TOLERANCE_MS] before [marker], or any
- * time after. An older row does not prove the marker's own disconnect was absent.
+ * True when an older disconnect row shows [marker]'s own row would have survived
+ * retention. That row's timestamp is at or before [marker] minus
+ * [AUDIO_OUTAGE_MATCH_TOLERANCE_MS]. Rows only newer than that do not prove it.
  */
 internal fun historyCoversMarker(history: JSONArray, marker: Long): Boolean {
     if (marker <= 0L) return false
-    val earliest = marker - AUDIO_OUTAGE_MATCH_TOLERANCE_MS
+    val latestOlder = marker - AUDIO_OUTAGE_MATCH_TOLERANCE_MS
     for (i in 0 until history.length()) {
         val item = history.optJSONObject(i) ?: continue
         if (item.optString("eventType") != "disconnect") continue
-        if (item.optLong("timestamp", 0L) >= earliest) return true
+        if (item.optLong("timestamp", 0L) <= latestOlder) return true
     }
     return false
 }
 
 /**
- * GENUINE is billed. ECHO is a session-start copy with positive proof and is deleted.
- * AMBIGUOUS cannot be proved either way: do not bill it. [BatteryHistorySessionStore.start]
- * deletes an ambiguous marker only when [sessionStartMatchingMarker] matches the
- * session row being overwritten. A marker far after that start is not an echo. It
- * stays on disk, unbilled, until a later unambiguous state resolves it.
+ * GENUINE is billed, and only when a disconnect row is within tolerance of the
+ * marker. ECHO is a session-start copy that an older surviving row proves would
+ * have been retained, and is deleted. AMBIGUOUS cannot be proved either way: do
+ * not bill it. An orphan with no supporting row stays ambiguous; under-billing
+ * it is accepted. [BatteryHistorySessionStore.start] deletes an ambiguous marker
+ * only when [sessionStartMatchingMarker] matches the session row being overwritten.
+ * A marker far after that start is not an echo. It stays on disk, unbilled, until
+ * a later unambiguous state resolves it.
  *
  * Deleting an echo-plausible marker can drop a real outage of a link shorter than
  * the tolerance while history is corrupt. That bounded loss is accepted over billing
@@ -198,17 +201,19 @@ internal fun judgeAudioOutageMarker(
 ): AudioOutageMarkerVerdict {
     if (!markerEpochMatches || marker <= 0L) return AudioOutageMarkerVerdict.AMBIGUOUS
     val history = parsedDisconnectHistory(historyJson) ?: return AudioOutageMarkerVerdict.AMBIGUOUS
-    if (!historyCoversMarker(history, marker)) return AudioOutageMarkerVerdict.AMBIGUOUS
     if (disconnectEvidenceSupportsMarker(history, marker)) return AudioOutageMarkerVerdict.GENUINE
-    if (sessionStartMatchingMarker(sessionJson, epoch, marker, history) != null) {
+    if (sessionStartMatchingMarker(sessionJson, epoch, marker, history) != null &&
+        historyCoversMarker(history, marker)
+    ) {
         return AudioOutageMarkerVerdict.ECHO
     }
-    return AudioOutageMarkerVerdict.GENUINE
+    return AudioOutageMarkerVerdict.AMBIGUOUS
 }
 
 /**
  * [dropMarker] is true only for [AudioOutageMarkerVerdict.ECHO]: the session row
- * matches, history covers the marker's period, and no disconnect row records it.
+ * matches, an older disconnect row proves the marker would have survived
+ * retention, and no disconnect row records the marker itself.
  * Unreadable history, or history with no disconnect row, is left untouched,
  * including `audio_recovered` rows.
  * [rewrittenHistory] is null when history must be left untouched.
@@ -286,13 +291,14 @@ internal class BatteryHistorySessionStore(
 
     fun openSince(device: String): Long? {
         if (!enabled()) return null
-        // Only a proven disconnect marker is an outage. session.started_at is when
-        // the link came up; billing from it charges the whole connected interval.
-        // An echo is deleted only when history covers the marker and no disconnect
-        // row records it. Without that coverage the marker is ambiguous: return
-        // nothing. start() deletes it only when it still matches this session.
-        // A marker after started_at, with a row that records it, is a short link
-        // that died before the session row was removed.
+        // Only a disconnect row within tolerance of the marker is an outage.
+        // session.started_at is when the link came up; billing from it charges
+        // the whole connected interval. An echo is deleted only when an older
+        // disconnect row proves this marker would have survived retention and no
+        // row records it. Anything else is ambiguous: return nothing. start()
+        // deletes it only when it still matches this session. A marker after
+        // started_at, with a row that records it, is a short link that died
+        // before the session row was removed.
         val markerEpochMatches = read("audio_outage_epoch_$device")?.toLongOrNull() == epoch()
         val marker = read("audio_outage_$device")?.toLongOrNull() ?: return null
         if (!markerEpochMatches) return null
@@ -311,8 +317,9 @@ internal class BatteryHistorySessionStore(
 
     /**
      * Decide the outage start from disk as it is now, before the disconnect row
-     * is appended. A row written first would cover an unproven marker and make
-     * the old timestamp look genuine. Clears that marker when it cannot be proved.
+     * is appended. A row written first, within tolerance of an unproven marker,
+     * would be direct evidence and make that timestamp look genuine. Clears that
+     * marker when it cannot be proved.
      * Returns null when recording is disabled.
      */
     fun prepareDisconnect(device: String, now: Long): Long? {
