@@ -877,11 +877,7 @@ class SiriIntegration extends SiriEventsApi {
       for (var page = 0; page < maxPages; page++) {
         final result =
             await (_testMemoryPageFetcher?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-                    getMemoriesResult(
-                      limit: limit,
-                      offset: cursor == null ? offset : 0,
-                      cursor: cursor,
-                    ))
+                    getMemoriesResult(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor))
                 .timeout(const Duration(seconds: 10));
         if (_uid != uid || _accountGeneration != generation) return;
         if (!result.ok || result.truncated) break;

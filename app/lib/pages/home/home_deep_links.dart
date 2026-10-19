@@ -304,12 +304,7 @@ Future<Memory?> resolveIndexedMemoryById(
   required bool Function() ownerIsCurrent,
   IndexedMemoryPageFetcher? fetchPage,
 }) async {
-  final found = await resolveIndexedMemoriesByIds(
-    {id},
-    uid: uid,
-    ownerIsCurrent: ownerIsCurrent,
-    fetchPage: fetchPage,
-  );
+  final found = await resolveIndexedMemoriesByIds({id}, uid: uid, ownerIsCurrent: ownerIsCurrent, fetchPage: fetchPage);
   return found[id];
 }
 
@@ -329,11 +324,7 @@ Future<Map<String, Memory>> resolveIndexedMemoriesByIds(
   final seenCursors = <String>{};
   for (var page = 0; page < 100; page++) {
     final result = await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-        memories_api.getMemoriesResult(
-          limit: limit,
-          offset: cursor == null ? offset : 0,
-          cursor: cursor,
-        ));
+        memories_api.getMemoriesResult(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor));
     if (!ownerIsCurrent()) return const {};
     if (!result.ok || result.truncated) return found;
     for (final row in result.memories) {

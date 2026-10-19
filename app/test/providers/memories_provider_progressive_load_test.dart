@@ -611,8 +611,11 @@ void main() {
     await pumpEventQueue();
 
     expect(provider.memories.map((m) => m.id), contains('restored-fact'));
-    expect(provider.memories.map((m) => m.id), isNot(contains('superseded')),
-        reason: 'a replaced fact must not resurrect from the stale traversal snapshot');
+    expect(
+      provider.memories.map((m) => m.id),
+      isNot(contains('superseded')),
+      reason: 'a replaced fact must not resurrect from the stale traversal snapshot',
+    );
   });
 
   test('a delete-all during a pending-memory sync releases the sync latch', () async {
@@ -628,9 +631,7 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.loadMemories();
-    SharedPreferencesUtil().pendingMemories = [
-      _row('draft-1'),
-    ];
+    SharedPreferencesUtil().pendingMemories = [_row('draft-1')];
     final sync = provider.syncPendingMemories();
     await pumpEventQueue();
     expect(await provider.deleteAllMemories(), isTrue);

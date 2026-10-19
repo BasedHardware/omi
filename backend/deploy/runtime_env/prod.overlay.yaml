@@ -663,7 +663,10 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_PERCENT:
-            value: '0'
+            value: '100'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
@@ -747,7 +750,7 @@ overlay:
             version: latest
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
-          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -951,7 +954,10 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_PERCENT:
-            value: '0'
+            value: '100'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
@@ -1077,7 +1083,7 @@ overlay:
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           VAD_CACHE_TTL_SECONDS:
             value: '7200'
@@ -1262,7 +1268,10 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_PERCENT:
-            value: '0'
+            value: '100'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
@@ -1488,7 +1497,7 @@ overlay:
             default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL
@@ -1516,7 +1525,10 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_PERCENT:
-            value: '0'
+            value: '100'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'true'
@@ -1528,7 +1540,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'true'

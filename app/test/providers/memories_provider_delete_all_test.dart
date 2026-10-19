@@ -190,8 +190,11 @@ void main() {
     expect(provider.memories, isEmpty);
     expect(SharedPreferencesUtil().cachedMemories, isEmpty);
     expect(host.memories, isEmpty);
-    expect(host.calls.sublist(host.calls.lastIndexOf('reconcile') + 1), isNot(contains('upsert')),
-        reason: 'the retired page must not index rows after the clear');
+    expect(
+      host.calls.sublist(host.calls.lastIndexOf('reconcile') + 1),
+      isNot(contains('upsert')),
+      reason: 'the retired page must not index rows after the clear',
+    );
   });
 
   test('a history page pending when delete-all commits is dropped', () async {

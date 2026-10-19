@@ -272,11 +272,14 @@ See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
 serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE`, falling back
 to `SYNC_TASKS_QUEUE` when unset, using `SYNC_TASKS_INVOKER_SA`. Production
-integration uses the isolated `batch-quarantine-recovery` queue (four concurrent
-dispatches, four/second, five attempts), provisioned by the existing deploy
-action before the integration revision. This prevents shared legacy sync
-retries from consuming recovery dispatch slots; it does not grant another paid
-intent. Clear the queue override to roll back isolation.
+integration uses the isolated `batch-quarantine-recovery` queue (16 concurrent
+dispatches, eight/second, five attempts), provisioned by the existing deploy
+action before the integration revision. The 5% ramp left recovery p95 just over
+five minutes at four concurrent dispatches, so production was raised to 16
+concurrent and eight dispatches/second at 01:27Z. Attempts and backoff remain
+unchanged. This prevents shared legacy sync retries from consuming recovery
+dispatch slots; it does not grant another paid intent. Clear the queue override
+to roll back isolation.
 The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
 origin, declared separately from the worker audience in dev and prod) plus
 `/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.

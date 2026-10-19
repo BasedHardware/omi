@@ -111,12 +111,7 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: MemoryItem(
-            memory: memory,
-            provider: provider,
-            showDismissible: false,
-            onTap: (_, __, ___) {},
-          ),
+          body: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
         ),
       ),
     );
@@ -149,12 +144,7 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: MemoryItem(
-            memory: memory,
-            provider: provider,
-            showDismissible: false,
-            onTap: (_, __, ___) {},
-          ),
+          body: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
         ),
       ),
     );
@@ -220,9 +210,7 @@ void main() {
     // Descendant semantics are preserved (not replaced) when actionable, so
     // the banner text merges with the button into one readable node.
     expect(
-      find.bySemanticsLabel(
-        RegExp('Some memory history is unavailable. Showing the history received so far.*'),
-      ),
+      find.bySemanticsLabel(RegExp('Some memory history is unavailable. Showing the history received so far.*')),
       findsWidgets,
     );
 
@@ -272,10 +260,7 @@ void main() {
   testWidgets('eligible superseded v1 fact exposes one accessible revert action', (tester) async {
     final provider = _RevertProvider();
     addTearDown(provider.dispose);
-    final memory = _fact(
-      supersededBy: 'replacement',
-      invalidAt: DateTime.utc(2026, 8, 24),
-    );
+    final memory = _fact(supersededBy: 'replacement', invalidAt: DateTime.utc(2026, 8, 24));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -287,12 +272,7 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: MemoryItem(
-            memory: memory,
-            provider: provider,
-            showDismissible: false,
-            onTap: (_, __, ___) {},
-          ),
+          body: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
         ),
       ),
     );
@@ -319,12 +299,7 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: MemoryItem(
-            memory: memory,
-            provider: provider,
-            showDismissible: false,
-            onTap: (_, __, ___) {},
-          ),
+          body: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
         ),
       ),
     );
@@ -367,12 +342,7 @@ void main() {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: MemoryItem(
-              memory: memory,
-              provider: provider,
-              showDismissible: false,
-              onTap: (_, __, ___) {},
-            ),
+            body: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
           ),
         ),
       );

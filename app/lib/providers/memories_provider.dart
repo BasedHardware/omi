@@ -21,12 +21,8 @@ import 'package:omi/widgets/extensions/string.dart';
 part 'memories_provider_loading.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
-typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function({
-  int limit,
-  int offset,
-  bool thisDeviceOnly,
-  String? cursor,
-});
+typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function(
+    {int limit, int offset, bool thisDeviceOnly, String? cursor});
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
 typedef FetchLedgerHistoryCursorRequest = Future<GetLedgerHistoryResult> Function(
     {int limit, int offset, String? cursor});
@@ -571,9 +567,9 @@ class MemoriesProvider extends ChangeNotifier {
             _ledgerProjectionRevision++;
             _inFlightLoad = null;
             SharedPreferencesUtil().cachedMemories = [
-              ...SharedPreferencesUtil()
-                  .cachedMemories
-                  .where((cached) => cached.id != memory.id && cached.id != serverMemory.id),
+              ...SharedPreferencesUtil().cachedMemories.where(
+                    (cached) => cached.id != memory.id && cached.id != serverMemory.id,
+                  ),
               serverMemory,
             ];
             SiriIntegration.current.queueUpsertMemories([serverMemory]);
@@ -1044,9 +1040,9 @@ class MemoriesProvider extends ChangeNotifier {
       _ledgerProjectionRevision++;
       _inFlightLoad = null;
       SharedPreferencesUtil().cachedMemories = [
-        ...SharedPreferencesUtil()
-            .cachedMemories
-            .where((cached) => cached.id != pendingId && cached.id != serverMemory.id),
+        ...SharedPreferencesUtil().cachedMemories.where(
+              (cached) => cached.id != pendingId && cached.id != serverMemory.id,
+            ),
         serverMemory,
       ];
       SiriIntegration.current.queueUpsertMemories([serverMemory]);

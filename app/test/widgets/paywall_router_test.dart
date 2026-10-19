@@ -32,8 +32,11 @@ Future<BuildContext> _context(WidgetTester tester, UsageProvider usage) async {
   return captured;
 }
 
-UserSubscriptionResponse _response(
-        {required PlanType plan, bool showSubscriptionUi = true, bool trialEligible = false}) =>
+UserSubscriptionResponse _response({
+  required PlanType plan,
+  bool showSubscriptionUi = true,
+  bool trialEligible = false,
+}) =>
     UserSubscriptionResponse(
       trialEligible: trialEligible,
       subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
@@ -99,8 +102,9 @@ void main() {
     expect(exposures, isEmpty);
   });
 
-  testWidgets('trial arm: a former subscriber on the free plan is exposed as trial but keeps the sheet',
-      (tester) async {
+  testWidgets('trial arm: a former subscriber on the free plan is exposed as trial but keeps the sheet', (
+    tester,
+  ) async {
     final usage = UsageProvider();
     usage.debugSetSubscription(_response(plan: PlanType.basic, trialEligible: false));
     final context = await _context(tester, usage);

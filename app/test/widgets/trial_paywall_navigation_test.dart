@@ -36,8 +36,10 @@ class _Pops extends NavigatorObserver {
   }
 }
 
-Future<(_Usage, _Pops)> _pump(WidgetTester tester,
-    {required Future<PaywallCheckoutOutcome> Function() checkout}) async {
+Future<(_Usage, _Pops)> _pump(
+  WidgetTester tester, {
+  required Future<PaywallCheckoutOutcome> Function() checkout,
+}) async {
   final usage = _Usage();
   final pops = _Pops();
   await tester.pumpWidget(

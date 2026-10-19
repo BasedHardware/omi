@@ -555,8 +555,11 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData =
-          await createCheckoutSession(priceId: priceId, promotionCode: promotionCode, trialDays: trialDays);
+      final sessionData = await createCheckoutSession(
+        priceId: priceId,
+        promotionCode: promotionCode,
+        trialDays: trialDays,
+      );
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';
