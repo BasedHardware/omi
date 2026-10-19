@@ -249,6 +249,7 @@ async def admit_recording(store, pending, *, now=None):
         )
         for i, (start, duration, _) in enumerate(units)
     ]
+    _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
     binding = ProjectionBinding(
         uid,
         'bp_' + content,
@@ -264,7 +265,7 @@ async def admit_recording(store, pending, *, now=None):
         data_protection_level=protection.level,
         record_origin=True,
         native_record=True,
-        policy=load_job_policy(store, pending['segment_id'])[1],
+        policy=policy,
     )
     staged = []
     for item, (_, _, refs) in zip(items, units):
