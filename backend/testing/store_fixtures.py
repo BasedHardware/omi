@@ -219,12 +219,49 @@ class LocalPostgres:
 _postgres_state: dict[str, Any] = {}
 
 
+def iam_target() -> tuple[str, str, str] | None:
+    """``OMI_TEST_POSTGRES_IAM=host,database,user``: Cloud SQL over private IP with IAM auth (staging job)."""
+    raw = os.getenv('OMI_TEST_POSTGRES_IAM', '').strip()
+    if not raw:
+        return None
+    parts = [part.strip() for part in raw.split(',')]
+    if len(parts) != 3 or not all(parts):
+        raise BackendUnavailable('OMI_TEST_POSTGRES_IAM must be host,database,user')
+    return parts[0], parts[1], parts[2]
+
+
+def postgres_connect() -> Callable[[], Any]:
+    """A connection factory for the migrated test database (IAM when ``OMI_TEST_POSTGRES_IAM`` is set)."""
+    target = iam_target()
+    if target is not None:
+        from database.jobstore.connection import iam_connector
+
+        postgres_dsn()  # migrates once
+        return iam_connector(*target)
+    dsn = postgres_dsn()
+    from database.jobstore.connection import dial
+
+    return lambda: dial(dsn)
+
+
 def postgres_dsn() -> str:
-    """DSN of a migrated test database, started once per process."""
+    """DSN of a migrated test database, started once per process (or the IAM target's label)."""
     if 'dsn' in _postgres_state:
         return _postgres_state['dsn']
     if importlib.util.find_spec('psycopg') is None:
         raise BackendUnavailable('psycopg 3 is not installed')
+    target = iam_target()
+    if target is not None:
+        from database.jobstore.connection import iam_connector
+        from database.jobstore.migrate import migrate
+
+        conn = iam_connector(*target)()
+        try:
+            migrate(conn)  # idempotent: staging-jobstore already applied every migration
+        finally:
+            conn.close()
+        _postgres_state['dsn'] = f'iam:{target[0]}/{target[1]}'  # a label, never a credential
+        return _postgres_state['dsn']
     dsn = os.getenv('OMI_TEST_POSTGRES_DSN')
     if dsn:
         local = 'host=/' in dsn or 'localhost' in dsn or '127.0.0.1' in dsn
@@ -305,10 +342,10 @@ def make_postgres() -> StoreHarness:
     from database.jobstore.postgres_store import PostgresStore
     from testing.pipeline_sim.store import CustomerData
 
-    dsn = postgres_dsn()
+    connect = postgres_connect()
     namespace, token = _new_ids()
     customer = CustomerData()
-    pool = Pool(dsn)
+    pool = Pool('', connect=connect)
     store = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
     harness = StoreHarness('postgres', store, customer, namespace, token)
 
