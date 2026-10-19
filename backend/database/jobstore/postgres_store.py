@@ -43,9 +43,8 @@ _DEADLOCK = '40P01'
 
 
 def _jsonb(value: dict):
-    from psycopg.types.json import (
-        Jsonb,
-    )  # pyright: ignore[reportMissingImports]  # psycopg joins the lockfile separately
+    # psycopg joins the lockfile separately; until then pyright cannot resolve it.
+    from psycopg.types.json import Jsonb  # pyright: ignore[reportMissingImports]
 
     return Jsonb(value)
 
