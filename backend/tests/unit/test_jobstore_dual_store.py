@@ -236,6 +236,7 @@ class TestSelection:
         return SimStore(CustomerData(), namespace=namespace)
 
     def configure(self, monkeypatch, mode='shadow'):
+        monkeypatch.setattr(dual_store, '_SHADOWED', {})
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
         monkeypatch.setenv('JOBSTORE_PG_HOST', '10.0.0.1')
         monkeypatch.setenv('JOBSTORE_PG_DATABASE', 'jobstore_staging')
@@ -270,3 +271,9 @@ class TestSelection:
         assert isinstance(store, DualStore) and store.primary is primary
         assert store.shadow.namespace == 'batch_pipeline_dev'
         assert store.namespace == 'batch_pipeline_dev'  # delegated
+
+    def test_one_shadow_per_namespace(self, monkeypatch):
+        self.configure(monkeypatch)
+        first = dual_store.shadow_from_env(self.primary())
+        assert dual_store.shadow_from_env(self.primary()) is first
+        assert dual_store.shadow_from_env(self.primary('batch_pipeline_test_other')) is not first

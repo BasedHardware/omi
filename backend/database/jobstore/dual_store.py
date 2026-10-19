@@ -214,11 +214,17 @@ class DualStore:
         return done.wait(timeout)
 
 
+_SHADOWED: dict[str, DualStore] = {}
+_SHADOWED_LOCK = threading.Lock()
+
+
 def shadow_from_env(primary: Any) -> Any:
     """``primary`` unchanged unless ``BATCH_JOBSTORE_MODE=shadow`` and the staging Postgres is configured.
 
     Fails closed to Firestore-only: any other mode, the prod namespace, or a missing setting returns
-    ``primary`` and logs why. No Postgres connection is opened here (the pool dials lazily).
+    ``primary`` and logs why. One ``DualStore`` (one mirror thread, one pool) serves each namespace per
+    process, so call sites that build a store per call share it. No Postgres connection is opened here
+    (the pool dials lazily).
     """
     mode = os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower()
     if mode != 'shadow':
@@ -231,10 +237,14 @@ def shadow_from_env(primary: Any) -> Any:
     if not all(target):
         logger.warning('event=jobstore_shadow outcome=refused reason=unconfigured')
         return primary
-    from database.jobstore.connection import Pool, iam_connector
-    from database.jobstore.postgres_store import PostgresStore
+    with _SHADOWED_LOCK:
+        if namespace in _SHADOWED:
+            return _SHADOWED[namespace]
+        from database.jobstore.connection import Pool, iam_connector
+        from database.jobstore.postgres_store import PostgresStore
 
-    pool = Pool('', size=2, connect=iam_connector(*target))
-    shadow = PostgresStore(namespace, pool=pool, customer_client=None)
-    logger.info('event=jobstore_shadow outcome=enabled')
-    return DualStore(primary, shadow)
+        pool = Pool('', size=2, connect=iam_connector(*target))
+        shadow = PostgresStore(namespace, pool=pool, customer_client=None)
+        _SHADOWED[namespace] = DualStore(primary, shadow)
+        logger.info('event=jobstore_shadow outcome=enabled')
+        return _SHADOWED[namespace]
