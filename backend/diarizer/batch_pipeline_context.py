@@ -59,10 +59,13 @@ def select_context(samples, spans, max_seconds: float) -> tuple[int, int] | None
 
 
 class LeftContextIndex:
-    """Bounded, process-local predecessor tails keyed by owner and privacy generation.
+    """Bounded, process-local predecessor tails of one capture stream.
 
-    Entries hold at most ``max_seconds`` of int16 PCM each and expire after
-    ``ttl_seconds``. A privacy-generation change never matches an older entry.
+    Keyed by owner, privacy generation and conversation (the capture stream),
+    so another device's simultaneous audio never matches. Entries hold at most
+    ``max_seconds`` of int16 PCM each and expire after ``ttl_seconds``. Seeing a
+    unit of a newer (or older) generation drops that owner's other-generation
+    tails.
     """
 
     def __init__(
@@ -77,15 +80,20 @@ class LeftContextIndex:
         self.max_units = int(max_units)
         self.ttl_seconds = float(ttl_seconds)
         self.clock = clock
-        self._tails: OrderedDict[tuple[str, Any, float], _Tail] = OrderedDict()
+        self._tails: OrderedDict[tuple[str, Any, str, float], _Tail] = OrderedDict()
 
     @staticmethod
     def _key(item, end_at: float):
-        return (item.owner_id, item.privacy_generation, round(end_at, 3))
+        return (item.owner_id, item.privacy_generation, item.conversation_id, round(end_at, 3))
+
+    def _drop_other_generations(self, item) -> None:
+        for key in [k for k in self._tails if k[0] == item.owner_id and k[1] != item.privacy_generation]:
+            del self._tails[key]
 
     def remember(self, item, samples, spans) -> None:
-        if self.max_units <= 0 or not isinstance(samples, np.ndarray):
+        if self.max_units <= 0 or not isinstance(samples, np.ndarray) or not item.conversation_id:
             return
+        self._drop_other_generations(item)
         selected = select_context(samples, spans, self.max_seconds)
         if selected is None:
             return
@@ -100,6 +108,9 @@ class LeftContextIndex:
 
     def lookup(self, item, duration: float) -> np.ndarray | None:
         """float32 context for ``item`` from a contiguous same-owner predecessor."""
+        if not item.conversation_id:
+            return None
+        self._drop_other_generations(item)
         now = self.clock()
         own_end = item.capture_at + duration
         best = None
@@ -107,7 +118,10 @@ class LeftContextIndex:
             if now - tail.stored_at > self.ttl_seconds:
                 del self._tails[key]
                 continue
-            if key[0] != item.owner_id or key[1] != item.privacy_generation or abs(tail.end_at - own_end) < 1e-3:
+            if (
+                key[:3] != (item.owner_id, item.privacy_generation, item.conversation_id)
+                or abs(tail.end_at - own_end) < 1e-3
+            ):
                 continue
             gap = item.capture_at - tail.end_at
             if -MAX_SEAM_OVERLAP_SECONDS <= gap <= MAX_SEAM_GAP_SECONDS and (
@@ -116,7 +130,15 @@ class LeftContextIndex:
                 best = tail
         if best is None:
             return None
-        return best.pcm.astype(np.float32) / 32768
+        pcm = best.pcm
+        overlap = item.capture_at - best.end_at
+        if overlap < 0:
+            # Never replay audio the unit itself contains: end the prefix where
+            # the unit starts.
+            pcm = pcm[: max(0, len(pcm) - int(round(-overlap * SAMPLE_RATE)))]
+            if not len(pcm):
+                return None
+        return pcm.astype(np.float32) / 32768
 
 
 # VAD speech starting this close to sample 0 is treated as mid-utterance.

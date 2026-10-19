@@ -657,6 +657,8 @@ class PipelineWorker:
                     if not clips:
                         self.counts['silence'] += 1
                         continue
+                    # Every non-silent unit can be a later unit's predecessor.
+                    state['vad_raw'] = spans
                     receipt = None
                     if self.config.reuse_live and self.live_words:
                         if sync_live_dedupe_active_for(item.owner_id):
@@ -674,7 +676,6 @@ class PipelineWorker:
                         self.counts['reused_live'] += 1
                     else:
                         state['asr_clips'] = clips
-                        state['vad_raw'] = spans
                 except Exception as exc:
                     fail(item, exc, stage)
 
@@ -721,10 +722,14 @@ class PipelineWorker:
                 for window, hypothesis in zip(batch, hypotheses):
                     try:
                         checked_words = validate_words(hypothesis, window.duration)
-                        shapes[window.segment_id]['asr_words'] += len(checked_words)
                         for word in checked_words:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2
+                            if midpoint < 0:
+                                # Left-context words are the predecessor's; they never
+                                # count as this unit's ASR output (empty_asr stays empty_asr).
+                                continue
+                            shapes[window.segment_id]['asr_words'] += 1
                             if window.core_start <= midpoint < window.core_end:
                                 # A left-context window may own a word straddling the seam.
                                 states[window.segment_id]['words'].append({**word, 'timestamp': [max(0.0, start), end]})

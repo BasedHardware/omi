@@ -17,8 +17,9 @@ class ProviderConfig:
     context_seconds: float = 2
     reuse_live: bool = False
     # Left context from the same owner's contiguous predecessor for a unit whose
-    # speech starts at sample 0 (TDT start-state empties). 0 disables.
-    asr_left_context_seconds: float = 8.0
+    # speech starts at sample 0 (TDT start-state empties). 0 disables; off until
+    # the L4 community-1 replay qualifies it.
+    asr_left_context_seconds: float = 0.0
     asr_left_context_units: int = 64
     # Batch pyannote segmentation/embeddings across the items of one locked
     # flight. Per-forward model batches keep the pinned batch size, so peak
@@ -71,10 +72,8 @@ def provider_config() -> ProviderConfig:
         window_seconds=float(os.getenv('BATCH_PIPELINE_WINDOW_SECONDS', '30')),
         context_seconds=float(os.getenv('BATCH_PIPELINE_CONTEXT_SECONDS', '2')),
         reuse_live=os.getenv('BATCH_PIPELINE_REUSE_LIVE_ENABLED', 'false').lower() == 'true',
-        # Kill switch: BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS=0.
-        asr_left_context_seconds=float(
-            os.getenv('BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS', '0' if pool_kind == 'shared_live' else '8')
-        ),
+        # Off by default; set seconds (e.g. 8) to enable on a qualified pool.
+        asr_left_context_seconds=float(os.getenv('BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS', '0')),
         asr_left_context_units=int(os.getenv('BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS', '64')),
         # Dark until qualified: only an explicit 'true' enables packing.
         flight_batching=os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false').strip().lower() == 'true',
