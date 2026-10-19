@@ -1496,7 +1496,7 @@
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -1505,7 +1505,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+          "expr": "label_replace(((sum(increase(omi_listen_demand_failure_detail_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])), 1)) > 0.1) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])) >= 50), \"gate_scope\", \"admitted\", \"\", \"\") or label_replace(((sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])), 1)) > 0.6) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])) >= 100), \"gate_scope\", \"all_sessions_guard\", \"\", \"\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1546,9 +1546,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  0
                 ],
-                "type": "gte"
+                "type": "gt"
               },
               "operator": {
                 "type": "and"
@@ -1600,15 +1600,15 @@
     ],
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "5m",
+    "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "2",
       "summary": "The live STT demand gate is unavailable; sessions are degrading to the vendor path.",
       "user_impact": "Live STT sessions are falling back to the vendor path because the demand gate is unavailable.",
-      "threshold": "At least 50 reason=gate_unavailable outcome=degraded events in 5m for 5m.",
-      "scope": "backend-listen omi_fallback_total; to_mode=vendor is the demand-gate sentinel, not a provider.",
+      "threshold": "Admitted cohort: omi_listen_demand_failure_detail_total{demand_cohort=admitted,reason=gate_unavailable} / admitted live sessions over 15m > 0.10 with >= 50 admitted sessions, for 15m. All-sessions guard (independent of the cohort label, so a missing label cannot hide an outage): gate_unavailable omi_fallback_total / all live sessions over 15m > 0.60 with >= 100 sessions. Baseline 2026-10-18/19 (all sessions, 15m windows): p10 9.6%, p50 23.9%, p90 50.5%, max 76.6%; that level came from demand_presence on non-admitted sessions and is no longer expected to page.",
+      "scope": "backend-listen omi_listen_demand_failure_detail_total (admitted cohort) plus the omi_fallback_total all-sessions guard; to_mode=vendor is the demand-gate sentinel, not a provider.",
       "verification": "Confirm the vendor sentinel events and demand-gate Redis health.",
       "safe_next_action": "Restore the demand-gate Redis path and confirm sessions return to normal provider routing."
     },

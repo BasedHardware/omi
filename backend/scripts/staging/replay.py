@@ -320,6 +320,9 @@ class ReplayConfig:
     poll_timeout_s: float = 1800.0
     request_timeout_s: float = 120.0
     stop_after_s: float | None = None
+    # Cloud Run invoker IAM: an ID token for the target, sent in X-Serverless-Authorization so the
+    # app still sees the ADMIN_KEY Authorization header. None when the target admits all invokers (prod shape).
+    id_token: Callable[[], str] | None = None
 
 
 Sender = Callable[..., Awaitable[Any]]
@@ -336,9 +339,15 @@ class Replay:
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     results: list[UploadResult] = field(default_factory=list)
 
+    def _auth(self, owner_id: str) -> dict[str, str]:
+        headers = {'Authorization': f'Bearer {self.config.admin_key}{owner_id}'}
+        if self.config.id_token is not None:
+            headers['X-Serverless-Authorization'] = f'Bearer {self.config.id_token()}'
+        return headers
+
     def _headers(self, upload: pop.PlannedUpload) -> dict[str, str]:
         return {
-            'Authorization': f'Bearer {self.config.admin_key}{upload.owner_id}',
+            **self._auth(upload.owner_id),
             'X-App-Platform': upload.platform,
             'X-Device-Id-Hash': upload.device_hash,
             'X-App-Version': 'loadgen',
@@ -424,7 +433,7 @@ class Replay:
 
     async def _poll(self, client: Any, result: UploadResult) -> None:
         deadline = time.monotonic() + self.config.poll_timeout_s
-        headers = {'Authorization': f'Bearer {self.config.admin_key}{result.owner_id}'}
+        headers = self._auth(result.owner_id)
         while time.monotonic() < deadline:
             await self.sleep(self.config.poll_interval_s)
             try:
@@ -568,25 +577,73 @@ def _storage_client(args: argparse.Namespace) -> Any:
     return storage.Client(project=getattr(args, 'mirror_project', None) or 'based-hardware-dev')
 
 
+STAGING_SECRET_RE = re.compile(r'^projects/based-hardware-dev/secrets/staging-[a-z0-9-]+/versions/(latest|[0-9]+)$')
+
+
+def read_staging_secret(resource: str, session: Any = None) -> str:
+    """A ``staging-*`` Secret Manager value through ambient credentials (Workload Identity in-cluster)."""
+    import base64
+
+    if not STAGING_SECRET_RE.match(resource):
+        raise ReplayRefused('secrets must be based-hardware-dev staging-* resources')
+    if session is None:
+        import google.auth
+        from google.auth.transport.requests import AuthorizedSession
+
+        creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+        session = AuthorizedSession(creds)
+    response = session.get(f'https://secretmanager.googleapis.com/v1/{resource}:access', timeout=30)
+    if response.status_code != 200:
+        raise ReplayRefused(f'cannot read {resource.split("/")[3]} (HTTP {response.status_code})')
+    return base64.b64decode(response.json()['payload']['data']).decode()
+
+
+def _secret(args: argparse.Namespace, env_name: str, resource: str | None) -> str:
+    return read_staging_secret(resource) if resource else os.environ.get(env_name, '')
+
+
+class CachedIdToken:
+    """Google ID token for one audience, refreshed before its one-hour expiry."""
+
+    def __init__(self, audience: str, fetch: Callable[[str], str] | None = None, ttl_s: float = 3000.0):
+        self.audience = audience
+        self.ttl_s = ttl_s
+        self._fetch = fetch
+        self._token = ''
+        self._at = 0.0
+
+    def __call__(self) -> str:
+        if not self._token or time.monotonic() - self._at > self.ttl_s:
+            if self._fetch is None:
+                from google.auth.transport.requests import Request
+                from google.oauth2 import id_token
+
+                self._fetch = lambda aud: id_token.fetch_id_token(Request(), aud)
+            self._token = self._fetch(self.audience)
+            self._at = time.monotonic()
+        return self._token
+
+
 async def _run_async(args: argparse.Namespace) -> int:
     import httpx
 
     target = check_target(args.target, allow_local=args.allow_local)
     where = check_load_host(target)
-    admin_key = os.environ.get(args.admin_key_env, '')
+    admin_key = _secret(args, args.admin_key_env, args.admin_key_secret)
     if len(admin_key) < 16:
-        raise ReplayRefused(f'{args.admin_key_env} must hold the staging ADMIN_KEY')
+        raise ReplayRefused('the staging ADMIN_KEY is missing (--admin-key-secret or --admin-key-env)')
     header, plans = pop.read_plan(args.plan)
     reader = None
     if any(f.ref.startswith('mirror:') for p in plans for f in p.files):
-        secret = os.environ.get(args.mirror_key_env, '')
+        secret = _secret(args, args.mirror_key_env, args.mirror_key_secret)
         if not secret:
-            raise ReplayRefused(f'{args.mirror_key_env} must hold the staging mirror secret')
+            raise ReplayRefused('the staging mirror secret is missing (--mirror-key-secret or --mirror-key-env)')
         if args.mirror_bucket != 'based-hardware-dev-staging-mirror' and not args.allow_local:
             raise ReplayRefused('mirror bucket must be based-hardware-dev-staging-mirror')
         reader = MirrorReader(_storage_client(args).bucket(args.mirror_bucket), mc.derive_mirror_key(secret))
     seeder = StagingFirestoreSeeder() if args.seed_capture else None
     config = ReplayConfig(
+        id_token=CachedIdToken(target) if args.cloud_run_id_token else None,
         target=target,
         admin_key=admin_key,
         time_scale=args.time_scale,
@@ -639,7 +696,12 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument('--target', required=True)
     r.add_argument('--out', required=True)
     r.add_argument('--admin-key-env', default='STAGING_ADMIN_KEY')
+    r.add_argument('--admin-key-secret', help='projects/based-hardware-dev/secrets/staging-admin-key/versions/latest')
     r.add_argument('--mirror-key-env', default='STAGING_ENCRYPTION_SECRET')
+    r.add_argument(
+        '--mirror-key-secret', help='projects/based-hardware-dev/secrets/staging-encryption-secret/versions/latest'
+    )
+    r.add_argument('--cloud-run-id-token', action='store_true', help='send X-Serverless-Authorization (invoker IAM on)')
     r.add_argument('--mirror-bucket', default='based-hardware-dev-staging-mirror')
     r.add_argument('--mirror-project', default='based-hardware-dev')
     r.add_argument('--seed-capture', action='store_true', help='device-bound fresh uploads (in-cluster, fence)')

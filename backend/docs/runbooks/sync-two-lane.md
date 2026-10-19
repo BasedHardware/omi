@@ -276,7 +276,9 @@ later setting change cannot silently reinterpret existing retry material.
 Never set `active` on a normal deploy while old revisions may run. The
 protected two-phase `Sync ledger fence cutover` workflow requires an operator
 to set the environment variable `legacy` → `standby`, stage all three services,
-pause `sync-jobs` and `sync-backfill`, promote standby traffic, and delete then
+pause `sync-jobs` and `sync-backfill` (in prod also `sync-jobs-fresh` and
+`sync-backfill-fresh`, which carry live dispatch since the 10-18/10-19
+stalls), promote standby traffic, and delete then
 prove absent every prior zero-traffic revision. It deliberately leaves queues
 paused on any failure. Only after that barrier does an operator set
 `standby` → `active` and approve the activation job; activation promotes all

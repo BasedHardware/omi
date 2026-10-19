@@ -5,7 +5,10 @@
 #   PLAN_URI   gs://based-hardware-dev-staging-mirror/plans/<run>.jsonl (uploaded by the operator)
 #   TARGET     https://backend-sync-staging-<hash>.a.run.app
 #   EXTRA_ARGS e.g. "--poll --seed-capture --time-scale 1"
-# Secrets/SA are lane 2's (contract (i)): staging-admin-key, staging-encryption-secret, staging-worker KSA.
+# Identity: KSA staging-worker (Workload Identity -> staging-worker@). Secrets are read from Secret Manager
+# in-process (--admin-key-secret / --mirror-key-secret); the ENCRYPTION_SECRET env (seeding only) comes from
+# the k8s secret staging-batch-worker, which holds the same staging key. Add --cloud-run-id-token to
+# EXTRA_ARGS while staging enforces Cloud Run invoker IAM (prod does not).
 # The staging fence runs in-process before any capture seeding (--seed-capture).
 apiVersion: batch/v1
 kind: Job
@@ -33,7 +36,10 @@ spec:
               b, _, n = sys.argv[1][5:].partition('/');
               storage.Client(project='based-hardware-dev').bucket(b).blob(n).download_to_filename('/tmp/plan.jsonl')" "${PLAN_URI}"
               && python -m scripts.staging.replay run --plan /tmp/plan.jsonl --target "${TARGET}"
-              --out /tmp/out ${EXTRA_ARGS}
+              --out /tmp/out
+              --admin-key-secret projects/based-hardware-dev/secrets/staging-admin-key/versions/latest
+              --mirror-key-secret projects/based-hardware-dev/secrets/staging-encryption-secret/versions/latest
+              ${EXTRA_ARGS}
               ; rc=$?; python -c "from google.cloud import storage; import pathlib;
               b = storage.Client(project='based-hardware-dev').bucket('based-hardware-dev-staging-mirror');
               [b.blob('replays/${RUN_ID}/' + p.name).upload_from_filename(str(p)) for p in pathlib.Path('/tmp/out').glob('*')]";
@@ -43,12 +49,8 @@ spec:
             - {name: OMI_ENV_STAGE, value: prod}
             - {name: FIRESTORE_DATABASE_ID, value: staging}
             - {name: GOOGLE_CLOUD_PROJECT, value: based-hardware-dev}
-            - name: STAGING_ADMIN_KEY
-              valueFrom: {secretKeyRef: {name: staging-admin-key, key: value}}
-            - name: STAGING_ENCRYPTION_SECRET
-              valueFrom: {secretKeyRef: {name: staging-encryption-secret, key: value}}
             - name: ENCRYPTION_SECRET  # the staging runtime key; the seeder encodes conversations with it
-              valueFrom: {secretKeyRef: {name: staging-encryption-secret, key: value}}
+              valueFrom: {secretKeyRef: {name: staging-batch-worker, key: ENCRYPTION_SECRET}}
           resources:
             requests: {cpu: "1", memory: 2Gi}
             limits: {cpu: "2", memory: 4Gi}

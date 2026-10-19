@@ -67,6 +67,12 @@ cloud_run:
     FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
     # Vendor spend caps (staging uses dev's test keys).
     SONIOX_MONTHLY_CEILING_USD: '50'
+    # Messaging channels stay off in staging: their webhooks and bot tokens are prod-only.
+    OMI_TELEGRAM_ENABLED: 'off'
+    OMI_IMESSAGE_ENABLED: 'off'
+    # Prod live-service residue the code reads with os.environ[...] (not in runtime_env.yaml;
+    # value read from prod backend on ro-prod 2026-10-19).
+    SUBSCRIPTION_LAUNCH_DATE: '2025-08-21'
   # Queue names: every *_QUEUE value is mapped prod name -> staging name; unmapped prod queues fail compose.
   queue_map:
     sync-jobs: staging-sync-jobs

@@ -61,6 +61,13 @@ Listen counters:
   candidate or replay failures, gate dependency outages, plus existing window
   recovery causes. Dependency outages emit once per socket/outage episode. Existing
   window admission/POST metrics distinguish capacity, pressure and degradation.
+  Gate outages also count in `omi_listen_demand_failure_detail_total{demand_cohort,reason="gate_unavailable"}`
+  so alerts can page on the admitted cohort only. Non-admitted sessions refresh
+  their sibling-visible presence entry every 10 s (lease 30 s) instead of every
+  second; an admitted session bridges exactly one missed heartbeat with the last
+  good answer (under the 30 s lease) and otherwise fails to the vendor. Admission
+  into Parakeet never uses a bridged answer. Failures are logged as
+  `demand_presence_unavailable error_class=timeout|connection|response|redis_error|other`.
 
 ## Lead-owned rollout and rollback
 

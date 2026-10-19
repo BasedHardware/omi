@@ -557,10 +557,20 @@ def test_http_auth_size_and_admin_gate(monkeypatch):
 
 
 def test_router_is_registered_on_the_backend_app():
-    main = Path(__file__).resolve().parents[2] / "main.py"
-    text = main.read_text()
-    assert "client_telemetry" in text
-    assert "app.include_router(client_telemetry.router)" in text
+    # main.py mounts through the B8 role map; read its ROUTER_MOUNTS rows structurally (AST, not an
+    # import: importing app_roles loads every router, too slow for a fast unit test).
+    import ast
+
+    role_map = ast.parse((Path(__file__).resolve().parents[2] / "app_roles.py").read_text())
+    mounts = {
+        (node.args[0].id, next((k.value.value for k in node.keywords if k.arg == "attr"), "router"))
+        for node in ast.walk(role_map)
+        if isinstance(node, ast.Call)
+        and getattr(node.func, "id", None) == "Mount"
+        and node.args
+        and isinstance(node.args[0], ast.Name)
+    }
+    assert ("client_telemetry", "router") in mounts
 
 
 def test_session_histogram_adds_the_week_bucket():

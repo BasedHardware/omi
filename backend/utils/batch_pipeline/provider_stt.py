@@ -18,13 +18,14 @@ from dataclasses import asdict, dataclass, fields
 import io
 import logging
 import time
-from typing import Any, Callable, Literal
+from typing import Any, Callable, ClassVar, Literal
 from uuid import uuid4
 import wave
 
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, projection_speech_spans
 from utils.batch_pipeline.recovery_disposition import (
@@ -37,6 +38,8 @@ from utils.batch_pipeline.recovery_disposition import (
     silence_payload,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.observability.reasons import ConsumerReason, RetryReason
+from utils.workers.consumer import Result, Role
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +88,16 @@ class SttRoute:
 def resolve_route(language: str | None, *, byok: bool = False) -> SttRoute:
     """Decide once at admission. Unknown language is ``multi``: Parakeet, as legacy sync.
 
-    BYOK does not change the STT route. Sync pre-recorded STT has never used a
-    BYOK key (only Modulate and Parakeet serve it), so a BYOK upload is routed by
-    language like any other and its reason is recorded for funding.
+    BYOK uploads are routed like every other upload (David, 10-19): sync
+    pre-recorded STT has never used a BYOK key, and enrichment runs on Omi's keys.
+    ``provider_reason='byok'`` only records the admission-time funding decision,
+    made while the validated keys were present, so later keyless stages never
+    re-hold the unit (contract (c): admission decides once).
     """
     normalized = normalized_stt_language(language) or 'multi'
     if normalized in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL]:
         return SttRoute('parakeet', 'byok' if byok else 'none', 'none', normalized)
-    return SttRoute('provider', 'unsupported_language', 'modulate', normalized[:16])
+    return SttRoute('provider', 'byok' if byok else 'unsupported_language', 'modulate', normalized[:16])
 
 
 def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -> bool:
@@ -144,8 +149,25 @@ def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -
     return True
 
 
-def provider_enqueue(route: SttRoute) -> Callable[[Any, WorkItem, float], bool]:
-    return lambda tx, item, now: enqueue_in_transaction(tx, item, now, route=route)
+def provider_enqueue(route: SttRoute, outbox: Any, wakes: dict[str, str]) -> Callable[[Any, WorkItem, float], bool]:
+    """The admit() ``enqueue`` hook: the job row and its outbox row commit together.
+
+    ``wakes`` collects ``row_id -> wake_token``; the caller calls ``outbox.wake``
+    for each after the admission transaction commits (contract (b), invariant 4).
+    A retried transaction body overwrites the same keys.
+    """
+
+    def enqueue(tx: Any, item: WorkItem, now: float) -> bool:
+        created = enqueue_in_transaction(tx, item, now, route=route)
+        if created:
+            result = outbox.enqueue(
+                item.segment_id, item.owner_id, {'segment_id': item.segment_id}, now, tx=tx, now=now
+            )
+            if result.wake_token:
+                wakes[result.row_id] = result.wake_token
+        return created
+
+    return enqueue
 
 
 class ProviderSttStore:
@@ -279,14 +301,14 @@ def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, servic
     return payload
 
 
-Outcome = Literal['done', 'deferred', 'discarded', 'retry']
+UnitOutcomeName = Literal['done', 'deferred', 'discarded', 'retry']
 
 
 @dataclass(frozen=True)
 class UnitOutcome:
     """Transport-free result; the queue consumer maps it onto contract (a)'s Result."""
 
-    outcome: Outcome
+    outcome: UnitOutcomeName
     reason: str  # ConsumerReason value, or a RetryReason value for 'retry'
     available_at: float | None = None
     provider_reason: str = 'none'  # ProviderSttReason value, for metrics only
@@ -328,7 +350,10 @@ class ProviderSttStage:
         route = SttRoute(**job['stt_route'])
         if job['state'] == RUNNING:
             return self._reconcile(segment_id, job, item)
-        if not self.allowed(item.owner_id, item.duration_seconds, route.provider_service):
+        # A BYOK unit was funded at admission; the keyless re-check would hold it forever.
+        if route.provider_reason != 'byok' and not self.allowed(
+            item.owner_id, item.duration_seconds, route.provider_service
+        ):
             return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
         audio = self.artifacts.fetch_audio(item)
         inspected, failure = None, None
@@ -395,3 +420,42 @@ class ProviderSttStage:
             logger.info('event=batch_provider_stt outcome=%s reason=%s', outcome, reason)
         except Exception:
             pass
+
+
+# --- queue consumer (contract (a): kind provider_stt, role workers) -----------------------------
+
+RETRY_SECONDS = 30.0
+
+
+def _service_stage() -> ProviderSttStage:
+    # Deferred: the batch store namespace and artifact bucket are resolved per host stage.
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.batch_pipeline.intake import artifacts_for
+    from utils.sync.stage import current_stage
+
+    store = FirestoreStore(f'batch_pipeline_{current_stage()}')
+    return ProviderSttStage(store, artifacts_for(store))
+
+
+class ProviderSttConsumer:
+    """Push consumer: one outbox row per provider unit, keyed by its segment id."""
+
+    kind: ClassVar[OutboxKind] = OutboxKind.PROVIDER_STT
+    role: ClassVar[Role] = Role.WORKERS
+    # No heartbeat: one blocking vendor call. Longer than the 1500s dispatch deadline.
+    lease_seconds: ClassVar[float] = 1800.0
+    heartbeat_seconds: ClassVar[float] = 0.0
+
+    def __init__(self, stage_factory: Callable[[], ProviderSttStage] = _service_stage, clock=time.time):
+        self.stage_factory, self.clock = stage_factory, clock
+
+    def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
+        segment_id = claim.payload.get('segment_id')
+        if not isinstance(segment_id, str) or not segment_id or segment_id != claim.row_id:
+            # A malformed row can never succeed; close it rather than re-wake it forever.
+            return Result(Outcome.DISCARDED, ConsumerReason.UNKNOWN)
+        unit = self.stage_factory().run(segment_id)
+        if unit.outcome == 'retry':
+            return Result(Outcome.RETRY, RetryReason(unit.reason), self.clock() + RETRY_SECONDS)
+        outcome = {'done': Outcome.DONE, 'deferred': Outcome.DEFERRED, 'discarded': Outcome.DISCARDED}[unit.outcome]
+        return Result(outcome, ConsumerReason(unit.reason), unit.available_at)

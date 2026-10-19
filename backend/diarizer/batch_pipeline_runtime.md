@@ -317,9 +317,10 @@ See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
 serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE`, falling back
 to `SYNC_TASKS_QUEUE` when unset, using `SYNC_TASKS_INVOKER_SA`. Production
-integration uses the isolated `batch-quarantine-recovery` queue (four concurrent
-dispatches, four/second, five attempts), provisioned by the existing deploy
-action before the integration revision. This prevents shared legacy sync
+integration uses the isolated `batch-quarantine-recovery` queue (16 concurrent
+dispatches, eight/second, five attempts), provisioned by the existing deploy
+action before the integration revision. Four slots left recovery p95 above five
+minutes at the 5% ramp (10-19), so production runs 16/8. This prevents shared legacy sync
 retries from consuming recovery dispatch slots; it does not grant another paid
 intent. Clear the queue override to roll back isolation.
 The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
@@ -333,8 +334,15 @@ to inline recovery with the same token. The task and inline path race through
 the same transactional start fence, so at most one can invoke paid STT. The
 shared fallback metric records this degraded inline execution. A disabled
 handler host or owner cohort returns retryable HTTP 503, never a successful ack.
-A two-minute wake-name generation repairs exhausted tasks without authorizing a
-second provider call. Existing privacy, lease, content ownership and intent-token
+Each prepared intent has at most one outstanding wake task: the sweep leases a
+wake (`recovery_wake`, default 600s, `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`)
+and names the task by intent token and wake sequence, so a backlog no longer
+adds a new task per unit on every sweep. At lease expiry the previous task is
+probed; it keeps its lease while it exists, and only NotFound (or three failed
+probes) mints the next sequence; a delivery of that same wake that leaves the
+intent prepared, or a failed enqueue, re-arms a 120-second wake, and a stale
+delivery never shortens a newer wake. `0` restores the legacy two-minute wake-name
+generation on every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token
 fences apply to every delivery, including duplicates and admission rollback.
 
 Integration declares a 3,600-second Cloud Run request timeout in both manifests,
