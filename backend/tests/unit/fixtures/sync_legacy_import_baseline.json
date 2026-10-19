@@ -55,6 +55,7 @@
     "utils.sync.pipeline": {
       "retire_in": "C11",
       "importers": {
+        "scripts/cap_hold_durability_emulator_test.py": "Loopback cap-hold durability proof drives legacy pipeline restart as its crash-recovery subject; retires with cap-hold-on-legacy in C11.",
         "testing/e2e/test_sync_lifecycle.py": "Hermetic e2e for the legacy sync lifecycle; deleted with legacy transcription in C11.",
         "testing/replay_harness_phase0a/apps.py": "Replay harness serves the legacy sync worker; drop the legacy app in C11.",
         "testing/sync_cloud_tasks_stack/app.py": "Gauntlet (GA) stack serves the legacy sync worker; drop it in C11 once the gauntlet is batch-only.",

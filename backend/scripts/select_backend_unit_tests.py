@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
+from tests.support.sync_legacy_ratchet_scope import is_sync_legacy_ratchet_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -161,6 +162,16 @@ FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
 BACKGROUND_TASK_RATCHET_TESTS = (
     'tests/unit/test_background_task_ratchet.py',
     'tests/unit/test_revision_drain_harness.py',
+)
+
+# Legacy-sync import ratchet: no new importer of the retiring legacy sync
+# modules (plan C class (a)) may slip past changed-file CI and only fail the
+# post-merge --all run. Selection uses the shared scope predicate
+# (tests/support/sync_legacy_ratchet_scope.py) so the ratchet runs for every
+# importer path its walk can scan, mirroring the background-task ratchet.
+SYNC_LEGACY_RATCHET_TESTS = (
+    'tests/unit/test_sync_legacy_import_ratchet.py',
+    'tests/unit/test_workflow_contracts.py',
 )
 
 # Shared with the canonical release manifest's named trigger. Do not copy the
@@ -565,6 +576,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):
         selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
+    if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):
+        selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

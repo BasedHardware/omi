@@ -33,7 +33,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from database import batch_pipeline_privacy
 from tests.integration.test_sync_reprocess_emulator import loopback_only_network, store  # noqa: F401
+from utils import cloud_tasks
+from utils.batch_pipeline import enrichment
 from utils.sync import reprocess
 
 pytestmark = pytest.mark.integration
@@ -42,12 +45,19 @@ REAL_ENQUEUE = reprocess._enqueue  # type: ignore[reportPrivateUsage]
 HANDLER = 'https://fresh.invalid/v2/sync-jobs/run'
 SUMMARY = {'structured': {'overview': 'Synthetic summary committed through the normal callback'}}
 
+# Conversation ids this module creates obligations or synthetic conversation
+# documents for. Completed first-summary deliveries leave dormant receipts with
+# ``uid`` cleared, so the imported ``store`` fixture's ``where('uid', '==', uid)``
+# teardown cannot see them; deleting by document key is the only exact handle.
+# Deleting a Firestore parent (``users/{uid}``) does not remove subcollections
+# either, so the synthetic ``conversations`` documents are deleted explicitly.
+MODULE_CONVERSATIONS = ('a', 'b', 'c', 'canonical', 'cycle', 'donor')
+
 
 @pytest.fixture
 def outbox(store, monkeypatch):  # noqa: F811
     """Real outbox IO and real ``_enqueue``; Cloud Tasks calls are captured."""
     client, uid, _ = store
-    from utils import cloud_tasks
 
     for name in (
         'DEMAND_PROCESSING_ENABLED',
@@ -78,6 +88,12 @@ def outbox(store, monkeypatch):  # noqa: F811
     # exhausted/missing task so the repair path is exercised.
     monkeypatch.setattr(reprocess, '_wake_exists', lambda _row: False)
     yield client, uid, tasks
+    outbox_collection = client.collection(reprocess.COLLECTION)
+    for conversation_id in MODULE_CONVERSATIONS:
+        outbox_collection.document(reprocess.key(uid, conversation_id)).delete()
+    user = client.collection('users').document(uid)
+    for conversation_id in MODULE_CONVERSATIONS:
+        user.collection('conversations').document(conversation_id).delete()
 
 
 @pytest.fixture
@@ -203,8 +219,6 @@ def test_stale_or_unknown_tokens_never_run_work(outbox):
 
 
 def test_batch_task_adapter_rejects_malformed_bindings_before_any_io(outbox):
-    from utils.batch_pipeline import enrichment
-
     with pytest.raises(ValueError):
         enrichment.run_enrichment('not-a-key', uuid.uuid4().hex, process=Mock())
     with pytest.raises(ValueError):
@@ -257,7 +271,6 @@ def test_crashed_worker_lease_blocks_until_expiry_then_sweep_rewakes(
 
 def test_sweep_repairs_a_lost_enqueue_between_mark_and_dispatch(outbox, monkeypatch):
     client, uid, tasks = outbox
-    from utils import cloud_tasks
 
     capture = cloud_tasks.enqueue_named_task
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', Mock(side_effect=RuntimeError('lost enqueue ack')))
@@ -312,9 +325,7 @@ def _blocked_by_user_deletion(client, uid):
 
 
 def _blocked_by_privacy_generation(client, uid):
-    from database.batch_pipeline_privacy import advance_privacy_generation
-
-    advance_privacy_generation(client, uid, blocked=True)
+    batch_pipeline_privacy.advance_privacy_generation(client, uid, blocked=True)
 
 
 def _blocked_by_account_deletion(client, uid):
@@ -325,9 +336,6 @@ def _blocked_by_account_deletion(client, uid):
     'block', [_blocked_by_user_deletion, _blocked_by_privacy_generation, _blocked_by_account_deletion]
 )
 def test_privacy_blocked_row_is_discarded_without_running_work(outbox, block):
-    from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
-    from utils.batch_pipeline import enrichment
-
     client, uid, _ = outbox
     client.collection('users').document(uid).collection('conversations').document('c').set({'id': 'c'})
     reprocess.mark(uid, 'c', 'en', now=0)
@@ -345,12 +353,12 @@ def test_privacy_blocked_row_is_discarded_without_running_work(outbox, block):
         user.collection('deleted_conversations').document('c').delete()
         user.collection('conversations').document('c').delete()
         client.collection('account_deletions').document(uid).delete()
-        client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid)).delete()
+        client.collection(batch_pipeline_privacy.PRIVACY_COLLECTION).document(
+            batch_pipeline_privacy.privacy_owner_key(uid)
+        ).delete()
 
 
 def test_invalid_redirect_topology_keeps_the_debt(outbox):
-    from utils.batch_pipeline import enrichment
-
     client, uid, _ = outbox
     conversation = client.collection('users').document(uid).collection('conversations').document('cycle')
     conversation.set({'id': 'cycle', 'deleted': True, 'sync_merged_into': 'cycle'})

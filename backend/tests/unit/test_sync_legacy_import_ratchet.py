@@ -45,6 +45,19 @@ from pathlib import Path
 import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+# Direct ``--write`` invocation (``python tests/unit/test_sync_legacy_import_ratchet.py``)
+# runs without backend/ on sys.path; bootstrap like scripts/select_backend_unit_tests.py.
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from tests.support.sync_legacy_ratchet_scope import (  # noqa: E402
+    EXCLUDED_FILES as SCOPE_EXCLUDED_FILES,
+    EXCLUDED_PARTS as SCOPE_EXCLUDED_PARTS,
+    EXCLUDED_PREFIXES as SCOPE_EXCLUDED_PREFIXES,
+    EXCLUDED_TOP_DIRS as SCOPE_EXCLUDED_TOP_DIRS,
+    is_sync_legacy_ratchet_path,
+)
+
 BASELINE_PATH = BACKEND_DIR / 'tests' / 'unit' / 'fixtures' / 'sync_legacy_import_baseline.json'
 UNREVIEWED = 'UNREVIEWED: justify this new dependant on retiring legacy sync code'
 
@@ -72,11 +85,11 @@ RETIRING_MODULES: dict[str, str] = {
     'database.sync_empty_recovery': 'C11',
 }
 
-EXCLUDED_TOP_DIRS = {'tests'}
+EXCLUDED_TOP_DIRS = SCOPE_EXCLUDED_TOP_DIRS
 # Local environments and caches (``.venv``, ``.openapi-venv``, ...) are not first-party code.
-EXCLUDED_PARTS = {'venv', 'node_modules', '__pycache__', 'site-packages'}
-EXCLUDED_PREFIXES = ('utils/sync/',)
-EXCLUDED_FILES = {'routers/sync.py'}
+EXCLUDED_PARTS = SCOPE_EXCLUDED_PARTS
+EXCLUDED_PREFIXES = SCOPE_EXCLUDED_PREFIXES
+EXCLUDED_FILES = SCOPE_EXCLUDED_FILES
 
 
 def _module_path(module: str) -> str:
@@ -134,19 +147,18 @@ def imported_retiring_modules(source: str, importer: str) -> set[str]:
                 module = _retiring(f'{base}.{alias.name}' if base else alias.name)
                 if module:
                     found.add(module)
-        elif (
-            isinstance(node, ast.Call)
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-            and (
-                (isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')
-                or (isinstance(node.func, ast.Name) and node.func.id == 'import_module')
-            )
+        elif isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')
+            or (isinstance(node.func, ast.Name) and node.func.id == 'import_module')
         ):
-            module = _retiring(node.args[0].value)
-            if module:
-                found.add(module)
+            name_arg = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == 'name'),
+                node.args[0] if node.args else None,
+            )
+            if isinstance(name_arg, ast.Constant) and isinstance(name_arg.value, str):
+                module = _retiring(name_arg.value)
+                if module:
+                    found.add(module)
     return found
 
 
@@ -257,6 +269,8 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ('from .sync_dead_letters import x', 'database/other.py', {'database.sync_dead_letters'}),
         ('from . import sync_empty_recovery', 'database/other.py', {'database.sync_empty_recovery'}),
         ('importlib.import_module("utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
+        ('importlib.import_module(name="utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
+        ('importlib.import_module(name=name_variable)', 'utils/x.py', set()),
         ('from utils.sync import reprocess, assignment', 'utils/x.py', set()),
         ('from utils.sync.pipeline_v2 import x', 'utils/x.py', set()),
         ('import database.sync_ledger', 'utils/x.py', set()),
@@ -281,6 +295,49 @@ def test_import_detection(source, importer, expected):
 )
 def test_importer_scope(relative, scoped):
     assert _in_scope(relative) is scoped
+
+
+@pytest.mark.parametrize(
+    ('path', 'selects'),
+    [
+        # Any importer in the ratchet's scope selects the ratchet, even when
+        # its AREA_TESTS mapping has no test_sync_* glob (utils/apps).
+        ('backend/utils/apps/app_loader.py', True),
+        ('backend/utils/other/storage.py', True),
+        ('backend/database/sync_jobs.py', True),
+        ('backend/testing/pipeline_sim/sim.py', True),
+        ('backend/scripts/repair_sync_redrive.py', True),
+        ('backend/main.py', True),
+        # The ratchet's own excluded scopes stay narrow.
+        ('backend/tests/unit/test_x.py', False),
+        ('backend/utils/sync/pipeline.py', False),
+        ('backend/routers/sync.py', False),
+        # Not Python source: cannot add an import edge.
+        ('backend/utils/apps/README.md', False),
+    ],
+)
+def test_ratchet_selects_for_every_scoped_importer(path, selects):
+    assert is_sync_legacy_ratchet_path(path) is selects
+
+
+def test_selection_scope_is_the_ratchet_scope():
+    """The selector predicate must be a superset of the ratchet's importer
+    scope: every ``_in_scope`` path must select the ratchet, and the shared
+    exclusion constants cannot drift apart."""
+    assert SCOPE_EXCLUDED_TOP_DIRS == {'tests'}
+    assert SCOPE_EXCLUDED_PREFIXES == ('utils/sync/',)
+    assert SCOPE_EXCLUDED_FILES == {'routers/sync.py'}
+    for relative in _all_source_paths():
+        if _in_scope(relative):
+            assert is_sync_legacy_ratchet_path(relative), relative
+
+
+def _all_source_paths():
+    for root, dirs, files in os.walk(BACKEND_DIR):
+        dirs[:] = sorted(d for d in dirs if not d.startswith('.') and d not in EXCLUDED_PARTS)
+        for name in sorted(files):
+            if name.endswith('.py'):
+                yield Path(root, name).relative_to(BACKEND_DIR).as_posix()
 
 
 if __name__ == '__main__':
