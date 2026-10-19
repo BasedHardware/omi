@@ -499,10 +499,10 @@
             </p>
 
             <div class="action-buttons">
-                <a href="/auth/linear?uid={{ uid }}" class="btn btn-outline btn-small">
+                <a href="/auth/linear?uid={{ uid_q|default(uid) }}" class="btn btn-outline btn-small">
                     🔄 Reconnect
                 </a>
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                <a href="/disconnect?uid={{ uid_q|default(uid) }}" class="btn btn-danger btn-small">
                     Disconnect
                 </a>
             </div>
@@ -647,8 +647,8 @@
             const teamName = selectedOption.getAttribute('data-name');
             
             if (teamId) {
-                const uid = new URLSearchParams(window.location.search).get('uid');
-                fetch(`/settings/default-team?uid=${uid}&team_id=${teamId}&team_name=${encodeURIComponent(teamName)}`, {
+                const uid = new URLSearchParams(window.location.search).get('uid') || '';
+                fetch(`/settings/default-team?uid=${encodeURIComponent(uid)}&team_id=${encodeURIComponent(teamId)}&team_name=${encodeURIComponent(teamName || '')}`, {
                     method: 'POST'
                 }).then(response => {
                     if (response.ok) {
