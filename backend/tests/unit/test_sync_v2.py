@@ -107,11 +107,11 @@ class TestSyncV2Structure:
         assert '"/v2/sync-local-files/{job_id}"' in source
         assert 'def get_sync_job_status' in source
 
-    def test_v1_endpoint_unchanged(self):
-        """v1 endpoint must still exist with original path and function name."""
+    def test_v1_endpoint_is_a_410_stub(self):
+        """v1 keeps its path and function name but answers 410 (lane 10 slice 2b; 7-day census: zero calls)."""
         source = self._read_sync_source()
-        assert '"/v1/sync-local-files"' in source
-        assert 'async def sync_local_files(' in source
+        assert '"/v1/sync-local-files", deprecated=True, status_code=410' in source
+        assert '\ndef sync_local_files(' in source
 
     def test_v2_returns_202_with_job_id(self):
         """v2 POST must return 202 with job_id."""
