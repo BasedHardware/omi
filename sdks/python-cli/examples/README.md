@@ -2,6 +2,8 @@
 
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
+* [`agent_quickstart.hi.md`](agent_quickstart.hi.md) — एजेंट्स के लिए omi-cli
+  मार्गदर्शिका (Hindi agent guide).
 * [`agent_quickstart.zh-CN.md`](agent_quickstart.zh-CN.md) — 面向 Agent 的
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
