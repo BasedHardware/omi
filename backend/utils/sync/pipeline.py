@@ -1286,9 +1286,21 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
+def _first_word_offset(words: list[Any]) -> float:
+    """Seconds from the start of a VAD file to its first word.
+
+    postprocess_words starts the transcript clock at this word, while the file's
+    timestamp, stored audio and capture evidence start where VAD did. A word
+    without a start time keeps the file clock.
+    """
+    first = words[0] if words else None
+    timing = first.get('timestamp') if isinstance(first, dict) else None
+    return round(float(timing[0]), 2) if timing else 0.0
+
+
 def _recover_empty_segment(
     path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
-) -> tuple[list[TranscriptSegment], str] | None:
+) -> tuple[list[TranscriptSegment], str, float] | None:
     def observe_inspection(duration: float | None, spans: list[dict] | None):
         logger.info(
             'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
@@ -1361,7 +1373,7 @@ def _recover_empty_segment(
         outcome='recovered',
         log=logger,
     )
-    return transcript_segments, recovered_language
+    return transcript_segments, recovered_language, _first_word_offset(words)
 
 
 def process_segment(
@@ -1483,6 +1495,7 @@ def process_segment(
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
+        speech_offset = 0.0
         while True:
             phase = 'provider_call'
             if stt_cap_dispatch_enabled() and not sync_allowed(uid):
@@ -1534,6 +1547,7 @@ def process_segment(
             language = user_language if (single_language_mode and user_language) else detected_language
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
+            speech_offset = _first_word_offset(words)
             if sync_safety_wal_enabled():
                 for segment in transcript_segments:
                     segment.stt_provider = model
@@ -1554,7 +1568,7 @@ def process_segment(
                     phase = 'provider_call'
                     recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
                     if recovered is not None:
-                        transcript_segments, recovered_language = recovered
+                        transcript_segments, recovered_language, speech_offset = recovered
                         provider, model = 'modulate', 'velma-2'
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
@@ -1583,7 +1597,8 @@ def process_segment(
         # legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
-        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+        # Lines are timed from the first word, speech_offset seconds into this file.
+        segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
         # Target eligibility (including live stubs and tombstones) is resolved
         # inside the same transaction as temporal assignment.
         closest_memory = (
@@ -1635,7 +1650,7 @@ def process_segment(
                 for segment in transcript_segments:
                     segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
                     segment.stt_provider = model
-                segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+                segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
             else:
                 identify_speakers_for_segments(
                     transcript_segments,
@@ -1654,6 +1669,13 @@ def process_segment(
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
+        # Put each line back on the VAD file clock that started_at, the stored audio
+        # chunk and capture evidence share. The file can open on a cough or noise
+        # well before the first word.
+        if speech_offset:
+            for segment in transcript_segments:
+                segment.start = round(segment.start + speech_offset, 2)
+                segment.end = round(segment.end + speech_offset, 2)
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,

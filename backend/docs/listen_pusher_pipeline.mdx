@@ -4729,7 +4729,9 @@ v2 scalar outcomes/comparisons are separate. No private text or vectors enter me
 `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` independently gates sync/WAL cutover.
 When enabled for the same cohort, sync reuses its matching/storage WAV download
 and passes absolute provider word clocks through the same triage, diarizer and naming seam.
-Persisted sync segments use the legacy first-word origin and two-decimal clocks.
+It returns the legacy first-word origin; like legacy segments, sync intake adds the
+first word's offset back, so persisted segments use the VAD file's `started_at` origin
+(shared with its stored audio) and two-decimal clocks.
 Failure retains legacy matching; manual owner reservations remain authoritative.
 Live matching enters through an adapter preserving its clip policy unchanged.
 
