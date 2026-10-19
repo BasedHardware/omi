@@ -8,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
@@ -326,6 +329,56 @@ void main() {
   });
 
   group('OnTheWayPage', () {
+    Future<PendingWorkStore> serverWork(List<PendingWorkItem> items) async {
+      final store = PendingWorkStore(
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: items)),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+      );
+      await store.refresh();
+      return store;
+    }
+
+    Future<void> pumpWithServerWork(WidgetTester tester, SyncProvider sync, PendingWorkStore store) async {
+      OnTheWayPage.resetFolds();
+      await tester.pumpWidget(_app(
+        sync,
+        OnTheWayPage(
+          multiFileSync: true,
+          pendingWork: store,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    testWidgets('lists server work the phone did not start instead of saying all is synced', (tester) async {
+      final store = await serverWork([
+        PendingWorkItem(
+          id: 'conv:a',
+          kind: 'conversation',
+          state: 'summarizing',
+          conversationIds: const ['a'],
+          startedAt: DateTime.fromMillisecondsSinceEpoch(900 * 1000),
+          durationSeconds: 600,
+        ),
+        const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
+      await pumpWithServerWork(tester, _FakeSync(), store);
+
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('Processing'), findsOneWidget, reason: 'the summarizing conversation, on its day');
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the undated sync job');
+    });
+
+    testWidgets('a server sync job the phone is uploading itself is not listed twice', (tester) async {
+      final store = await serverWork([
+        const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
+      await pumpWithServerWork(tester, _FakeSync(wals: [_wal('phone', 4, WalStatus.uploaded)]), store);
+
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the recording only, not the job again');
+    });
+
     testWidgets('shows how close each recording is to done', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));

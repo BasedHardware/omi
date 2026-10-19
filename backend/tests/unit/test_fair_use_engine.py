@@ -503,6 +503,7 @@ class TestEnforcementCache:
 
     def setup_method(self):
         _mock_redis.reset_mock()
+        _fair_use_db.update_fair_use_state.reset_mock()
 
     def test_returns_cached_stage(self):
         _mock_redis.get.return_value = b'warning'
@@ -515,6 +516,36 @@ class TestEnforcementCache:
         stage = fair_use_mod.get_enforcement_stage('user1')
         assert stage == 'throttle'
         _mock_redis.setex.assert_called_once()
+
+    def test_expired_restriction_reads_as_throttle_on_cache_miss(self):
+        """Live listen keys its restrict-stage DG budget cap on this stage, so a restriction
+        past restrict_until must expire here exactly as it does for sync and the status API."""
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) - timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'throttle'
+        _fair_use_db.update_fair_use_state.assert_called_once_with(
+            'user1', {'stage': 'throttle', 'restrict_until': None}
+        )
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'throttle')
+
+    def test_active_restriction_stays_restrict_on_cache_miss(self):
+        _mock_redis.get.return_value = None
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
+
+        stage = fair_use_mod.get_enforcement_stage('user1')
+
+        assert stage == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_not_called()
+        _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'restrict')
 
     def test_invalidate_cache_deletes_keys(self):
         fair_use_mod.invalidate_enforcement_cache('user1')

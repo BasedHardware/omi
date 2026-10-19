@@ -768,10 +768,12 @@ def detect_speaker_introduction(text: str, language: Optional[str] = None) -> Op
             if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
+            # Capitalize only the first letter. People are looked up by exact name, and
+            # str.capitalize() lowercased the rest: "McDonald" became "Mcdonald".
             normalized = (
                 name
                 if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
-                else name.capitalize()
+                else name[:1].capitalize() + name[1:]
             )
             return SpeakerNameDetection(name=normalized, explicit=_is_explicit_introduction(pattern, match))
     return None

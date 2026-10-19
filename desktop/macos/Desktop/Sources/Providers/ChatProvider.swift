@@ -2319,11 +2319,13 @@ class ChatProvider: ObservableObject {
     return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
-  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+  nonisolated static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
     }
-    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
+    // The chat-first shell has no "new chat": clearing is what moves this chat to the selected provider.
+    return "This chat uses Claude and needs sign-in. Clear the chat to switch to your selected AI provider, "
+      + "or reconnect Claude in Settings."
   }
 
   func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -6603,9 +6605,73 @@ class ChatProvider: ObservableObject {
       return
     }
     log("Cleared default chat messages")
+    await moveClearedMainChatToSelectedProvider(surface: surface)
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
+  }
+
+  /// The main chat is one long-lived session pinned to the provider it was created on, and the
+  /// chat-first shell has no "new chat", so choosing another AI Provider in Settings never reached
+  /// it. Clearing is the explicit, idle point where that choice can apply: the emptied chat adopts
+  /// the selected provider. A refused migration (a revoked turn still finishing) keeps the old one.
+  private func moveClearedMainChatToSelectedProvider(surface: AgentSurfaceReference) async {
+    let harness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+    guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
+      await ensureBridgeStarted()
+    else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("ChatProvider: cleared main chat could not resolve its session", error: error)
+      return
+    }
+    let client = resolvedAgentClient()
+    let modelProfile =
+      modelOverride ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode)
+    let workingDirectory = effectiveAgentWorkingDirectory()
+    let outcome = await Self.moveSessionToSelectedProvider(
+      pinnedAdapterId: session.profile.adapterId,
+      selectedAdapterId: adapterId
+    ) {
+      try await client.migrateSessionExecutionProfile(
+        sessionId: session.sessionId,
+        expectedProfileGeneration: session.profile.profileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      ).profile.adapterId
+    }
+    switch outcome {
+    case .unchanged:
+      break
+    case .moved(let from, let to):
+      log("ChatProvider: cleared main chat moved from \(from) to \(to)")
+    case .refused(let error):
+      logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
+  }
+
+  enum ClearedChatProviderMove {
+    case unchanged
+    case moved(from: String, to: String)
+    case refused(Error)
+  }
+
+  /// The decision behind Clear Chat's provider move: no call when the chat is already on the
+  /// selected adapter; otherwise migrate, and a refused migration leaves the pinned provider.
+  static func moveSessionToSelectedProvider(
+    pinnedAdapterId: String,
+    selectedAdapterId: String,
+    migrate: () async throws -> String
+  ) async -> ClearedChatProviderMove {
+    guard pinnedAdapterId != selectedAdapterId else { return .unchanged }
+    do {
+      return .moved(from: pinnedAdapterId, to: try await migrate())
+    } catch {
+      return .refused(error)
+    }
   }
 
   // MARK: - App Selection
