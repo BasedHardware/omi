@@ -52,6 +52,17 @@ scrape_jobs:
     coverage_alert: null
     coverage_status: declared
 
+  # Dedicated batch-pipeline worker (stage timings, ready-age, refresh time).
+  # Feeds the adapter's omi_batch_pipeline_ready_age_seconds external rule,
+  # which drops samples whose refresh timestamp is older than 60s, so a
+  # missing target yields no HPA input rather than a false zero.
+  - name: batch-pipeline-worker-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token

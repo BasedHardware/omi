@@ -21,6 +21,18 @@ DIARIZER_BATCH_RULE: dict[str, Any] = {
     'name': {'as': 'omi_diarization_v2_queue_depth'},
     'metricsQuery': 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)',
 }
+BATCH_PIPELINE_READY_AGE_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_batch_pipeline_ready_age_seconds{namespace!="",worker_release!="",priority!=""}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {'matches': '^omi_batch_pipeline_ready_age_seconds$', 'as': 'omi_batch_pipeline_ready_age_seconds'},
+    'metricsQuery': (
+        'max by (namespace, worker_release, priority) (\n'
+        '  omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>}\n'
+        '  and on (namespace, worker_release, pod)\n'
+        '  (time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60)\n'
+        ')'
+    ),
+}
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
 PARAKEET_QUEUE_RULES = [
     {
@@ -88,6 +100,13 @@ def expected_config(live):
         raise ValueError('Unexpected live NLLB rule: reconcile and review first')
     if not nllb:
         expected['externalRules'].append(copy.deepcopy(NLLB_RULE))
+    ready_age = [
+        rule for rule in expected['externalRules'] if rule['name']['as'] == BATCH_PIPELINE_READY_AGE_RULE['name']['as']
+    ]
+    if ready_age and ready_age != [BATCH_PIPELINE_READY_AGE_RULE]:
+        raise ValueError('Unexpected live batch pipeline ready-age rule: reconcile and review first')
+    if not ready_age:
+        expected['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_READY_AGE_RULE))
     batch = [rule for rule in expected['rules'] if rule['name']['as'] == DIARIZER_BATCH_RULE['name']['as']]
     if batch and batch != [DIARIZER_BATCH_RULE]:
         raise ValueError('Unexpected live batch queue rule: reconcile and review first')
