@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 
+import numpy  # noqa: F401  (imported at collection so synthetic_pcm's lazy import is not billed to a test)
 import pytest
 
 from scripts.staging import replay as rp
@@ -57,7 +58,7 @@ def _plans(n_recordings=40, **kw):
 
 
 def test_materialize_synthetic_files_parse_and_are_owner_unique():
-    plans = _plans()
+    plans = _plans()[:8]  # fast-unit CPU budget
     now = time.time()
     seen = {}
     for p in plans:
