@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -19,7 +21,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// Each row shows how close it is to done; device storage, retries and past
 /// syncs stay on the Offline Sync page behind Sync Details.
 class OnTheWayPage extends StatefulWidget {
-  const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync, this.clock});
+  const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync, this.clock, this.pendingWork});
 
   /// Injectable for tests and the visual audit; defaults to the app provider.
   final SyncProvider? syncProvider;
@@ -29,6 +31,10 @@ class OnTheWayPage extends StatefulWidget {
 
   /// Injectable "now" for tests and the visual audit: which day is Today.
   final DateTime Function()? clock;
+
+  /// Server work Home's pending row also stands for. Injectable for tests; defaults to
+  /// [PendingWorkStore.instance].
+  final PendingWorkStore? pendingWork;
 
   /// Days opened or closed this app session, by local midnight. A day not here is open only when it
   /// is today. Memory only: after a restart the page opens on Today again.
@@ -42,7 +48,25 @@ class OnTheWayPage extends StatefulWidget {
 }
 
 class _OnTheWayPageState extends State<OnTheWayPage> {
+  late final PendingWorkStore _store = widget.pendingWork ?? PendingWorkStore.instance;
+
   bool _isOpen(DateTime day, DateTime today) => OnTheWayPage._folds[day] ?? day == today;
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_onPendingWork);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onPendingWork);
+    super.dispose();
+  }
+
+  void _onPendingWork() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +107,17 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         }
 
         final undated = <_PendingItem>[];
+        // Server work the phone did not start (another device, or a relaunch mid-job) is what Home's
+        // row stands for when nothing local is pending: list it by the same rule, so the row never
+        // opens on "all synced". A conversation already listed as processing is not repeated, and a
+        // sync job the phone is itself running is covered by its recordings or its status line.
+        final phoneSyncing = pending.isNotEmpty || SyncPendingWork.hasServerJobs(p);
+        for (final work in _store.pending) {
+          if (work.conversationIds.any(processingIds.contains)) continue;
+          if (work.kind == 'sync_job' && phoneSyncing) continue;
+          final item = _PendingItem.server(work, l);
+          (item.start == null ? undated : items).add(item);
+        }
         // A sync can be mid-run with no recording listed yet (WAL-less processing), and refused
         // recordings are not pending: neither is "all synced".
         if (items.every((i) => i.needsAttention) && SyncPendingWork.hasServerJobs(p)) {
@@ -229,6 +264,14 @@ class _PendingItem {
   const _PendingItem.status({required this.label, required this.step})
       : start = null,
         seconds = 0;
+
+  /// Work the server reports: `summarizing` is step 3, `transcribing` step 2, and `queued` (synced,
+  /// waiting its turn) reads as processing like Home's row does.
+  _PendingItem.server(PendingWorkItem work, AppLocalizations l)
+      : start = work.startedAt?.toLocal(),
+        seconds = work.durationSeconds ?? 0,
+        label = work.state == 'transcribing' ? l.transcribing : l.processing,
+        step = work.state == 'summarizing' ? 3 : 2;
 
   final DateTime? start;
   final int seconds;

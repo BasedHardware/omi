@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
@@ -14,6 +15,8 @@ app = FastAPI(
     description="PubMed chat tools for Omi",
     version="1.0.3",
 )
+
+logger = logging.getLogger(__name__)
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 TIMEOUT = 20.0
@@ -272,8 +275,15 @@ async def search_pubmed(request: Request):
         if len(lines) == 1:
             return ChatToolResponse(result=f"No PubMed results found for: {query}")
         return ChatToolResponse(result="\n".join(lines))
-    except Exception as e:
-        return ChatToolResponse(error=f"PubMed search failed: {e}")
+    except httpx.HTTPStatusError as exc:
+        logger.warning("PubMed HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"PubMed API error: {exc.response.status_code}")
+    except httpx.HTTPError as exc:
+        logger.warning("PubMed request failed: %s", exc)
+        return ChatToolResponse(error="PubMed search failed.")
+    except Exception as exc:
+        logger.exception("Unexpected error in search_pubmed: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
 
 
 @app.post("/tools/get_pubmed_article", response_model=ChatToolResponse, tags=["chat_tools"])
@@ -315,8 +325,18 @@ async def get_pubmed_article(request: Request):
         if record["abstract"]:
             lines.append(f"Abstract: {record['abstract'][:1800]}")
         return ChatToolResponse(result="\n".join(lines))
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to fetch PubMed article: {e}")
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code == 404:
+            return ChatToolResponse(error="PubMed article not found.")
+        logger.warning("PubMed HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"PubMed API error: {code}")
+    except httpx.HTTPError as exc:
+        logger.warning("PubMed request failed: %s", exc)
+        return ChatToolResponse(error="Failed to fetch PubMed article.")
+    except Exception as exc:
+        logger.exception("Unexpected error in get_pubmed_article: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")
 
 
 @app.post("/tools/get_related_pubmed", response_model=ChatToolResponse, tags=["chat_tools"])
@@ -369,5 +389,15 @@ async def get_related_pubmed(request: Request):
         if len(lines) == 1:
             return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
         return ChatToolResponse(result="\n".join(lines))
-    except Exception as e:
-        return ChatToolResponse(error=f"Failed to fetch related PubMed articles: {e}")
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code == 404:
+            return ChatToolResponse(error="Related PubMed articles not found.")
+        logger.warning("PubMed HTTP status error: %s", exc)
+        return ChatToolResponse(error=f"PubMed API error: {code}")
+    except httpx.HTTPError as exc:
+        logger.warning("PubMed request failed: %s", exc)
+        return ChatToolResponse(error="Failed to fetch related PubMed articles.")
+    except Exception as exc:
+        logger.exception("Unexpected error in get_related_pubmed: %s", exc)
+        return ChatToolResponse(error="Unexpected error processing request.")

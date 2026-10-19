@@ -103,6 +103,7 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'status',
     'discarded',
     'deleted',
+    'dream_duplicate_of',
     'relevance_decision',
     'sync_relevance_user_kept',
     'has_photos',

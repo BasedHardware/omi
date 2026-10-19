@@ -1846,3 +1846,25 @@ def test_llm_gateway_lane_failure_ratio_excludes_proactive_admission_refusals():
             'lane_id="omi:auto:proactive-notification",error_class="invalid_request",provider="none"' in expr
         ), export_name
         assert expr.count('outcome!="success"') == 3, export_name
+
+
+def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_volume_guarded():
+    # 2026-10-19: Modulate legs connected cleanly while sessions exhausted on
+    # capacity_full (mostly replay_ring_cap); connect-error alerts saw nothing.
+    for export_name, rules in _all_rule_exports().items():
+        capacity = rules["omi-stt-capacity-full-exhausted"]
+        terminal = rules["omi-stt-provider-terminal-failure-ratio"]
+        for rule in (capacity, terminal):
+            assert rule["labels"]["severity"] == "warning", export_name
+            assert rule["for"] == "30m", export_name
+            assert rule["noDataState"] == "OK", export_name
+        cap = {node["refId"]: node["model"] for node in capacity["data"]}
+        assert "sum by (to_mode)" in cap["B"]["expr"], export_name
+        assert 'reason="capacity_full",outcome="exhausted"' in cap["B"]["expr"], export_name
+        assert cap["C"]["expression"] == "$A >= 100 && $B > 0.15", export_name
+        assert "subtype=" in capacity["annotations"]["safe_next_action"], export_name
+        term = {node["refId"]: node["model"] for node in terminal["data"]}
+        assert "sum by (provider)" in term["A"]["expr"], export_name
+        assert 'outcome="success"' in term["A"]["expr"], export_name
+        assert "omi_live_stt_terminal_failures_total" in term["B"]["expr"], export_name
+        assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name

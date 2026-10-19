@@ -208,6 +208,7 @@ def smoke(
     if selected is None:
         raise BrowserSmokeError("unknown public-build target")
     url = absolute_https_url(base_url)
+    render_url = f"{url}{selected.candidate_acceptance.path}"
     marker = selected.candidate_acceptance.marker
     wants_sha = "{sha}" in selected.candidate_acceptance.command
     sha = (expect_sha or "").strip() or None
@@ -220,7 +221,7 @@ def smoke(
         try:
             document = render_candidate(
                 browser=browser,
-                base_url=url,
+                base_url=render_url,
                 timeout_seconds=selected.candidate_acceptance.timeout_seconds,
                 retry_timeout_seconds=selected.candidate_acceptance.retry_timeout_seconds,
                 virtual_time_budget_ms=virtual_time_budget_ms,

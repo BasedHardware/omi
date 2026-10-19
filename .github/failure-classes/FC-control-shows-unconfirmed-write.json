@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-control-shows-unconfirmed-write",
+  "violated_contract": "A control that applies a server-side setting the moment it is flipped must end in the state the server confirmed. Developer Settings' four webhook switches set their flag and fired enableWebhook/disableWebhook without awaiting them, so an offline, rejected or failed request left the switch showing a webhook state the server never applied, and nothing told the user. The result could not have been checked anyway: the client counted only 204 as success, while POST /v1/users/developer/webhook/{wtype}/enable and /disable answer 200 {\"status\": \"ok\"}, so every confirmed change read as a failure. Earlier instances of the same contract: an app's visibility (#15017), the notification settings (#15225) and task completion (#21590) each showed a write the server had not accepted.",
+  "canonical_prevention": "Route the control through one provider helper that shows the new state, awaits the write, keeps the state only on the endpoint's documented success status (docs/api-reference/app-client-openapi.json; 200 for these routes) and otherwise restores the previous state and shows the shared save-failure error. A tap while that control's own write is still running is ignored, so two writes for one setting cannot finish out of order. Guard with a widget test where the write fails (the control goes back and the error shows) and a provider test against a loopback server that answers the backend's real success status (the control stays and the exact request is sent).",
+  "canonical_prevention_artifact": [
+    "app/test/providers/developer_mode_webhook_switch_failure_test.dart",
+    "app/test/providers/developer_mode_webhook_switch_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/**",
+    "app/lib/backend/http/api/**",
+    "app/lib/pages/settings/**"
+  ],
+  "status": "open"
+}

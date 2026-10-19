@@ -173,6 +173,7 @@ export interface GetConversationsParams {
   startDate?: Date;
   endDate?: Date;
   folderId?: string;
+  starred?: boolean;
 }
 
 export async function getConversations(
@@ -186,6 +187,7 @@ export async function getConversations(
     startDate,
     endDate,
     folderId,
+    starred,
   } = params;
 
   const queryParams = new URLSearchParams({
@@ -205,6 +207,10 @@ export async function getConversations(
 
   if (folderId) {
     queryParams.set('folder_id', folderId);
+  }
+
+  if (starred !== undefined) {
+    queryParams.set('starred', starred.toString());
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);

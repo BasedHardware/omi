@@ -245,3 +245,37 @@ def test_completion_query_route_cancels_then_schedules_when_uncompleted(scenario
     assert _armed_ids(scenario) == ['task-1']
     assert _cancelled_ids(scenario) == []
     assert [call['payload']['task_id'] for call in scenario.queued] == ['task-1']
+
+
+def test_rename_patch_rearms_the_reminder_with_the_new_title(scenario):
+    # The phone shows the description the reminder was armed with, so a rename-only PATCH (what
+    # the app sends from the task editor) must re-arm it; otherwise it fires with the old title.
+    scenario.repo.seed('task-1')
+
+    response = scenario.client.patch('/v1/action-items/task-1', json={'description': 'Call the dentist'})
+
+    assert response.status_code == 200
+    assert response.json()['description'] == 'Call the dentist'
+    assert _cancelled_ids(scenario) == []
+    assert [
+        (call['data']['type'], call['data']['action_item_id'], call['data']['description'], call['data']['due_at'])
+        for call in scenario.fcm
+    ] == [('action_item_update', 'task-1', 'Call the dentist', DUE.isoformat())]
+
+
+@pytest.mark.parametrize(
+    'seed',
+    [
+        {'status': 'completed', 'completed': True},
+        {'due_at': None},
+    ],
+    ids=['completed', 'undated'],
+)
+def test_rename_patch_never_arms_a_task_without_a_live_reminder(scenario, seed):
+    scenario.repo.seed('task-1', **seed)
+
+    response = scenario.client.patch('/v1/action-items/task-1', json={'description': 'Renamed task'})
+
+    assert response.status_code == 200
+    assert _armed_ids(scenario) == []
+    assert scenario.queued == []

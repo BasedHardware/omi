@@ -6,7 +6,12 @@ from database import review_store as store
 from utils.agent_capabilities.transcripts import original_fingerprint, apply_entries
 
 
-def transfer(uid, source_ids, destination_id, *, firestore_client=None):
+def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | None = None, firestore_client=None):
+    """``placements[k][i]`` is the destination index of segment ``i`` of ``source_ids[k]``.
+
+    The merge sorts its transcript by time, so overlapping sources interleave. Without
+    placements, each source's segments must be one block, in ``source_ids`` order.
+    """
     database = firestore_client or store.client()
     owner = database.collection('users').document(uid)
     target = owner.collection('conversations').document(destination_id)
@@ -23,9 +28,9 @@ def transfer(uid, source_ids, destination_id, *, firestore_client=None):
         segments = decode_transcript_segments_verified(
             uid, raw_target.get('transcript_segments') or [], bool(raw_target.get('transcript_segments_compressed'))
         )
-        combined, journals, sources = [], {}, []
+        combined, journals, sources, placed = [], {}, [], []
         offset = 0
-        for source_id in source_ids:
+        for source_index, source_id in enumerate(source_ids):
             source_ref = owner.collection('conversations').document(source_id)
             source = source_ref.get(transaction=tx).to_dict() or {}
             if source.get('deleted') or source.get('is_locked'):
@@ -36,9 +41,10 @@ def transfer(uid, source_ids, destination_id, *, firestore_client=None):
             captured = decode_transcript_segments_verified(
                 uid, source.get('transcript_segments') or [], bool(source.get('transcript_segments_compressed'))
             )
-            if any(
-                offset + i >= len(segments) or segment.get('text') != segments[offset + i].get('text')
-                for i, segment in enumerate(captured)
+            positions = range(offset, offset + len(captured)) if placements is None else placements[source_index]
+            if len(positions) != len(captured) or any(
+                position >= len(segments) or segment.get('text') != segments[position].get('text')
+                for position, segment in zip(positions, captured)
             ):
                 raise store.ReviewConflict('Captured speech changed during merge')
             if source.get('has_transcript_corrections'):
@@ -46,7 +52,7 @@ def transfer(uid, source_ids, destination_id, *, firestore_client=None):
                 rows = store.require_doc(uid, overlay)['source']
                 for row in rows:
                     moved = deepcopy(row)
-                    moved['segment_index'] += offset
+                    moved['segment_index'] = positions[moved['segment_index']]
                     anchor = segments[moved['segment_index']]
                     moved.update(
                         segment_id=anchor.get('id'),
@@ -61,8 +67,9 @@ def transfer(uid, source_ids, destination_id, *, firestore_client=None):
                         if 'transcript_overlay' not in data:
                             raise store.ReviewConflict('Correction receipt unavailable during merge')
                         journals[moved['change_id']] = (ref, data)
+            placed.extend(positions)
             offset += len(captured)
-        if offset != len(segments):
+        if sorted(placed) != list(range(len(segments))):
             raise store.ReviewConflict('Merged speech shape changed')
         if not combined:
             # Seal every source against a correction arriving between merge

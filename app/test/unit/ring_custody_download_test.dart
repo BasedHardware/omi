@@ -393,7 +393,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(wal.status, isNot(WalStatus.synced));
@@ -416,7 +416,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(card.advances.single.ringId, 42);
@@ -437,7 +437,7 @@ void main() {
     card.emit(_record());
     card.custodyEpochValue = 8;
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
