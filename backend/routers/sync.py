@@ -20,7 +20,12 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.batch_pipeline import enabled_for as batch_enabled_for
-from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.batch_pipeline.intake import (
+    accept_upload as accept_batch_upload,
+    get_durable_job_status,
+    privacy_blocked_response,
+)
 from models.sync_job_status import (
     SyncJobStartResponse,
     SyncJobStatusResponse,
@@ -198,17 +203,7 @@ from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
-# Only the API process importing this router owns held-audio STT recovery.
-# Pusher/auth-only images retain the lightweight locked-content recovery path.
-if cap_dispatch_enabled():
-    from utils.locked_content_recovery import register_cap_audio_recovery
-
-    def _kick_cap_hold_recovery(uid: str) -> None:
-        from utils.sync.cap_hold_recovery import kick
-
-        kick(uid)
-
-    register_cap_audio_recovery(_kick_cap_hold_recovery)
+from utils.sync import cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
@@ -1745,7 +1740,10 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
-    durable = get_durable_job_status(job_id, uid)
+    try:
+        durable = get_durable_job_status(job_id, uid)
+    except BatchPrivacyBlocked:
+        return privacy_blocked_response()
     if durable is not None:
         return with_poll_hint(durable, surface_open=surface_open)
     job = get_sync_job(job_id)
@@ -2946,3 +2944,9 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+@router.post('/v2/cap-hold-recovery/sweep', include_in_schema=False)
+@read_origin('job:cap_hold_recovery')
+async def sweep_cap_hold_recovery(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    return await cap_hold_redrive.sweep()

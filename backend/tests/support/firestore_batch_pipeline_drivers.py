@@ -9,6 +9,19 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
+            covered_by=('database.batch_pipeline_store.ready_predecessor',),
+            reason='thin adapter forwards the transaction-bound predecessor query unchanged',
+            expect_observed=False,
+            body_digest='345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_predecessor',
+            base={'owner_key': 'owner-hash', 'segment_id': 'segment-head'},
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'transaction': (None, 'transaction binding only')},
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the transaction-bound frontier query unchanged',

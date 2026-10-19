@@ -12,6 +12,11 @@ WIRE_AUDIO = Counter(
     'Listen PCM seconds successfully written to paid transports, including each replay write',
     ['provider', 'demand_cohort'],
 )
+SONIOX_CONNECTED = Counter(
+    'omi_soniox_connected_seconds_total',
+    'Wall seconds a Soniox real-time websocket was open (the vendor bills this, keepalive silence included)',
+    ['demand_cohort'],
+)
 BATCH_WIRE_AUDIO = Counter(
     'omi_batch_live_stt_provider_wire_audio_seconds_total',
     'Successful paid transport PCM seconds including replay, pinned to batch preview admission',
@@ -113,10 +118,11 @@ try:
     for _cohort in DEMAND_COHORTS:
         BATCH_CAPTURE_AUDIO.labels(batch_cohort=_cohort)
         CAPTURE_AUDIO.labels(demand_cohort=_cohort)
+        SONIOX_CONNECTED.labels(demand_cohort=_cohort)
         for _provider in ('soniox', 'modulate', 'deepgram'):
             BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort)
             WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
-        for _reason in ('first_text_deadline', 'capacity_full', 'other'):
+        for _reason in ('first_text_deadline', 'capacity_full', 'gate_unavailable', 'other'):
             _subtypes = (
                 ('buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout', 'unknown')
                 if _reason == 'capacity_full'
@@ -233,6 +239,34 @@ class WireAudioMeter:
             )
 
 
+class ConnectedSecondsMeter:
+    """Billed stream time for one paid transport, flushed incrementally so rates stay smooth.
+
+    Pin at transport creation; ``flush`` from the writer's wake-ups and once with
+    ``close=True`` when the websocket ends. Seconds are counted exactly once.
+    """
+
+    FLUSH_SECONDS = 5.0
+
+    def __init__(self, metric=None):
+        self.metric = SONIOX_CONNECTED if metric is None else metric
+        self.cohort = cohort_label(current_telemetry())
+        self.accounted_at = monotonic()
+        self.closed = False
+
+    def flush(self, *, close: bool = False) -> None:
+        if self.closed:
+            return
+        now = monotonic()
+        elapsed = now - self.accounted_at
+        if not close and elapsed < self.FLUSH_SECONDS:
+            return
+        self.accounted_at = now
+        self.closed = close
+        if elapsed > 0:
+            record_metric(self.metric, {'demand_cohort': self.cohort}, elapsed)
+
+
 class MeteredSyncTransport:
     """Observe the Deepgram SDK's synchronous websocket write, below its error handling."""
 
@@ -247,6 +281,13 @@ class MeteredSyncTransport:
         result = self.transport.send(data, *args, **kwargs)
         telemetry_call(self, 'meter', 'written', data)
         return result
+
+
+def create_connected_meter():
+    try:
+        return ConnectedSecondsMeter()
+    except Exception:
+        return None
 
 
 def create_wire_meter(provider: str, sample_rate: int, channels: int = 1):

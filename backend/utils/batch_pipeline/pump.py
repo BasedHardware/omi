@@ -19,6 +19,7 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
+from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import db_executor, run_blocking, sync_executor
@@ -40,6 +41,8 @@ class Pump:
         capacity: Callable[[], PoolCapacity] | None = None,
         project_pending: Callable[[], Any] | None = None,
         authorize_compute: Callable[[list[LeasedWork]], dict] | None = None,
+        leader: LeaderLease | None = None,
+        inline_metrics: bool = True,
     ):
         if not 1 <= batch_size <= 32 or not 0 < poll_seconds <= 30:
             raise ValueError('invalid bounded pump configuration')
@@ -53,6 +56,12 @@ class Pump:
         self.capacity = capacity
         self.project_pending = project_pending
         self.authorize_compute = authorize_compute
+        # Optional single-owner lease for the recovery/drain tick. None keeps
+        # every pump running it (single-replica and test behaviour).
+        self.leader = leader
+        # False when a supervisor samples queue metrics on its own task, so
+        # gauges stay fresh while this pump awaits a long GPU batch.
+        self.inline_metrics = inline_metrics
         self._last_recovery = float('-inf')
         self._last_metrics = float('-inf')
 
@@ -102,19 +111,24 @@ class Pump:
     async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
-            if self.project_pending:
-                await run_blocking(sync_executor, self.project_pending)
-            await run_blocking(db_executor, self.scheduler.recover, time.time())
-            ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
-            owners = set()
-            for segment in ready:
-                job = await run_blocking(db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment))
-                if job and job['owner_id'] not in owners:
-                    owners.add(job['owner_id'])
-                    await self.drain_owner(job['owner_id'])
+            # Expired-lease recovery and the global result_ready drain are
+            # idempotent and transaction-fenced; with several replicas one
+            # leader runs them per tick. Each pump still drains the owners of
+            # its own completions below. The lease fails open on store errors.
+            if self.leader is None or await run_blocking(db_executor, self.leader.acquire):
+                if self.project_pending:
+                    await run_blocking(sync_executor, self.project_pending)
+                await run_blocking(db_executor, self.scheduler.recover, time.time())
+                ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
+                owners = set()
+                for segment in ready:
+                    job = await run_blocking(db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment))
+                    if job and job['owner_id'] not in owners:
+                        owners.add(job['owner_id'])
+                        await self.drain_owner(job['owner_id'])
             self._last_recovery = sampled_at
-        if self.metrics and sampled_at - self._last_metrics >= 15:
-            await run_blocking(db_executor, self.metrics.refresh, self.scheduler.store, time.time())
+        if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
+            await self.sample_metrics()
             self._last_metrics = sampled_at
         if stop_event is not None and stop_event.is_set():
             return 0
@@ -274,6 +288,11 @@ class Pump:
         finally:
             done.set()
             await renew
+
+    async def sample_metrics(self) -> None:
+        """One complete queue-age sample; failures keep the last values and freshness."""
+        if self.metrics:
+            await run_blocking(db_executor, self.metrics.refresh, self.scheduler.store, time.time())
 
     async def drain_owner(self, owner_id: str) -> None:
         for _ in range(100):

@@ -647,7 +647,7 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
         memory_service.read.assert_called_once_with(
-            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY
+            'uid1', limit=4, offset=7, include_pending_processing=True, budget=ANY, reuse_compatibility_reads=True
         )
 
     def test_cleaner_memory_coerces_edge_values(self):

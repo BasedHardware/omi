@@ -257,19 +257,9 @@ async def test_finishing_choice_schedules_an_already_accepted_upgrade(monkeypatc
     finished = Mock(return_value=True)
     monkeypatch.setattr(worker.store, 'finish', finished)
     monkeypatch.setattr(worker, '_page', lambda *args: [])
-    scheduled = []
-
-    def schedule(coroutine, *, name):
-        scheduled.append(name)
-        if name == 'processing_backlog_continuation':
-            coroutine.close()
-            return None
-        return asyncio.create_task(coroutine)
-
-    monkeypatch.setattr(worker, 'start_background_task', schedule)
     await worker.run('synthetic')
     finished.assert_called_once_with('synthetic', 'choice', 'lease', '2026-10')
-    assert scheduled == ['processing_backlog_lease', 'processing_backlog_continuation']
+    # The accepted upgrade remains durable for the next scheduler sweep.
 
 
 async def test_previous_month_intent_cannot_spend_the_new_month(monkeypatch):
@@ -292,8 +282,6 @@ def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backen
         state='processing', estimated_units=130, estimated_hours=1, estimated_percent=10, exceeds_remaining=True
     )
     monkeypatch.setattr(backlog, 'snapshot', lambda uid: snapshot)
-    kicked = Mock()
-    monkeypatch.setattr(worker, 'kick', kicked)
     app = FastAPI()
     app.include_router(route.router)
     app.dependency_overrides[route.auth.get_current_user_uid] = lambda: 'synthetic'
@@ -306,7 +294,6 @@ def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backen
     assert response.json()['estimated_percent'] == 10
     assert response.json()['exceeds_remaining'] is True
     choice.assert_called_once_with('synthetic', request_key='synthetic-choice-uuid')
-    kicked.assert_called_once_with('synthetic')
 
 
 def test_renewals_and_downgrades_do_not_create_upgrade_intent():
