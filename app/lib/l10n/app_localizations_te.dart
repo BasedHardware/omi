@@ -11133,12 +11133,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
 
   @override
-  String get captureBannerWhatsWrong => 'ఏమి జరుగుతోంది?';
-
-  @override
-  String get captureBannerDismiss => 'దాచు';
-
-  @override
   String get captureWedgeBleExplanation =>
       'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
 
@@ -13738,9 +13732,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము';
-
-  @override
-  String get activityAttentionManage => 'నిర్వహించండి';
 
   @override
   String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';

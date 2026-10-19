@@ -143,10 +143,21 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   CaptureUploadStall? get uploadStall => _uploadStall;
 
-  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null;
+  /// The acute link episode the reader is being asked about (a stalled or
+  /// silent pendant link, or an exhausted ingress recovery), if any. The
+  /// storage episode shares the prompt slot but is slow-burn: it has its own
+  /// [storageAtRisk] row, so it is not acute.
+  CaptureWedgeEpisode? get acuteEpisode {
+    final episode = visiblePrompt;
+    return episode == null || episode.trigger == triggerStorageAtRisk ? null : episode;
+  }
+
+  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
 
   /// True while a capture attention row is newer than the last Activity visit:
-  /// lights the bell's warning dot. A new episode re-lights it.
+  /// lights the bell's warning dot. A new episode re-lights it. Acute link
+  /// episodes count too: Home has no banner, so the dot is how a stall reaches
+  /// a reader who is not on the live page.
   final ValueNotifier<bool> hasUnseenCaptureAttention = ValueNotifier(false);
 
   /// Records that Activity rendered its capture rows. With [through], marks
@@ -168,8 +179,18 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final seen = _captureAttentionSeenAt;
     final storage = _storageAtRisk;
     final upload = _uploadStall;
+    final acute = acuteEpisode;
     hasUnseenCaptureAttention.value = (storage != null && (seen == null || storage.engagedAt.isAfter(seen))) ||
-        (upload != null && (seen == null || upload.since.isAfter(seen)));
+        (upload != null && (seen == null || upload.since.isAfter(seen))) ||
+        (acute != null && (seen == null || acute.declaredAt.isAfter(seen)));
+  }
+
+  /// Every episode change (declared, retried, resolved, dismissed) passes through
+  /// here, so the bell's acute half stays in step without each path recomputing it.
+  @override
+  void notifyListeners() {
+    _updateUnseenCaptureAttention();
+    super.notifyListeners();
   }
 
   /// Ends the slow-burn rows the way their episodes end: resolved, dismissed, or reset.

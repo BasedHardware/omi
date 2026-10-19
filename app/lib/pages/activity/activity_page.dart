@@ -270,6 +270,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       final builtThrough = <DateTime>[
         if (_captureMonitor.storageAtRisk != null) _captureMonitor.storageAtRisk!.engagedAt,
         if (_captureMonitor.uploadStall != null) _captureMonitor.uploadStall!.since,
+        if (_captureMonitor.acuteEpisode != null) _captureMonitor.acuteEpisode!.declaredAt,
       ].fold<DateTime?>(null, (a, b) => a == null || b.isAfter(a) ? b : a);
       // A build with no capture rows shows nothing to mark seen; advancing the
       // timestamp then would be the stale-callback bug this snapshot prevents.

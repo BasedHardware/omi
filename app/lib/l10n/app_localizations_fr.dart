@@ -11176,12 +11176,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get captureBannerRetrySync => 'Réessayer la synchronisation';
 
   @override
-  String get captureBannerWhatsWrong => 'Que se passe-t-il ?';
-
-  @override
-  String get captureBannerDismiss => 'Masquer';
-
-  @override
   String get captureWedgeBleExplanation =>
       'La liaison Bluetooth avec votre Omi s\'est interrompue, l\'audio n\'atteint donc pas l\'application. Omi continue d\'enregistrer sur l\'appareil et se synchronisera dès que la liaison sera rétablie. Réessayer rétablit la liaison ; si cela échoue toujours, vérifiez votre appareil dans Réglages > Appareil.';
 
@@ -13792,9 +13786,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Impossible de vérifier le stockage';
-
-  @override
-  String get activityAttentionManage => 'Gérer';
 
   @override
   String get activityAttentionStorageSubtitle => 'Enregistrements en pause';

@@ -20151,18 +20151,6 @@ abstract class AppLocalizations {
   /// **'Retry sync'**
   String get captureBannerRetrySync;
 
-  /// Text button on the capture recovery banner that opens the details sheet explaining the outage.
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s going on?'**
-  String get captureBannerWhatsWrong;
-
-  /// Semantic label for the capture recovery banner's close button.
-  ///
-  /// In en, this message translates to:
-  /// **'Dismiss'**
-  String get captureBannerDismiss;
-
   /// Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does.
   ///
   /// In en, this message translates to:
@@ -24314,12 +24302,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Can\'t check storage'**
   String get activityAttentionStorageUnknownTitle;
-
-  /// Action pill on the Activity storage-full row; opens Offline Sync
-  ///
-  /// In en, this message translates to:
-  /// **'Manage'**
-  String get activityAttentionManage;
 
   /// Needs attention row subtitle under the storage title: new recordings cannot be saved
   ///

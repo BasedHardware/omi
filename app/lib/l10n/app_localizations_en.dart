@@ -11072,12 +11072,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureBannerRetrySync => 'Retry sync';
 
   @override
-  String get captureBannerWhatsWrong => 'What\'s going on?';
-
-  @override
-  String get captureBannerDismiss => 'Dismiss';
-
-  @override
   String get captureWedgeBleExplanation =>
       'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.';
 
@@ -13669,9 +13663,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Can\'t check storage';
-
-  @override
-  String get activityAttentionManage => 'Manage';
 
   @override
   String get activityAttentionStorageSubtitle => 'Recordings paused';

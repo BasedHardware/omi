@@ -11094,12 +11094,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureBannerRetrySync => 'Senkronizasyonu yeniden dene';
 
   @override
-  String get captureBannerWhatsWrong => 'Ne oluyor?';
-
-  @override
-  String get captureBannerDismiss => 'Gizle';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.';
 
@@ -13699,9 +13693,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Depolama alanı kontrol edilemedi';
-
-  @override
-  String get activityAttentionManage => 'Yönet';
 
   @override
   String get activityAttentionStorageSubtitle => 'Kayıtlar duraklatıldı';

@@ -11017,12 +11017,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get captureBannerRetrySync => 'أعد محاولة المزامنة';
 
   @override
-  String get captureBannerWhatsWrong => 'ما الذي يحدث؟';
-
-  @override
-  String get captureBannerDismiss => 'تجاهل';
-
-  @override
   String get captureWedgeBleExplanation =>
       'تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.';
 
@@ -13611,9 +13605,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'تعذّر التحقق من مساحة التخزين';
-
-  @override
-  String get activityAttentionManage => 'إدارة';
 
   @override
   String get activityAttentionStorageSubtitle => 'تم إيقاف التسجيلات مؤقتًا';

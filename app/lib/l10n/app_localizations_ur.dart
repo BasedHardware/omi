@@ -11096,12 +11096,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get captureBannerRetrySync => 'ہم وقت کرنے کی دوبارہ کوشش کریں';
 
   @override
-  String get captureBannerWhatsWrong => 'کیا ہو رہا ہے؟';
-
-  @override
-  String get captureBannerDismiss => 'چھپائیں';
-
-  @override
   String get captureWedgeBleExplanation =>
       'آپ کے Omi سے بلوٹوتھ کنکشن رکاوٹ کا شکار ہے، اس لیے آڈیو ایپ تک نہیں پہنچ رہا۔ Omi ڈیوائس پر ریکارڈنگ جاری رکھتا ہے اور کنکشن بحال ہوتے ہی سنک ہو جائے گا۔ دوبارہ کوشش کرنے سے کنکشن دوبارہ قائم ہوتا ہے؛ اگر یہ بار بار ناکام ہو، تو سیٹنگز > ڈیوائس میں اپنا ڈیوائس چیک کریں۔';
 
@@ -13698,9 +13692,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'اسٹوریج کی جانچ ممکن نہیں';
-
-  @override
-  String get activityAttentionManage => 'منظم کریں';
 
   @override
   String get activityAttentionStorageSubtitle => 'ریکارڈنگز روک دی گئی ہیں';

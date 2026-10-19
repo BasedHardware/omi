@@ -11088,12 +11088,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureBannerRetrySync => 'Coba sinkronkan lagi';
 
   @override
-  String get captureBannerWhatsWrong => 'Ada apa?';
-
-  @override
-  String get captureBannerDismiss => 'Tutup';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.';
 
@@ -13695,9 +13689,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa';
-
-  @override
-  String get activityAttentionManage => 'Kelola';
 
   @override
   String get activityAttentionStorageSubtitle => 'Rekaman dijeda';

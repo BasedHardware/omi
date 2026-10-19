@@ -11113,12 +11113,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get captureBannerRetrySync => 'Ponovi sinhronizacijo';
 
   @override
-  String get captureBannerWhatsWrong => 'Kaj se dogaja?';
-
-  @override
-  String get captureBannerDismiss => 'Skrij';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.';
 
@@ -13715,9 +13709,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Shrambe ni mogoče preveriti';
-
-  @override
-  String get activityAttentionManage => 'Upravljaj';
 
   @override
   String get activityAttentionStorageSubtitle => 'Posnetki so pavzirani';

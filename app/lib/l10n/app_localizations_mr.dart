@@ -11093,12 +11093,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get captureBannerRetrySync => 'सिंक पुन्हा प्रयत्न करा';
 
   @override
-  String get captureBannerWhatsWrong => 'काय चालू आहे?';
-
-  @override
-  String get captureBannerDismiss => 'लपवा';
-
-  @override
   String get captureWedgeBleExplanation =>
       'तुमच्या Omi शी असलेला ब्लूटूथ दुवा तुटला आहे, म्हणून ऑडिओ अ‍ॅपपर्यंत पोहोचत नाही. Omi डिव्हाइसवर रेकॉर्डिंग सुरू ठेवते आणि दुवा पुन्हा स्थापित झाल्यावर सिंक होईल. पुन्हा प्रयत्न केल्याने दुवा पुन्हा जोडला जातो; तो सतत अयशस्वी होत असल्यास, सेटिंग्ज > डिव्हाइसमध्ये तुमचे डिव्हाइस तपासा.';
 
@@ -13690,9 +13684,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'स्टोरेज तपासता येत नाही';
-
-  @override
-  String get activityAttentionManage => 'व्यवस्थापित करा';
 
   @override
   String get activityAttentionStorageSubtitle => 'रेकॉर्डिंग थांबवल्या';

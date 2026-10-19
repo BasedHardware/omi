@@ -11119,12 +11119,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get captureBannerRetrySync => 'Pokušaj ponovno sinkronizirati';
 
   @override
-  String get captureBannerWhatsWrong => 'Što se događa?';
-
-  @override
-  String get captureBannerDismiss => 'Sakrij';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth veza s vašim Omijem je zastala, pa zvuk ne dolazi do aplikacije. Omi nastavlja snimati na uređaju i sinkronizirat će se kada se veza oporavi. Ponovni pokušaj ponovno uspostavlja vezu; ako i dalje ne uspijeva, provjerite uređaj u Postavke > Uređaj.';
 
@@ -13719,9 +13713,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Pohranu nije moguće provjeriti';
-
-  @override
-  String get activityAttentionManage => 'Upravljaj';
 
   @override
   String get activityAttentionStorageSubtitle => 'Snimke su pauzirane';

@@ -11173,12 +11173,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get captureBannerRetrySync => 'Synchronisierung erneut versuchen';
 
   @override
-  String get captureBannerWhatsWrong => 'Was ist los?';
-
-  @override
-  String get captureBannerDismiss => 'Ausblenden';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Die Bluetooth-Verbindung zu deinem Omi ist ins Stocken geraten, deshalb erreicht das Audio die App nicht. Omi nimmt auf dem Gerät weiter auf und synchronisiert, sobald die Verbindung wiederhergestellt ist. Erneut versuchen stellt die Verbindung wieder her; wenn es weiter fehlschlägt, prüfe dein Gerät unter Einstellungen > Gerät.';
 
@@ -13785,9 +13779,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Speicher konnte nicht geprüft werden';
-
-  @override
-  String get activityAttentionManage => 'Verwalten';
 
   @override
   String get activityAttentionStorageSubtitle => 'Aufnahmen pausiert';

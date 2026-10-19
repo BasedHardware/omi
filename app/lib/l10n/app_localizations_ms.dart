@@ -11106,12 +11106,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureBannerRetrySync => 'Cuba segerak semula';
 
   @override
-  String get captureBannerWhatsWrong => 'Apa yang berlaku?';
-
-  @override
-  String get captureBannerDismiss => 'Tutup';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Pautan Bluetooth ke Omi anda tersekat, jadi audio tidak sampai ke aplikasi. Omi terus merakam pada peranti dan akan disegerakkan apabila pautan pulih. Mencuba semula menyambung semula pautan; jika ia terus gagal, semak peranti anda di Tetapan > Peranti.';
 
@@ -13716,9 +13710,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Storan tidak dapat disemak';
-
-  @override
-  String get activityAttentionManage => 'Urus';
 
   @override
   String get activityAttentionStorageSubtitle => 'Rakaman dijedakan';

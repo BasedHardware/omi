@@ -11077,12 +11077,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureBannerRetrySync => 'تلاش برای همگام‌سازی مجدد';
 
   @override
-  String get captureBannerWhatsWrong => 'چه اتفاقی افتاده است؟';
-
-  @override
-  String get captureBannerDismiss => 'رد کردن';
-
-  @override
   String get captureWedgeBleExplanation =>
       'اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.';
 
@@ -13680,9 +13674,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'امکان بررسی حافظه نیست';
-
-  @override
-  String get activityAttentionManage => 'مدیریت';
 
   @override
   String get activityAttentionStorageSubtitle => 'ضبط‌ها متوقف شده‌اند';

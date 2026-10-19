@@ -11084,12 +11084,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get captureBannerRetrySync => 'Thử đồng bộ lại';
 
   @override
-  String get captureBannerWhatsWrong => 'Chuyện gì đang xảy ra?';
-
-  @override
-  String get captureBannerDismiss => 'Ẩn';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
 
@@ -13683,9 +13677,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ';
-
-  @override
-  String get activityAttentionManage => 'Quản lý';
 
   @override
   String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';

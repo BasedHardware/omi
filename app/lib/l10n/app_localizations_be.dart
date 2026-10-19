@@ -11113,12 +11113,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureBannerRetrySync => 'Паўтарыць сінхранізацыю';
 
   @override
-  String get captureBannerWhatsWrong => 'Што адбываецца?';
-
-  @override
-  String get captureBannerDismiss => 'Схаваць';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Спынілася Bluetooth-злучэнне з вашым Omi, таму гук не трапляе ў праграму. Omi працягвае запіс на прыладзе і сінхранізуецца, калі злучэнне адновіцца. Паўтор спрабыў зноў падлучыць злучэнне; калі гэта працягвае не працаваць, праверце прыладу ў Налады > Прылада.';
 
@@ -13720,9 +13714,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Немагчыма праверыць памяць';
-
-  @override
-  String get activityAttentionManage => 'Кіраваць';
 
   @override
   String get activityAttentionStorageSubtitle => 'Запісы прыпынены';

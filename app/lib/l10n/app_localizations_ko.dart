@@ -10920,12 +10920,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get captureBannerRetrySync => '동기화 재시도';
 
   @override
-  String get captureBannerWhatsWrong => '무슨 일인가요?';
-
-  @override
-  String get captureBannerDismiss => '닫기';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.';
 
@@ -13501,9 +13495,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => '저장 공간을 확인할 수 없음';
-
-  @override
-  String get activityAttentionManage => '관리';
 
   @override
   String get activityAttentionStorageSubtitle => '녹음 일시중지됨';

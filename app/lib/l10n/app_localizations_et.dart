@@ -11076,12 +11076,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureBannerRetrySync => 'Proovi sünkroonimist uuesti';
 
   @override
-  String get captureBannerWhatsWrong => 'Mis toimub?';
-
-  @override
-  String get captureBannerDismiss => 'Peida';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.';
 
@@ -13678,9 +13672,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Salvestusruumi ei õnnestunud kontrollida';
-
-  @override
-  String get activityAttentionManage => 'Halda';
 
   @override
   String get activityAttentionStorageSubtitle => 'Salvestised peatatud';

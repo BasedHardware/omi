@@ -10900,12 +10900,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureBannerRetrySync => '重试同步';
 
   @override
-  String get captureBannerWhatsWrong => '怎么了？';
-
-  @override
-  String get captureBannerDismiss => '忽略';
-
-  @override
   String get captureWedgeBleExplanation =>
       '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
 
@@ -13476,9 +13470,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => '无法检查存储空间';
-
-  @override
-  String get activityAttentionManage => '管理';
 
   @override
   String get activityAttentionStorageSubtitle => '录音已暂停';

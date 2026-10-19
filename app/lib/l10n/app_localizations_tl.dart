@@ -11178,12 +11178,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get captureBannerRetrySync => 'Subukang i-sync muli';
 
   @override
-  String get captureBannerWhatsWrong => 'Anong nangyayari?';
-
-  @override
-  String get captureBannerDismiss => 'Isara';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.';
 
@@ -13791,9 +13785,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Hindi masuri ang storage';
-
-  @override
-  String get activityAttentionManage => 'Pamahalaan';
 
   @override
   String get activityAttentionStorageSubtitle => 'Naka-pause ang mga recording';

@@ -11111,12 +11111,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureBannerRetrySync => 'Atkārtot sinhronizāciju';
 
   @override
-  String get captureBannerWhatsWrong => 'Kas notiek?';
-
-  @override
-  String get captureBannerDismiss => 'Paslēpt';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
 
@@ -13716,9 +13710,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Atmiņu neizdevās pārbaudīt';
-
-  @override
-  String get activityAttentionManage => 'Pārvaldīt';
 
   @override
   String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';

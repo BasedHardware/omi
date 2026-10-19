@@ -11075,12 +11075,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get captureBannerRetrySync => 'Zopakovať synchronizáciu';
 
   @override
-  String get captureBannerWhatsWrong => 'Čo sa deje?';
-
-  @override
-  String get captureBannerDismiss => 'Skryť';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetoothové prepojenie s vaším zariadením Omi sa zastavilo, takže zvuk sa do aplikácie nedostáva. Omi naďalej nahráva na zariadení a po obnovení prepojenia sa synchronizuje. Opätovný pokus prepojenie znovu naviaže; ak to naďalej zlyháva, skontrolujte zariadenie v Nastavenia > Zariadenie.';
 
@@ -13681,9 +13675,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Úložisko sa nepodarilo skontrolovať';
-
-  @override
-  String get activityAttentionManage => 'Spravovať';
 
   @override
   String get activityAttentionStorageSubtitle => 'Nahrávky pozastavené';

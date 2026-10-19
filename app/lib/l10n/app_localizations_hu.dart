@@ -11129,12 +11129,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureBannerRetrySync => 'Szinkronizálás újrapróbálása';
 
   @override
-  String get captureBannerWhatsWrong => 'Mi történik?';
-
-  @override
-  String get captureBannerDismiss => 'Elrejtés';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
 
@@ -13737,9 +13731,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült';
-
-  @override
-  String get activityAttentionManage => 'Kezelés';
 
   @override
   String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';

@@ -11113,12 +11113,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get captureBannerRetrySync => 'Synchronisatie opnieuw proberen';
 
   @override
-  String get captureBannerWhatsWrong => 'Wat is er aan de hand?';
-
-  @override
-  String get captureBannerDismiss => 'Verbergen';
-
-  @override
   String get captureWedgeBleExplanation =>
       'De Bluetooth-verbinding met je Omi is vastgelopen, dus audio komt de app niet meer binnen. Omi blijft opnemen op het apparaat en synchroniseert zodra de verbinding herstelt. Opnieuw proberen herstelt de verbinding; als het blijft mislukken, controleer je apparaat onder Instellingen > Apparaat.';
 
@@ -13721,9 +13715,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Opslag kon niet worden gecontroleerd';
-
-  @override
-  String get activityAttentionManage => 'Beheren';
 
   @override
   String get activityAttentionStorageSubtitle => 'Opnames gepauzeerd';

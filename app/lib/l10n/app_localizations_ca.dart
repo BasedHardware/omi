@@ -11144,12 +11144,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureBannerRetrySync => 'Reintenta la sincronització';
 
   @override
-  String get captureBannerWhatsWrong => 'Què està passant?';
-
-  @override
-  String get captureBannerDismiss => 'Descarta';
-
-  @override
   String get captureWedgeBleExplanation =>
       'L\'enllaç Bluetooth amb el vostre Omi s\'ha aturat, per tant l\'àudio no arriba a l\'aplicació. L\'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l\'enllaç es recuperi. Reintentar torna a connectar l\'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.';
 
@@ -13755,9 +13749,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'No es pot comprovar l\'emmagatzematge';
-
-  @override
-  String get activityAttentionManage => 'Gestiona';
 
   @override
   String get activityAttentionStorageSubtitle => 'Enregistraments en pausa';

@@ -11064,12 +11064,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get captureBannerRetrySync => 'सिंक पुनः प्रयास करें';
 
   @override
-  String get captureBannerWhatsWrong => 'क्या हो रहा है?';
-
-  @override
-  String get captureBannerDismiss => 'हटाएँ';
-
-  @override
   String get captureWedgeBleExplanation =>
       'आपके Omi से ब्लूटूथ कनेक्शन रुक गया है, इसलिए ऑडियो ऐप तक नहीं पहुँच रहा है। Omi डिवाइस पर रिकॉर्डिंग जारी रखता है और कनेक्शन लौटते ही सिंक हो जाएगा। फिर से कोशिश करने पर कनेक्शन दोबारा जुड़ता है; अगर यह बार-बार विफल रहे, तो सेटिंग > डिवाइस में अपना डिवाइस जाँचें।';
 
@@ -13666,9 +13660,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'स्टोरेज की जाँच संभव नहीं';
-
-  @override
-  String get activityAttentionManage => 'प्रबंधित करें';
 
   @override
   String get activityAttentionStorageSubtitle => 'रिकॉर्डिंग रोक दी गई हैं';

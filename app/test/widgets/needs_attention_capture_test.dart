@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -17,12 +19,14 @@ import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/ui/ui.dart';
 
-/// The slow-burn capture problems (full phone disk, stalled upload) live in Activity's Needs
-/// attention section and light the bell's warning dot, never a banner on Home.
+/// Capture problems (a stalled pendant link, a full phone disk, a stalled upload) live in
+/// Activity's Needs attention section and light the bell's warning dot, never a banner on Home.
 
 class _IdleSync extends ChangeNotifier implements SyncProvider {
   @override
@@ -136,8 +140,8 @@ void main() {
       expect(find.text('Phone storage full'), findsOneWidget);
       expect(find.textContaining('3'), findsNothing);
       expect(find.text('Recordings paused'), findsOneWidget);
-      expect(find.text('Manage'), findsOneWidget, reason: 'the row carries its action button, not a bare chevron');
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(find.byType(OmiButton), findsNothing, reason: 'a settings-style row: no button');
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget, reason: 'the row opens Offline Sync');
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
     });
 
@@ -150,8 +154,8 @@ void main() {
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
       expect(find.text('Upload stalled'), findsOneWidget);
       expect(find.text('5 recordings waiting · 47m'), findsOneWidget);
-      expect(find.text('Try Again'), findsOneWidget, reason: 'the row carries its action button, not a bare chevron');
-      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      expect(find.byType(OmiButton), findsNothing, reason: 'a settings-style row: no button');
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget, reason: 'the row opens Offline Sync');
       expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
     });
 
@@ -173,7 +177,7 @@ void main() {
       expect(find.text('Phone storage full'), findsNothing, reason: 'an unavailable probe is not a proven full disk');
     });
 
-    testWidgets('the Manage button opens Offline Sync once, without the row gesture double-firing', (tester) async {
+    testWidgets('tapping the storage row opens Offline Sync once', (tester) async {
       final monitor = _monitor();
       addTearDown(monitor.dispose);
       _seedStorage(monitor);
@@ -182,14 +186,74 @@ void main() {
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor, observer: pushes));
       final baseline = pushes.count; // the MaterialApp's own initial route
 
-      await tester.tap(find.text('Manage'));
-      expect(pushes.count - baseline, 1, reason: 'the button opens the Offline Sync entry exactly once');
-
-      // Pop back so the row body is hittable again, then tap it away from the button.
-      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
-      await tester.pump();
       await tester.tap(find.text('Phone storage full'));
-      expect(pushes.count - baseline, 2, reason: 'the row body still opens the same Offline Sync entry');
+      expect(pushes.count - baseline, 1, reason: 'the row opens the Offline Sync entry exactly once');
+    });
+
+    testWidgets('a stalled pendant link lists a row that reconnects in place', (tester) async {
+      var bleRetries = 0;
+      // The automatic retry at declaration completes at once; the reader's retry is held in
+      // flight so the row can be seen stepping aside while it runs.
+      final held = Completer<void>();
+      final monitor = CaptureWedgeMonitor(
+        featureGate: () async => true,
+        track: (_, __) {},
+        bleRetry: (_) {
+          bleRetries++;
+          return bleRetries == 1 ? Future.value() : held.future;
+        },
+        appBuild: () => '1',
+        platform: () => 'ios',
+      );
+      addTearDown(monitor.dispose);
+      for (var i = 0; i < 3; i++) {
+        final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+        monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+      }
+      await tester.pump();
+      final pushes = _PushCounter();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor, observer: pushes));
+      final baseline = pushes.count;
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
+      expect(find.text("Omi isn't sending audio"), findsOneWidget);
+      final retriesBefore = bleRetries;
+
+      await tester.tap(find.text('Reconnect'));
+      await tester.pump();
+      expect(bleRetries, retriesBefore + 1, reason: 'the row retries the episode in place');
+      expect(pushes.count - baseline, 0, reason: 'a stalled link is fixed where the reader stands');
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsNothing,
+          reason: 'the row leaves while the retry runs');
+      held.complete();
+      await tester.pump();
+    });
+
+    testWidgets('an exhausted ingress recovery row explains, with no retry and no saved-audio claim', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'actionRequired',
+          generation: 'g1',
+          reason: 'subscription_timeout',
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 60000,
+        ),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
+      expect(find.text('Reconnect'), findsNothing, reason: 'a Dart-side retry would no-op');
+      expect(find.textContaining('transcribes when it recovers'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('activity_attention_capture_link')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('could not restore the connection automatically'), findsOneWidget,
+          reason: 'the row opens the explanation');
     });
 
     testWidgets('an upload stall without known seconds shows only the count', (tester) async {
@@ -303,6 +367,37 @@ void main() {
       monitor.markCaptureAttentionSeen();
       await tester.pump();
       expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+    });
+
+    testWidgets('a stalled pendant link lights the warning dot until audio flows again', (tester) async {
+      final store = await _noWork();
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      var stored = yesterday.millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
+
+      await tester.pumpWidget(pageApp(Scaffold(
+        body: Center(child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor)),
+      )));
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+
+      for (var i = 0; i < 3; i++) {
+        final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+        monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+      }
+      await tester.pump();
+      await tester.pump();
+      expect(monitor.acuteEpisode, isNotNull);
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsOneWidget,
+          reason: 'Home has no banner, so the bell carries an acute stall');
+
+      final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+      monitor.onTranscriptObserved('dev-a');
+      monitor.onCaptureSessionEnded(handle, binaryBytesSent: 64);
+      await tester.pump();
+      expect(monitor.acuteEpisode, isNull);
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing,
+          reason: 'a resolved stall is no longer attention');
     });
   });
 

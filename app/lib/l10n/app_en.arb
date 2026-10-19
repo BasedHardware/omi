@@ -13195,14 +13195,6 @@
     "@captureBannerRetrySync": {
         "description": "Banner button that retries the pending transfer (phone-storage episodes)"
     },
-    "captureBannerWhatsWrong": "What's going on?",
-    "@captureBannerWhatsWrong": {
-        "description": "Text button on the capture recovery banner that opens the details sheet explaining the outage."
-    },
-    "captureBannerDismiss": "Dismiss",
-    "@captureBannerDismiss": {
-        "description": "Semantic label for the capture recovery banner's close button."
-    },
     "captureWedgeBleExplanation": "The Bluetooth link to your Omi stalled, so audio isn't reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.",
     "@captureWedgeBleExplanation": {
         "description": "Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does."
@@ -16535,10 +16527,6 @@
     "activityAttentionStorageUnknownTitle": "Can't check storage",
     "@activityAttentionStorageUnknownTitle": {
         "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
-    },
-    "activityAttentionManage": "Manage",
-    "@activityAttentionManage": {
-        "description": "Action pill on the Activity storage-full row; opens Offline Sync"
     },
     "activityAttentionStorageSubtitle": "Recordings paused",
     "@activityAttentionStorageSubtitle": {

@@ -11085,12 +11085,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureBannerRetrySync => 'Prøv synkronisering igjen';
 
   @override
-  String get captureBannerWhatsWrong => 'Hva skjer?';
-
-  @override
-  String get captureBannerDismiss => 'Avvis';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
 
@@ -13687,9 +13681,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
-
-  @override
-  String get activityAttentionManage => 'Administrer';
 
   @override
   String get activityAttentionStorageSubtitle => 'Opptak satt på pause';

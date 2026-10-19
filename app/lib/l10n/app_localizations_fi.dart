@@ -11086,12 +11086,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
 
   @override
-  String get captureBannerWhatsWrong => 'Mitä on meneillään?';
-
-  @override
-  String get captureBannerDismiss => 'Hylkää';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
 
@@ -13689,9 +13683,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa';
-
-  @override
-  String get activityAttentionManage => 'Hallitse';
 
   @override
   String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';

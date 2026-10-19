@@ -11093,12 +11093,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get captureBannerRetrySync => 'Понови синхронизацију';
 
   @override
-  String get captureBannerWhatsWrong => 'Шта се дешава?';
-
-  @override
-  String get captureBannerDismiss => 'Сакриј';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth веза са вашим Omi је стала, па звук не стиже до апликације. Omi наставља да снима на уређају и синхронизоваће се када се веза опорави. Поновни покушај поново успоставља везу; ако и даље не успева, проверите уређај у Подешавања > Уређај.';
 
@@ -13694,9 +13688,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Складиште није могуће проверити';
-
-  @override
-  String get activityAttentionManage => 'Управљај';
 
   @override
   String get activityAttentionStorageSubtitle => 'Снимке су паузиране';

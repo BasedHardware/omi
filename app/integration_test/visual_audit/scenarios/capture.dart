@@ -394,9 +394,9 @@ void _seedVisibleWedgeEpisode() {
   });
 }
 
-/// A quiet monitor owning both slow-burn capture problems, so Activity's Needs attention rows
-/// render: a phone disk refusing new recordings, and an upload stalled for hours. Passed into the
-/// page directly; the app's instance is untouched.
+/// A monitor owning every capture problem Activity lists, so all Needs attention rows render: a
+/// pendant that stopped sending audio, a phone disk refusing new recordings, and an upload stalled
+/// for hours. Passed into the page directly; the app's instance is untouched.
 CaptureWedgeMonitor _seededCaptureAttention() {
   final monitor = CaptureWedgeMonitor(
     featureGate: () async => true,
@@ -418,6 +418,10 @@ CaptureWedgeMonitor _seededCaptureAttention() {
     oldestPendingAt: now.subtract(const Duration(hours: 3, minutes: 10)),
     pendingSeconds: 47 * 60,
   );
+  for (var i = 0; i < CaptureWedgeMonitor.zeroByteThreshold; i++) {
+    final handle = monitor.onCaptureSessionConnected(deviceId: auditPendant.id, source: 'omi');
+    monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+  }
   return monitor;
 }
 
@@ -462,17 +466,14 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(
-    id: 'home-capture-recovery-banner',
-    title: 'Pendant recording, acute recovery banner',
+    id: 'home-capture-link-stall',
+    title: 'Pendant recording, link stalled',
     page: _home,
-    state: 'The pendant streams, but the BLE link stalled: Home keeps the acute banner under the '
-        'capture card (title, one detail line, Reconnect, What\'s going on?, corner dismiss)',
+    state: 'The pendant streams, but the BLE link stalled: Home shows no banner; the bell\'s amber '
+        'dot is the only signal, and Activity lists the stall',
     run: (a) {
       _seedVisibleWedgeEpisode();
-      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
-        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
-        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
-      });
+      return _runHome(a, AuditLive.pendant, pendantConnected: true);
     },
   ),
   AuditScenario(
@@ -536,21 +537,17 @@ final captureScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'conversation-live-recovery-banner',
-    title: 'Live page, pendant, recovery banner',
+    title: 'Live page, pendant, link stalled',
     page: _live,
-    state: 'The pendant streams, but the BLE link stalled: the one banner retries in place '
-        '(never opens settings), explains itself on demand, and can be dismissed. Home keeps '
-        'this same acute banner; only slow-burn problems live in the Activity bell',
+    state: 'The pendant streams, but the BLE link stalled: the header reads Reconnecting and one '
+        'line under it names the cause with Reconnect, which retries in place. No card, no dismiss',
     run: (a) {
       _seedVisibleWedgeEpisode();
       return _runLivePage(a, AuditLive.pendant).then((_) async {
-        // The seeded episode is the retryable kind (zero-byte streak): the banner
-        // must offer the in-place affordances this scenario exists to audit, not
-        // the manual-reconnect variant, and the assertions are keyed so the audit
-        // cannot pass vacuously.
-        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
-        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
-        expect(find.byKey(const Key('capture_recovery_banner_dismiss')), findsOneWidget);
+        // The seeded episode is the retryable kind (zero-byte streak), so the line must offer
+        // the in-place retry this scenario exists to audit, not the manual-reconnect variant.
+        expect(find.text('Omi isn\'t sending audio'), findsOneWidget);
+        expect(find.text('Reconnect'), findsOneWidget);
       });
     },
   ),
@@ -558,8 +555,9 @@ final captureScenarios = <AuditScenario>[
     id: 'activity-capture-attention',
     title: 'Activity: capture problems under Needs attention',
     page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
-    state: 'Phone storage full with three recordings blocked, and an upload stalled three hours '
-        'with five recordings (47 minutes of audio) waiting; no recaps, changes, or server attention',
+    state: 'The pendant stopped sending audio, phone storage is full with three recordings blocked, '
+        'and an upload stalled three hours with five recordings (47 minutes of audio) waiting; no '
+        'recaps, changes, or server attention',
     run: (a) async {
       final monitor = _seededCaptureAttention();
       addTearDown(monitor.dispose);
@@ -589,7 +587,7 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runLivePage(a, AuditLive.pendantOutage).then((_) async {
       // A terminal transcription failure is not a BLE wedge: it must not grow a
       // recovery banner for an unrelated failure the page never declared.
-      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+      expect(find.text('Omi isn\'t sending audio'), findsNothing);
     }),
   ),
 ];

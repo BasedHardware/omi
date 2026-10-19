@@ -11136,12 +11136,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureBannerRetrySync => 'Reîncearcă sincronizarea';
 
   @override
-  String get captureBannerWhatsWrong => 'Ce se întâmplă?';
-
-  @override
-  String get captureBannerDismiss => 'Ascunde';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Legătura Bluetooth cu Omi-ul tău s-a blocat, deci audioul nu mai ajunge în aplicație. Omi continuă să înregistreze pe dispozitiv și se va sincroniza când legătura revine. Reîncercarea reconectează legătura; dacă continuă să eșueze, verifică dispozitivul în Setări > Dispozitiv.';
 
@@ -13740,9 +13734,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Stocarea nu poate fi verificată';
-
-  @override
-  String get activityAttentionManage => 'Gestionează';
 
   @override
   String get activityAttentionStorageSubtitle => 'Înregistrările sunt pauzate';

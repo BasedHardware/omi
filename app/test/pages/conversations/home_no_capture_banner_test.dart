@@ -9,10 +9,10 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 
 import '../../support/typed_conversation_screen.dart';
 
-/// Home keeps the capture banner for acute link failures only. Slow-burn capture problems
-/// (storage at risk, upload silence) live in Activity's Needs attention section (see
-/// needs_attention_capture_test.dart); the live amber pill does not observe the wedge
-/// monitor, so Home must still surface a zero-byte/reconnect/ingress episode itself.
+/// Home has no capture banner at all. Acute link failures speak on the live page (a status
+/// line under the header) and light the Activity bell's warning dot; slow-burn problems
+/// (storage at risk, upload silence) are Needs attention rows in Activity (see
+/// needs_attention_capture_test.dart).
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
 
@@ -60,7 +60,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
   }
 
-  testWidgets('Home shows the banner for an acute zero-byte episode', (tester) async {
+  testWidgets('Home shows no banner for an acute zero-byte episode', (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -68,8 +68,8 @@ void main() {
 
     final monitor = swapInMonitor();
     final conversations = await seedConversations();
-    // Three zero-byte capture sessions: the acute link failure whose banner must
-    // reach the reader even when they stay on Home.
+    // Three zero-byte capture sessions: the acute link failure that used to keep a
+    // Home banner. It now reaches a Home reader through the bell's dot instead.
     for (var i = 0; i < 3; i++) {
       final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
       monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
@@ -78,13 +78,16 @@ void main() {
     await pumpHome(tester, conversations);
 
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget,
-        reason: 'an acute episode still warns on Home; the live pill does not observe the monitor');
+    expect(monitor.acuteEpisode, isNotNull, reason: 'the seeded episode is acute and visible');
+    expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
+    expect(find.text('Omi isn\'t sending audio'), findsNothing,
+        reason: 'Home carries no capture banner; the bell dot is the signal');
+    expect(monitor.hasUnseenCaptureAttention.value, isTrue, reason: 'the bell warns instead');
     expect(find.text('Capture banner check'), findsOneWidget, reason: 'the page itself still renders');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Home stays free of the slow-burn storage banner', (tester) async {
+  testWidgets('Home shows no banner for the slow-burn storage episode', (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -103,8 +106,9 @@ void main() {
     await pumpHome(tester, conversations);
 
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('capture_recovery_banner')), findsNothing,
-        reason: 'storage at risk is slow-burn and lives in Activity, not the Home banner');
+    expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
+    expect(find.text('Phone storage full'), findsNothing,
+        reason: 'storage at risk is slow-burn and lives in Activity, not on Home');
     expect(find.text('Capture banner check'), findsOneWidget, reason: 'the page itself still renders');
     await tester.pumpWidget(const SizedBox.shrink());
   });

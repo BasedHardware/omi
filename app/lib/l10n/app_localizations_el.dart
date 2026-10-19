@@ -11157,12 +11157,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get captureBannerRetrySync => 'Επανάληψη συγχρονισμού';
 
   @override
-  String get captureBannerWhatsWrong => 'Τι συμβαίνει;';
-
-  @override
-  String get captureBannerDismiss => 'Απόρριψη';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.';
 
@@ -13770,9 +13764,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'Δεν είναι δυνατός ο έλεγχος του αποθηκευτικού χώρου';
-
-  @override
-  String get activityAttentionManage => 'Διαχείριση';
 
   @override
   String get activityAttentionStorageSubtitle => 'Οι ηχογραφήσεις τέθηκαν σε παύση';

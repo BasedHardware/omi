@@ -10998,12 +10998,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureBannerRetrySync => 'נסה שוב לסנכרן';
 
   @override
-  String get captureBannerWhatsWrong => 'מה קורה?';
-
-  @override
-  String get captureBannerDismiss => 'סגירה';
-
-  @override
   String get captureWedgeBleExplanation =>
       'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
 
@@ -13590,9 +13584,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'לא ניתן לבדוק את האחסון';
-
-  @override
-  String get activityAttentionManage => 'נהל';
 
   @override
   String get activityAttentionStorageSubtitle => 'ההקלטות מושהות';

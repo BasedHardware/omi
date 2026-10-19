@@ -10916,12 +10916,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureBannerRetrySync => '同期を再試行';
 
   @override
-  String get captureBannerWhatsWrong => '何が起きていますか？';
-
-  @override
-  String get captureBannerDismiss => '非表示';
-
-  @override
   String get captureWedgeBleExplanation =>
       'OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。';
 
@@ -13495,9 +13489,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageUnknownTitle => 'ストレージを確認できません';
-
-  @override
-  String get activityAttentionManage => '管理';
 
   @override
   String get activityAttentionStorageSubtitle => '録音を一時停止中';
