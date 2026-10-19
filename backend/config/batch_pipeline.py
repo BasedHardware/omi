@@ -219,3 +219,20 @@ def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_MAX = 8
+
+
+def worker_io_concurrency() -> int:
+    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+
+    1 restores the fully serial chain. Malformed or out-of-range values keep the
+    conservative default; GPU work and the chain lock are unaffected either way.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))
+    except ValueError:
+        return WORKER_IO_CONCURRENCY_DEFAULT
+    return value if 1 <= value <= WORKER_IO_CONCURRENCY_MAX else WORKER_IO_CONCURRENCY_DEFAULT
