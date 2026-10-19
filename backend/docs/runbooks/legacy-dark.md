@@ -14,7 +14,7 @@ Any failure to read the mode serves `on`. During the soak the legacy image, queu
 
 ## Preconditions
 
-- **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete.
+- **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
 - **`draining` → `dark`:** the drain census reads zero twice, at least 10 minutes apart:
 
   ```bash
@@ -30,9 +30,17 @@ Only the lead writes `legacy_sync`, under David's merge/deploy authorization; th
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh prod-operator
-backend/scripts/rollout/ramp_set.py --env prod --legacy-sync draining   # then dark
-backend/scripts/rollout/ramp_set.py --env prod --legacy-sync on         # rollback, from either state
+cd backend
+.venv/bin/python scripts/rollout/ramp_set.py --env prod --show          # note "revision"
+.venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync draining \
+  --precondition-met cap_hold_ladder_debit --actor lead --reason draining --expected-revision <rev> --apply
+.venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync dark \
+  --actor lead --reason dark --expected-revision <rev> --apply
+.venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync on \
+  --actor lead --reason rollback --expected-revision <rev> --apply      # rollback, from either state
 ```
+
+Without `--apply` each command is a dry run. A revision conflict exits 3: re-read with `--show` and retry.
 
 Each write is a CAS on `_ramp.revision` with a history row. The change takes effect within 30s plus the in-flight request; nothing is redeployed. Record each transition in the run dir STATE.md with the census output.
 
