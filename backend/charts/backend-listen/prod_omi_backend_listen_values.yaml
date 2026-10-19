@@ -557,8 +557,6 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
-  - name: SONIOX_IDLE_CLOSE_SECONDS
-    value: "45"
   - name: STT_ROUTING_MODE
     value: "on"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS

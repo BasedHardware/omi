@@ -3912,20 +3912,43 @@ its 30-minute denominator and dwell rather than adding a raw-count page.
 
 ### Soniox idle transport
 
-`SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
-values preserve the existing adapter and keepalive wire behavior). Prod listen
-sets `45` after a 3h51m canary; every other service leaves it unset. Positive
-values below `20` seconds clamp to `20`, with
-one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
-and cannot be set below `60`: after a successful reopen, the socket stays
-connected for at least that interval even if VAD flaps. Non-finite or invalid
-rearm values use `60`. `SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned
-closes per logical session in a rolling monotonic hour; invalid or non-positive
-values use `12`. Both legacy and managed connectors retain one receiver-owned
-budget through provider leg rotation/recovery. When either limit blocks a close, the transport stays open and
-continues normal audio/keepalive handling. Expired hourly slots rearm naturally
-without resetting the silence timer. Only active VAD on a Soniox leg participates; shadow,
-VAD-off, Modulate and Deepgram continue their existing paths.
+Soniox bills a real-time stream for every connected second, keepalive silence
+included, so the idle close is default-on. `SONIOX_IDLE_CLOSE_SECONDS` defaults
+to `45` seconds, the value prod listen ran since 2026-10-06; `0`, a negative
+value, `inf` or `off`/`false` is the kill switch and preserves the
+always-connected adapter and keepalive wire behavior. Unset, blank or unreadable
+values keep the default. Positive values below `20` seconds clamp to `20`, with
+one warning per process. No environment overrides it.
+
+Two triggers start a planned close:
+
+- **VAD silence.** Continuous active-VAD silence for the threshold, after the
+  gate's hangover has released the word boundary.
+- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `60`, floor
+  `10`, `0` disables only this trigger) of wall time in which the client sent no
+  frames at all, in any VAD mode. VAD only runs on arriving frames, so a
+  backgrounded app or a dropped pendant otherwise holds a billed socket open on
+  keepalives until the session ends. If the last frame carried speech or its
+  hangover tail (or any ungated audio), the close waits the 4 s VAD hangover on
+  top of the interval, so it never finalizes inside that tail. A per-socket
+  watchdog wakes once per interval; the next frame reopens through the same
+  onset path below.
+
+`SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds (floor `5`): after a
+successful reopen, the socket stays connected for at least that interval even
+if VAD flaps. Non-finite or invalid rearm values use `60`.
+`SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned closes per logical
+session in a rolling monotonic hour, shared by both triggers; invalid or
+non-positive values use `12`. Both legacy and managed connectors retain one
+receiver-owned budget through provider leg rotation/recovery. When a limit
+blocks a close, the transport stays open and continues normal audio/keepalive
+handling. Expired hourly slots rearm naturally without resetting the silence
+timer. Only Soniox legs participate; Modulate, Parakeet and Deepgram continue
+their existing paths.
+
+Every reopen starts a new provider speaker scope (see below), so the VAD policy
+keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
+reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
 
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
@@ -3951,9 +3974,15 @@ pre-roll survives without duplicate delivery. Account/config rejections remain
 real failures even if they arrive during the planned drain.
 Shutdown while closed never opens a socket just to finalize the session.
 
-The `omi_soniox_idle_*` close/reopen/failure counters, reopen latency histogram
-and estimated connected-seconds avoided counter register only for flag-on
-Soniox transports. Avoided seconds measure the actual closed interval, excluding
+The `omi_soniox_idle_*` close/reopen/failure counters (including
+`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
+histogram and estimated connected-seconds avoided counter register only for
+flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort}`
+counts the wall time every Soniox websocket is actually open, flag on or off,
+flushed by the writer about every 10 s and once at close. That is the billed
+quantity: compare Soniox by connected hour, and divide
+`omi_stt_provider_wire_audio_seconds_total{provider="soniox"}` by it for the
+share of billed time that carried audio. Avoided seconds measure the actual closed interval, excluding
 the close drain. These are estimated connection savings, not vendor invoices.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
@@ -5666,6 +5695,25 @@ context words outside ownership never establish silence by themselves.
 Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
 retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
+### Batch worker GPU skips (speech-only diarization, short single speaker)
+
+Two switches decide whether the batch worker runs diarization on the whole
+unit. They never change ASR input, words or speech accounting.
+`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` (on) diarizes the union of
+unpadded VAD speech and every emitted word clock, each padded by 1 s, with
+nearby regions joined and 0.5 s of zeros between retained pieces; turns map
+back to capture clocks. Units that would keep over 80% of their audio
+(`reason="kept_over_80pct"`), empty compacted output for a unit with words, and
+any compaction or mapping error (`reason="other"`) diarize the full unit and
+record `omi_fallback_total{component="vad",from="batch_speech_only_diarization"}`.
+`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` is **off** by default: when on,
+all speech and words forming one region of at most 2 s (pauses up to 0.5 s
+inclusive) take the existing `skipped_single` `SPEAKER_00` result. Enable it
+only after a paired prod-revision run qualifies it. Silence units (no VAD
+speech) already skip ASR and diarization. Set
+`worker.diarizeSpeechOnlyEnabled=false` to restore full-unit diarization.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
 ### Legacy sync double-empty recovery (dark)

@@ -347,7 +347,7 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service = Mock(store=store)
     monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
     assert client.get('/v2/batch-pipeline/metrics').status_code == 200
-    service.reconcile.assert_called_once_with()
+    service.reconcile.assert_called_once_with(periodic=True)
     service.metrics.refresh.assert_not_called()
 
 
@@ -424,10 +424,110 @@ async def test_real_adapter_logs_closed_class_site_without_exception_text(monkey
         raise reprocess.FirstSummaryCallbackPending('DO-NOT-LOG synthetic payload')
 
     monkeypatch.setattr(adapter, 'run_blocking', run)
-    caplog.set_level(logging.ERROR, logger=adapter.__name__)
+    caplog.set_level(logging.WARNING, logger=adapter.__name__)
     response = await adapter.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
-    assert response.status_code == 500 and json.loads(response.body) == {'status': 'retry'}
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
     messages = [record.getMessage() for record in caplog.records]
     assert messages == [
-        'event=batch_enrichment_sync_reprocess outcome=retry site=run_enrichment exception_type=FirstSummaryCallbackPending'
+        'event=batch_enrichment_sync_reprocess outcome=retry retry_class=callback_pending site=run_enrichment '
+        'exception_type=FirstSummaryCallbackPending'
     ]
+
+
+def _retry_count(reason):
+    return module.ENRICHMENT_RETRIES.labels(reason)._value.get()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['callback_pending', 'persistence_fenced', 'fenced_subclass', 'unexpected'])
+async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monkeypatch, caplog, kind):
+    from utils.sync import reprocess
+
+    # Importing the real sync pipeline costs seconds; the identity check below
+    # pins its defining module and name instead.
+    SyncConversationPersistenceFenced = type(
+        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
+    )
+
+    class StaleSnapshot(SyncConversationPersistenceFenced):
+        pass
+
+    error, code, reason = {
+        'callback_pending': (reprocess.FirstSummaryCallbackPending('x'), 409, 'callback_pending'),
+        'persistence_fenced': (SyncConversationPersistenceFenced('x'), 409, 'persistence_fenced'),
+        'fenced_subclass': (StaleSnapshot('x'), 409, 'persistence_fenced'),
+        # Same class name from another module is not a deliberate retry.
+        'unexpected': (type('FirstSummaryCallbackPending', (RuntimeError,), {})('x'), 500, 'unexpected'),
+    }[kind]
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+
+    async def run(*_):
+        raise error
+
+    monkeypatch.setattr(module, 'run_blocking', run)
+    before = _retry_count(reason)
+    caplog.set_level(logging.WARNING, logger=module.__name__)
+    response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    # Never 429/503: those throttle the whole Cloud Tasks queue.
+    assert response.status_code == code
+    assert json.loads(response.body)['status'] == 'retry'
+    assert _retry_count(reason) == before + 1
+    [record] = [record for record in caplog.records if record.name == module.__name__]
+    assert f'retry_class={reason} ' in record.getMessage()
+    assert record.levelno == (logging.ERROR if code == 500 else logging.WARNING)
+
+
+def test_expected_retry_classes_are_defined_where_the_router_matches_them():
+    import ast
+    from pathlib import Path
+
+    backend = Path(module.__file__).resolve().parents[1]
+    for (module_name, class_name), _ in module.EXPECTED_RETRIES.items():
+        tree = ast.parse((backend / (module_name.replace('.', '/') + '.py')).read_text())
+        assert class_name in {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+
+
+def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
+    from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+
+    store = MemoryStore()
+    instances = []
+    for _ in range(2):
+        instance = Serving(
+            store,
+            projector=Mock(),
+            cleanup=Mock(),
+            enrichment_sweep=Mock(),
+            recovery=Mock(),
+            metrics=Mock(),
+            leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
+        )
+        instances.append(instance)
+    for instance in instances:
+        instance.reconcile(recover_quarantine=True, periodic=True)
+    leader, follower = instances
+    for maintenance in ('cleanup', 'enrichment_sweep'):
+        assert getattr(leader, maintenance).call_count == 1
+        assert getattr(follower, maintenance).call_count == 0
+    leader.recovery.sweep.assert_called_once()
+    follower.recovery.sweep.assert_not_called()
+    # Projection throughput and each instance's own gauges are not leader-gated.
+    for instance in instances:
+        instance.projector.sweep.assert_called_once()
+        instance.metrics.refresh.assert_called_once()
+    # Explicit RPC reconcile always runs, lease or not.
+    follower.reconcile(recover_quarantine=True)
+    follower.recovery.sweep.assert_called_once()
+    follower.cleanup.assert_called_once()
+
+
+def test_serving_maintenance_fails_open_when_lease_store_errors():
+    from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+
+    broken = Mock()
+    broken.run.side_effect = RuntimeError('lease store down')
+    store = MemoryStore()
+    service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
+    service.reconcile(periodic=True)
+    service.cleanup.assert_called_once()
