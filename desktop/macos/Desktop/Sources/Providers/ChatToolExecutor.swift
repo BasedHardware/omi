@@ -1269,7 +1269,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool execute_sql failed", error: error)
-      return "SQL Error: The local database could not complete that query."
+      return "Error: The local database could not complete that query."
     }
   }
 
