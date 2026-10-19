@@ -152,7 +152,7 @@ def test_unknown_role_fails_startup():
         app_roles.role_from_env({'OMI_ROLE': 'worker'})
 
 
-def test_mount_routers_includes_in_order_from_the_namespace():
+def test_mount_routers_includes_in_role_order():
     class FakeApp:
         def __init__(self):
             self.routers = []
@@ -160,22 +160,17 @@ def test_mount_routers_includes_in_order_from_the_namespace():
         def include_router(self, router):
             self.routers.append(router)
 
-    class Module:
-        def __init__(self, name):
-            self.router = f'{name}.router'
-            self.mcp_router = f'{name}.mcp_router'
-            self.developer_router = f'{name}.developer_router'
-
-    namespace = {m.module: Module(m.module) for m in app_roles.ROUTER_MOUNTS}
     app = FakeApp()
-    count = app_roles.mount_routers(app, AppRole.WORKERS, namespace)
-    assert count == len(app.routers)
-    assert app.routers == [f'{m.module}.{m.attr}' for m in app_roles.mounts_for(AppRole.WORKERS)]
-    assert 'sync.router' in app.routers and 'transcribe.router' not in app.routers
+    count = app_roles.mount_routers(app, AppRole.WORKERS)
+    expected = [getattr(m.router_module, m.attr) for m in app_roles.mounts_for(AppRole.WORKERS)]
+    assert count == len(app.routers) and app.routers == expected
+    keys = {m.key for m in app_roles.mounts_for(AppRole.WORKERS)}
+    assert 'sync.router' in keys and 'transcribe.router' not in keys
 
 
 def _main_router_imports() -> set[str]:
-    tree = ast.parse(MAIN.read_text(encoding='utf-8'))
+    """Router modules imported by the route table (app_roles.py, which main.py imports)."""
+    tree = ast.parse((BACKEND / 'app_roles.py').read_text(encoding='utf-8'))
     names: set[str] = set()
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module == 'routers':

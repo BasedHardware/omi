@@ -10,7 +10,6 @@ from utils.firebase_admin_runtime import (
     install_firebase_auth_mutation_guard,
     install_google_adc_guard,
 )
-from app_roles import mount_routers, role_from_env
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
@@ -33,110 +32,10 @@ install_firebase_auth_mutation_guard()
 
 from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from utils.observability.external_lists import ExternalListMetricsMiddleware
-from routers import messaging
-from routers import (
-    fleet_telemetry,
-    budget_choice,
-    candidate_integration_sweep,
-    chat_receipts,
-    dream_cohort,
-    dream_report,
-    dream_sweep,
-    review,
-    proactivity,
-    chat,
-    firmware,
-    static_map,
-    transcribe,
-    omni_relay,
-    auto_model,
-    notifications,
-    speech_profile,
-    speaker_tag_prompts,
-    speaker_labels,
-    people,
-    agents,
-    users,
-    support,
-    trends,
-    sync,
-    batch_pipeline,
-    apps,
-    payment,
-    storefront,
-    integration,
-    conversations,
-    conversation_mutations,
-    memories,
-    api_key_management,
-    mcp,
-    mcp_sse,
-    oauth,
-    auth,
-    action_items,
-    account_cutover,
-    candidates,
-    chat_first,
-    chat_first_e2e,
-    daily_summary_e2e,
-    task_integrations,
-    integrations,
-    x_connector,
-    other,
-    developer,
-    developer_key,
-    updates,
-    calendar_meetings,
-    google_calendar,
-    calendar_onboarding,
-    imports,
-    knowledge_graph,
-    wrapped,
-    folders,
-    search,
-    goals,
-    workstreams,
-    announcements,
-    phone_calls,
-    agent_tools,
-    tools,
-    metrics,
-    fair_use_admin,
-    feedback_admin,
-    staged_tasks,
-    focus_sessions,
-    advice,
-    chat_sessions,
-    chat_generation,
-    desktop_agent_vm,
-    desktop_chat,
-    desktop_core,
-    desktop_prompts,
-    desktop_proxy,
-    desktop_task_gate,
-    desktop_realtime,
-    desktop_screen_crisp,
-    frame_requests,
-    retired_app_client_contracts,
-    referrals,
-    desktop_tts_updates,
-    scores,
-    stt,
-    tts,
-    memory_admin,
-    memory_product,
-    task_recommendations,
-    conversation_finalization,
-    pending_work,
-    commitment_followup,
-    public_shared_conversation_chat,
-    screen_frames,
-    csat,
-    email_preferences,
-    mobile_feedback,
-    device_diagnostics,
-    client_telemetry,
-)
+
+# app_roles imports every router (the route table) in the original order.
+from app_roles import mount_routers, role_from_env
+from routers import messaging  # also used directly for the adapter runtime below
 from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
@@ -236,7 +135,7 @@ app.add_middleware(
 # The route table and roles live in app_roles.py; the router imports above stay static so the image
 # source-closure and import-time checks still see every router. An unknown OMI_ROLE fails startup.
 OMI_APP_ROLE = role_from_env()
-mount_routers(app, OMI_APP_ROLE, globals(), include_harness=is_chat_first_e2e_harness_runtime())
+mount_routers(app, OMI_APP_ROLE, include_harness=is_chat_first_e2e_harness_runtime())
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),

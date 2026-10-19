@@ -27,8 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ROUTERS_DIR = ROOT / "backend" / "routers"
 APP_ROLES = ROOT / "backend" / "app_roles.py"
-# app_roles.ROUTER_MOUNTS rows: Mount('module') or Mount('module', attr='named_router', ...)
-ROLE_MOUNT = re.compile(r"Mount\(\s*['\"](\w+)['\"](?:\s*,\s*attr\s*=\s*['\"](\w+)['\"])?")
+# app_roles.ROUTER_MOUNTS rows: Mount(module) or Mount(module, attr='named_router', ...)
+ROLE_MOUNT = re.compile(r"^\s+Mount\(\s*(\w+)(?:\s*,\s*attr\s*=\s*['\"](\w+)['\"])?", re.M)
 ENTRYPOINTS = {
     "main": ROOT / "backend" / "main.py",
     "desktop_backend": ROOT / "backend" / "desktop_backend.py",

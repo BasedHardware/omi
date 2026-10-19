@@ -471,7 +471,7 @@ def test_private_get_only_router_and_main_registration(harness):
     import app_roles
 
     assert 'support.router' in {mount.key for mount in app_roles.ROUTER_MOUNTS}
-    assert 'mount_routers(app, OMI_APP_ROLE, globals()' in (Path(__file__).resolve().parents[2] / 'main.py').read_text()
+    assert 'mount_routers(app, OMI_APP_ROLE' in (Path(__file__).resolve().parents[2] / 'main.py').read_text()
 
 
 @pytest.mark.parametrize('model', [SupportLookupResponse, SupportTraceRow, SupportTraceResponse])
