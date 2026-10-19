@@ -11,6 +11,17 @@ from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_e
 from utils.sync.backfill import reserve_backfill_speech, retry_after_next_utc_day
 
 
+def admitted_as_byok(binding: object) -> bool:
+    """Admission decides funding once (contract (c)): a BYOK unit is never re-held at GPU dispatch.
+
+    The dispatch re-check runs without the user's keys or BYOK consent, so for a BYOK owner it
+    would hold the unit on every lease. Only the admission-time policy snapshot can say BYOK;
+    a missing or malformed policy keeps today's re-check (fail closed).
+    """
+    policy = binding.get('policy') if isinstance(binding, dict) else None  # pyright: ignore[reportUnknownMemberType]
+    return isinstance(policy, dict) and policy.get('provider_reason') == 'byok'
+
+
 def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
     current = time.time() if now is None else now
     allowed, retries = [], {}
@@ -36,8 +47,10 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
-            if cap_dispatch_enabled() and not sync_allowed(
-                job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet'
+            if (
+                cap_dispatch_enabled()
+                and not admitted_as_byok(binding)
+                and not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet')
             ):
                 retries[segment] = 60
                 continue
