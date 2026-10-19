@@ -57,6 +57,7 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
 from utils.other.list_budget import ListReadBudget
@@ -1710,11 +1711,24 @@ _add(
         'database.memories.list_memory_updated_or_created_index',
         base={'uid': UID},
         setup=_queue_hidden_memory_index_page,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'index_state': (
+                MemoryListIndexState(UID),
+                'per-operation metadata reuse; same prefix/snapshot-suffix shapes, fresh per trial',
+            ),
+        },
         profiles=(
             CallerProfile(
                 'historical-dual-window',
-                {'categories': [[]], 'start_date': [None], 'end_date': [None], 'include_invalidated': [False]},
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                },
             ),
         ),
     )

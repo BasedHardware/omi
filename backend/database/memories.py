@@ -443,6 +443,21 @@ def _stream_memory_list_index_window(
     return budgeted_stream_list(query.limit(candidate_limit), budget)
 
 
+class MemoryListIndexState:
+    """Dual metadata prefixes owned by one synchronous read operation.
+
+    Retain snapshots (including Firestore's implicit name tiebreaker) so outer
+    compatibility/category expansions seek beyond prior work. Never share this
+    state across requests, users, clients, or retries; it contains no content.
+    """
+
+    def __init__(self, uid: str) -> None:
+        self.uid = uid
+        self.client: Any = None
+        self.windows: Dict[str, List[Any]] = {}
+        self.exhausted: set[str] = set()
+
+
 def _merge_memory_list_index_docs(
     candidate_docs: List[Any],
     *,
@@ -477,6 +492,7 @@ def list_memory_updated_or_created_index(
     *,
     firestore_client: Any = None,
     budget: Optional[ListReadBudget] = None,
+    index_state: Optional[MemoryListIndexState] = None,
 ) -> List[Dict[str, Any]]:
     """Newest-first historical index rows without content or decrypt.
 
@@ -490,6 +506,10 @@ def list_memory_updated_or_created_index(
     gets the budget's per-RPC timeout (#11831).
     """
     database = _get_db(firestore_client)
+    if index_state is not None:
+        if index_state.uid != uid or (index_state.client is not None and index_state.client is not database):
+            raise ValueError("Memory list index state cannot cross users or clients")
+        index_state.client = database
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
@@ -514,7 +534,25 @@ def list_memory_updated_or_created_index(
             and os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
         )
         while True:
-            if incremental:
+            if incremental and index_state is not None and not categories:
+                retained = index_state.windows.setdefault(order_field, [])
+                if len(retained) < window_limit and order_field not in index_state.exhausted:
+                    batch_limit = window_limit - len(retained)
+                    batch = _stream_memory_list_index_window(
+                        memories_ref,
+                        order_field,
+                        batch_limit,
+                        budget=budget,
+                        cursor_snapshot=retained[-1] if retained else None,
+                    )
+                    retained.extend(batch)
+                    if len(batch) < batch_limit:
+                        index_state.exhausted.add(order_field)
+                # Preserve this round's exact prefix even when a previous
+                # hidden-row expansion retained more metadata.
+                window_docs = retained[:window_limit]
+                exhausted = len(window_docs) < window_limit
+            elif incremental:
                 # Retain each fetched prefix and seek after its last snapshot.
                 # Projection contains both ordering fields; snapshots also carry
                 # the implicit document-name tiebreaker used by Firestore.

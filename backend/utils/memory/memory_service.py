@@ -778,6 +778,15 @@ class HistoricalMemoryRecord:
     hydrated: bool = True
 
 
+class _CompatibilityReadState:
+    """Reuse metadata and status evidence only within one admitted list read."""
+
+    def __init__(self, uid: str) -> None:
+        self.index = memories_db.MemoryListIndexState(uid)
+        self.statuses: Dict[str, MemoryItemStatus] = {}
+        self.status_ids_read: Set[str] = set()
+
+
 class HistoricalMemoryAdapter:
     """Bounded, protected, read-only reader for historical memory documents.
 
@@ -993,6 +1002,7 @@ class HistoricalMemoryAdapter:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         hydrate: bool = True,
         budget: Optional[ListReadBudget] = None,
+        index_state: Optional[memories_db.MemoryListIndexState] = None,
     ) -> List[HistoricalMemoryRecord]:
         bounded_limit = max(1, min(int(limit or 100), self.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -1020,6 +1030,7 @@ class HistoricalMemoryAdapter:
                     index_limit,
                     0,
                     budget=budget,
+                    **({"index_state": index_state} if index_state is not None else {}),
                     **self._firestore_kwargs(),
                 )
                 records = []
@@ -2621,6 +2632,7 @@ class MemoryService:
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
         category_filter: Optional[Set[str]] = None,
+        reuse_compatibility_reads: bool = False,
     ) -> List[MemoryDB]:
         kwargs: Dict[str, Any] = dict(
             device_scope_request=device_scope_request,
@@ -2632,6 +2644,10 @@ class MemoryService:
             as_of=as_of,
             authoritative=authoritative,
         )
+        if reuse_compatibility_reads:
+            # Allocated inside the resilience attempt: a whole-operation retry
+            # gets fresh evidence and every call drops it on return.
+            kwargs["read_state"] = _CompatibilityReadState(uid)
         if category_filter is None:
             return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
         # One admission owns all internal windows and their shared budget.
@@ -2659,6 +2675,7 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
+        read_state: Optional[_CompatibilityReadState] = None,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -2724,8 +2741,8 @@ class MemoryService:
         # batch gets over 55,000 documents for one page and took the request
         # past the 30s edge timeout. Canonical status is a stable read within
         # one request, so ask for each memory id exactly once.
-        statuses: Dict[str, MemoryItemStatus] = {}
-        status_ids_read: Set[str] = set()
+        statuses: Dict[str, MemoryItemStatus] = read_state.statuses if read_state is not None else {}
+        status_ids_read: Set[str] = read_state.status_ids_read if read_state is not None else set()
         kept_stub_ids: Set[str] = set()
         try:
             while True:
@@ -2736,6 +2753,7 @@ class MemoryService:
                     device_scope_request=device_scope_request,
                     hydrate=False,
                     budget=budget,
+                    **({"index_state": read_state.index} if read_state is not None else {}),
                 )
                 merged = list(canonical)
                 identity_suppressed = 0
