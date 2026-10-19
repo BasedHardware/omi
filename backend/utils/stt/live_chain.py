@@ -6,7 +6,6 @@ from config.policy.listen import listen_value
 
 import asyncio
 import logging
-import os
 import threading
 import time
 from collections import deque

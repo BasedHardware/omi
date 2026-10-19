@@ -315,3 +315,9 @@ def test_unused_malformed_knobs_do_not_block_admission(key):
     if key == 'STT_ROUTING_DISRUPTION_GATE':
         with pytest.raises(ValueError):
             disruption_gate()
+
+
+@pytest.mark.parametrize('flags', [{'STT_LIVE_DEMAND_PERCENT': 'invalid'}, {'STT_LIVE_DEMAND_MIN_DWELL_SECONDS': '-1'}])
+def test_invalid_demand_defaults_keep_restart_content_hash(flags):
+    policy = resolve_listen_policy('owner', flags=flags)
+    assert ListenSessionPolicy.from_dict(json.loads(json.dumps(policy.to_dict()))) == policy

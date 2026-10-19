@@ -449,16 +449,13 @@ class ListenSessionRuntime:
                 recording_id=self.request.client_conversation_id,
             )
             telemetry_call(self, 'demand_telemetry', 'finish')
+            policy = getattr(self.state, 'listen_policy', None)
             record_metric(
                 WINDOW_CANARY_OUTCOME,
                 {
                     'arm': (
                         'window'
-                        if (
-                            self.state.listen_policy.window_allocated
-                            if getattr(self.state, 'listen_policy', None) is not None
-                            else window_allocation(self.request.uid)
-                        )
+                        if (policy.window_allocated if policy is not None else window_allocation(self.request.uid))
                         else 'control'
                     ),
                     'outcome': outcome,

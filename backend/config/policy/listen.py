@@ -59,6 +59,10 @@ class ListenSessionPolicy(PolicyPart):
     def __post_init__(self):
         from config.live_stt_registry import parse_registry
 
+        for field in fields(self):
+            if field.type in (float, 'float'):
+                object.__setattr__(self, field.name, float(getattr(self, field.name)))
+
         # Parse once, not on every permission/health read. A malformed registry
         # retains the old fail-closed routing path when a consumer asks for it.
         try:

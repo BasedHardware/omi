@@ -3,7 +3,7 @@
 
 from typing import TypedDict
 
-from config.policy.listen import window_allocation
+from config.policy.listen import window_allocation as window_allocation
 
 from config.stt_provider_policy import STTServingSurface, normalized_stt_language, parakeet_supports_language
 

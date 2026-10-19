@@ -10,7 +10,6 @@ from __future__ import annotations
 from config.policy.listen import routing_mode_raw
 
 import logging
-import os
 from typing import Callable, Any
 
 from config.live_stt_registry import registry, DEFAULT_TARGETS

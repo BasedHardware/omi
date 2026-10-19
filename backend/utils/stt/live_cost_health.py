@@ -10,7 +10,6 @@ import logging
 from dataclasses import replace
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
-import os
 
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
