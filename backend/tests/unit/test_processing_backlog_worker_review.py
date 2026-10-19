@@ -20,6 +20,8 @@ from google.cloud.firestore_v1.types import Document, RunQueryRequest, RunQueryR
 import grpc
 import pytest
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 from utils import processing_backlog_worker as worker
 
 
@@ -174,7 +176,7 @@ def job_harness(monkeypatch):
     processed, finishes, scheduled = [], [], []
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
-    monkeypatch.delenv('STT_CAP_DISPATCH_LANES', raising=False)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     monkeypatch.setattr(worker, '_selected', AsyncMock(return_value=True))
     monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True))

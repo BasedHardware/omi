@@ -17,6 +17,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from config.plan_catalog import PAID_PLAN_TYPES, PlanType
