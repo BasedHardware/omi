@@ -60,6 +60,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-evidence-loss",
     "omi-stt-evidence-loss-critical",
     "omi-stt-leg-lifecycle-gap",
+    "omi-stt-leg-settlement-omission",
     "omi-stt-snapshot-unready",
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",

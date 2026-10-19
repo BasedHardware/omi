@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from config.episode_writer import EpisodeWriterSettings, episode_writer_settings
+from testing.episode_notes.settings import EpisodeEvalSettings
 from testing.episode_notes.generation_experiments import apply_edits, verify_draft, extract_facts, fact_check
 from testing.episode_notes.policy_replay import replay_policy
 from testing.episode_notes.runner import evaluate, REFERENCE_PROMPT, JUDGE_PROMPT
@@ -17,7 +18,6 @@ from testing.episode_notes.schema import (
     LLMResult,
     LLMCallError,
 )
-from testing.episode_notes.selection_experiments import experiment_selection
 from utils.conversations.episode_evidence import EvidenceItem
 
 
@@ -117,22 +117,6 @@ def test_malformed_fact_extraction_retains_paid_receipt(facts):
     assert error.value.result.provider_cost == 0.001
 
 
-@pytest.mark.parametrize('mode', ['jev_veto', 'jev_per_source', 'jev_rank', 'jev_discussed', 'jev_choice'])
-def test_selector_variants_only_remove_from_deterministic_pool(mode):
-    def fake(_, payload):
-        scores = {
-            q: {'discussed': 0.1, 'background': 0.1, 'unrelated': 0.8} if question['type'] == 'choice' else 0.1
-            for q, question in payload['questions'].items()
-        }
-        return {'scores': scores}
-
-    selected, _, _ = experiment_selection(
-        items(), fixture().episodes[0], mode=mode, cutoff=0.3, cache_dir=None, llm=fake
-    )
-    assert {i.id for i in selected} <= {i.id for i in items()}
-    assert selected[0].source_kind == 'speech' and selected[-1].source_kind == 'device_state'
-
-
 def test_oversize_fact_check_does_not_guess_from_truncated_evidence():
     enormous = [items()[0].model_copy(update={'content': 'x' * 30000})]
     draft = LLMResult(content={'title': 'Launch'})
@@ -180,7 +164,7 @@ def test_verify_cost_is_in_candidate_receipt_without_extra_writer():
             latency_seconds=2,
         )
 
-    report = evaluate(fixture(), fake, settings=EpisodeWriterSettings(), experiment='verify')
+    report = evaluate(fixture(), fake, settings=EpisodeEvalSettings(), experiment='verify')
     assert report['cases'][0]['candidate_cost']['provider_cost'] == pytest.approx(0.005)
     assert report['cases'][0]['candidate_cost']['latency_seconds'] == 3
     assert len(calls) == 4
@@ -221,19 +205,9 @@ def test_output_budget_is_keyed_and_only_applied_to_c6_then_one_c7_fallback():
         )
 
     report = evaluate(
-        sample, fake, settings=EpisodeWriterSettings(tiered=True, tier_min_words=1000), candidate_max_tokens=8000
+        sample, fake, settings=EpisodeEvalSettings(tiered=True, tier_min_words=1000), candidate_max_tokens=8000
     )
     row = report['cases'][0]
     assert len(writers) == 2 and row['tier_fallback'] and row['status'] == 'ok'
     assert row['candidate_cost']['provider_cost'] == pytest.approx(0.010)
     assert row['candidate_cost']['latency_seconds'] == 90
-
-
-def test_jev_router_is_one_typed_question_with_bounded_excerpt():
-    from testing.episode_notes.jev_router import router_payload
-
-    episode = fixture().episodes[0]
-    episode.evidence.transcript_segments[0].content = 'speech ' * 10000
-    payload = router_payload(episode)
-    assert len(payload['questions']) == 1 and payload['questions']['careful_summary']['type'] == 'noul'
-    assert len(payload['state']) < 24000 and '[excerpt gap]' in payload['state']

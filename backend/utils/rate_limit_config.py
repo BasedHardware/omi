@@ -138,7 +138,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
-    # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
+    # Frame request metadata is cheap, but uploads carry bounded pixel bytes.
     "frame_requests:read": (120, 3600),
     "frame_requests:write": (120, 3600),
     "frame_requests:upload": (30, 3600),

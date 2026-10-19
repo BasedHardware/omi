@@ -12,7 +12,7 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
-from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio
+from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
@@ -876,7 +876,7 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
-        if suppress_socket_audio(self.raw, data):
+        if suppress_socket_audio(self.raw, data, start_sample=start_sample):
             return True
         if self._closing_for_health:
             return False
@@ -954,6 +954,7 @@ class LiveLegSocket(STTSocket):
                 try:
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
+                        set_cap_capture(self.raw, audio, sent_spans)
                         sent = self.raw.send(audio)
                     finally:
                         if token is not None:
@@ -1106,6 +1107,7 @@ class LiveLegSocket(STTSocket):
         self._idle_send_spans = spans
         token = capture_spans.set(tuple(spans)) if self._soniox_wire_ledger else None
         try:
+            set_cap_capture(self.raw, data, spans)
             accepted = self.raw.send(data)
         finally:
             if token is not None:

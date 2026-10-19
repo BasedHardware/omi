@@ -93,7 +93,6 @@ from utils.mcp_server.transport import (  # noqa: F401 — compat re-exports
     handle_mcp_message,
 )
 from utils.mcp_server.versions import SUPPORTED_PROTOCOL_VERSIONS  # noqa: F401
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid  # noqa: F401
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

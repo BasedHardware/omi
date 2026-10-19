@@ -27,6 +27,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -514,6 +515,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  /// Headless transcription loads custody without starting cloud-audio timers or migrations.
+  Future<void> loadForOnDeviceWorker() async {
+    final generation = _sessionGeneration;
+    await WalFileManager.init();
+    final loaded = await WalFileManager.loadWals();
+    if (!_isCurrent(generation)) return;
+    _admitLoadedWals(loaded);
+    if (!_walReady.isCompleted) _walReady.complete();
+  }
+
   Future<void> _initializeWals() async {
     final generation = _sessionGeneration;
     await WalFileManager.init();
@@ -970,6 +981,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final wal = wals[i];
 
       if (wal.storage == WalStorage.mem) {
+        // A policy edge may share a partially filled chunk with previously sent
+        // frames. Conservatively retain the whole chunk; never upload its local tail.
+        // Custody was latched when these frames were captured.
         final fileName = await _uniqueStorageFileName(wal);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
@@ -1748,6 +1762,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return unsyncedCount ~/ _framesPerSecond;
   }
 
+  /// Commit result before publishing it; stale-account work cannot rewrite the index.
+  Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation) async {
+    if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly) return false;
+    wal.onDeviceConversation = conversation;
+    wal.conversationId = conversation['id'] as String?;
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+    return true;
+  }
+
   @override
   Future<List<Wal>> getAllWals() async {
     return List.from(_wals);
@@ -1803,7 +1827,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
-    if (LocalSttCustody.keepsPhoneAudio) {
+    if (LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
         wal.onDeviceOnly = true;

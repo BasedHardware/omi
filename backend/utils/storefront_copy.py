@@ -1,4 +1,4 @@
-"""English plans-sheet copy and the recording-hours formula. Clients do not hardcode either."""
+"""Plans-sheet copy and the recording-hours formula. Clients do not hardcode either."""
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
@@ -6,6 +6,9 @@ from functools import lru_cache
 from pathlib import Path
 import json
 from typing import Any
+
+from babel import Locale as BabelLocale
+from babel.dates import format_skeleton
 
 import config.plan_catalog_generated as plan_catalog
 
@@ -45,19 +48,69 @@ def load_copy() -> dict[str, Any]:
     return json.loads((Path(__file__).resolve().parents[1] / 'config/storefront_copy_v1.json').read_text())
 
 
+# Norwegian Bokmål/Nynorsk tags have no catalog of their own; the app uses `no`.
+_LANGUAGE_ALIASES = {'nb': 'no', 'nn': 'no'}
+# Babel's locale id where it differs from the catalog key.
+_BABEL_TAGS = {'no': 'nb', 'zh': 'zh_Hans', 'sr': 'sr_Cyrl'}
+
+
+def _deep_merge(base: Any, overlay: Any) -> Any:
+    """Overlay wins. A missing nested key keeps the base value, so a partial locale cannot drop a section."""
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return overlay
+    merged = dict(base)
+    for key, value in overlay.items():
+        merged[key] = _deep_merge(merged[key], value) if key in merged else value
+    return merged
+
+
+def _locale_key(locale: str | None, locales: dict[str, Any], default: str) -> str:
+    if not locale or not str(locale).strip():
+        return default
+    index = {name.lower(): name for name in locales}
+    raw = str(locale).strip().replace('_', '-')
+    if raw.lower() in index:
+        return index[raw.lower()]
+    short = _LANGUAGE_ALIASES.get(raw.split('-', 1)[0].lower(), raw.split('-', 1)[0].lower())
+    return index.get(short, default)
+
+
 def copy_for(locale: str | None) -> dict[str, Any]:
     payload = load_copy()
     locales = payload['locales']
     default = payload['default_locale']
-    if not locale:
+    key = _locale_key(locale, locales, default)
+    if key == default:
         return locales[default]
-    key = locale.lower()
-    if key in locales:
-        return locales[key]
-    short = key.split('-', 1)[0]
-    if short in locales:
-        return locales[short]
-    return locales[default]
+    return _deep_merge(locales[default], locales[key])
+
+
+def _babel_tag(locale: str | None) -> str:
+    payload = load_copy()
+    key = _locale_key(locale, payload['locales'], payload['default_locale'])
+    return _BABEL_TAGS.get(key, key)
+
+
+def _plural_category(count: int, locale: str | None) -> str:
+    try:
+        return BabelLocale.parse(_babel_tag(locale)).plural_form(count)
+    except (ValueError, LookupError):
+        return 'one' if count == 1 else 'other'
+
+
+def _count_template(
+    group: dict[str, Any], count: int, locale: str | None, *, plural_key: str, one_key: str, many_key: str
+) -> str:
+    """CLDR category when the catalog has one, otherwise the one/many pair."""
+    forms = group.get(plural_key)
+    if isinstance(forms, dict) and forms:
+        category = _plural_category(count, locale)
+        template = forms.get(category) or forms.get('other') or forms.get('many')
+        if isinstance(template, str):
+            return template
+    if count == 1 and isinstance(group.get(one_key), str):
+        return group[one_key]
+    return group[many_key]
 
 
 def _recording() -> dict[str, Any]:
@@ -70,7 +123,9 @@ def _share() -> Decimal:
 
 
 def _units_per_hour() -> Decimal:
-    return Decimal(_recording()['units_per_recorded_hour'])
+    from config.rate_card import recording_units_per_hour
+
+    return recording_units_per_hour()
 
 
 def budget_units_for(plan_id: str) -> int | None:
@@ -103,7 +158,14 @@ def recording_hours(plan_id: str) -> int:
     if units is None:
         return 0
     raw = Decimal(units) * _share() / _units_per_hour()
-    return floor_to_nice(raw)
+    return _capacity_hours(plan_id, raw)
+
+
+def _capacity_hours(plan_id: str, raw: Decimal) -> int:
+    # Keep a supported promise boundary visible when nice rounding would hide it.
+    threshold = {'plus': 240, 'operator': 720, 'architect': 1440}.get(plan_id)
+    nice = floor_to_nice(raw)
+    return max(nice, threshold) if threshold is not None and raw >= threshold else nice
 
 
 def per_day_count(monthly_hours: int) -> int:
@@ -119,7 +181,9 @@ def per_day_phrase(monthly_hours: int, locale: str | None = None) -> str:
     daily = Decimal(monthly_hours) / Decimal(30)
     if daily < 6:
         count = per_day_count(monthly_hours)
-        template = phrases['under_6_one'] if count == 1 else phrases['under_6']
+        template = _count_template(
+            phrases, count, locale, plural_key='under_6_plural', one_key='under_6_one', many_key='under_6'
+        )
         return template.format(n=count)
     if daily <= 16:
         return phrases['all_day']
@@ -132,6 +196,10 @@ def hours_line(plan_id: str, locale: str | None = None) -> str:
     if not template:
         return ''
     hours = recording_hours(plan_id)
+    bands = copy_for(locale)['hours_bands']
+    threshold = {'plus': 240, 'operator': 720, 'architect': 1440}.get(plan_id)
+    if threshold is not None and hours >= threshold:
+        return bands[plan_id].format(hours=f'{hours:,}')
     return template.format(hours=f'{hours:,}', per_day=per_day_count(hours))
 
 
@@ -153,7 +221,7 @@ def recording_hours_left(plan_id: str, percent: float) -> int:
     if units is None:
         return 0
     remaining_units = Decimal(units) * fraction
-    return floor_to_nice(remaining_units * _share() / _units_per_hour())
+    return _capacity_hours(plan_id, remaining_units * _share() / _units_per_hour())
 
 
 def bullets(plan_id: str, trigger: str | None, locale: str | None = None) -> list[str]:
@@ -190,7 +258,7 @@ def header(
     if legacy:
         return headers['legacy']
     if cancel_scheduled and plan_name_text and type(period_end) is int and period_end > 0:
-        return headers['cancel_scheduled'].format(plan=plan_name_text, date=format_date(period_end))
+        return headers['cancel_scheduled'].format(plan=plan_name_text, date=format_date(period_end, locale))
     if trigger == 'proactive_agent':
         return headers['proactive_agent']
     if trigger == 'screen_context':
@@ -206,14 +274,22 @@ def header(
     return headers['default']
 
 
-def format_date(timestamp: int) -> str:
-    moment = datetime.fromtimestamp(timestamp, timezone.utc)
-    return f'{_MONTHS[moment.month - 1]} {moment.day}'
+def format_date(timestamp: int, locale: str | None = None) -> str:
+    """Locale month-and-day. English stays `Nov 1` (Babel skeleton MMMd)."""
+    moment = datetime.fromtimestamp(timestamp, timezone.utc).date()
+    tag = _babel_tag(locale)
+    if tag == 'en':
+        # Shipped English goldens use this abbreviation. Babel's en skeleton matches it today.
+        return f'{_MONTHS[moment.month - 1]} {moment.day}'
+    try:
+        return format_skeleton('MMMd', moment, locale=tag)
+    except (ValueError, LookupError):
+        return f'{_MONTHS[moment.month - 1]} {moment.day}'
 
 
-def reset_parts(reset_at: int) -> tuple[str, str]:
+def reset_parts(reset_at: int, locale: str | None = None) -> tuple[str, str]:
     moment = datetime.fromtimestamp(reset_at, timezone.utc)
-    reset_label = f'resets {format_date(reset_at)}'
+    reset_label = copy_for(locale)['dates']['resets'].format(date=format_date(reset_at, locale))
     period = moment
     if moment.day == 1 and moment.hour == 0 and moment.minute == 0 and moment.second == 0:
         period = moment - timedelta(days=1)
@@ -256,9 +332,10 @@ def format_money(amount_minor: int, currency: str) -> str:
 
 def months_free_phrase(count: int, locale: str | None = None) -> str:
     prices = copy_for(locale)['prices']
-    if count == 1:
-        return prices['months_free_one']
-    return prices['months_free_many'].format(n=count)
+    template = _count_template(
+        prices, count, locale, plural_key='months_free_plural', one_key='months_free_one', many_key='months_free_many'
+    )
+    return template.format(n=count)
 
 
 def months_free(monthly_minor: int, annual_minor: int) -> int | None:
@@ -297,22 +374,27 @@ def current_line(
     note = text['legacy_note'] if legacy else None
     if plan_id == 'basic':
         return text['free'], note
-    date = format_date(period_end) if type(period_end) is int and period_end > 0 else None
+    date = format_date(period_end, locale) if type(period_end) is int and period_end > 0 else None
     # Paid cancel-scheduled: price only. The end date moves to the header.
     # Legacy keeps the previous "ends {date}" line; resubscribe is not offered.
     if cancel and not legacy and amount_minor is not None and interval in {'month', 'year'}:
-        period = 'mo' if interval == 'month' else 'yr'
+        period = _period_word(interval, locale)
         price = format_money(amount_minor, currency)
         return text['cancel'].format(plan=plan_name_text, price=price, period=period), note
     if cancel and date:
         return text['cancel_ends'].format(plan=plan_name_text, date=date), note
     if amount_minor is not None and interval in {'month', 'year'}:
-        period = 'mo' if interval == 'month' else 'yr'
+        period = _period_word(interval, locale)
         price = format_money(amount_minor, currency)
         if date:
             return text['paid'].format(plan=plan_name_text, price=price, period=period, date=date), note
         return text['paid_no_date'].format(plan=plan_name_text, price=price, period=period), note
     return text['name_only'].format(plan=plan_name_text), note
+
+
+def _period_word(interval: str, locale: str | None) -> str:
+    dates = copy_for(locale)['dates']
+    return dates['period_month'] if interval == 'month' else dates['period_year']
 
 
 def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | None = None) -> str | None:
@@ -403,7 +485,9 @@ def yearly_switch_label(
 
 
 def _wire_percent(percent: float) -> int:
-    return int(Decimal(str(percent)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    rounded = int(Decimal(str(percent)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    # Never promote an unexhausted budget into the cap/Architect surface by rounding.
+    return min(rounded, 99) if percent < 100 else rounded
 
 
 def present_usage(
@@ -429,14 +513,53 @@ def present_usage(
     shown = _wire_percent(percent)
     payload['percent'] = shown
     if type(reset_at) is int and reset_at > 0:
-        period_id, reset_label = reset_parts(reset_at)
+        period_id, reset_label = reset_parts(reset_at, locale)
         payload['period_id'] = period_id
         payload['reset_label'] = reset_label
     if kind == 'usage_budget' and payload['reset_label']:
-        left = recording_hours_left(plan_id, shown)
-        payload['meter_line'] = text['meter']['line'].format(
-            percent=shown, hours=f'{left:,}', reset=payload['reset_label']
-        )
+        # Hours only from 80 up to, but not including, 100. At the cap the at-cap
+        # state applies, so the meter never says "about 0 hours".
         if 80 <= shown < 100:
+            left = recording_hours_left(plan_id, shown)
+            if left > 0:
+                payload['hours_left'] = left
+                payload['meter_line'] = _meter_hours_line(
+                    text, shown=shown, left=left, reset=payload['reset_label'], locale=locale
+                )
+            else:
+                payload['meter_line'] = text['meter']['line_short'].format(percent=shown, reset=payload['reset_label'])
             payload['nudge_line'] = text['meter']['nudge_80'].format(reset=payload['reset_label'])
+        else:
+            payload['meter_line'] = text['meter']['line_short'].format(percent=shown, reset=payload['reset_label'])
+        payload['more_label'] = text['meter']['more_label']
     return payload
+
+
+def _meter_hours_line(text: dict[str, Any], *, shown: int, left: int, reset: str, locale: str | None) -> str:
+    meter = text['meter']
+    forms = meter.get('line_plural')
+    template = meter['line']
+    if isinstance(forms, dict) and forms:
+        category = _plural_category(left, locale)
+        chosen = forms.get(category) or forms.get('other')
+        if isinstance(chosen, str):
+            template = chosen
+    return template.format(percent=shown, hours=f'{left:,}', reset=reset)
+
+
+def chat_at_cap(plan_id: str, reset_at: int, locale: str | None = None) -> dict[str, Any]:
+    """One backend-owned pause state shared by admission, quota and storefront."""
+    text = copy_for(locale)['chat_at_cap']
+    upgrade = {'basic': ('plus', 'Plus'), 'plus': ('operator', 'Pro'), 'operator': ('architect', 'Architect')}.get(
+        plan_id
+    )
+    return {
+        'state': 'paused',
+        'title': text['title'],
+        'body': text['body'],
+        'reset_at': reset_at,
+        'reset_line': text['reset_line'].format(date=format_date(reset_at, locale)),
+        'trigger': 'usage_budget',
+        'upgrade_plan': upgrade[0] if upgrade else None,
+        'upgrade_label': text['upgrade_label'].format(plan=upgrade[1]) if upgrade else None,
+    }

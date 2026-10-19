@@ -12,6 +12,12 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from datetime import datetime, timezone
+from config.plan_catalog import (
+    LADDER_V1_PRICE_BINDINGS,
+    RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
+    resolve_subscription_entitlements,
+)
 
 _SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
@@ -19,15 +25,30 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 
 
 @pytest.fixture(autouse=True)
-def _reuse_parsed_repo_manifest(monkeypatch):
+def _reuse_parsed_repo_manifest(monkeypatch, tmp_path):
     # runpy's returned mapping is distinct from the function's globals.
     monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: _MANIFEST)
+    output_path = tmp_path / 'github-output'
+    output_path.touch()
+    monkeypatch.setenv('GITHUB_OUTPUT', str(output_path))
     # Full-state renderer tests need deploy-time values for every declared job.
     for env_config in _MANIFEST['environments'].values():
         for job in (env_config.get('cloud_run', {}).get('jobs') or {}).values():
             for raw_entry in (job.get('env') or {}).values():
                 if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
                     monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
+
+
+def _read_workflow_outputs() -> str:
+    return Path(os.environ['GITHUB_OUTPUT']).read_text(encoding='utf-8')
+
+
+def test_workflow_outputs_are_not_written_to_stdout(capsys):
+    _MODULE['_emit_output']('private_value', 'not-for-logs')
+
+    assert capsys.readouterr().out == ''
+    assert 'private_value<<' in _read_workflow_outputs()
+    assert 'not-for-logs' in _read_workflow_outputs()
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
@@ -86,7 +107,7 @@ def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
     assert rendered == f'VALUE={expected}'
 
 
-def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monkeypatch):
+def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, monkeypatch):
     env_config = {
         'cloud_run': {
             'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
@@ -122,7 +143,7 @@ def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monk
         'FEATURE_NO': 'no',
     }
     assert all(isinstance(value, str) for value in rendered_env.values())
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'FEATURE_OFF=off' in output
     assert 'FEATURE_ON=on' in output
 
@@ -133,7 +154,7 @@ def test_network_flags_still_required(monkeypatch):
         _MODULE['_render_flags']({'--network': {'env_var': 'CLOUD_RUN_VPC_NETWORK'}})
 
 
-def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, monkeypatch):
+def test_selected_job_renders_only_shared_network_and_named_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
     monkeypatch.setattr(
@@ -143,7 +164,7 @@ def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, 
 
     assert _MODULE['main']() == 0
 
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'cloud_run_flags<<' in output
     assert 'memory_maintenance_job_flags<<' in output
     assert 'memory_maintenance_job_env_vars<<' in output
@@ -151,13 +172,13 @@ def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, 
     assert 'notifications_job_env_vars<<' not in output
 
 
-def test_selected_job_rejects_unknown_name_without_emitting_partial_output(capsys, monkeypatch):
+def test_selected_job_rejects_unknown_name_without_emitting_partial_output(monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'unknown-job'])
 
     with pytest.raises(ValueError, match='unknown Cloud Run job'):
         _MODULE['main']()
 
-    assert capsys.readouterr().out == ''
+    assert _read_workflow_outputs() == ''
 
 
 def test_render_dev_emits_memory_maintenance_job_outputs():
@@ -191,7 +212,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
-def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
+def test_render_dev_emits_x_connector_sync_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
     monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
@@ -200,7 +221,7 @@ def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
 
     assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
     assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
     assert 'RAPID_API_HOST=twitter-api.example' in output
@@ -239,11 +260,10 @@ def test_every_cloud_run_job_pins_a_task_timeout(env):
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
-def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
+def test_retired_daily_sweep_runtime_is_absent(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
     maintenance = jobs['memory-maintenance-job']
-    daily = jobs['daily-memory-sweep-job']
-    daily_names = {
+    retired_names = {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
@@ -258,16 +278,8 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
-    assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
-        'secret': 'POSTHOG_PROJECT_API_KEY',
-        'version': 'latest',
-    }
-    assert {
-        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
-    } <= set(daily.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' in daily.get('secrets', {})
+    assert retired_names.isdisjoint(maintenance.get('env', {}))
+    assert 'daily-memory-sweep-job' not in jobs
 
 
 def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
@@ -282,7 +294,7 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
     approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+            if key in approved_allowlists:
                 continue
             if _contains_uid_outside_approved_allowlists(value, uid):
                 return True
@@ -293,10 +305,8 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    # The dev-only ledger drain has an explicit operational fence for the two
-    # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists. Only explicitly reviewed operational
-    # allowlists remain approved.
+    # Product/runtime surfaces must contain no first-user or capture admission
+    # lists. Only explicitly reviewed operational allowlists remain approved.
     assert not _contains_uid_outside_approved_allowlists(
         _MANIFEST['environments']['dev'],
         'vi7SA9ckQCe4ccobWNxlbdcNdC23',
@@ -370,7 +380,7 @@ def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
     assert '--lane omi:auto:x-memory-extraction-flex' in workflow
 
 
-def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
+def test_render_prod_emits_memory_maintenance_job_cron_on(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -394,7 +404,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
-    out = capsys.readouterr().out
+    out = _read_workflow_outputs()
     job_env = _job_env_block(out, 'memory_maintenance_job')
     # Prod GO 2026-08-15: the maintenance job follows the request-path product
     # flag. ST→LT cron is job-hosted on both env overlays with Flex.
@@ -414,7 +424,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env
 
 
-def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
+def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -439,7 +449,7 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
 
     assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
 
     for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
         service_env = _job_env_block(output, service)
@@ -728,6 +738,10 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
     literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
     for entry in state['services']['desktop-backend']['env']:
         name, value = entry['name'], entry['value']
+        if name in {row['env_var'] for row in LADDER_V1_PRICE_BINDINGS.values()}:
+            assert '${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}' in workflow
+            assert f'{name}: ${{{{ vars.{name} }}}}' in workflow
+            continue
         if name in _MODULE['FIRESTORE_READ_RUNTIME_ENV_NAMES']:
             assert '${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}' in workflow
             continue
@@ -736,51 +750,6 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
             assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
             continue
         assert f'{name}={value}' in workflow, f'{env_name}: {name}={value} is not what the workflow deploys'
-
-
-@pytest.mark.parametrize('cohort', [None, '', 'uid:fixture-a,uid:fixture-b'])
-def test_free_tier_cohort_renders_empty_or_escaped_on_every_cloud_run_host(monkeypatch, cohort):
-    key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
-    if cohort is None:
-        monkeypatch.delenv(key, raising=False)
-    else:
-        monkeypatch.setenv(key, cohort)
-    for environment in ('dev', 'prod'):
-        config = _MANIFEST['environments'][environment]
-        hosts = [config['desktop_backend'], *config['cloud_run']['services'].values()]
-        expected = (cohort or '') if environment == 'dev' else ''
-        for host in hosts:
-            binding = {key: host['env'][key]}
-            assert _MODULE['_render_env_entries'](binding) == [{'name': key, 'value': expected}]
-            assert _MODULE['_render_env_vars'](binding) == f'{key}=' + expected.replace(',', r'\,')
-
-
-def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path, capsys):
-    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'uid:')
-    state = tmp_path / 'state.json'
-    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
-    with pytest.raises(ValueError, match='uid:<non-empty>'):
-        _MODULE['main']()
-    assert not state.exists()
-    assert capsys.readouterr().out == ''
-
-
-def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path, capsys):
-    cohort = 'uid:fixture-a,uid:fixture-b'
-    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', cohort)
-    state = tmp_path / 'state.json'
-    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
-    assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
-    assert output.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
-    )
-    assert output.endswith(
-        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
-        'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
-    )
-    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
 
 
 def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
@@ -792,9 +761,9 @@ def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiter
 
     assert _MODULE['main']() == 0
 
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
-    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n')
+    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
 
 
 def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
@@ -822,6 +791,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     subprocess.run(['bash', '-c', staging['run']], cwd=tmp_path, env=environment, check=True)
     controls = runner_temp / 'desktop-backend-deploy-controls'
     state = tmp_path / 'state.json'
+    renderer_output = tmp_path / 'renderer-github-output'
     result = subprocess.run(
         [
             sys.executable,
@@ -833,19 +803,20 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
             str(state),
         ],
         cwd=tmp_path,
+        env={**os.environ, 'GITHUB_OUTPUT': str(renderer_output)},
         check=True,
         capture_output=True,
         text=True,
     )
-    assert result.stdout.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+    assert result.stdout == ''
+    workflow_outputs = renderer_output.read_text(encoding='utf-8')
+    assert (
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
+        in workflow_outputs
     )
-    assert result.stdout.endswith(
-        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
-    )
+    assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
+    assert {'name': 'CLIENT_SUMMARIES_AT_CAP_ENABLED', 'value': 'true'} in entries
 
 
 def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
@@ -967,3 +938,337 @@ def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch)
     assert f'SYNC_TASKS_HANDLER_URL={handler}' in rendered
     assert f'SYNC_TASKS_OIDC_AUDIENCE={handler}' in rendered
     assert 'SYNC_TASKS_INVOKER_SA=invoker@example.invalid' in rendered
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+@pytest.mark.parametrize('bound', [False, True])
+def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatch, tmp_path, capsys, env_name, bound):
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-subscription-reader')
+    bindings = list(LADDER_V1_PRICE_BINDINGS.values())
+    for index, row in enumerate(bindings):
+        if bound:
+            monkeypatch.setenv(row['env_var'], f'price_render_fixture_{index}')
+        else:
+            monkeypatch.delenv(row['env_var'], raising=False)
+    state_path = tmp_path / 'desktop-state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', env_name, '--desktop-state-output', str(state_path)])
+    assert _MODULE['main']() == 0
+    output = _read_workflow_outputs()
+    marker = '__BACKEND_RUNTIME_ENV_ladder_price_env_vars__'
+    deployed = dict(line.split('=', 1) for line in output.split(marker)[1].strip().splitlines() if line)
+    expected_state = {
+        entry['name']: entry['value']
+        for entry in json.loads(state_path.read_text())['services']['desktop-backend']['env']
+    }
+    backend_entries = _MANIFEST['environments'][env_name]['cloud_run']['services']['backend']['env']
+    backend_workflow = (
+        _REPO_ROOT / '.github/workflows' / ('gcp_backend_auto_dev.yml' if env_name == 'dev' else 'gcp_backend.yml')
+    )
+    workflow_text = backend_workflow.read_text()
+    # Environment-scoped price refs must be read after the deployment job selects its environment.
+    workflow = yaml.safe_load(workflow_text)
+    deploy_job = workflow['jobs']['deploy']
+    assert deploy_job.get('environment')
+    deploy_steps = [
+        step for step in deploy_job['steps'] if step.get('uses') == './.github/actions/deploy-backend-stack'
+    ]
+    assert len(deploy_steps) == 1
+    for index, row in enumerate(bindings):
+        key = row['env_var']
+        expected = f'price_render_fixture_{index}' if bound else ''
+        if bound:
+            assert deployed[key] == expected_state[key] == expected
+            assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == f'{key}={expected}'
+        else:
+            assert key not in deployed and key not in expected_state
+            assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == ''
+        assert f'{key}: ${{{{ vars.{key} }}}}' in workflow_text
+        assert key not in workflow.get('env', {})
+        assert deploy_steps[0]['env'][key] == '${{ vars.' + key + ' }}'
+        if bound:
+            subscription = {
+                'plan': row['plan_id'],
+                'current_price_id': expected,
+                'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+            }
+            assert resolve_subscription_entitlements(subscription, deployed)['capabilities'][
+                'cloud_screen_vectors'
+            ] is (row['plan_id'] != 'plus')
+    assert set(deployed) == ({row['env_var'] for row in bindings} if bound else set())
+    for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items():
+        subscription = {
+            'plan': plan.value,
+            'current_price_id': price,
+            'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+        }
+        assert resolve_subscription_entitlements(subscription, deployed)['capabilities']['cloud_screen_vectors'] is True
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('reference', [None, 'fixture-reader', 'projects/fixture-project/secrets/fixture-reader'])
+def test_desktop_mixed_prices_require_only_optional_restricted_read_reference(
+    monkeypatch, tmp_path, capsys, environment, reference
+):
+    for binding in LADDER_V1_PRICE_BINDINGS.values():
+        monkeypatch.delenv(binding['env_var'], raising=False)
+    if reference is None:
+        monkeypatch.delenv('SCREEN_VECTOR_STRIPE_READ_SECRET', raising=False)
+    else:
+        monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', reference)
+    # Explicitly supplied references are mounted even when incoming prices are
+    # omitted: the effective service can retain previously configured prices.
+    config = _MANIFEST['environments'][environment]
+    optional = _MODULE['_render_desktop_backend_state'](config)['services']['desktop-backend']['secrets']
+    assert bool(optional) is (reference is not None)
+    monkeypatch.setenv('LADDER_V1_PLUS_MONTH_PRICE_ID', 'price_future_fixture')
+    path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', environment, '--desktop-state-output', str(path)])
+    if reference is None:
+        with pytest.raises(ValueError, match='require SCREEN_VECTOR_STRIPE_READ_SECRET'):
+            _MODULE['main']()
+        assert not path.exists() and capsys.readouterr().out == ''
+    else:
+        assert _MODULE['main']() == 0
+        state = json.loads(path.read_text())['services']['desktop-backend']
+        assert state['secrets'] == [
+            {
+                'name': 'SCREEN_VECTOR_STRIPE_API_KEY',
+                'valueFrom': {'secretKeyRef': {'name': reference, 'key': 'latest'}},
+            }
+        ]
+        output = _read_workflow_outputs()
+        assert reference not in output
+        assert 'screen_vector_stripe_secret' not in output
+        assert '\nSTRIPE_API_KEY=' not in output
+        assert all(entry['name'] != 'SCREEN_VECTOR_STRIPE_READ_SECRET' for entry in state['env'])
+    workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    render = next(
+        (job, step)
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'desktop-expected-env'
+    )
+    assert render[0].get('environment')
+    assert (
+        render[1]['env']['SCREEN_VECTOR_STRIPE_READ_SECRET'] == '${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}'
+    )
+    assert 'SCREEN_VECTOR_STRIPE_READ_SECRET' not in workflow.get('env', {})
+    deploy = next(
+        step
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'deploy-candidate'
+    )
+    steps = render[0]['steps']
+    assert steps.index(render[1]) < steps.index(deploy)
+    assert not render[1].get('continue-on-error')
+    assert not deploy.get('if')  # Default success() keeps invalid metadata from reaching deployment.
+    assert (
+        "${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && "
+        "format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}"
+    ) in deploy['with']['secrets']
+    assert '\nSTRIPE_API_KEY=' not in deploy['with']['secrets']
+
+
+@pytest.mark.parametrize(
+    'reference',
+    [
+        'bad:latest',
+        'a,b=payload',
+        'bad\nSTRIPE_API_KEY=payload',
+        '../bad',
+        'projects/a/secrets/name/versions/1',
+        'sk_live_fixture',
+        'rk_live_fixture',
+    ],
+)
+def test_dynamic_secret_reference_rejects_injection_and_credential_payload_shapes(monkeypatch, reference):
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', reference)
+    with pytest.raises(ValueError, match='invalid resource reference') as error:
+        _MODULE['_render_secret_entries'](
+            {
+                'SCREEN_VECTOR_STRIPE_API_KEY': {
+                    'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET',
+                    'default': '',
+                    'version': 'latest',
+                }
+            }
+        )
+    assert reference not in str(error.value)
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_cloud_run_omitted_price_updates_preserve_existing_identity(monkeypatch, environment):
+    keys = [row['env_var'] for row in LADDER_V1_PRICE_BINDINGS.values()]
+    for key in keys:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv('SCREEN_VECTOR_STRIPE_READ_SECRET', raising=False)
+    config = _MANIFEST['environments'][environment]
+    # Pin the actual owning deployment actions' merge contract rather than
+    # modeling an update independently of the checked-in caller.
+    desktop_workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    stack = yaml.safe_load((_REPO_ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    deploys = [step for step in stack['runs']['steps'] if step.get('id') == 'deploy-backend']
+    deploys += [
+        step
+        for job in desktop_workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'deploy-candidate'
+    ]
+    assert len(deploys) == 2
+    for deploy in deploys:
+        assert deploy['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+        assert deploy['with'].get('env_vars_update_strategy', 'merge') == 'merge'
+        assert all(key not in deploy['with'].get('flags', '') for key in keys)
+    from scripts.attach_cloud_run_gmp_sidecar import _validate_expected_literal_env
+
+    prior = {key: f'price_existing_fixture_{index}' for index, key in enumerate(keys)}
+    for entries in [config['cloud_run']['services']['backend']['env'], config['desktop_backend']['env']]:
+        price_entries = {key: entries[key] for key in keys}
+        updates = _MODULE['_render_env_vars'](price_entries)
+        expected = _MODULE['_render_env_entries'](price_entries)
+        assert updates == '' and expected == []
+        # deploy-cloudrun merges only supplied env assignments; omitted names
+        # remain operator-owned, including when sidecar guard rewrites the export.
+        effective = dict(prior)
+        effective.update(dict(line.split('=', 1) for line in updates.splitlines()))
+        assert effective == prior
+        exported = {
+            'spec': {
+                'template': {
+                    'spec': {
+                        'containers': [
+                            {
+                                'name': 'ingress',
+                                'env': [{'name': key, 'value': value} for key, value in effective.items()],
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        _validate_expected_literal_env(exported, expected={}, ingress_container_name='ingress', phase='before')
+        assert {e['name']: e['value'] for e in exported['spec']['template']['spec']['containers'][0]['env']} == prior
+        monkeypatch.setenv(keys[0], 'price_explicit_fixture')
+        updates = _MODULE['_render_env_vars'](price_entries)
+        effective.update(dict(line.split('=', 1) for line in updates.splitlines()))
+        assert effective == dict(prior, **{keys[0]: 'price_explicit_fixture'})
+        assert _MODULE['_render_env_entries'](price_entries) == [{'name': keys[0], 'value': 'price_explicit_fixture'}]
+        monkeypatch.delenv(keys[0])
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_desktop_operator_price_realm_is_explicit_and_separate_from_main(monkeypatch, environment):
+    workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    render_job, render = next(
+        (job, step)
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'desktop-expected-env'
+    )
+    assert render_job.get('environment')
+    config = _MANIFEST['environments'][environment]
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-desktop-customer-reader')
+    main = {}
+    desktop = {}
+    for index, binding in enumerate(LADDER_V1_PRICE_BINDINGS.values()):
+        key = binding['env_var']
+        assert render['env'][key] == '${{ vars.DESKTOP_' + key + ' }}'
+        assert key not in workflow.get('env', {})
+        assert '${{ vars.' + key + ' }}' not in _DESKTOP_WORKFLOWS[environment].read_text()
+        main[key] = f'price_main_plane_{index}'
+        desktop[key] = f'price_desktop_customer_plane_{index}'
+        monkeypatch.setenv(key, main[key])
+    main_env = {
+        e['name']: e['value']
+        for e in _MODULE['_render_env_entries'](
+            {key: config['cloud_run']['services']['backend']['env'][key] for key in main}
+        )
+    }
+    for key, value in desktop.items():
+        monkeypatch.setenv(key, value)
+    desktop_env = {
+        e['name']: e['value']
+        for e in _MODULE['_render_desktop_backend_state'](config)['services']['desktop-backend']['env']
+        if e['name'] in desktop
+    }
+    assert main_env == main and desktop_env == desktop
+    for index, binding in enumerate(LADDER_V1_PRICE_BINDINGS.values()):
+        for values, price in [(main_env, main[binding['env_var']]), (desktop_env, desktop[binding['env_var']])]:
+            subscription = {
+                'plan': binding['plan_id'],
+                'current_price_id': price,
+                'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+            }
+            assert resolve_subscription_entitlements(subscription, values)['capabilities']['cloud_screen_vectors'] is (
+                binding['plan_id'] != 'plus'
+            )
+
+
+@pytest.mark.parametrize('descriptor', ['literal', 'dynamic'])
+@pytest.mark.parametrize(
+    'candidate',
+    [
+        'sk_live_fixture_not_real',
+        'rk_live_fixture_not_real',
+        'bad\nSTRIPE_API_KEY=fixture',
+        'bad:latest',
+        '../fixture',
+        '{"private_key":"fixture"}',
+    ],
+)
+def test_invalid_resource_never_reaches_cli_state_or_workflow_output(
+    monkeypatch, tmp_path, capsys, descriptor, candidate
+):
+    config = deepcopy(_MANIFEST['environments']['dev'])
+    entry = (
+        {'secret': candidate}
+        if descriptor == 'literal'
+        else {'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET', 'default': ''}
+    )
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', candidate)
+    config['desktop_backend']['secrets']['SCREEN_VECTOR_STRIPE_API_KEY'] = entry
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': config}})
+    output_path = Path(os.environ['GITHUB_OUTPUT'])
+    output_path.write_text('existing_output=retained\n')
+    state_path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state_path)])
+    with pytest.raises(ValueError, match='invalid resource reference') as error:
+        _MODULE['main']()
+    assert candidate not in str(error.value)
+    assert not state_path.exists()
+    assert output_path.read_text() == 'existing_output=retained\n'
+    assert capsys.readouterr() == ('', '')
+
+
+@pytest.mark.parametrize('descriptor', ['literal', 'dynamic'])
+@pytest.mark.parametrize('resource_name', ['fixture-reader', 'projects/fixture-project/secrets/fixture-reader'])
+def test_cli_emits_only_resource_metadata_never_runtime_credential_value(
+    monkeypatch, tmp_path, capsys, descriptor, resource_name
+):
+    config = deepcopy(_MANIFEST['environments']['dev'])
+    entry = (
+        {'secret': resource_name}
+        if descriptor == 'literal'
+        else {'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET', 'default': ''}
+    )
+    config['desktop_backend']['secrets']['SCREEN_VECTOR_STRIPE_API_KEY'] = entry
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': config}})
+    fixture_credential = 'sk_live_fixture_not_real'
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_API_KEY', fixture_credential)
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', resource_name)
+    state_path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state_path)])
+    assert _MODULE['main']() == 0
+    state = json.loads(state_path.read_text())['services']['desktop-backend']
+    assert state['secrets'] == [
+        {
+            'name': 'SCREEN_VECTOR_STRIPE_API_KEY',
+            'valueFrom': {'secretKeyRef': {'name': resource_name, 'key': 'latest'}},
+        }
+    ]
+    output = _read_workflow_outputs()
+    assert resource_name not in output
+    assert 'screen_vector_stripe_secret' not in output
+    assert fixture_credential not in output + state_path.read_text()
+    assert capsys.readouterr() == ('', '')

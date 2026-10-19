@@ -693,6 +693,23 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
   return null;
 }
 
+/// Explicit, authenticated and idempotent backlog choice. Reset alone never calls this.
+Future<ProcessingBacklog?> processProcessingBacklog({required String idempotencyKey}) async {
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    throw ArgumentError.value(idempotencyKey, 'idempotencyKey', 'Must contain 8..128 characters');
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/processing-backlog/process',
+    headers: {'Idempotency-Key': idempotencyKey},
+    method: 'POST',
+    body: '{}',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  return ProcessingBacklog.fromGenerated(
+    subscription_wire.GeneratedProcessingBacklog.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+  );
+}
+
 // Daily Summary Settings
 
 class DailySummarySettings {

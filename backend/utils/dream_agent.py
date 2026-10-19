@@ -1,5 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+
 import asyncio
 from datetime import datetime, timezone
 from collections import Counter
@@ -19,6 +21,7 @@ from config.dream_agent import (
     DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
+from config.rollout_cohorts import warm_rollout_cohorts
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -601,6 +604,10 @@ async def run_pass(
     dry_run=False,
     bootstrap_tools=None,
 ):
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
+    ):
+        return {'status': 'not_admitted', 'reason': 'usage_budget_exhausted'}
     if not enabled():
         report = {'status': 'not_admitted', 'reason': 'disabled'}
         if not dry_run:
@@ -609,6 +616,7 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    await warm_rollout_cohorts(uid)
     # Reject stale queue entries before capacity waits or owner-data loading.
     # Synthetic canaries have separate, authoritative admission in acquire().
     if not canary and not may_be_eligible(uid):

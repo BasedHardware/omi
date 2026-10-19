@@ -413,7 +413,10 @@ def test_serving_config_expires_and_does_not_serve_stale_after_error(env, monkey
     [
         ('trial', False, 6),
         ('trial', True, 2),
-        ('subscription', False, 12),
+        # +1 per request (this case issues two) for the trial-eligibility read of
+        # stripe_customer_id; it joins the entitlement projection when request_read_dedupe
+        # is on, so the deduped budget below is unchanged.
+        ('subscription', False, 14),
         ('subscription', True, 5),
     ],
 )

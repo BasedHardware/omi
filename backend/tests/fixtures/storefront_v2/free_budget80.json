@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 7,
+  "catalog_revision": 10,
   "show_subscription_ui": true,
   "header": "You've used 80% of this month's usage",
   "current": {
@@ -19,7 +19,9 @@
     "period_id": "2026-10",
     "reset_label": "resets Nov 1",
     "meter_line": "80% used · about 3 hours of recording left · resets Nov 1",
+    "hours_left": 3,
     "nudge_line": "You've used 80% of this month's usage · resets Nov 1",
+    "more_label": "Get more usage",
     "pro_gates": [
       "proactive_agent",
       "screen_context"

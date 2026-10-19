@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import importlib
 import unittest.mock
+
+from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -55,6 +57,8 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from database.memories import MemoryListIndexState
+from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
 from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
@@ -128,6 +132,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': '73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -146,7 +152,7 @@ BODY_DIGEST = {
     'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
-    'database.durable_queue_age._publish_queue_ages': '6981674c08c0e133899133a08ad5c7ee8dc34f2be420e134818af4db20d0f644',
+    'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
@@ -1043,7 +1049,7 @@ _add(
     CoveredByEntry(
         'database.durable_queue_age._publish_queue_ages',
         covered_by=('database.durable_queue_age.publish_all_queue_oldest_ready_ages',),
-        reason='sample-budget cache wrapper around the same scan+publish path; reached only by the periodic publisher',
+        reason='sample-budget cache wrapper; invalidates metrics before fresh I/O, with scan query shapes unchanged',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.durable_queue_age._publish_queue_ages'],
     )
@@ -1061,20 +1067,6 @@ _add(
     )
 )
 
-for _fn in (
-    'list_entity_timeline_conversations',
-    'list_entity_timeline_meetings',
-    'list_entity_timeline_screen_activity',
-):
-    _add(
-        DriverEntry(
-            f'database.entity_timeline_sources.{_fn}',
-            base={'uid': UID},
-            domains={'start_date': [None, T0], 'end_date': [None, T1]},
-            neutrals={'limit': _LIMIT},
-        )
-    )
-
 _add(DriverEntry('database.fair_use.get_fair_use_events', base={'uid': UID}, neutrals={'limit': _LIMIT}))
 _add(
     DriverEntry(
@@ -1088,12 +1080,6 @@ _add(
     )
 )
 _add(DriverEntry('database.feedback.list_report_dates', neutrals={'limit': _LIMIT}))
-_add(
-    DriverEntry(
-        'database.first_open_obligations.commit_first_open_folder_count',
-        base={'uid': UID, 'conversation_id': 'conv-1', 'token': 'token-1', 'folder_id': 'folder-1'},
-    )
-)
 _add(
     DriverEntry(
         'database.focus_sessions.get_focus_sessions',
@@ -1699,17 +1685,60 @@ _add(
         'database.memories.get_user_public_memories', base={'uid': UID}, neutrals={'limit': _LIMIT, 'offset': _OFFSET}
     )
 )
+
+
+def _queue_hidden_memory_index_page(client, combo, trial):
+    # A full hidden prefix forces the new snapshot-cursor suffix query.
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{UID}/memories/hidden-{index}',
+                {
+                    'created_at': T0,
+                    'updated_at': T0,
+                    'user_review': False,
+                },
+            )
+            for index in range(50)
+        ]
+    )
+    client.queue_results([])
+    client.queue_results([])
+
+
 _add(
     DriverEntry(
         'database.memories.list_memory_updated_or_created_index',
         base={'uid': UID},
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        setup=_queue_hidden_memory_index_page,
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'index_state': (
+                MemoryListIndexState(UID),
+                'per-operation metadata reuse; same prefix/snapshot-suffix shapes, fresh per trial',
+            ),
+        },
         profiles=(
             CallerProfile(
                 'historical-dual-window',
-                {'categories': [[]], 'start_date': [None], 'end_date': [None], 'include_invalidated': [False]},
+                {
+                    'categories': [[]],
+                    'start_date': [None],
+                    'end_date': [None],
+                    'include_invalidated': [False],
+                },
             ),
         ),
+    )
+)
+_add(
+    DriverEntry(
+        'database.action_item_completion_backfill.backfill_completion_page',
+        base={'uid': UID},
+        domains={'cursor': [None, 'previous-task']},
+        neutrals={'limit': _LIMIT, 'apply': (False, 'operator dry-run; same read query as apply')},
     )
 )
 _add(
@@ -2520,6 +2549,13 @@ _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(USAGE_UNITS_DRIVER)
+_add(
+    CoveredByEntry(
+        'database.usage_units.read_usage_month',
+        covered_by=('database.usage_units.get_usage_units',),
+        reason='shared month builder called by the public reader and cold/900-second session refresh; current-bucket refresh uses document get_all only',
+    )
+)
 _add(DriverEntry('database.user_usage.get_usage_by_plan', base={'uid': UID}, domains={'now': [None, T0]}))
 _add(DriverEntry('database.user_usage.get_yearly_history', base={'uid': UID}))
 _add(DriverEntry('database.user_usage.get_yearly_usage_stats', base={'uid': UID, 'date': T0}))
@@ -2920,7 +2956,18 @@ _add(
         patchers=(_messaging_cleanup, _messaging_decryption),
     )
 )
-_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+_add(
+    DriverEntry(
+        'database.channel_visibility.visible_sessions',
+        base={'uid': UID},
+        patchers=(
+            _messaging_visibility,
+            # Drivers run outside serving bootstrap/function fixtures. Model a
+            # successful empty cohort document with the explicit synthetic env fallback.
+            lambda client: unittest.mock.patch('config.rollout_cohorts._membership_resolver', legacy_membership),
+        ),
+    )
+)
 
 _add(
     DriverEntry(
@@ -2996,6 +3043,50 @@ _add(
         neutrals={'limit': (10, 'bounded recovery page; does not affect filters')},
     )
 )
+_add(
+    DriverEntry(
+        'utils.sync.held_audio_summary._load_rows',
+        base={'uid': UID},
+    )
+)
+
+
+def _summary_migration_pages(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{UID}/stt_cap_holds/held-{i:04d}', {'state': 'held', 'seconds': 1, 'listed_at': i + 1}
+            )
+            for i in range(400)
+        ]
+    )
+    client.queue_results([])
+
+
+def _summary_migration_writes(client):
+    # This driver resumes from transaction-written summary markers. The shape
+    # recorder normally discards writes; persist only this driver's set markers.
+    from tests.support.firestore_shape_recorder import RecordingTransaction
+
+    original = RecordingTransaction._commit
+
+    def commit(tx, *args, **kwargs):
+        for operation, reference, data in tx._write_ops:
+            if operation == 'set':
+                client.documents[reference.path] = dict(data)
+        return original(tx, *args, **kwargs)
+
+    return unittest.mock.patch.object(RecordingTransaction, '_commit', commit)
+
+
+_add(
+    DriverEntry(
+        'utils.sync.cap_hold._ensure_held_audio_summary',
+        base={'uid': UID},
+        setup=_summary_migration_pages,
+        patchers=(_summary_migration_writes,),
+    )
+)
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(
@@ -3065,5 +3156,41 @@ _add(
         'database.summary_debt_queries.due_conversations',
         neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
         domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+    )
+)
+
+_add(
+    DriverEntry(
+        'utils.processing_backlog_worker._page',
+        base={'uid': UID},
+        domains={'kind': ['audio', 'text'], 'cursor': [None, {'at': 1, 'id': 'cursor'}]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.funded_usage_session.LegacyUsageSession.read',
+        base={'self': LegacyUsageSession(), 'uid': UID, 'launch': T0},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.funded_usage_session.read_month',
+        covered_by=('database.funded_usage_session.LegacyUsageSession.read',),
+        reason='Cold session executes this monthly builder; warm checks read explicit hour documents.',
+    )
+)
+# Background-only discovery. Each boolean field has its own automatic single-field
+# index; point reads of all memberships on serving requests need no query index.
+_add(
+    DriverEntry(
+        'database.rollout_cohorts.read_cohort_members',
+        domains={
+            'name': [
+                'prod:batch-pipeline-recovery',
+                'prod:dream-agent',
+                'dev:batch-pipeline-recovery',
+                'dev:dream-agent',
+            ]
+        },
     )
 )

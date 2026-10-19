@@ -17,3 +17,6 @@ opuslib==3.0.1
 
 # Shared strict-local silence disposition (utils.stt.local_vad); no hosted calls.
 onnxruntime==1.19.0
+
+# Shared Firestore SDK task-write fencing; no task reads or Redis IO until a task write.
+redis==5.0.8

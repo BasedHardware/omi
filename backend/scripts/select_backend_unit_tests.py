@@ -546,6 +546,21 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
+    # Cross-cutting cap guard: a new model endpoint must declare a funded gate.
+    # Keep this separate from AREA_TESTS so unknown sources retain full-suite fallback.
+    if any(
+        path.startswith(('backend/routers/', 'backend/utils/llm/'))
+        or path
+        in {
+            'backend/utils/generated_compute.py',
+            'backend/utils/funded_processing.py',
+            'backend/docs/llm/model_endpoint_inventory.yaml',
+        }
+        for path in changed_paths
+    ):
+        selected.update(
+            test for test in ('tests/unit/test_generated_compute_inventory_guardrails.py',) if test in all_tests
+        )
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):

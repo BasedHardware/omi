@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { normalizeKnowledgeLedgerMemories } from '@/lib/knowledgeLedger';
@@ -11,27 +9,8 @@ const baseMemory = {
   layer: 'long_term',
 };
 
-type JitRuntimeMatrix = {
-  memory_rows: Array<Record<string, unknown>>;
-  chat_records: Record<'legacy' | 'v1' | 'future', Record<string, unknown>>;
-  expected: {
-    memory_ids: string[];
-    authoritative_ledger_ids: string[];
-    readable_text_by_id: Record<string, string>;
-    v1_evidence_kind: string;
-  };
-};
-
-const jitRuntimeMatrix = (): JitRuntimeMatrix => {
-  const path = resolve(
-    process.cwd(),
-    '../../contracts/parity/jit_runtime_contract_matrix.json',
-  );
-  return JSON.parse(readFileSync(path, 'utf8')) as JitRuntimeMatrix;
-};
-
 describe('web knowledge ledger memory boundary', () => {
-  it('keeps server belief metadata read-only and leaves unknown rows unclassified', () => {
+  it('ignores retired belief fields while keeping memory rows readable', () => {
     const [current, unknown] = normalizeKnowledgeLedgerMemories([
       {
         ...baseMemory,
@@ -54,40 +33,25 @@ describe('web knowledge ledger memory boundary', () => {
     ]);
 
     expect(current).toMatchObject({
-      belief_class: 'preference',
-      currency: 0.8,
-      currency_band: 'current',
-      as_of: '2026-08-23T00:00:00Z',
-      belief_computed_at: '2026-08-23T01:00:00Z',
+      id: 'current-belief',
+      content: 'A current preference',
     });
     expect(unknown).toMatchObject({
-      belief_computed_at: '2026-08-23T01:00:00Z',
-      currency: null,
-      currency_band: null,
+      id: 'unknown-belief',
+      content: 'An unclassified legacy memory',
     });
-  });
-
-  it('runs the shared mixed-version JIT contract through the web runtime adapters', () => {
-    const matrix = jitRuntimeMatrix();
-    const memories = normalizeKnowledgeLedgerMemories(matrix.memory_rows);
-
-    expect(memories.map((memory) => memory.id)).toEqual(matrix.expected.memory_ids);
-    expect(
-      Object.fromEntries(memories.map((memory) => [memory.id, memory.content])),
-    ).toEqual(matrix.expected.readable_text_by_id);
-    expect(
-      memories
-        .filter((memory) => memory.ledger_schema_version === 'knowledge_ledger.v1')
-        .map((memory) => memory.id),
-    ).toEqual(matrix.expected.authoritative_ledger_ids);
-
-    expect(parseChatEvidenceFromRecord(matrix.chat_records.legacy)).toBeNull();
-    const current = parseChatEvidenceFromRecord(matrix.chat_records.v1);
-    const future = parseChatEvidenceFromRecord(matrix.chat_records.future);
-    expect(current?.references[0]?.kind).toBe(matrix.expected.v1_evidence_kind);
-    expect(future?.schemaVersion).toBe(2);
-    expect(future?.references).toEqual([]);
-    expect(matrix.chat_records.future.text).toBeTruthy();
+    for (const item of [current, unknown]) {
+      for (const field of [
+        'belief_class',
+        'currency',
+        'currency_band',
+        'as_of',
+        'half_life_days',
+        'belief_computed_at',
+      ]) {
+        expect(item).not.toHaveProperty(field);
+      }
+    }
   });
 
   it('keeps legacy, v1, and future text rows readable without granting future authority', () => {

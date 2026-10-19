@@ -55,6 +55,7 @@ import 'widgets/ask_agent_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 import 'widgets/summarized_apps_sheet.dart';
 import 'widgets/transcript_tab.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 
 /// Offset of the floating bottom bar from the bottom of the screen.
 ///
@@ -79,6 +80,7 @@ double detailToastClearance(double bottomSystemInset) =>
 /// transcript so retained fragment data is immediately visible.
 ConversationTab conversationDetailInitialTab(ServerConversation conversation, {ConversationTab? requested}) {
   if (requested != null) return requested;
+  if (conversation.processingDeferred) return ConversationTab.transcript;
   if (conversation.status != ConversationStatus.completed) return ConversationTab.summary;
 
   final hasTranscript = conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty);
@@ -1174,6 +1176,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                   children: [
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                    if (conversation.processingDeferred)
+                      const Padding(padding: EdgeInsets.all(OmiSpacing.xs), child: ProcessingDeferredMarker()),
                     ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
                     ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(

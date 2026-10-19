@@ -1,6 +1,6 @@
 """Deployed day3-reengagement-email entrypoint lifecycle behavior.
 
-Mirrors test_daily_memory_sweep_job.py: the job module is loaded from its
+The job module is loaded from its
 literal path (``modal/`` is not an importable package on the normal path),
 then every name it imported by reference is monkeypatched directly on the
 loaded module object.

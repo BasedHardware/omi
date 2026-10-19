@@ -148,6 +148,20 @@ void main() {
     }
   }
 
+  test('import repair retains an existing local conversation and phone-only custody', () {
+    final wal = Wal(
+        timerStart: 1,
+        seconds: 1,
+        originalStorage: WalStorage.sdcard,
+        codec: BleAudioCodec.opus,
+        storage: WalStorage.sdcard,
+        onDeviceOnly: true,
+        onDeviceConversation: {'id': 'local-result'});
+    final restored = Wal.fromJson(wal.toJson());
+    expect(restored.onDeviceOnly, isTrue);
+    expect(restored.onDeviceConversation?['id'], 'local-result');
+  });
+
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
