@@ -45,9 +45,9 @@ def validate_window_cursors(state: Any, uid: str) -> None:
             decode_cursor(keyset.index_window_cursor, query_scope({'uid': uid, 'order': field}))
 
 
-def window_sort_key(memory: Any) -> tuple[int, int, str]:
+def window_sort_key(memory: Any) -> tuple[int, str]:
     stamp = memory.updated_at or memory.created_at
     if isinstance(stamp, DatetimeWithNanoseconds):
         value = stamp.timestamp_pb()
-        return (-value.seconds, -value.nanos, memory.id)
-    return (-int(stamp.timestamp()), -stamp.microsecond * 1000, memory.id)
+        return (-(value.seconds * 1_000_000_000 + value.nanos), memory.id)
+    return (-(int(stamp.replace(microsecond=0).timestamp()) * 1_000_000_000 + stamp.microsecond * 1000), memory.id)
