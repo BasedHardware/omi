@@ -2,14 +2,12 @@
 
 import pytest
 
-pytest.importorskip('testing.pipeline_sim.sim', reason='virtual-clock harness is in PR #22201')
-
-from testing.ordered_head_scenario import qualify
-
 
 @pytest.fixture(scope='module')
 def reverse_upload():
-    return qualify()
+    pytest.importorskip('testing.pipeline_sim.sim', reason='virtual-clock harness is in PR #22201')
+    scenario = pytest.importorskip('testing.ordered_head_scenario')
+    return scenario.qualify()
 
 
 def test_reverse_upload_160_selects_capture_head_without_waiting_for_fifo(reverse_upload):
