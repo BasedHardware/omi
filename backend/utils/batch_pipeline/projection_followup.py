@@ -37,6 +37,7 @@ class ProjectionFollowups:
         self.tasks: dict[str, asyncio.Task] = {}
         self.after: str | None = None
         self.pending: deque[str] = deque()
+        self.prioritized: set[str] = set()
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
 
@@ -59,6 +60,7 @@ class ProjectionFollowups:
             # segment claims and receipt fences are unchanged; discovery resumes
             # once the queue drains.
             first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
             return
@@ -72,7 +74,12 @@ class ProjectionFollowups:
         if self.after in segments:
             offset = segments.index(self.after) + 1
             segments = segments[offset:] + segments[:offset]
-        self.pending = deque(segment for segment in segments if segment not in self.tasks)
+        # A wake may have queued rows while this read was suspended; keep them
+        # ahead of the discovered page instead of replacing the queue.
+        queued = list(self.pending)
+        self.pending = deque(
+            queued + [segment for segment in segments if segment not in self.tasks and segment not in queued]
+        )
         self.launch()
 
     def launch(self):
@@ -80,7 +87,11 @@ class ProjectionFollowups:
             segment = self.pending.popleft()
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
-            self.after = segment
+            if segment in self.prioritized:
+                # Out-of-order wake rows must not move the discovery rotation.
+                self.prioritized.discard(segment)
+            else:
+                self.after = segment
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
 
     def finished(self, segment, task):

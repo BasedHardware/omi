@@ -9,6 +9,7 @@ discovery cursors, follow-up scheduler and ``Serving.reconcile`` run on it.
 
 import asyncio
 import itertools
+import threading
 from contextlib import contextmanager
 from dataclasses import asdict
 from types import SimpleNamespace
@@ -362,6 +363,43 @@ async def test_priority_followups_jump_discovered_queue_within_slot_bound(monkey
     assert started == ['busy', 'shared', 'urgent', 'queued']
 
 
+@pytest.mark.asyncio
+async def test_suspended_discovery_read_keeps_wake_rows_queued_behind_full_slots(monkeypatch):
+    """A discovery read in flight must not replace rows a wake queued meanwhile."""
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 4)
+    release, reading, resume = asyncio.Event(), threading.Event(), threading.Event()
+    runner = projection_followup.ProjectionFollowups(Mock())
+
+    def candidates():
+        reading.set()
+        assert resume.wait(5)
+        return ['busy-0', 'page-a', 'page-b']
+
+    runner.candidates = candidates
+
+    async def run(segment):
+        await release.wait()
+
+    runner.run = run
+    runner.pending.extend(f'busy-{n}' for n in range(4))
+    runner.launch()
+    runner.after = 'busy-3'
+    assert len(runner.tasks) == 4 and not runner.pending
+    discovery = asyncio.create_task(runner.schedule())
+    assert await asyncio.to_thread(reading.wait, 2)
+    await runner.schedule(['recovered'])
+    assert list(runner.pending) == ['recovered']
+    resume.set()
+    await discovery
+    assert list(runner.pending) == ['recovered', 'page-a', 'page-b']
+    release.set()
+    while runner.tasks:
+        await asyncio.gather(*list(runner.tasks.values()))
+    # The wake row launched out of order without moving the discovery rotation.
+    assert runner.after == 'page-b'
+    assert not runner.prioritized
+
+
 # --- characterization: recovered predecessor committed late -----------------------
 
 
@@ -448,5 +486,5 @@ async def test_recovered_tail_unit_projects_in_the_recovery_pass(monkeypatch):
     assert blocked_with == 0
     # Without the wake: cursor wrap for assignment, then a follow-up page full
     # of other owners' receipts, four slots at a time, ahead of R.
-    assert without_chain > 10
+    assert without_chain >= 30  # 36 for this deterministic shape
     assert blocked_without > 0
