@@ -1,6 +1,7 @@
 """Legacy dark (contract (h)): neutral at ``on``, fenced in ``draining``/``dark``."""
 
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -38,6 +39,11 @@ def runtime_mode(monkeypatch):
 
     monkeypatch.setattr(runtime_percent, 'legacy_sync_mode', legacy_sync_mode)
     return state
+
+
+def test_missing_reader_module_serves_on(monkeypatch):
+    monkeypatch.setitem(sys.modules, 'utils.rollout', None)
+    assert legacy_dark.current_mode() is ON
 
 
 def test_stale_window_matches_ledger():
@@ -248,3 +254,18 @@ def test_queue_spec_round_trips_to_gcloud_flags():
     assert legacy_queues._queue_name('prod', 'sync-jobs') == 'sync-jobs'
     assert legacy_queues._queue_name('staging', 'sync-jobs') == 'staging-sync-jobs'
     assert set(legacy_queues.QUEUES) == set(legacy_dark.LEGACY_QUEUES)
+
+
+def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from utils.sync import uid_sequencer
+
+    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
+    claim = MagicMock()
+    monkeypatch.setattr(uid_sequencer, '_claim_next', claim)
+    monkeypatch.setattr(uid_sequencer.registry, 'due_owners', claim)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+    assert uid_sequencer.kick('test-uid') is False
+    assert uid_sequencer.sweep() == {'legacy_dark': 1}
+    claim.assert_not_called()
