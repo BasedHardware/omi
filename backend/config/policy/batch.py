@@ -1,7 +1,8 @@
 """Versioned, immutable batch decisions. Resolution is an admission operation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import hashlib
+import json
 import math
 from collections.abc import Mapping
 
@@ -21,6 +22,7 @@ STT_ROUTES = frozenset({'parakeet', 'provider'})
 PROVIDER_REASONS = frozenset({'none', 'byok', 'unsupported_language'})
 PROVIDER_SERVICES = frozenset({'none', 'byok', 'soniox', 'deepgram', 'modulate'})
 _ROUTE_DEFAULTS = {'stt_route': 'parakeet', 'provider_reason': 'none', 'provider_service': 'none'}
+_UNSET = object()
 
 
 def cohort_bucket(uid: str, salt: str) -> float:
@@ -55,6 +57,18 @@ class BatchUnitPolicy(PolicyPart):
         if not _valid_route(self.stt_route, self.provider_reason, self.provider_service):
             raise ValueError('closed STT route fields required')
         super().__post_init__()
+        # Additive fields enter the identity only when set: a snapshot stamped before
+        # they existed keeps its stored policy_id (default route == pre-field row).
+        content = {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name != 'policy_id' and _ROUTE_DEFAULTS.get(f.name, _UNSET) != getattr(self, f.name)
+        }
+        object.__setattr__(
+            self,
+            'policy_id',
+            hashlib.sha256(json.dumps(content, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+        )
 
     @classmethod
     def from_dict(cls, raw: object) -> 'BatchUnitPolicy':
