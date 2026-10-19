@@ -30,6 +30,44 @@ class CaptureWedgeEpisode {
   DateTime? lastRecoveryByteAt;
 }
 
+/// Phone-disk admission failures engaged: new recordings cannot be written until
+/// space frees or retention changes. A slow-burn problem, so it lives in
+/// Activity's Needs attention section, never in a banner.
+class CaptureStorageAtRisk {
+  const CaptureStorageAtRisk({
+    required this.engagedAt,
+    required this.blockedCount,
+    required this.retainedCount,
+    required this.reason,
+  });
+
+  final DateTime engagedAt;
+
+  /// Recordings the disk could not admit.
+  final int blockedCount;
+
+  /// Recordings kept under the admission count cap.
+  final int retainedCount;
+
+  final String reason;
+}
+
+/// A WAL backlog with no upload progress for
+/// [CaptureWedgeMonitor.uploadSilenceThreshold]: the recordings wait on the
+/// phone, safe but not moving. Listed in Activity's Needs attention section.
+class CaptureUploadStall {
+  const CaptureUploadStall({required this.since, required this.pendingCount, required this.pendingSeconds});
+
+  /// When the stall was first declared; counts refresh while it persists.
+  final DateTime since;
+
+  /// Recordings waiting to upload.
+  final int pendingCount;
+
+  /// Kept-audio length across the pending recordings, 0 when unknown.
+  final int pendingSeconds;
+}
+
 typedef CaptureWedgeTrack = void Function(String event, Map<String, Object> properties);
 
 class CaptureWedgeMonitor extends ChangeNotifier {
@@ -96,6 +134,46 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   final Set<String> _nativeIngressDevices = {};
   final Set<String> _cccdRecoveryDevices = {};
 
+  CaptureStorageAtRisk? _storageAtRisk;
+  CaptureUploadStall? _uploadStall;
+  DateTime? _captureAttentionSeenAt;
+
+  /// The latest slow-burn local capture state, for Activity's Needs attention rows.
+  CaptureStorageAtRisk? get storageAtRisk => _storageAtRisk;
+
+  CaptureUploadStall? get uploadStall => _uploadStall;
+
+  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null;
+
+  /// True while a capture attention row is newer than the last Activity visit:
+  /// lights the bell's warning dot. A new episode re-lights it.
+  final ValueNotifier<bool> hasUnseenCaptureAttention = ValueNotifier(false);
+
+  /// Activity showed its capture attention rows: the bell goes dark until a new
+  /// episode arrives. In memory only — after a restart the live observations
+  /// re-declare any condition that still holds.
+  void markCaptureAttentionSeen() {
+    _captureAttentionSeenAt = _now();
+    _updateUnseenCaptureAttention();
+  }
+
+  void _updateUnseenCaptureAttention() {
+    final seen = _captureAttentionSeenAt;
+    final storage = _storageAtRisk;
+    final upload = _uploadStall;
+    hasUnseenCaptureAttention.value = (storage != null && (seen == null || storage.engagedAt.isAfter(seen))) ||
+        (upload != null && (seen == null || upload.since.isAfter(seen)));
+  }
+
+  /// Ends the slow-burn rows the way their episodes end: resolved, dismissed, or reset.
+  void _clearCaptureAttention() {
+    if (_storageAtRisk == null && _uploadStall == null) return;
+    _storageAtRisk = null;
+    _uploadStall = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
   void setNativeIngressOwner(String deviceId, bool active) {
     if (active) {
       _nativeIngressDevices.add(deviceId);
@@ -151,7 +229,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     if (health?.actionable == true) {
-      if (state.episode?.trigger != triggerIngressRecoveryFailed) {
+      final dismissedGeneration = state.dismissedIngressGeneration;
+      final sameIncident = dismissedGeneration != null && health!.generation == dismissedGeneration;
+      if (!sameIncident && state.episode?.trigger != triggerIngressRecoveryFailed) {
         state.episode = CaptureWedgeEpisode(
           deviceId: deviceId,
           source: 'omi',
@@ -159,9 +239,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           declaredAt: _now(),
         )..retryAttempted = true;
       }
-      state.episode!.promptVisible = true;
-    } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
-      state.episode = null;
+      if (!sameIncident) state.episode?.promptVisible = true;
+    } else {
+      if (state.episode?.trigger == triggerIngressRecoveryFailed) state.episode = null;
+      // Health left actionRequired (or the owner went away): the incident is
+      // over, so a later actionable snapshot of a *new* incident may alert.
+      state.dismissedIngressGeneration = null;
     }
     // A new, valid native ingress lease proves recovery independently of STT.
     // Replaying the same cached lease must not resolve a later BLE episode.
@@ -313,8 +396,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   /// Surfaces durable recordings that have made no upload progress for long
   /// enough to require user attention. Callers pass the oldest retryable local
-  /// WAL timestamp after every inventory refresh.
-  void observeWalBacklog({required int pendingCount, required DateTime? oldestPendingAt}) {
+  /// WAL timestamp after every inventory refresh; [pendingSeconds] is the
+  /// kept-audio length across the backlog, when the caller knows it.
+  void observeWalBacklog({required int pendingCount, required DateTime? oldestPendingAt, int pendingSeconds = 0}) {
     final state = _stateFor(localWalDeviceId);
     if (pendingCount <= 0 || oldestPendingAt == null) {
       _resolveIfActive(localWalDeviceId, state);
@@ -324,6 +408,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     if (now.difference(oldestPendingAt) < uploadSilenceThreshold) return;
     final lastUploadAt = _lastUploadAt;
     if (lastUploadAt != null && now.difference(lastUploadAt) < uploadSilenceThreshold) return;
+    _updateUploadStall(since: _uploadStall?.since ?? now, pendingCount: pendingCount, pendingSeconds: pendingSeconds);
     unawaited(
       _maybeDeclare(
         state,
@@ -337,6 +422,18 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         },
       ),
     );
+  }
+
+  /// Refreshes the upload-stall row's counts without re-declaring the episode:
+  /// the telemetry slot may already be held by this very stall.
+  void _updateUploadStall({required DateTime since, required int pendingCount, required int pendingSeconds}) {
+    final previous = _uploadStall;
+    if (previous != null && previous.pendingCount == pendingCount && previous.pendingSeconds == pendingSeconds) {
+      return;
+    }
+    _uploadStall = CaptureUploadStall(since: since, pendingCount: pendingCount, pendingSeconds: pendingSeconds);
+    _updateUnseenCaptureAttention();
+    notifyListeners();
   }
 
   void observeStorageAtRisk({
@@ -380,6 +477,16 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         extraProperties: properties,
       ),
     );
+    // The row follows the observation, not the episode: counts refresh even
+    // while the episode slot is held and no new alert is declared.
+    _storageAtRisk = CaptureStorageAtRisk(
+      engagedAt: engagedAt,
+      blockedCount: blockedCount,
+      retainedCount: retainedCount,
+      reason: reason,
+    );
+    _updateUnseenCaptureAttention();
+    notifyListeners();
   }
 
   @visibleForTesting
@@ -502,9 +609,33 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _devices[deviceId];
     if (state == null) return;
     state.rapidDropEnds.clear();
+    if (deviceId == localWalDeviceId) _clearCaptureAttention();
     if (state.episode == null && state.telemetryEpisode == null) return;
     state.episode = null;
     state.telemetryEpisode = null;
+    notifyListeners();
+  }
+
+  /// Dismisses only the episode the reader dismissed — the visible prompt. A
+  /// telemetry-only episode for the same device (an upload-silence observation,
+  /// say) is a separate recovery operation: erasing it would silently cancel
+  /// its eventual resolved event and let later observations redeclare it as a
+  /// new incident. [dismissDeviceEpisode] remains the full reset for an
+  /// intentional disconnect.
+  void dismissVisibleEpisode(String deviceId) {
+    final state = _devices[deviceId];
+    if (state == null || state.episode == null) return;
+    state.rapidDropEnds.clear();
+    final episode = state.episode!;
+    if (episode.trigger == triggerIngressRecoveryFailed) {
+      // The native side republishes the same actionable snapshot every few
+      // seconds, and observeIngressHealth would recreate a nulled episode on
+      // the next tick — resurrecting a dismissed banner. Remember the
+      // dismissed incident (its connection generation) until health actually
+      // changes; a new generation or a healthy/quiet snapshot re-allows it.
+      state.dismissedIngressGeneration = state.lastIngressHealth?.generation;
+    }
+    state.episode = null;
     notifyListeners();
   }
 
@@ -516,6 +647,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _retryInFlightDevices.clear();
     _lastUploadAt = null;
     _lastRetentionRiskFingerprint = null;
+    _storageAtRisk = null;
+    _uploadStall = null;
+    _captureAttentionSeenAt = null;
+    hasUnseenCaptureAttention.value = false;
     _connectedWatchdog?.cancel();
     _connectedWatchdog = null;
     notifyListeners();
@@ -529,6 +664,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _openSessions.clear();
     _retryInFlightDevices.clear();
     _connectedWatchdog?.cancel();
+    hasUnseenCaptureAttention.dispose();
     super.dispose();
   }
 
@@ -661,6 +797,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state, {bool bleIngressOnly = false}) {
     if (bleIngressOnly && !_isBleIngressTrigger(state.episode?.trigger ?? '')) return;
+    if (deviceId == localWalDeviceId) _clearCaptureAttention();
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during
       // the alert must still release the telemetry slot: native-owned devices
@@ -745,6 +882,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
 class _DeviceWedgeState {
   CaptureIngressHealth? lastIngressHealth;
+  String? dismissedIngressGeneration;
   final List<DateTime> zeroByteSessionEnds = [];
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];

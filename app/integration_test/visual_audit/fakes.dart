@@ -157,6 +157,8 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => const [];
   @override
+  bool canPlayOrShareWal(Wal wal) => false;
+  @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override
   int get clearableWalsCount => 0;

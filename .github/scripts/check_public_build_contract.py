@@ -37,12 +37,14 @@ PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
 DEFAULT_CANDIDATE_TIMEOUT_SECONDS = 45
 DEFAULT_RETRY_TIMEOUT_SECONDS = 19
+BROWSER_EXIT_GRACE_SECONDS = 5
 SMOKE_RETRY_ATTEMPTS = 3
 SMOKE_RETRY_SLEEP_SECONDS = 5
 MAX_BROWSER_CANDIDATES = 5
-# The requested app values need 20m50s if all five browser names are present
-# and every attempt times out. Keep a small, explicit ceiling above that bound.
-MAX_TOTAL_SMOKE_SECONDS = 21 * 60
+# The requested app values need 22m05s if all five browser names are present,
+# every attempt reaches its subprocess fallback, and retries use their grace.
+# Keep a small, explicit ceiling above that bound.
+MAX_TOTAL_SMOKE_SECONDS = 23 * 60
 MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
     inputs:
       environment:
@@ -254,8 +256,8 @@ def _parse_candidate_timeouts(acceptance: Mapping[str, Any], *, target_name: str
         raise ValueError(
             f"target {target_name} candidate_acceptance.retry_timeout_seconds must be less than timeout_seconds"
         )
-    per_browser_seconds = timeout + (SMOKE_RETRY_ATTEMPTS - 1) * (
-        retry_timeout + SMOKE_RETRY_SLEEP_SECONDS
+    per_browser_seconds = timeout + BROWSER_EXIT_GRACE_SECONDS + (SMOKE_RETRY_ATTEMPTS - 1) * (
+        retry_timeout + BROWSER_EXIT_GRACE_SECONDS + SMOKE_RETRY_SLEEP_SECONDS
     )
     worst_case_seconds = MAX_BROWSER_CANDIDATES * per_browser_seconds
     if worst_case_seconds > MAX_TOTAL_SMOKE_SECONDS:

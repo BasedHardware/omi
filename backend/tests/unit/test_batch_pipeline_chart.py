@@ -293,6 +293,15 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
 
 
+@pytest.mark.parametrize('arguments,expected', [((), '2'), (('--set', 'worker.pipelineDepth=1'), '1')])
+def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == expected
+
+
 def test_gpu_skip_switches_render_overrides():
     result = render(
         *enabled_arguments(),

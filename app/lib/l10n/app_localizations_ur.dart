@@ -11090,6 +11090,32 @@ class AppLocalizationsUr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی';
 
   @override
+  String get captureBannerTryReconnect => 'دوبارہ کنیکٹ کرنے کی کوشش کریں';
+
+  @override
+  String get captureBannerRetrySync => 'ہم وقت کرنے کی دوبارہ کوشش کریں';
+
+  @override
+  String get captureBannerWhatsWrong => 'کیا ہو رہا ہے؟';
+
+  @override
+  String get captureBannerDismiss => 'چھپائیں';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'آپ کے Omi سے بلوٹوتھ کنکشن رکاوٹ کا شکار ہے، اس لیے آڈیو ایپ تک نہیں پہنچ رہا۔ Omi ڈیوائس پر ریکارڈنگ جاری رکھتا ہے اور کنکشن بحال ہوتے ہی سنک ہو جائے گا۔ دوبارہ کوشش کرنے سے کنکشن دوبارہ قائم ہوتا ہے؛ اگر یہ بار بار ناکام ہو، تو سیٹنگز > ڈیوائس میں اپنا ڈیوائس چیک کریں۔';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'آڈیو لنک رک گیا ہے — بحال ہونے پر نقل تیار ہوگی';
+
+  @override
+  String get captureIngressNeedsReconnect => 'آڈیو ایپ تک نہیں پہنچ رہا — اپنا Omi دوبارہ جوڑیں';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'ایپ اب Omi ڈیوائس سے آڈیو حاصل نہیں کر سکتی اور کنکشن خودکار طور پر بحال نہیں ہو سکا۔ ڈیوائس کو غیر منسلک کر کے دوبارہ جوڑیں — ڈیوائس کی ترتیبات سے، یا اسے بند کر کے چالو کر کے۔ ڈیوائس پر محفوظ آڈیو بعد میں سنک ہوگا۔';
+
+  @override
   String get captureStillRecording => 'ریکارڈنگ جاری ہے';
 
   @override
