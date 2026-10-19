@@ -218,11 +218,18 @@ def test_stale_or_unknown_tokens_never_run_work(outbox):
     assert reprocess.run(key, rotated, process, now=601) == 'stale'  # Replay after completion.
 
 
-def test_batch_task_adapter_rejects_malformed_bindings_before_any_io(outbox):
+def test_batch_task_adapter_rejects_malformed_bindings_before_any_io(outbox, monkeypatch):
+    # Validation must precede every Firestore touch: replace the client
+    # accessor both the adapter and the outbox resolve, so any read or write
+    # before the ValueError fails the test instead of generating traffic.
+    fail_fast = Mock(side_effect=AssertionError('malformed bindings must not reach Firestore'))
+    monkeypatch.setattr(enrichment, 'get_firestore_client', fail_fast)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', fail_fast)
     with pytest.raises(ValueError):
         enrichment.run_enrichment('not-a-key', uuid.uuid4().hex, process=Mock())
     with pytest.raises(ValueError):
         enrichment.run_enrichment('0' * 64, 'not-a-token', process=Mock())
+    fail_fast.assert_not_called()
 
 
 # 4. Lease expiry repaired by the sweep ------------------------------------------------
@@ -335,12 +342,14 @@ def _blocked_by_account_deletion(client, uid):
 @pytest.mark.parametrize(
     'block', [_blocked_by_user_deletion, _blocked_by_privacy_generation, _blocked_by_account_deletion]
 )
-def test_privacy_blocked_row_is_discarded_without_running_work(outbox, block):
+def test_privacy_blocked_row_is_discarded_without_running_work(outbox, block, monkeypatch):
     client, uid, _ = outbox
     client.collection('users').document(uid).collection('conversations').document('c').set({'id': 'c'})
     reprocess.mark(uid, 'c', 'en', now=0)
     key, token = reprocess.key(uid, 'c'), row(client, uid, 'c')['task_token']
     try:
+        # Phase 1: the block predates the delivery — the entry fence discards
+        # the obligation without ever claiming or running work.
         block(client, uid)
         process = Mock(side_effect=AssertionError('blocked work must not run'))
         assert enrichment.run_enrichment(key, token, now=600, process=process) == 'superseded'
@@ -348,14 +357,40 @@ def test_privacy_blocked_row_is_discarded_without_running_work(outbox, block):
         assert row(client, uid, 'c') is None
         # A late redelivery cannot recreate or run the discarded obligation.
         assert enrichment.run_enrichment(key, token, now=601, process=process) == 'stale'
+        _unblock(client, uid)
+
+        # Phase 2: the block lands after the entry fence but before the claimed
+        # callback starts. The adapter's inner discard_blocked is what closes
+        # that race; it must discard and the work must still never run.
+        reprocess.mark(uid, 'c', 'en', now=0)
+        key, token = reprocess.key(uid, 'c'), row(client, uid, 'c')['task_token']
+        real_discard = enrichment.discard_blocked
+
+        def fence_then_block(document_id: str) -> bool:
+            result = real_discard(document_id)
+            if not result:
+                # First (entry) check passed unblocked: land the deletion now,
+                # between the entry fence and the claimed-callback fence.
+                block(client, uid)
+            return result
+
+        monkeypatch.setattr(enrichment, 'discard_blocked', fence_then_block)
+        process = Mock(side_effect=AssertionError('blocked work must not run'))
+        assert enrichment.run_enrichment(key, token, now=600, process=process) == 'processed'
+        process.assert_not_called()
+        assert row(client, uid, 'c') is None
     finally:
-        user = client.collection('users').document(uid)
-        user.collection('deleted_conversations').document('c').delete()
-        user.collection('conversations').document('c').delete()
-        client.collection('account_deletions').document(uid).delete()
-        client.collection(batch_pipeline_privacy.PRIVACY_COLLECTION).document(
-            batch_pipeline_privacy.privacy_owner_key(uid)
-        ).delete()
+        _unblock(client, uid)
+
+
+def _unblock(client, uid):
+    user = client.collection('users').document(uid)
+    user.collection('deleted_conversations').document('c').delete()
+    user.collection('conversations').document('c').delete()
+    client.collection('account_deletions').document(uid).delete()
+    client.collection(batch_pipeline_privacy.PRIVACY_COLLECTION).document(
+        batch_pipeline_privacy.privacy_owner_key(uid)
+    ).delete()
 
 
 def test_invalid_redirect_topology_keeps_the_debt(outbox):

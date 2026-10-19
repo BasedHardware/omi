@@ -22,10 +22,12 @@ Scope (exact):
   scope: a dependant there blocks deletion just as a runtime caller does.
 - Edges: ``import a.b``, ``from a import b``, ``from a.b import c`` and
   package-relative forms, at any nesting depth (function-local imports count),
-  plus ``importlib.import_module('<literal>')`` — including calls through an
-  alias bound by ``from importlib import import_module as load``. An edge is
-  keyed by (backend-relative importer path, retiring module), never by line
-  number.
+  plus ``importlib.import_module('<literal>')`` — through aliases bound by
+  ``import importlib [as imp]`` or ``from importlib import import_module
+  [as load]``, with relative names resolved against a literal ``package``
+  argument. Unproven callees (``obj.import_module`` or a local function of
+  that name) are not dynamic imports. An edge is keyed by (backend-relative
+  importer path, retiring module), never by line number.
 
 The test fails when an edge appears (call the batch pipeline or shared
 infrastructure instead; an edge that must exist goes into the baseline with a
@@ -136,18 +138,44 @@ def _retiring(candidate: str | None) -> str | None:
     return None
 
 
+def _resolve_relative_import_module(name: str, package: str) -> str | None:
+    """Resolve ``importlib.import_module('.pipeline', package='utils.sync')``.
+
+    Mirrors the interpreter's rule: each leading dot beyond the first removes
+    one trailing component from ``package``. Returns None for names that
+    cannot resolve (empty package or too many dots).
+    """
+    dots = len(name) - len(name.lstrip('.'))
+    if not dots:
+        return name
+    if not package:
+        return None
+    parts = package.split('.')
+    if len(parts) < dots:
+        return None
+    if dots > 1:
+        parts = parts[: -(dots - 1)]
+    rest = name[dots:]
+    return '.'.join([*parts, rest]) if rest else '.'.join(parts)
+
+
 def imported_retiring_modules(source: str, importer: str) -> set[str]:
     found: set[str] = set()
     tree = ast.parse(source, filename=importer)
-    # ``from importlib import import_module as load`` rebinds the callable;
-    # calls through such an alias are dynamic imports too.
-    import_module_names = {'import_module'} | {
-        alias.asname
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == 'importlib'
-        for alias in node.names
-        if alias.name == 'import_module' and alias.asname
-    }
+    # Only calls proven to reference importlib.import_module count: attribute
+    # receivers bound by ``import importlib [as imp]`` and bare names bound by
+    # ``from importlib import import_module [as load]``. An unrelated
+    # ``obj.import_module(...)`` or a local function named import_module is
+    # not a dynamic import of the retiring modules.
+    importlib_names = {'importlib'}
+    import_module_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            importlib_names.update(alias.asname or 'importlib' for alias in node.names if alias.name == 'importlib')
+        elif isinstance(node, ast.ImportFrom) and node.module == 'importlib':
+            import_module_names.update(
+                alias.asname or 'import_module' for alias in node.names if alias.name == 'import_module'
+            )
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             found.update(m for m in (_retiring(alias.name) for alias in node.names) if m)
@@ -161,18 +189,35 @@ def imported_retiring_modules(source: str, importer: str) -> set[str]:
                 module = _retiring(f'{base}.{alias.name}' if base else alias.name)
                 if module:
                     found.add(module)
-        elif isinstance(node, ast.Call) and (
-            (isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')
-            or (isinstance(node.func, ast.Name) and node.func.id in import_module_names)
-        ):
+        elif isinstance(node, ast.Call):
+            proven = (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == 'import_module'
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in importlib_names
+            ) or (isinstance(node.func, ast.Name) and node.func.id in import_module_names)
+            if not proven:
+                continue
             name_arg = next(
                 (keyword.value for keyword in node.keywords if keyword.arg == 'name'),
                 node.args[0] if node.args else None,
             )
-            if isinstance(name_arg, ast.Constant) and isinstance(name_arg.value, str):
-                module = _retiring(name_arg.value)
-                if module:
-                    found.add(module)
+            package_arg = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == 'package'),
+                node.args[1] if len(node.args) > 1 else None,
+            )
+            if not (isinstance(name_arg, ast.Constant) and isinstance(name_arg.value, str)):
+                continue
+            module_name: str | None = name_arg.value
+            if module_name.startswith('.'):
+                module_name = (
+                    _resolve_relative_import_module(module_name, package_arg.value)
+                    if isinstance(package_arg, ast.Constant) and isinstance(package_arg.value, str)
+                    else None
+                )
+            module = _retiring(module_name)
+            if module:
+                found.add(module)
     return found
 
 
@@ -282,8 +327,16 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ('def f():\n    from database import sync_redrive\n', 'services/x.py', {'database.sync_redrive'}),
         ('from .sync_dead_letters import x', 'database/other.py', {'database.sync_dead_letters'}),
         ('from . import sync_empty_recovery', 'database/other.py', {'database.sync_empty_recovery'}),
-        ('importlib.import_module("utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
-        ('importlib.import_module(name="utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
+        (
+            'import importlib\nimportlib.import_module("utils.sync.legacy_fresh")',
+            'utils/x.py',
+            {'utils.sync.legacy_fresh'},
+        ),
+        (
+            'import importlib\nimportlib.import_module(name="utils.sync.legacy_fresh")',
+            'utils/x.py',
+            {'utils.sync.legacy_fresh'},
+        ),
         (
             'from importlib import import_module as load\nload("utils.sync.legacy_fresh")',
             'utils/x.py',
@@ -294,8 +347,34 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
             'utils/x.py',
             {'utils.sync.legacy_fresh'},
         ),
+        (
+            'import importlib as imp\nimp.import_module("utils.sync.legacy_fresh")',
+            'utils/x.py',
+            {'utils.sync.legacy_fresh'},
+        ),
+        # Relative targets resolve against the literal package argument.
+        (
+            'import importlib\nimportlib.import_module(".pipeline", package="utils.sync")',
+            'utils/x.py',
+            {'utils.sync.pipeline'},
+        ),
+        (
+            'import importlib\nimportlib.import_module(".pipeline", "utils.sync")',
+            'utils/x.py',
+            {'utils.sync.pipeline'},
+        ),
+        (
+            'import importlib\nimportlib.import_module("..wal_audio_coverage", package="utils.sync.pipeline")',
+            'utils/x.py',
+            {'utils.sync.wal_audio_coverage'},
+        ),
+        # Relative name without a literal package cannot be resolved.
+        ('import importlib\nimportlib.import_module(".pipeline")', 'utils/x.py', set()),
+        # Unproven bindings are not importlib.import_module.
         ('from importlib import load  # not import_module\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
         ('import load\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
+        ('obj.import_module("utils.sync.legacy_fresh")', 'utils/x.py', set()),
+        ('def import_module(n):\n    return None\nimport_module("utils.sync.legacy_fresh")', 'utils/x.py', set()),
         ('importlib.import_module(name=name_variable)', 'utils/x.py', set()),
         ('from utils.sync import reprocess, assignment', 'utils/x.py', set()),
         ('from utils.sync.pipeline_v2 import x', 'utils/x.py', set()),
