@@ -22,6 +22,11 @@ DEFERRED_READS = {
         'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE',
         'BATCH_PIPELINE_WORKER_IO_CONCURRENCY',
     },
+    # #22358 landed on main while E1 was in flight; its GPU worker controls are E1b.
+    'config/batch_pipeline_gpu_skip.py': {
+        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED',
+        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED',
+    },
     'config/batch_pipeline_providers.py': {
         'BATCH_PIPELINE_CONTEXT_SECONDS',
         'BATCH_PIPELINE_DIARIZER',
