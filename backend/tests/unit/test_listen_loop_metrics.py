@@ -9,8 +9,12 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from fastapi.security import HTTPAuthorizationCredentials
 
+import routers.listen.runtime as runtime_module
+import routers.transcribe  # noqa: F401  the listen websocket route's import path
 import utils.observability.listen_loop as listen_loop
+from routers.metrics import metrics
 from routers.listen.receiver import ListenReceiver
 from utils.observability.listen_loop import (
     ENABLED_ENV,
@@ -267,3 +271,30 @@ async def test_lag_probe_does_not_inherit_session_byok_or_uid_context(monkeypatc
     assert all(value in (None, False) for value in leaked.values()), leaked
     assert 'secret-key' not in repr(list(captured[0].values()))
     assert 'user-1' not in repr(list(captured[0].values()))
+
+
+@pytest.mark.anyio
+async def test_listen_session_entry_starts_lag_probe_before_runtime(monkeypatch):
+    calls: list[str] = []
+
+    class _Boom(Exception):
+        pass
+
+    def _runtime(_request):
+        calls.append('runtime')
+        raise _Boom()
+
+    monkeypatch.setattr(runtime_module, 'ensure_loop_lag_probe', lambda: calls.append('probe'))
+    monkeypatch.setattr(runtime_module, 'ListenSessionRuntime', _runtime)
+    with pytest.raises(_Boom):
+        await runtime_module.run_listen_session(SimpleNamespace(source=None))
+    assert calls == ['probe', 'runtime']
+
+
+def test_listen_metrics_endpoint_renders_lag_histogram(monkeypatch):
+    monkeypatch.setenv('METRICS_SECRET', 'scrape-token')
+    response = metrics(HTTPAuthorizationCredentials(scheme='Bearer', credentials='scrape-token'))
+    body = response.body.decode()
+    # A label-less histogram renders from import, before any session observes it.
+    assert 'omi_listen_event_loop_lag_seconds_count ' in body
+    assert 'omi_listen_event_loop_lag_seconds_bucket{le="0.05"}' in body
