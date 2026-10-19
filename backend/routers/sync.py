@@ -2402,7 +2402,11 @@ async def _clear_deferral_marker_after_failed_replacement(
 
 
 async def _defer_sync_job_after_handler_budget_expiry(
-    request: Request, attempt_state: Optional[dict] = None, *, terminal_cleanup: bool = False
+    request: Request,
+    attempt_state: Optional[dict] = None,
+    *,
+    terminal_cleanup: bool = False,
+    deadline: Optional[float] = None,
 ) -> JSONResponse:
     """Ack a budget-expired attempt against a replacement scheduled past the
     preserved run lock's TTL. Queue-level retries cannot outlive that lock, so
@@ -2416,7 +2420,15 @@ async def _defer_sync_job_after_handler_budget_expiry(
     terminalize a terminal job) and structurally impossible
     (``update_sync_job`` refuses to mutate terminal states), and the
     replacement's redelivery hits the terminal branch's retry-only cleanup
-    either way — the deferral schedules that one replacement directly."""
+    either way — the deferral schedules that one replacement directly. The
+    attempt-cap guard is bypassed exactly at its boundary for this variant:
+    the cap bounds whole-budget re-runs, while this replacement only
+    redelivers the terminal branch's cleanup.
+
+    ``deadline`` optionally carries an existing absolute post-budget
+    deadline (the terminal recovery's), so replacement creation and the
+    cleanup drains it feeds through ``attempt_state`` share one wall instead
+    of stacking fresh allowances against the route cap."""
     if not is_cloud_tasks_dispatch_enabled():
         return _budget_deferral_fallback('dispatch_disabled', 'degraded')
     try:
@@ -2432,11 +2444,17 @@ async def _defer_sync_job_after_handler_budget_expiry(
             type(error).__name__,
         )
         return _budget_deferral_fallback('malformed', 'degraded')
-    if deferrals + 1 >= get_sync_tasks_max_attempts():
+    if deferrals + 1 >= get_sync_tasks_max_attempts() and not terminal_cleanup:
         # Original delivery plus replacements have used the whole attempt
         # contract. Ending here through the queue leaves the lock preserved for
         # any live leaf; once it expires, the stale self-heal on the status
-        # poll finalizes the job through the owned finalizer.
+        # poll finalizes the job through the owned finalizer. The
+        # terminal-cleanup variant is exempt exactly at this boundary: its
+        # replacement never re-runs a whole budget — it redelivers the
+        # terminal branch's retry-only cleanup — and without it a direct
+        # backfill job's unconfirmed-release 409s would spend the cap with no
+        # cleanup retry ever landing and the per-UID slot held to its TTL
+        # (direct deliveries have no sequencer sweep to fail the job later).
         logger.error(
             'event=sync_transcription_job outcome=handler_budget_deferrals_exhausted deferrals=%d',
             deferrals,
@@ -2450,7 +2468,9 @@ async def _defer_sync_job_after_handler_budget_expiry(
     # the post-attempt cleanup waits (marker drain and clear, heartbeat drain)
     # through attempt_state, so a slow enqueue cannot buy each cleanup wait a
     # fresh margin-sized timeout either.
-    post_budget_deadline = time.monotonic() + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
+    post_budget_deadline = (
+        deadline if deadline is not None else time.monotonic() + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
+    )
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
     if payload.get('sequencer_epoch') is not None:
@@ -2468,22 +2488,65 @@ async def _defer_sync_job_after_handler_budget_expiry(
         # count. Only an owner that has moved on (completed/released, or a
         # newer epoch) makes the write inert: nothing left can redrive this
         # job from the owner, so the deferral may proceed.
+        owner_count_write = asyncio.ensure_future(
+            run_blocking(
+                db_executor,
+                sync_backfill_sequencer.note_budget_deferral,
+                uid,
+                job_id,
+                int(payload['sequencer_epoch']),
+                deferrals + 1,
+            )
+        )
         try:
             async with asyncio.timeout_at(post_budget_deadline):
-                owner_count_written = await run_blocking(
-                    db_executor,
-                    sync_backfill_sequencer.note_budget_deferral,
-                    uid,
-                    job_id,
-                    int(payload['sequencer_epoch']),
-                    deferrals + 1,
-                )
+                owner_count_written = await asyncio.shield(owner_count_write)
         except Exception as error:
             logger.warning(
                 'event=sync_transcription_job outcome=handler_budget_owner_deferral_write_failed exception_type=%s',
                 type(error).__name__,
             )
-            return _budget_deferral_fallback('owner_write_failed', 'degraded')
+            # The timeout cancels only the await: the Firestore transaction
+            # can still be running in db_executor and commit later. An
+            # abandoned leaf that lands records active_budget_deferrals with
+            # no marker or replacement behind it — the sequencer sweep then
+            # reads the count plus absent marker as an exhausted chain and
+            # terminally fails the job a whole attempt short. Drain the
+            # retained write within the cleanup allowance: a settled True
+            # rescues the deferral (the count the sweep will see is exactly
+            # the one this chain carries), a settled False/exception is the
+            # plain failure below, and a write that cannot settle skips the
+            # rescue and keeps the queue-owned 409 — with the leaf's possible
+            # late commit fenced by the sweep's own lease-expiry recheck of
+            # the owner it would read.
+            rescued: Optional[bool] = None
+            try:
+                async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+                    rescued = await asyncio.shield(owner_count_write)
+            except Exception:
+                _consume_detached_outcome(owner_count_write)
+                logger.warning('event=sync_transcription_job outcome=handler_budget_owner_deferral_drain_failed')
+            if rescued is None:
+                return _budget_deferral_fallback('owner_write_failed', 'degraded')
+            # A settled False is the inert owner (moved on, nothing written)
+            # — the same proceed-outcome as the settled path; only a write
+            # that cannot settle at all keeps the queue-owned 409.
+            owner_count_written = rescued
+            # The drain consumed the original enqueue window, so the rescued
+            # deferral's remaining work (acquire drain, marker, replacement
+            # enqueue) runs against the drain's absolute wall — the one
+            # cleanup allowance past the original deadline that the wrapper's
+            # heartbeat drain also bounds itself by — instead of the
+            # already-expired deadline, whose instant expiry would turn every
+            # rescue into a marker_timeout/enqueue_failed 409 and leave the
+            # late commit the drain just rescued with no replacement behind
+            # it. attempt_state carries the extended wall so the wrapper's
+            # post-response drains share it instead of stacking a fresh
+            # allowance on top.
+            post_budget_deadline += SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
+            if attempt_state is not None:
+                attempt_state['post_budget_deadline'] = post_budget_deadline
+            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_late_commit_rescued')
         if owner_count_written is False:
             logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_inert')
     # The expiry that reached here may have cancelled only the await of the run
@@ -2774,7 +2837,13 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
                         'job_status=%s',
                         expired_job.get('status'),
                     )
-                    return await _defer_sync_job_after_handler_budget_expiry(request, state, terminal_cleanup=True)
+                    # The deferral inherits this recovery's absolute deadline
+                    # (not a fresh enqueue allowance) so replacement creation
+                    # and the heartbeat drain it feeds stay inside the one
+                    # post-budget wall the route margin was sized for.
+                    return await _defer_sync_job_after_handler_budget_expiry(
+                        request, state, terminal_cleanup=True, deadline=recovery_deadline
+                    )
                 return JSONResponse(
                     status_code=500,
                     content={'status': 'terminal_cleanup_retry', 'job_status': expired_job.get('status')},
