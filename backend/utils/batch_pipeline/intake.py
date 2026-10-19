@@ -135,6 +135,7 @@ async def accept_upload(
     record_router=None,
     decode=None,
     policy: BatchUnitPolicy | None = None,
+    usage_period: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -238,6 +239,15 @@ async def accept_upload(
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
+        # Contract (c): admission records the route it actually takes. A unit that
+        # stays on Parakeet keeps only the BYOK funding decision (lane 6's dispatch
+        # re-check reads job['policy']['provider_reason']).
+        policy = replace(
+            policy,
+            stt_route='provider' if provider else 'parakeet',
+            provider_reason=route.provider_reason if provider else ('byok' if byok_enabled else 'none'),
+            provider_service=route.provider_service if provider else 'none',
+        )
         # legacy_sync 'on' keeps today's fallback exactly, including unknown and
         # 'multi' languages.
         if (
@@ -342,6 +352,9 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                # Funded period the owner's choice was made in (cap-hold re-entry); projection
+                # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
+                **({'usage_period': usage_period} if usage_period else {}),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

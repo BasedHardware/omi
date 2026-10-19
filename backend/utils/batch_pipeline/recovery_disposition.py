@@ -5,27 +5,24 @@ import wave
 from collections.abc import Callable
 from typing import Any
 
-STAGES = frozenset({'audio_validation', 'strict_vad', 'provider', 'response_validation', 'payload_validation'})
-REASONS = frozenset(
-    {
-        'invalid_audio',
-        'vad_failed',
-        'invalid_vad',
-        'no_speech',
-        'provider_failed',
-        'invalid_response',
-        'empty_asr',
-        'invalid_payload',
-        'operation_failed',
-        'abandoned_running',
-    }
+from utils.observability.reasons import (
+    ReasonFamily,
+    RecoveryFailureReason,
+    RecoveryFailureStage,
+    reason_label,
+    reason_values,
 )
+
+STAGES = reason_values(RecoveryFailureStage)
+REASONS = reason_values(RecoveryFailureReason)
 
 
 class RecoveryFailure(ValueError):
     def __init__(self, stage: str, reason: str):
         self.stage = stage if stage in STAGES else 'provider'
+        # Behaviour-neutral: unknown folds to operation_failed as before; the miss is also counted.
         self.reason = reason if reason in REASONS else 'operation_failed'
+        reason_label(ReasonFamily.RECOVERY_FAILURE, reason, RecoveryFailureReason)
         super().__init__(self.reason)
 
 

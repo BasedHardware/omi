@@ -4,7 +4,8 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 
 from google.cloud import firestore
@@ -27,6 +28,24 @@ from database.batch_pipeline_projection_protocol import (
     normalized_binding,
 )
 from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
+
+_USAGE_PERIOD = re.compile(r'(\d{4})-(\d{2})')
+
+
+def usage_stamp(now: datetime, usage_period: Any) -> datetime:
+    """Hour stamp for projection usage: ``now``, backdated into ``usage_period`` only across a rollover.
+
+    A cap-hold unit admitted under the owner's funded choice in month M is billed to M even when
+    projection completes in M+1 (lane 6, Subscription ruling B(a)). The stamp moves only backwards, to
+    the period's last second, and the hourly doc id/year/month/day/hour all derive from it, so the
+    month query reads it as M (transcription has no day rollup). Missing or malformed periods keep now.
+    """
+    match = _USAGE_PERIOD.fullmatch(usage_period) if isinstance(usage_period, str) else None
+    if match is None or not 1 <= int(match.group(2)) <= 12:
+        return now
+    start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
+    end = (start + timedelta(days=32)).replace(day=1)
+    return end - timedelta(seconds=1) if now >= end else now
 
 
 class ProjectionStore:
@@ -259,6 +278,8 @@ class ProjectionStore:
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
         if int(seconds) > 0 and ledger.get('status') != 'completed':
+            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+            stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
 

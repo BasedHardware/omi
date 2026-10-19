@@ -1,7 +1,8 @@
 """Versioned, immutable batch decisions. Resolution is an admission operation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import hashlib
+import json
 import math
 from collections.abc import Mapping
 
@@ -17,6 +18,11 @@ COHORT_SALTS = {
     'transcription-final-pass': '',  # existing assignment retained (E1)
 }
 LEGACY_CORRELATED_COHORTS = frozenset({'first-summary', 'transcription-final-pass'})
+STT_ROUTES = frozenset({'parakeet', 'provider'})
+PROVIDER_REASONS = frozenset({'none', 'byok', 'unsupported_language'})
+PROVIDER_SERVICES = frozenset({'none', 'byok', 'soniox', 'deepgram', 'modulate'})
+_ROUTE_DEFAULTS = {'stt_route': 'parakeet', 'provider_reason': 'none', 'provider_service': 'none'}
+_UNSET = object()
 
 
 def cohort_bucket(uid: str, salt: str) -> float:
@@ -36,6 +42,10 @@ class BatchUnitPolicy(PolicyPart):
     live_stt_retired: bool = False
     final_pass_enabled: bool = False
     final_pass_authoritative: bool = False
+    # Contract (c) STT route (lane 8): stamped by intake once the route is known.
+    stt_route: str = 'parakeet'
+    provider_reason: str = 'none'
+    provider_service: str = 'none'
 
     def __post_init__(self):
         object.__setattr__(self, 'batch_percent', float(self.batch_percent))
@@ -44,7 +54,21 @@ class BatchUnitPolicy(PolicyPart):
             raise ValueError('live STT retirement requires batch coverage')
         if not 0 <= self.retire_percent <= self.batch_percent <= 100:
             raise ValueError('retire percent must be nested within batch percent')
+        if not _valid_route(self.stt_route, self.provider_reason, self.provider_service):
+            raise ValueError('closed STT route fields required')
         super().__post_init__()
+        # Additive fields enter the identity only when set: a snapshot stamped before
+        # they existed keeps its stored policy_id (default route == pre-field row).
+        content = {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name != 'policy_id' and _ROUTE_DEFAULTS.get(f.name, _UNSET) != getattr(self, f.name)
+        }
+        object.__setattr__(
+            self,
+            'policy_id',
+            hashlib.sha256(json.dumps(content, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+        )
 
     @classmethod
     def from_dict(cls, raw: object) -> 'BatchUnitPolicy':
@@ -55,7 +79,21 @@ class BatchUnitPolicy(PolicyPart):
         values['retire_percent'] = min(parse_percent(str(values.get('retire_percent', 0))), values['batch_percent'])
         if not values.get('batch_enabled', False):
             values['live_stt_retired'] = False
+        route = (values.get(key, default) for key, default in _ROUTE_DEFAULTS.items())
+        if not _valid_route(*route):
+            # A malformed route reads as the default (no BYOK funding claim): fail closed.
+            for key in _ROUTE_DEFAULTS:
+                values.pop(key, None)
         return super().from_dict(values)
+
+
+def _valid_route(route: object, reason: object, service: object) -> bool:
+    return (
+        route in STT_ROUTES
+        and reason in PROVIDER_REASONS
+        and service in PROVIDER_SERVICES
+        and (route == 'provider') == (service != 'none')
+    )
 
 
 def parse_percent(raw: str) -> float:

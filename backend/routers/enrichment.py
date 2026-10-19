@@ -7,6 +7,7 @@ rows bound to either handler drain (contract (b) invariant 7). Responses follow 
 an unexpected exception.
 """
 
+import logging
 import os
 import re
 import time
@@ -18,6 +19,7 @@ from utils.executors import postprocess_executor, run_blocking
 from utils.workers.consumer import http_response, run_push
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _KINDS = {'enrichment', 'sync_reprocess'}
 
@@ -69,3 +71,45 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     result = await run_blocking(postprocess_executor, consume, *task)
     return http_response(result)
+
+
+def maintain(now: float) -> dict[str, int]:
+    """One maintenance pass: re-wake lost obligations, then admit overdue first-summary debt (C4).
+
+    Both halves are safe beside the legacy sequencer sweep: the outbox sweep is per-row CAS and the
+    summary-debt tick holds its own cursor lease, so a second owner never double-admits.
+    """
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+    from services import summary_debt_repair
+
+    swept = ENRICHMENT_OUTBOX.sweep(now=now)
+    counts = {
+        'rewoken': swept.rewoken,
+        'discarded': swept.discarded,
+        'sweep_errors': swept.errors,
+        'summary_debt_scanned': 0,
+        'summary_debt_admitted': 0,
+        'summary_debt_errors': 0,
+    }
+    try:
+        summary = summary_debt_repair.tick(now=now)
+    except Exception as error:
+        logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
+        summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+    counts.update(
+        summary_debt_scanned=summary['scanned'],
+        summary_debt_admitted=summary['admitted'],
+        summary_debt_errors=summary['errors'],
+    )
+    return counts
+
+
+@router.post('/v2/enrichment/sweep', include_in_schema=False)
+async def sweep_enrichment(_retry_count: int = Depends(verify_enrichment_task)):
+    """Cloud Scheduler ``enrichment-maintenance`` (*/2): 200 with counts; partial errors are counted, not 5xx."""
+    from utils.enrichment import outbox
+
+    if not outbox.owns_runtime():
+        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
+    counts = await run_blocking(postprocess_executor, maintain, time.time())
+    return JSONResponse(status_code=200, content={'status': 'swept', 'counts': counts})

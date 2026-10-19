@@ -447,6 +447,13 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
         stt=STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=1.0),
         modulate=ModulateProfile(near_silence_recover_rate=0.0),
     ),
+    # C8 with legacy draining: a language Parakeet cannot serve is admitted to the provider-STT stage,
+    # never leased by a GPU pump, pays exactly one vendor call per unit and merges in capture order.
+    'provider_stt_ja': lambda: _config('provider_stt_ja', language='ja', legacy_sync='draining'),
+    'provider_stt_unsupported': lambda: _config('provider_stt_unsupported', language='sw', legacy_sync='draining'),
+    # BYOK routes like everyone (David, 10-19): Parakeet, no vendor spend; the admission policy
+    # records provider_reason=byok so the keyless dispatch re-check never re-holds it.
+    'provider_stt_byok': lambda: _config('provider_stt_byok', byok=True, legacy_sync='draining', trace_policy=True),
     # Provider errors for a window: retries exhaust attempts -> quarantine -> one paid recovery each.
     'provider_failure_quarantine': lambda: _config(
         'provider_failure_quarantine',
