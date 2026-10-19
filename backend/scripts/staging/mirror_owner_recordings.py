@@ -34,7 +34,7 @@ import json
 import os
 import sys
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -317,10 +317,17 @@ class CopyStats:
             self.failed[reason] = self.failed.get(reason, 0) + 1
 
     def public(self) -> dict[str, Any]:
-        out = {k: v for k, v in asdict(self).items() if k != 'lock'}
-        out['audio_hours'] = round(self.audio_seconds / 3600, 3)
-        del out['audio_seconds']
-        return out
+        # Not dataclasses.asdict: it deep-copies fields and a Lock cannot be copied.
+        with self.lock:
+            return {
+                'read_objects': self.read_objects,
+                'read_bytes': self.read_bytes,
+                'decrypted': self.decrypted,
+                'written': self.written,
+                'already_present': self.already_present,
+                'audio_hours': round(self.audio_seconds / 3600, 3),
+                'failed': dict(sorted(self.failed.items())),
+            }
 
 
 def mirror_object_name(owner_label: str, group: str, seq: int, plaintext_sha256: str) -> str:
