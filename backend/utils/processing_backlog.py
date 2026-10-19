@@ -31,7 +31,7 @@ def defer_estimate(conversation: Any) -> dict:
 
 
 def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> ProcessingBacklog | None:
-    if not funded_processing.enabled():
+    if not funded_processing.enabled(uid):
         return None
     from database import processing_backlog as store
     from utils.sync import cap_hold
@@ -69,7 +69,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
 
 
 def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
-    if not funded_processing.enabled():
+    if not funded_processing.enabled(uid):
         return None
     from database import processing_backlog as store
 

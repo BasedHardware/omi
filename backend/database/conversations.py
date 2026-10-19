@@ -2379,9 +2379,9 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
-    from config.stt_cap_dispatch import execution_admission_enabled
+    from config.stt_cap_dispatch import any_execution_admission_enabled
 
-    if execution_admission_enabled():
+    if any_execution_admission_enabled(uid):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()

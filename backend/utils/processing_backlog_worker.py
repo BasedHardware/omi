@@ -14,9 +14,10 @@ from utils import funded_processing
 from utils.processing_backlog import choose, is_active
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
 from utils.sync import cap_hold, cap_hold_recovery, cap_work_budget
 from config.rate_card import recording_units_per_hour
+from config.stt_cap_dispatch import hold_lane
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -93,8 +94,39 @@ def _process_text(uid, identity) -> AttemptOutcome:
         store.release_item(uid, identity, lease)
 
 
+async def _selected(uid, item) -> bool | None:
+    if item['kind'] == 'text':
+        return funded_processing.enabled(uid, 'batch')
+    try:
+        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+        return not snap.exists or await cap_hold_recovery.selected_for_recovery(uid, snap.to_dict() or {})
+    except Exception as error:
+        logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
+        return None
+
+
+async def _release_excluded(uid, token, lease, period, item):
+    manifest = None
+    if item['kind'] == 'audio':
+        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+        if not snap.exists:
+            return None
+        manifest = snap.to_dict() or {}
+        meta = await run_blocking(storage_executor, cap_hold.metadata, uid, manifest)
+        lane = hold_lane(meta)
+        if lane is None or funded_processing.enabled(uid, lane):
+            return None
+    elif item['kind'] != 'text' or funded_processing.enabled(uid, 'batch'):
+        return None
+    return await run_blocking(
+        db_executor, store.release_undispatched_reservation, uid, token, lease, period, item, audio_manifest=manifest
+    )
+
+
 async def _process(uid, item) -> AttemptOutcome:
     if item['kind'] == 'text':
+        if not funded_processing.enabled(uid, 'batch'):
+            return AttemptOutcome.RETRY
         return await run_blocking(postprocess_executor, _process_text, uid, item['id'])
     snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
     if not snap.exists or (snap.to_dict() or {}).get('state') == 'purged':
@@ -104,7 +136,7 @@ async def _process(uid, item) -> AttemptOutcome:
 
 
 async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None):
-    if not funded_processing.enabled():
+    if not funded_processing.enabled(uid):
         return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
@@ -161,7 +193,23 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
         if reserved:
             if job['period'] != funded_processing.period_id():
                 return False
-            if not await attempt(reserved):
+            selected = await _selected(uid, reserved)
+            if selected is None:
+                return False
+            if not selected:
+                try:
+                    released = await _release_excluded(uid, token, lease, job['period'], reserved)
+                except Exception as error:
+                    # A committed refund's response may be lost. Never finish
+                    # from stale local state; the next visit rereads the choice.
+                    logger.warning(
+                        'event=processing_backlog outcome=release_deferred exception_type=%s', type(error).__name__
+                    )
+                    return False
+                if released is None:
+                    return False
+                job.update(released)
+            elif not await attempt(reserved):
                 return False
         pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
         pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
@@ -174,22 +222,25 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             if (
                 cap_work_budget.exhausted()
                 or fence_lost.is_set()
-                or not funded_processing.enabled()
+                or not funded_processing.enabled(uid)
                 or job['period'] != funded_processing.period_id()
             ):
                 return False
+            remaining = job.get('remaining')
+            cursor = {'at': item['at'], 'id': item['id']}
+            updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
+            if _timestamp(item['queued_at']) > _timestamp(job['cutoff']):
+                if not await save(updates):
+                    return False
+                continue
+            if not await _selected(uid, item):
+                if not await save({**updates, 'scope_skipped': True}):
+                    return False
+                continue
             current = await run_blocking(db_executor, funded_processing.allowance, uid)
             if not current.managed:
                 return await finish()
-            remaining = job.get('remaining')
-            # Keep the original Firestore field type in the durable cursor.
-            cursor = {'at': item['at'], 'id': item['id']}
-            updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
-            if (
-                _timestamp(item['queued_at']) > _timestamp(job['cutoff'])
-                or remaining is not None
-                and item['units'] > remaining
-            ):
+            if remaining is not None and item['units'] > remaining:
                 if not await save(updates):
                     return False
                 continue

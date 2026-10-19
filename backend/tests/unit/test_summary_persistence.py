@@ -116,7 +116,7 @@ def test_same_owners_lease_expires_during_long_process_conversation_but_summary_
     from models.structured import Structured
 
     # This lease test exercises funded processing, independently of cap admission.
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     _spy_managed_effects(monkeypatch, pc)
     conversation = _existing_desktop('c')
     conversation.sync_content_revision = 3

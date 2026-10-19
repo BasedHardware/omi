@@ -676,7 +676,7 @@ async def sync_local_files(
 
         cap_held = False
         cap_admission: dict = {}
-        if cap_dispatch_enabled():
+        if cap_dispatch_enabled(uid, 'sync'):
             cap_held = await hold_capture_if_exhausted(
                 uid,
                 wav_paths,
@@ -853,7 +853,7 @@ async def sync_local_files(
             ]
         )
 
-        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled() else {}
+        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled(uid, 'sync') else {}
         cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
 
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
