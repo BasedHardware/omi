@@ -219,13 +219,6 @@ actor ConversationFinalizationService {
       await meetingContextSyncForTesting(Self.captureInterval(of: session))
       return
     }
-    let enabled = await MainActor.run {
-      (
-        systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,
-        onDeviceIdentity: OnDeviceMeetingIdentityFeature.isEnabled
-      )
-    }
-    guard enabled.systemCalendar || enabled.onDeviceIdentity else { return }
     let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
     let interval = DateInterval(start: session.startedAt, end: end)
 
@@ -235,15 +228,11 @@ actor ConversationFinalizationService {
     await withTaskGroup(of: Void.self) { group in
       group.addTask {
         await withTaskGroup(of: Void.self) { syncGroup in
-          if enabled.systemCalendar {
-            syncGroup.addTask {
-              await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
           }
-          if enabled.onDeviceIdentity {
-            syncGroup.addTask {
-              await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
           }
           await syncGroup.waitForAll()
         }

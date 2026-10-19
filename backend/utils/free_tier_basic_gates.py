@@ -5,8 +5,8 @@ not snapshot a stale value. Unset and any value other than ``true``
 (case-insensitive) is off: that surface stays byte-identical to main before
 #14165 (no authorize call, no new Firestore read, no new marker).
 
-Truthiness matches ``FREE_TIER_LOCAL_PROCESSING`` /
-``FREE_TIER_MEMORY_SUPPRESSION``: only ``true`` (any case) lights the gate.
+Truthiness matches ``FREE_TIER_LOCAL_PROCESSING``: only ``true`` (any case)
+lights the gate.
 ``1`` / ``yes`` / ``on`` stay off.
 
 ``FREE_TIER_EMERGENCY_STOP`` (``utils.free_tier_cohort.emergency_stop_engaged``)
@@ -31,7 +31,7 @@ BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENA
 
 
 def _env_flag_on(name: str) -> bool:
-    """Same truthiness as ``FREE_TIER_LOCAL_PROCESSING`` / ``FREE_TIER_MEMORY_SUPPRESSION``."""
+    """Same truthiness as ``FREE_TIER_LOCAL_PROCESSING``."""
     return os.getenv(name, 'false').lower() == 'true'
 
 

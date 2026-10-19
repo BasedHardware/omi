@@ -411,46 +411,46 @@ class ProcessingBacklog {
       ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog.fromJson(json));
 
   factory ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog generated) => ProcessingBacklog(
-        state: generated.state,
-        budgetExhausted: generated.budgetExhausted,
-        heldAudioCount: generated.heldAudioCount,
-        heldAudioSeconds: generated.heldAudioSeconds,
-        deferredConversations: generated.deferredConversations,
-        deferredSeconds: generated.deferredSeconds,
-        estimatedUnits: generated.estimatedUnits,
-        estimatedHours: generated.estimatedHours,
-        estimatedPercent: generated.estimatedPercent,
-        remainingUnits: generated.remainingUnits,
-        exceedsRemaining: generated.exceedsRemaining,
-      );
+    state: generated.state,
+    budgetExhausted: generated.budgetExhausted,
+    heldAudioCount: generated.heldAudioCount,
+    heldAudioSeconds: generated.heldAudioSeconds,
+    deferredConversations: generated.deferredConversations,
+    deferredSeconds: generated.deferredSeconds,
+    estimatedUnits: generated.estimatedUnits,
+    estimatedHours: generated.estimatedHours,
+    estimatedPercent: generated.estimatedPercent,
+    remainingUnits: generated.remainingUnits,
+    exceedsRemaining: generated.exceedsRemaining,
+  );
 
   wire.GeneratedProcessingBacklog toGenerated() => wire.GeneratedProcessingBacklog(
-        state: state,
-        budgetExhausted: budgetExhausted,
-        heldAudioCount: heldAudioCount,
-        heldAudioSeconds: heldAudioSeconds,
-        deferredConversations: deferredConversations,
-        deferredSeconds: deferredSeconds,
-        estimatedUnits: estimatedUnits,
-        estimatedHours: estimatedHours,
-        estimatedPercent: estimatedPercent,
-        remainingUnits: remainingUnits,
-        exceedsRemaining: exceedsRemaining,
-      );
+    state: state,
+    budgetExhausted: budgetExhausted,
+    heldAudioCount: heldAudioCount,
+    heldAudioSeconds: heldAudioSeconds,
+    deferredConversations: deferredConversations,
+    deferredSeconds: deferredSeconds,
+    estimatedUnits: estimatedUnits,
+    estimatedHours: estimatedHours,
+    estimatedPercent: estimatedPercent,
+    remainingUnits: remainingUnits,
+    exceedsRemaining: exceedsRemaining,
+  );
 
   Map<String, dynamic> toJson() => {
-        'state': state,
-        'budget_exhausted': budgetExhausted,
-        'held_audio_count': heldAudioCount,
-        'held_audio_seconds': heldAudioSeconds,
-        'deferred_conversations': deferredConversations,
-        'deferred_seconds': deferredSeconds,
-        'estimated_units': estimatedUnits,
-        'estimated_hours': estimatedHours,
-        'estimated_percent': estimatedPercent,
-        'remaining_units': remainingUnits,
-        'exceeds_remaining': exceedsRemaining,
-      };
+    'state': state,
+    'budget_exhausted': budgetExhausted,
+    'held_audio_count': heldAudioCount,
+    'held_audio_seconds': heldAudioSeconds,
+    'deferred_conversations': deferredConversations,
+    'deferred_seconds': deferredSeconds,
+    'estimated_units': estimatedUnits,
+    'estimated_hours': estimatedHours,
+    'estimated_percent': estimatedPercent,
+    'remaining_units': remainingUnits,
+    'exceeds_remaining': exceedsRemaining,
+  };
 }
 
 class UserSubscriptionResponse {
@@ -463,6 +463,9 @@ class UserSubscriptionResponse {
   final int insightsGainedLimit;
   final List<SubscriptionPlan> availablePlans;
   final bool showSubscriptionUi;
+
+  /// Backend-confirmed: this reader can still get an introductory free trial on checkout.
+  final bool trialEligible;
   // Chat quota fields — populated from subscription endpoint
   final double chatQuotaUsed;
   final String? chatQuotaUnit;
@@ -484,6 +487,7 @@ class UserSubscriptionResponse {
     required this.insightsGainedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.trialEligible = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,
@@ -501,8 +505,9 @@ class UserSubscriptionResponse {
   factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
     return UserSubscriptionResponse(
       subscription: Subscription.fromGenerated(generated.subscription),
-      processingBacklog:
-          generated.processingBacklog == null ? null : ProcessingBacklog.fromGenerated(generated.processingBacklog!),
+      processingBacklog: generated.processingBacklog == null
+          ? null
+          : ProcessingBacklog.fromGenerated(generated.processingBacklog!),
       transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
       transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
       wordsTranscribedUsed: generated.wordsTranscribedUsed,
@@ -511,6 +516,7 @@ class UserSubscriptionResponse {
       insightsGainedLimit: generated.insightsGainedLimit,
       availablePlans: generated.availablePlans.map(SubscriptionPlan.fromGenerated).toList(),
       showSubscriptionUi: generated.showSubscriptionUi,
+      trialEligible: generated.trialEligible,
       chatQuotaUsed: generated.chatQuotaUsed,
       chatQuotaUnit: generated.chatQuotaUnit,
       chatQuotaPercent: generated.chatQuotaPercent,
@@ -562,7 +568,7 @@ class UserSubscriptionResponse {
   }
 
   Map<String, dynamic> toJson() => {
-        ...toGenerated().toJson(),
-        if (processingBacklog != null) 'processing_backlog': processingBacklog!.toJson(),
-      };
+    ...toGenerated().toJson(),
+    if (processingBacklog != null) 'processing_backlog': processingBacklog!.toJson(),
+  };
 }

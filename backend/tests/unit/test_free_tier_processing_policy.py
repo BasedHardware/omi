@@ -84,7 +84,7 @@ def _quiet_remote_kill_switch(monkeypatch):
     The seam is the one the module documents for tests.
     """
     from utils import free_tier_cohort as _cohort
-    from utils.jit_rollout import TriState
+    from utils.free_tier_cohort import TriState
 
     monkeypatch.setattr(_cohort, '_kill_switch_state', lambda _uid: TriState.UNKNOWN)
     yield

@@ -1990,12 +1990,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryHistory => 'تاریخ';
 
   @override
-  String get memoryAllowUse => 'استعمال کی اجازت دیں';
-
-  @override
-  String get memoryDontUse => 'استعمال نہ کریں';
-
-  @override
   String get undo => 'واپس لیں';
 
   @override
@@ -13183,6 +13177,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'اپنی اومی کو جوڑیں';
+
+  @override
+  String get firstCaptureConnectDescription => 'اومی کو جوڑیں اور یہ دن بھر آپ کی گفتگو کو ہینڈز فری ریکارڈ کرے گی۔';
+
+  @override
+  String get firstCaptureConnect => 'میری اومی کو جوڑیں';
+
+  @override
+  String get firstCaptureNoDevice => 'میرے پاس ابھی اومی نہیں ہے۔';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13289,6 +13295,112 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'اب ایک لفظ بھی نہ چھوڑیں۔';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'آپ کا مفت ٹرائل کیسے کام کرتا ہے یہ یہاں ہے۔';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited خلاصے، ہمیشہ کے لیے محفوظ';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'ہر گفتگو اگلے اقدامات کے ساتھ ایک صاف خلاصہ بن جاتی ہے، تاکہ کچھ بھی چھوٹ نہ جائے۔';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'بہترین ٹرانسکرپشن';
+
+  @override
+  String get paywallTrialChipDetails => 'مزید تفصیلات پکڑتا ہے';
+
+  @override
+  String get paywallTrialChipSpeakers => 'بولنے والوں کی پہچان کرتا ہے';
+
+  @override
+  String get paywallTrialChipNoise => 'شور والے کمروں میں کام کرتا ہے';
+
+  @override
+  String get paywallTrialChipAccents => 'لہجوں کو سنبھالتا ہے';
+
+  @override
+  String get paywallTrialChipJargon => 'آپ کی اصطلاحات اور ناموں کو جانتا ہے';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'بولنے والوں کے نام، خودکار طور پر پتہ لگائے گئے';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited سوالات، ہر گفتگو میں';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'اس میٹنگ سے ایک فالو اپ ای میل کا مسودہ تیار کریں۔';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'کیا منگل کو جان نے جو کہا اس سے کوئی تضاد ہے؟';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'ایسی کوئی بھی چیز تلاش کریں جو ہمیں سست کر سکتی ہے۔';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'آپ کی پسندیدہ ایپس کے ساتھ کام کرتا ہے';
+
+  @override
+  String get paywallTrialTodayTitle => 'آج';
+
+  @override
+  String get paywallTrialTodayBody => 'Pro میں سب کچھ کھلا ہے۔';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days دن مفت';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days دن Omi Pro، ہماری طرف سے۔';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days دنوں میں';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'ٹرائل ختم ہو جائے گا۔ اگر آپ منسوخ نہیں کرتے تو آپ سے چارج کیا جائے گا۔';
+
+  @override
+  String get paywallTrialFeatureModels => 'جدید ترین AI ماڈلز';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'ماہانہ بل کیا جائے گا';
+
+  @override
+  String get paywallTrialBilledYearly => 'سالانہ بل کیا جائے گا';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amount بچائیں';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$price میں شروع کریں';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'مفت پلان کے ساتھ جاری رکھیں';
+
+  @override
+  String get paywallTrialCancelNote => 'کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Pro کا آپ کا $days روزہ مفت ٹرائل شروع ہو گیا ہے۔';
+  }
 
   @override
   String get paywallCancelAnytime => 'کسی بھی وقت منسوخ کریں۔';

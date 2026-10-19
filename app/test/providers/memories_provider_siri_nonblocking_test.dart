@@ -37,14 +37,14 @@ void main() {
   const uid = 'siri-nonblocking-owner';
 
   Memory row(String id) => Memory(
-        id: id,
-        uid: uid,
-        content: 'Memory $id',
-        category: MemoryCategory.manual,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        visibility: MemoryVisibility.private,
-      );
+    id: id,
+    uid: uid,
+    content: 'Memory $id',
+    category: MemoryCategory.manual,
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    visibility: MemoryVisibility.private,
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': uid});
@@ -58,6 +58,10 @@ void main() {
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           GetMemoriesResult([row('visible')], true),
+      // Reconciliation may delete native rows, so the provider requires both
+      // the current list and the owner-scoped history projection to be complete.
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
     );
     addTearDown(provider.dispose);
     addTearDown(() => host.release.complete());

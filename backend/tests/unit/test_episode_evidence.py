@@ -1,5 +1,4 @@
 import json
-import os
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,21 +40,6 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    # Isolate annotation/repair regressions from the separately tested selector.
-    from dataclasses import replace
-    from config import episode_writer
-
-    configured = episode_writer.episode_writer_settings
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
-    monkeypatch.setattr(
-        episode_writer,
-        'episode_writer_settings',
-        lambda: (
-            replace(configured(), selection='compact')
-            if os.getenv('MEETING_NOTES_EPISODE_SELECTION') == 'compact'
-            else configured()
-        ),
-    )
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 
@@ -212,7 +196,6 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     sources = SimpleNamespace(load_people_documents=lambda *a: [], resolve_owner_identity=lambda *a: (None, ()))
     monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
     monkeypatch.setattr(wiring, '_rich_meeting_context_block', lambda *a, **k: None)
-    monkeypatch.setattr(wiring, 'meeting_notes_screen_frames_context_enabled', lambda: True)
     observed = []
     image = NotesFrameImage('frame', '+00:00', 'data:image/jpeg;base64,eA==')
     monkeypatch.setattr(

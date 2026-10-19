@@ -36,10 +36,7 @@ class MemoryManagementSheet extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
-          child: OmiSectionHeader(context.l10n.filterMemories),
-        ),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 8, 16, 8), child: OmiSectionHeader(context.l10n.filterMemories)),
         _buildCategoryFilterOption(context, context.l10n.filterAll, null),
         _buildCategoryFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
         _buildCategoryFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
@@ -48,30 +45,28 @@ class MemoryManagementSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Divider(height: 1, color: OmiColors.border),
         ),
-        if (provider.memoryBeliefEnabled) ...[
-          _buildFilterOption(
-            context,
-            context.l10n.current,
-            isSelected: provider.collectionView == MemoryCollectionView.usefulNow,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.usefulNow),
-          ),
-          _buildFilterOption(
-            context,
-            context.l10n.memoryHistory,
-            isSelected: provider.collectionView == MemoryCollectionView.history,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.history),
-          ),
-          _buildFilterOption(
-            context,
-            context.l10n.allMemories,
-            isSelected: provider.collectionView == MemoryCollectionView.all,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.all),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Divider(height: 1, color: OmiColors.border),
-          ),
-        ],
+        _buildFilterOption(
+          context,
+          context.l10n.current,
+          isSelected: provider.collectionView == MemoryCollectionView.usefulNow,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.usefulNow),
+        ),
+        _buildFilterOption(
+          context,
+          context.l10n.memoryHistory,
+          isSelected: provider.collectionView == MemoryCollectionView.history,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.history),
+        ),
+        _buildFilterOption(
+          context,
+          context.l10n.allMemories,
+          isSelected: provider.collectionView == MemoryCollectionView.all,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.all),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Divider(height: 1, color: OmiColors.border),
+        ),
         _buildFilterOption(
           context,
           context.l10n.memoryThisDevice,
@@ -168,10 +163,12 @@ class MemoryManagementSheet extends StatelessWidget {
         const SizedBox(width: 8),
         Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
         const Spacer(),
-        Text(count.toString(),
-            style: OmiType.footnote
-                .copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))
-                .copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          count.toString(),
+          style: OmiType.footnote
+              .copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))
+              .copyWith(fontWeight: FontWeight.w600),
+        ),
       ],
     );
   }

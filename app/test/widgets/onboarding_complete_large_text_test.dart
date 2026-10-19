@@ -16,11 +16,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var completed = false;
-    await tester.pumpWidget(host(MediaQuery(
-      data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-      child: OnboardingCompleteScreen(
-          onComplete: () => completed = true, showWatch: true, emit: (_) {}, setProperty: (_, value) {}),
-    )));
+    await tester.pumpWidget(
+      host(
+        MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: OnboardingCompleteScreen(onComplete: () => completed = true, emit: (_) {}, setProperty: (_, value) {}),
+        ),
+      ),
+    );
     final cta = find.byKey(const Key('onboarding_complete_start'));
     await tester.scrollUntilVisible(cta, 200, scrollable: find.byType(Scrollable).first);
     expect(tester.takeException(), isNull);

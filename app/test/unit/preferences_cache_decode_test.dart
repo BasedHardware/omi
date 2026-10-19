@@ -16,47 +16,47 @@ const _unreadable = ['not-json', '[]', '{"id": 42}'];
 Person _person(String id) => Person(id: id, name: 'Alex', createdAt: DateTime.utc(2026), updatedAt: DateTime.utc(2026));
 
 Memory _memory(String id) => Memory(
-      id: id,
-      uid: 'user-1',
-      content: 'unsynced',
-      category: MemoryCategory.manual,
-      createdAt: DateTime.utc(2026),
-      updatedAt: DateTime.utc(2026),
-      visibility: MemoryVisibility.private,
-    );
+  id: id,
+  uid: 'user-1',
+  content: 'unsynced',
+  category: MemoryCategory.manual,
+  createdAt: DateTime.utc(2026),
+  updatedAt: DateTime.utc(2026),
+  visibility: MemoryVisibility.private,
+);
 
 ServerConversation _conversation(String id) =>
     ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('Title', 'Overview'));
 
 ServerMessage _message(String id) => ServerMessage(
-      id,
-      DateTime.utc(2026),
-      'hello',
-      MessageSender.ai,
-      MessageType.text,
-      null,
-      false,
-      const [],
-      const [],
-      const [],
-    );
+  id,
+  DateTime.utc(2026),
+  'hello',
+  MessageSender.ai,
+  MessageType.text,
+  null,
+  false,
+  const [],
+  const [],
+  const [],
+);
 
 App _app(String id) => App.fromJson({
-      'id': id,
-      'uid': 'user-1',
-      'name': 'Test App',
-      'author': 'Author',
-      'description': 'Desc',
-      'image': 'https://example.com/icon.png',
-      'capabilities': ['chat'],
-      'status': 'approved',
-      'approved': true,
-      'rating_count': 0,
-      'enabled': true,
-      'deleted': false,
-      'is_paid': false,
-      'category': 'productivity-and-organization',
-    });
+  'id': id,
+  'uid': 'user-1',
+  'name': 'Test App',
+  'author': 'Author',
+  'description': 'Desc',
+  'image': 'https://example.com/icon.png',
+  'capabilities': ['chat'],
+  'status': 'approved',
+  'approved': true,
+  'rating_count': 0,
+  'enabled': true,
+  'deleted': false,
+  'is_paid': false,
+  'category': 'productivity-and-organization',
+});
 
 Future<SharedPreferencesUtil> _prefs([Map<String, Object> values = const {}]) async {
   SharedPreferences.setMockInitialValues(values);
@@ -107,32 +107,20 @@ void main() {
       expect(prefs.pendingMemories.map((m) => m.id), ['pending-1']);
     });
 
-    test('cachedMemories preserves temporal assessment fields', () async {
+    test('cachedMemories ignores retired temporal assessment fields', () async {
       final prefs = await _prefs({'uid': 'user-1'});
-      prefs.cachedMemories = [
-        Memory(
-          id: 'cached-1',
-          uid: 'user-1',
-          content: 'cached',
-          category: MemoryCategory.manual,
-          createdAt: DateTime.utc(2026),
-          updatedAt: DateTime.utc(2026),
-          visibility: MemoryVisibility.private,
-          asOf: DateTime.utc(2026, 9, 12),
-          currency: 0.7,
-          currencyBand: 'fading',
-          beliefComputedAt: DateTime.utc(2026, 9, 13),
-        ),
-      ];
-      expect(prefs.cachedMemories.single.currencyBand, 'fading');
-      expect(
-        prefs.cachedMemories.single.beliefComputedAt?.toUtc(),
-        DateTime.utc(2026, 9, 13),
-      );
-      expect(
-        prefs.cachedMemories.single.asOf?.toUtc(),
-        DateTime.utc(2026, 9, 12),
-      );
+      final legacy = _memory('cached-1').toJson()
+        ..['as_of'] = DateTime.utc(2026, 9, 12).toIso8601String()
+        ..['currency'] = 0.7
+        ..['currency_band'] = 'fading'
+        ..['belief_computed_at'] = DateTime.utc(2026, 9, 13).toIso8601String();
+      await prefs.saveStringList('cachedMemories:user-1', [jsonEncode(legacy)]);
+
+      final cached = prefs.cachedMemories.single;
+      expect(cached.id, 'cached-1');
+      expect(cached.content, 'unsynced');
+      expect(cached.toJson().containsKey('as_of'), isFalse);
+      expect(cached.toJson().containsKey('currency'), isFalse);
     });
   });
 

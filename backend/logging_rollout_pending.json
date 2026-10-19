@@ -28,14 +28,6 @@
   "backend/main.py::docker:backend/Dockerfile:main": {
     "missing_setup": 1
   },
-  "backend/modal/daily_memory_sweep_job.py::docker:backend/modal/Dockerfile.daily_memory_sweep_job:daily_memory_sweep_job": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
-  "backend/modal/daily_memory_sweep_job.py::docker:backend/modal/Dockerfile.daily_memory_sweep_job:daily_memory_sweep_job.py": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
   "backend/modal/day3_reengagement_email_job.py::docker:backend/modal/Dockerfile.day3_reengagement_email_job:day3_reengagement_email_job": {
     "basicConfig": 1,
     "missing_setup": 1
@@ -57,14 +49,6 @@
     "missing_setup": 1
   },
   "backend/modal/job.py::docker:backend/modal/Dockerfile.notifications_job:job.py": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
-  "backend/modal/knowledge_ledger_drain_job.py::docker:backend/modal/Dockerfile.knowledge_ledger_drain_job:knowledge_ledger_drain_job": {
-    "basicConfig": 1,
-    "missing_setup": 1
-  },
-  "backend/modal/knowledge_ledger_drain_job.py::docker:backend/modal/Dockerfile.knowledge_ledger_drain_job:knowledge_ledger_drain_job.py": {
     "basicConfig": 1,
     "missing_setup": 1
   },

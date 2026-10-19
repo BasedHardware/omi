@@ -24,11 +24,11 @@ class UsageProvider with ChangeNotifier {
     Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
     ProcessingBacklogRequest? processBacklogRequest,
     DateTime Function()? now,
-  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
-        _usageRequest = usageRequest ?? getUserUsage,
-        _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
-        _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
-        _now = now ?? DateTime.now;
+  }) : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+       _usageRequest = usageRequest ?? getUserUsage,
+       _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
+       _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
+       _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
@@ -543,7 +543,11 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -551,7 +555,11 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
+      final sessionData = await createCheckoutSession(
+        priceId: priceId,
+        promotionCode: promotionCode,
+        trialDays: trialDays,
+      );
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

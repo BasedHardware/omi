@@ -401,6 +401,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedTranscriptionAllowanceSnapshot? transcriptionAllowance;
   final int transcriptionSecondsLimit;
   final int transcriptionSecondsUsed;
+  final bool trialEligible;
   final int wordsTranscribedLimit;
   final int wordsTranscribedUsed;
 
@@ -422,6 +423,7 @@ class GeneratedUserSubscriptionResponse {
     this.transcriptionAllowance,
     required this.transcriptionSecondsLimit,
     required this.transcriptionSecondsUsed,
+    this.trialEligible = false,
     required this.wordsTranscribedLimit,
     required this.wordsTranscribedUsed,
   });
@@ -445,6 +447,7 @@ class GeneratedUserSubscriptionResponse {
       transcriptionAllowance: _readFieldValue<GeneratedTranscriptionAllowanceSnapshot>(_readField(json, const ["transcription_allowance"]), "transcription_allowance", (value) => _readObject(value, GeneratedTranscriptionAllowanceSnapshot.fromJson), requiredField: false, nullable: true),
       transcriptionSecondsLimit: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_limit"]), "transcription_seconds_limit", _readInt, requiredField: true, nullable: false), "transcription_seconds_limit"),
       transcriptionSecondsUsed: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_used"]), "transcription_seconds_used", _readInt, requiredField: true, nullable: false), "transcription_seconds_used"),
+      trialEligible: _required(_readFieldValue<bool>(_readField(json, const ["trial_eligible"]), "trial_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "trial_eligible"),
       wordsTranscribedLimit: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_limit"]), "words_transcribed_limit", _readInt, requiredField: true, nullable: false), "words_transcribed_limit"),
       wordsTranscribedUsed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_used"]), "words_transcribed_used", _readInt, requiredField: true, nullable: false), "words_transcribed_used"),
     );
@@ -469,6 +472,7 @@ class GeneratedUserSubscriptionResponse {
       'transcription_allowance': transcriptionAllowance?.toJson(),
       'transcription_seconds_limit': transcriptionSecondsLimit,
       'transcription_seconds_used': transcriptionSecondsUsed,
+      'trial_eligible': trialEligible,
       'words_transcribed_limit': wordsTranscribedLimit,
       'words_transcribed_used': wordsTranscribedUsed,
     };

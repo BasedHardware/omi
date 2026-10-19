@@ -1372,18 +1372,6 @@ runs:
     )
 
 
-def test_firestore_gate_policy_pins_qa_database_and_environment():
-    policy = _workflow_policy()
-    repo = BACKEND_DIR.parent
-    dockerfiles = policy._runtime_images(repo)
-    for workflow_name in ('jit_qa_cloud_run.yml', 'jit_qa_typesense_projection.yml'):
-        workflow = (repo / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
-        wrong_db = workflow.replace('database: ${{ env.QA_FIRESTORE_DATABASE }}', 'database: (default)')
-        assert policy.workflow_gate_violations(wrong_db, name=workflow_name, dockerfiles=dockerfiles)
-        wrong_env = workflow.replace('environment: development', 'environment: qa-sandbox')
-        assert policy.workflow_gate_violations(wrong_env, name=workflow_name, dockerfiles=dockerfiles)
-
-
 def test_firestore_gate_policy_rejects_source_sha_workflow_commit_substitution():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
@@ -1423,16 +1411,12 @@ _LANE_SOURCE_BINDINGS = {
     'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_daily_memory_sweep_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
-    'gcp_daily_memory_sweep_job_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_day3_reengagement_email_job_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_frame_request_retention_job.yml': '${{ github.event.inputs.release_sha }}',
     'gcp_backend_pusher.yml': '${{ env.FIRESTORE_GATE_SOURCE_SHA }}',
     'gcp_backend_pusher_auto_deploy.yml': '${{ github.sha }}',
     'gcp_backend_listen_helm.yml': '${{ env.BACKEND_LISTEN_SOURCE_SHA }}',
-    'jit_qa_cloud_run.yml': '${{ needs.admit.outputs.source_sha }}',
-    'jit_qa_typesense_projection.yml': '${{ needs.admit.outputs.source_sha }}',
 }
 
 
@@ -1474,11 +1458,6 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'BACKEND_LISTEN_SOURCE_SHA=$RUNNING_TAG' not in listen
     gate_condition = "if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}"
     assert listen.count(gate_condition) == 2
-
-    for jit_name in ('jit_qa_cloud_run.yml', 'jit_qa_typesense_projection.yml'):
-        jit = (workflows / jit_name).read_text(encoding='utf-8')
-        assert 'project_id: ${{ env.QA_PROJECT }}' in jit, jit_name
-        assert 'database: ${{ env.QA_FIRESTORE_DATABASE }}' in jit, jit_name
 
     auto_dev = (workflows / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
     assert "verify_credential_project: 'true'" in auto_dev
@@ -1716,8 +1695,6 @@ def test_no_customer_data_gate_for_central_or_qa():
     for workflow_name in (
         'gcp_backend.yml',
         'gcp_backend_auto_dev.yml',
-        'jit_qa_cloud_run.yml',
-        'jit_qa_typesense_projection.yml',
     ):
         workflow = (repo / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
         violations = policy.workflow_gate_violations(

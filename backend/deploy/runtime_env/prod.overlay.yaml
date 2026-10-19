@@ -63,9 +63,6 @@ overlay:
           value: 'true'
         SONIOX_WIRE_LEDGER:
           value: 'true'
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: shadow
-          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -100,8 +97,6 @@ overlay:
           value: 'off'
         HOSTED_TRANSLATION_API_URL:
           value: http://172.16.160.20/nllb
-        MEMORY_BELIEF_MODEL_ENABLED:
-          value: 'false'
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
@@ -225,9 +220,6 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
-        CONVERSATION_RELEVANCE_JEV_RESCUE:
-          value: shadow
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
         NOTES_TIER_ESCALATION_ENABLED:
@@ -256,9 +248,6 @@ overlay:
           value: 'true'
         SONIOX_WIRE_LEDGER:
           value: 'true'
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-          value: shadow
-          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -360,9 +349,6 @@ overlay:
           value: based-hardware
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
-        CONVERSATION_RELEVANCE_JEV_RESCUE:
-          value: shadow
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '100'
         NOTES_TIER_ESCALATION_ENABLED:
@@ -429,8 +415,6 @@ overlay:
         value: 'false'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
         value: ''
-      MEMORY_BELIEF_MODEL_ENABLED:
-        value: 'false'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'false'
       OMI_CUSTOMER_DATA_PROJECT:
@@ -505,9 +489,6 @@ overlay:
             value: '100'
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -522,8 +503,6 @@ overlay:
             value: http://172.16.160.20/diarizer
           POSTHOG_HOST:
             value: https://us.posthog.com
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -695,9 +674,6 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
-          CONVERSATION_RELEVANCE_JEV_RESCUE:
-            value: shadow
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
           NOTES_TIER_ESCALATION_ENABLED:
@@ -826,9 +802,6 @@ overlay:
             value: '100'
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -862,8 +835,6 @@ overlay:
             category: reliability
           POSTHOG_HOST:
             value: https://us.posthog.com
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           HOSTED_DIARIZATION_API_URL:
@@ -999,13 +970,6 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-          CONVERSATION_RELEVANCE_JEV_RESCUE:
-            value: shadow
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
@@ -1186,9 +1150,6 @@ overlay:
             value: '100'
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1224,8 +1185,6 @@ overlay:
             category: reliability
           POSTHOG_HOST:
             value: https://us.posthog.com
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -1331,19 +1290,9 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-          CONVERSATION_RELEVANCE_JEV_RESCUE:
-            value: shadow
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '100'
-            category: rollout
+            category: ops_kill
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
             category: rollout
@@ -1537,9 +1486,6 @@ overlay:
             value: '100'
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
-            value: shadow
-            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1548,8 +1494,6 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
           POSTHOG_HOST:
             value: https://us.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -1723,46 +1667,12 @@ overlay:
         env:
           PINECONE_INDEX_NAME:
             value: memories-backend
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
       frame-request-retention-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
-        env:
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware
-      daily-memory-sweep-job:
-        secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
-        env:
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'false'
-          MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-            value: 'false'
-          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-            value: 'false'
-          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: disabled
-          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-            value: '0'
-          MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
-            value: 'false'
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware
-      knowledge-ledger-drain-job:
         secrets:
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
@@ -1788,6 +1698,5 @@ overlay:
     - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_frame_request_retention_job.yml
-    - .github/workflows/gcp_daily_memory_sweep_job.yml
     - .github/workflows/gcp_day3_reengagement_email_job.yml
   data_plane_project: based-hardware

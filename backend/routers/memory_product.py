@@ -19,7 +19,6 @@ from models.memory_product import (
     VectorMemorySearchResponse,
 )
 from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
-from utils.memory.belief_model import belief_model_enabled
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_product_memory_route,
@@ -131,7 +130,7 @@ def search_product_memory(
     global_read_gate = _global_read_gate_observability(authz.global_gate)
     rollout_observability = authz.observability
     policy = authz.policy or _default_omi_chat_policy()
-    effective_view = (view or 'useful_now') if belief_model_enabled() else 'released'
+    effective_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
         raise HTTPException(status_code=400, detail='as_of must be timezone-aware')
     try:

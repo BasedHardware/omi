@@ -1375,7 +1375,7 @@ checks:
     reason: "#11979 keeps automatic development admission on merged-into-main ancestry, not main-tip equality"
   - id: superseded-auto-deploy-workflow-contracts
     command: ["python3", ".github/scripts/test_superseded_auto_deploys.py"]
-    triggers: [".github/workflows/gcp_daily_memory_sweep_job.yml", ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml", ".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Superseded deployment runs must report a neutral notice, and every later step must stay gated so stale images and deployments cannot run"
   - id: gcp-backend-production-boundary

@@ -31,7 +31,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PENDING = 'backend/logging_rollout_pending.json'
 # These run infrastructure/test binaries, not production backend Python services.
 NON_PRODUCTION = {
-    'backend/Dockerfile.jit_qa_typesense',
     'backend/testing/chaos-oom/Dockerfile.harness',
 }
 
@@ -221,7 +220,7 @@ def dockerfiles(root: Path) -> Iterator[Path]:
 
 def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
     contracts = [c for c in load_contracts() if c.source_root.is_relative_to(root / 'backend')]
-    by_docker = {c.dockerfile: c for c in contracts if not c.name.startswith('jit-qa')}
+    by_docker = {c.dockerfile: c for c in contracts}
     registry = json.loads((root / 'backend/runtime_images.json').read_text())
     bindings: dict[str, str] = registry['logging_chart_images']
     by_name = {c.name: c for c in contracts}

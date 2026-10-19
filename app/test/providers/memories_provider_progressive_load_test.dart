@@ -13,63 +13,63 @@ import 'package:omi/services/siri_integration.dart';
 const _uid = 'progressive-load-user';
 
 Memory _row(String id) => Memory(
-      id: id,
-      uid: _uid,
-      content: 'Memory $id',
-      category: MemoryCategory.manual,
-      createdAt: DateTime.utc(2026, 8, 17),
-      updatedAt: DateTime.utc(2026, 8, 17),
-      visibility: MemoryVisibility.private,
-    );
+  id: id,
+  uid: _uid,
+  content: 'Memory $id',
+  category: MemoryCategory.manual,
+  createdAt: DateTime.utc(2026, 8, 17),
+  updatedAt: DateTime.utc(2026, 8, 17),
+  visibility: MemoryVisibility.private,
+);
 
 Memory _supersededFact() => Memory(
-      id: 'superseded',
-      uid: _uid,
-      content: 'Lives in Brooklyn',
-      category: MemoryCategory.system,
-      createdAt: DateTime.utc(2026, 8, 23),
-      updatedAt: DateTime.utc(2026, 8, 23),
-      visibility: MemoryVisibility.private,
-      ledgerSchemaVersion: 'knowledge_ledger.v1',
-      ledgerKind: KnowledgeLedgerKind.fact,
-      ledgerSlot: 'home_city',
-      supersededBy: 'newer-fact',
-      invalidAt: DateTime.utc(2026, 8, 24),
-      intentBacked: true,
-    );
+  id: 'superseded',
+  uid: _uid,
+  content: 'Lives in Brooklyn',
+  category: MemoryCategory.system,
+  createdAt: DateTime.utc(2026, 8, 23),
+  updatedAt: DateTime.utc(2026, 8, 23),
+  visibility: MemoryVisibility.private,
+  ledgerSchemaVersion: 'knowledge_ledger.v1',
+  ledgerKind: KnowledgeLedgerKind.fact,
+  ledgerSlot: 'home_city',
+  supersededBy: 'newer-fact',
+  invalidAt: DateTime.utc(2026, 8, 24),
+  intentBacked: true,
+);
 
 Memory _currentFact() => Memory(
-      id: 'current-fact',
-      uid: _uid,
-      content: 'Lives in Brooklyn',
-      category: MemoryCategory.system,
-      createdAt: DateTime.utc(2026, 8, 23),
-      updatedAt: DateTime.utc(2026, 8, 23),
-      visibility: MemoryVisibility.private,
-      ledgerSchemaVersion: 'knowledge_ledger.v1',
-      ledgerKind: KnowledgeLedgerKind.fact,
-      ledgerSlot: 'home_city',
-      intentBacked: true,
-    );
+  id: 'current-fact',
+  uid: _uid,
+  content: 'Lives in Brooklyn',
+  category: MemoryCategory.system,
+  createdAt: DateTime.utc(2026, 8, 23),
+  updatedAt: DateTime.utc(2026, 8, 23),
+  visibility: MemoryVisibility.private,
+  ledgerSchemaVersion: 'knowledge_ledger.v1',
+  ledgerKind: KnowledgeLedgerKind.fact,
+  ledgerSlot: 'home_city',
+  intentBacked: true,
+);
 
 Memory _revertReplacement(Memory source) => Memory(
-      id: 'restored-fact',
-      uid: source.uid,
-      content: source.content,
-      category: source.category,
-      createdAt: DateTime.utc(2026, 8, 24),
-      updatedAt: DateTime.utc(2026, 8, 24),
-      visibility: source.visibility,
-      ledgerSchemaVersion: 'knowledge_ledger.v1',
-      ledgerKind: KnowledgeLedgerKind.fact,
-      ledgerSlot: source.ledgerSlot,
-      validAt: DateTime.utc(2026, 8, 24),
-      intentBacked: true,
-      writeReason: 'direct_user_statement',
-      evidence: [
-        {'source_type': 'explicit_user_revert', 'source_id': source.id},
-      ],
-    );
+  id: 'restored-fact',
+  uid: source.uid,
+  content: source.content,
+  category: source.category,
+  createdAt: DateTime.utc(2026, 8, 24),
+  updatedAt: DateTime.utc(2026, 8, 24),
+  visibility: source.visibility,
+  ledgerSchemaVersion: 'knowledge_ledger.v1',
+  ledgerKind: KnowledgeLedgerKind.fact,
+  ledgerSlot: source.ledgerSlot,
+  validAt: DateTime.utc(2026, 8, 24),
+  intentBacked: true,
+  writeReason: 'direct_user_statement',
+  evidence: [
+    {'source_type': 'explicit_user_revert', 'source_id': source.id},
+  ],
+);
 
 class _RecordingIndex extends SiriIndexApi {
   final calls = <String>[];
@@ -94,7 +94,7 @@ FetchMemoriesCursorRequest _gatedPages(
   void Function(int pageIndex)? onPage,
 }) {
   var index = 0;
-  return ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+  return ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
     final pageIndex = index < pages.length ? index++ : pages.length - 1;
     onPage?.call(pageIndex);
     if (pageIndex == 1 && gate != null) {
@@ -106,6 +106,8 @@ FetchMemoriesCursorRequest _gatedPages(
 
 FetchLedgerHistoryRequest _noHistory() =>
     ({int limit = 500, int offset = 0}) async => const GetLedgerHistoryResult([], supported: false);
+FetchLedgerHistoryRequest _completeHistory() =>
+    ({int limit = 500, int offset = 0}) async => const GetLedgerHistoryResult([], supported: true);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -165,8 +167,7 @@ void main() {
     final gate = Completer<void>();
     var index = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: (
-          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+      fetchMemoriesCursorRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
         if (index++ == 0) {
           return Future.value(GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'));
         }
@@ -237,13 +238,11 @@ void main() {
     expect(provider.memories, isEmpty);
   });
 
-  test('a superseding view prevents a late page from the retired traversal publishing', () async {
+  test('a local collection view change does not restart or discard an in-flight page', () async {
     final gate = Completer<void>();
-    final arrived = Completer<void>();
     var index = 0;
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: (
-          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+      fetchMemoriesCursorRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
         final call = index++;
         if (call == 0) {
           return Future.value(GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'));
@@ -251,8 +250,7 @@ void main() {
         if (call == 1) {
           return gate.future.then((_) => GetMemoriesResult([_row('m2')], true));
         }
-        if (!arrived.isCompleted) arrived.complete();
-        return Future.value(GetMemoriesResult(call == 2 ? [_row('m3')] : <Memory>[], true));
+        return Future.value(const GetMemoriesResult([], true));
       },
       fetchLedgerHistoryRequest: _noHistory(),
     );
@@ -262,13 +260,12 @@ void main() {
     await pumpEventQueue();
     expect(provider.memories.map((m) => m.id), ['m1']);
 
-    provider.setCollectionView(MemoryCollectionView.all);
-    await arrived.future;
+    provider.setCollectionView(MemoryCollectionView.history);
+    expect(index, 2, reason: 'a presentation-only view change does not start another server read');
     gate.complete();
-    await pumpEventQueue();
-    expect(provider.memories.map((m) => m.id), ['m3']);
-    expect(provider.memories.map((m) => m.id).contains('m2'), isFalse);
     await load;
+    expect(provider.memories.map((m) => m.id), ['m1', 'm2']);
+    expect(index, 2);
   });
 
   test('a ledger projection change while pending blocks late publication', () async {
@@ -356,7 +353,7 @@ void main() {
         GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
         GetMemoriesResult([_row('m2')], true),
       ], gate: gate),
-      fetchLedgerHistoryRequest: _noHistory(),
+      fetchLedgerHistoryRequest: _completeHistory(),
     );
     addTearDown(provider.dispose);
 
@@ -430,7 +427,7 @@ void main() {
         GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'),
         GetMemoriesResult([_row('m2')], true),
       ], gate: gate),
-      fetchLedgerHistoryRequest: _noHistory(),
+      fetchLedgerHistoryRequest: _completeHistory(),
     );
     addTearDown(provider.dispose);
 
@@ -570,8 +567,7 @@ void main() {
     SiriIntegration.testInstance = SiriIntegration.forTest(host, _uid);
     final gate = Completer<void>();
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: (
-          {int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor, MemoryReadView? view}) {
+      fetchMemoriesCursorRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false, String? cursor}) {
         if (cursor == null) return Future.value(GetMemoriesResult([_row('m1')], true, nextCursor: 'c2'));
         return gate.future.then((_) => throw StateError('offline'));
       },
@@ -615,8 +611,11 @@ void main() {
     await pumpEventQueue();
 
     expect(provider.memories.map((m) => m.id), contains('restored-fact'));
-    expect(provider.memories.map((m) => m.id), isNot(contains('superseded')),
-        reason: 'a replaced fact must not resurrect from the stale traversal snapshot');
+    expect(
+      provider.memories.map((m) => m.id),
+      isNot(contains('superseded')),
+      reason: 'a replaced fact must not resurrect from the stale traversal snapshot',
+    );
   });
 
   test('a delete-all during a pending-memory sync releases the sync latch', () async {
@@ -632,9 +631,7 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.loadMemories();
-    SharedPreferencesUtil().pendingMemories = [
-      _row('draft-1'),
-    ];
+    SharedPreferencesUtil().pendingMemories = [_row('draft-1')];
     final sync = provider.syncPendingMemories();
     await pumpEventQueue();
     expect(await provider.deleteAllMemories(), isTrue);

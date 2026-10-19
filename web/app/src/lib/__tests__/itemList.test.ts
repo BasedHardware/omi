@@ -140,7 +140,6 @@ describe('findMemoriesByIds', () => {
     memories: ids.map((id) => ({ id, content: id } as MemoriesPage['memories'][number])),
     nextCursor: null,
     truncated: false,
-    beliefEnabled: null,
     ...extra,
   });
 
@@ -153,7 +152,8 @@ describe('findMemoriesByIds', () => {
     expect([...found.keys()]).toEqual(['m-1', 'm-2']);
     expect(complete).toBe(true);
     expect(fetchPage).toHaveBeenCalledTimes(2);
-    expect(fetchPage.mock.calls[0][0]).toMatchObject({ view: 'all' });
+    expect(fetchPage.mock.calls[0][0]).toMatchObject({ limit: 500, offset: 0 });
+    expect(fetchPage.mock.calls[0][0]).not.toHaveProperty('view');
   });
 
   it('reports an early stop as incomplete, so a missing id is not called deleted', async () => {

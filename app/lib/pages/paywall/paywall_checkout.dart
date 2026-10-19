@@ -23,6 +23,7 @@ abstract final class PaywallCheckout {
     required String interval,
     required String source,
     void Function(String message)? surface,
+    int? trialDays,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -49,7 +50,7 @@ abstract final class PaywallCheckout {
     }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
-      final session = await provider.createUserCheckoutSession(priceId: priceId);
+      final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
         report(
@@ -65,13 +66,17 @@ abstract final class PaywallCheckout {
         return PaywallCheckoutOutcome.failed;
       }
       if (session['status'] == 'reactivated') {
-        final date = billingDateLabel(context, session['next_billing_date']) ??
+        final date =
+            billingDateLabel(context, session['next_billing_date']) ??
             billingDateLabel(context, subscription?.currentPeriodEnd);
         final planName = currentPlanDisplayName(context, provider.subscription);
         final message = date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
         report(message, error: false);
-        PlatformManager.instance.analytics
-            .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
+        PlatformManager.instance.analytics.upgradeSucceeded(
+          previousPlan: previousPlan,
+          newPlan: plan,
+          billingInterval: interval,
+        );
         await provider.fetchSubscription();
         return PaywallCheckoutOutcome.purchased;
       }
@@ -85,9 +90,18 @@ abstract final class PaywallCheckout {
         PlatformManager.instance.analytics.upgradeCancelled();
         return PaywallCheckoutOutcome.cancelled;
       }
-      if (context.mounted) report(l10n.subscriptionSuccessfulCharged, error: false);
-      PlatformManager.instance.analytics
-          .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
+      if (context.mounted) {
+        // A trial checkout charges nothing today; say so instead of the paid-checkout message.
+        report(
+          trialDays != null && trialDays > 0 ? l10n.paywallTrialStarted(trialDays) : l10n.subscriptionSuccessfulCharged,
+          error: false,
+        );
+      }
+      PlatformManager.instance.analytics.upgradeSucceeded(
+        previousPlan: previousPlan,
+        newPlan: plan,
+        billingInterval: interval,
+      );
       await provider.fetchSubscription();
       await provider.loadAvailablePlans();
       return PaywallCheckoutOutcome.purchased;
@@ -102,12 +116,7 @@ abstract final class PaywallCheckout {
 /// Null until the catalog has loaded; a catalog without an Unlimited tier yields no offer.
 @immutable
 class PaywallOffer {
-  const PaywallOffer({
-    required this.tierId,
-    required this.monthly,
-    required this.yearly,
-    this.resubscribe = false,
-  });
+  const PaywallOffer({required this.tierId, required this.monthly, required this.yearly, this.resubscribe = false});
 
   final String tierId;
   final PaywallPrice? monthly;
@@ -205,8 +214,12 @@ class PaywallOffer {
 
 @immutable
 class PaywallPrice {
-  const PaywallPrice(
-      {required this.priceId, required this.interval, required this.amountMinor, required this.currency});
+  const PaywallPrice({
+    required this.priceId,
+    required this.interval,
+    required this.amountMinor,
+    required this.currency,
+  });
 
   final String priceId;
   final String interval;

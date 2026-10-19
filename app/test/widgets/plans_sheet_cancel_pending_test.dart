@@ -14,14 +14,14 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Map<String, dynamic> _price(String planId, String title, String interval, int amount) => {
-      'id': 'price_${planId}_$interval',
-      'plan_id': planId,
-      'title': title,
-      'interval': interval,
-      'unit_amount': amount,
-      'price_string': '\$${amount ~/ 100}/${interval == 'year' ? 'yr' : 'mo'}',
-      'is_active': false,
-    };
+  'id': 'price_${planId}_$interval',
+  'plan_id': planId,
+  'title': title,
+  'interval': interval,
+  'unit_amount': amount,
+  'price_string': '\$${amount ~/ 100}/${interval == 'year' ? 'yr' : 'mo'}',
+  'is_active': false,
+};
 
 class _Usage extends UsageProvider {
   final List<String> sessions = [];
@@ -59,7 +59,11 @@ class _Usage extends UsageProvider {
   }
 
   @override
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     sessions.add(priceId);
     if (sessionError != null) throw sessionError!;
     return sessionResult;

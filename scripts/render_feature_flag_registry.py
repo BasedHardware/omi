@@ -132,6 +132,8 @@ def _effective_envs(base: dict[str, dict[str, str]], overlay: dict[str, dict[str
 
 
 _CHART_NAME = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Za-z0-9_.\-]+)['\"]?\s*$")
+_ACTION_ASSIGNMENT = re.compile(r"^\s*([A-Z][A-Z0-9_]+)=([^,\s]+)")
+_ACTION_ENV_ARG = re.compile(r"--(?:update|set)-env-vars(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s\\]+))", re.S)
 
 
 def _chart_envs(path: Path) -> dict[str, str]:
@@ -169,6 +171,36 @@ def _chart_envs(path: Path) -> dict[str, str]:
     return envs
 
 
+def _action_envs(path: Path) -> dict[str, str]:
+    """Literal env overlays emitted by deploy actions or workflow gcloud calls."""
+    if not path.is_file():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    envs: dict[str, str] = {}
+    for match in _ACTION_ENV_ARG.finditer(text):
+        payload = next((value for value in match.groups() if value is not None), "")
+        for item in payload.replace("\\\n", "").split(","):
+            key, separator, value = item.partition("=")
+            key = key.strip()
+            if separator and re.fullmatch(r"[A-Z][A-Z0-9_]+", key):
+                envs[key] = _unquote(value.strip()) or "declared"
+    # The sync-backfill composite action publishes a small, literal output map
+    # which is merged into the deployed service's cloned runtime contract.
+    if path.as_posix().endswith(".github/actions/sync-backfill-lifecycle/action.yml"):
+        in_output = False
+        for raw in text.splitlines():
+            if 'echo "sync_backfill_env_vars<<EOF"' in raw:
+                in_output = True
+                continue
+            if in_output and 'echo "EOF"' in raw:
+                break
+            if in_output:
+                match = _ACTION_ASSIGNMENT.match(raw.strip().removeprefix('echo "').removesuffix('"'))
+                if match:
+                    envs[match[1]] = match[2]
+    return envs
+
+
 def _deploy_index(root: Path) -> dict[str, dict[str, dict[str, str]]]:
     """scope -> host label -> {env key: token} for base/dev/prod plus charts."""
     deploy_dir = root / "backend" / "deploy" / "runtime_env"
@@ -184,6 +216,19 @@ def _deploy_index(root: Path) -> dict[str, dict[str, dict[str, str]]]:
                     envs = _chart_envs(values)
                     if envs:
                         effective[f"{chart.name} (chart)"] = envs
+        actions_dir = root / ".github" / "actions"
+        if actions_dir.is_dir():
+            for action in sorted(actions_dir.rglob("action.yml")):
+                envs = _action_envs(action)
+                if envs:
+                    effective[f"{action.parent.name} (action)"] = envs
+        if env == "prod":
+            workflows_dir = root / ".github" / "workflows"
+            if workflows_dir.is_dir():
+                for workflow in sorted(workflows_dir.glob("*prod*.y*ml")):
+                    envs = _action_envs(workflow)
+                    if envs:
+                        effective[f"{workflow.stem} (action)"] = envs
         result[env] = effective
     return result
 
@@ -238,10 +283,6 @@ def _preamble() -> list[str]:
         "vs `public_build` still lives only in",
         "[`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)",
         "and [`deployment-setting-classification.mdx`](deployment-setting-classification.mdx).",
-        "JIT admission (allowlist, `jit-processing-v1`, kill, decoy names) is specified",
-        "in [`jit_rollout_authority.mdx`](jit_rollout_authority.mdx); this registry",
-        "points at that contract and does not replace it.",
-        "",
         "## How to read the three authorities",
         "",
         "### Bundle identity",
@@ -268,17 +309,6 @@ def _preamble() -> list[str]:
         "Whole environment or Cloud Run job, declared in",
         "`backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml`. Use this",
         "for fleet-wide backend switches. Do not put those in PostHog.",
-        "",
-        "Memory belief processing uses two deployment-wide runtime controls:",
-        "",
-        "* `MEMORY_BELIEF_MODEL_ENABLED` is the positive dev-on/prod-off processing",
-        "  gate. It is declared for the listener, pusher, Cloud Run memory services,",
-        "  desktop-backend, and belief jobs.",
-        "* `MEMORY_BELIEF_AUTOMATION_PAUSED` is a reversible incident stop. It defaults",
-        "  to `false` in every environment and pauses automated evidence, synthesis, and",
-        "  backfill admission while leaving authenticated memory reads and TTL/expiry",
-        "  maintenance available. It is intentionally deployment-wide; it is not a",
-        "  PostHog user cohort or a per-UID product rollout.",
         "",
         "The source of truth is the composed manifest (`backend/deploy/runtime_env.yaml`)",
         "plus the GKE listener/pusher values. A flag value in this registry describes",
@@ -394,7 +424,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
         "",
         "`_base`, `dev`, and `prod` show declared literals from `runtime_env`",
         "(`dev`/`prod` are `_base` inheritance plus the environment overlay). Chart",
-        "values appear as extra sources suffixed `(chart)` and never mask runtime",
+        "values and deploy-action env overlays appear as extra sources suffixed",
+        "`(chart)` and `(action)` and never mask runtime",
         "differences; differing values list their hosts. A declaration without a",
         "literal (`config_map`, `env_var`, `secret`, `valueFrom`) counts as declared,",
         "and an explicit empty literal renders as `''`.",
