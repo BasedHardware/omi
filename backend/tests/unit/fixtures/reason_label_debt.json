@@ -1335,6 +1335,22 @@
       "shape": "name",
       "count": 4,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/workers/consumer.py",
+      "function": "_count",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "typed enum fields (Result.outcome / Result.reason are StrEnum members), closed by type; the scanner cannot see types. Remove when the check learns attribute typing."
+    },
+    {
+      "path": "utils/workers/consumer.py",
+      "function": "_count",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "typed enum fields (Result.outcome / Result.reason are StrEnum members), closed by type; the scanner cannot see types. Remove when the check learns attribute typing."
     }
   ]
 }

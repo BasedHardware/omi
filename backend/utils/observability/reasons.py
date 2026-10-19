@@ -43,7 +43,7 @@ class ReasonFamily(StrEnum):
     STAGING_FENCE = 'staging_fence'
 
 
-OMI_REASON_UNKNOWN_TOTAL = Counter(
+REASON_UNKNOWN_TOTAL = Counter(
     'omi_reason_unknown_total',
     'Values presented to a closed reason enum that were not members, by reason family',
     ['family'],
@@ -53,6 +53,11 @@ OMI_REASON_TOTAL = Counter(
     'Values presented to a closed reason enum (denominator for omi:reason_unknown_ratio:rate30m), by reason family',
     ['family'],
 )
+
+
+for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
+    REASON_UNKNOWN_TOTAL.labels(family=_family.value)
+    OMI_REASON_TOTAL.labels(family=_family.value)
 
 
 class RetryReason(StrEnum):
@@ -293,7 +298,7 @@ def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> st
     try:
         OMI_REASON_TOTAL.labels(family=family_label).inc()
         if result == 'unknown' and value != 'unknown':
-            OMI_REASON_UNKNOWN_TOTAL.labels(family=family_label).inc()
+            REASON_UNKNOWN_TOTAL.labels(family=family_label).inc()
     except Exception:
         pass
     return result
