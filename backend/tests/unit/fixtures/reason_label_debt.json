@@ -921,6 +921,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/staging_fence.py",
+      "function": "_assert",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "lane 2: reason comes from its own closed fence-check names; switch to a StagingFence enum + reason_label() to drop this entry."
+    },
+    {
       "path": "utils/stt/batch_pressure.py",
       "function": "BatchPressure._refresh",
       "label": "outcome",

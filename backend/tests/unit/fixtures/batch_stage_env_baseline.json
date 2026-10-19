@@ -2,31 +2,31 @@
   "entries": [
     {
       "path": "database/batch_pipeline_projection.py",
-      "function": "ProjectionStore.mark_enrichment.mutate.commit",
+      "function": "ProjectionStore._backfill_dispatch",
       "name": "SYNC_BACKFILL_TASKS_HANDLER_URL",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "database/batch_pipeline_projection.py",
-      "function": "ProjectionStore.mark_enrichment.mutate.commit",
+      "function": "ProjectionStore._backfill_dispatch",
       "name": "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "database/batch_pipeline_projection.py",
-      "function": "ProjectionStore.mark_enrichment.mutate.commit",
+      "function": "ProjectionStore._backfill_dispatch",
       "name": "SYNC_BACKFILL_TASKS_QUEUE",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "database/batch_pipeline_projection.py",
-      "function": "ProjectionStore.mark_enrichment.mutate.commit",
+      "function": "ProjectionStore._backfill_dispatch",
       "name": "SYNC_TASKS_INVOKER_SA",
       "count": 1,
-      "why": "pre-existing; unreviewed"
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "database/batch_pipeline_projection.py",
@@ -34,14 +34,6 @@
       "name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED",
       "count": 1,
       "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "database/batch_pipeline_projection.py",
-      "function": "_backfill_dispatch",
-      "name": "SYNC_BACKFILL_*",
-      "count": 6,
-      "why": "Moved, not new: lane 9 C2 relocates this existing read (lane 9 request via lead, 2026-10-19). Delete once it lands.",
-      "pending": true
     },
     {
       "path": "database/batch_pipeline_store.py",
@@ -186,18 +178,37 @@
     {
       "path": "utils/enrichment/outbox.py",
       "function": "_dispatch_binding",
-      "name": "SYNC_TASKS_*",
-      "count": 6,
-      "why": "Moved, not new: lane 9 C2 relocates this existing read (lane 9 request via lead, 2026-10-19). Delete once it lands.",
-      "pending": true
+      "name": "SYNC_TASKS_HANDLER_URL",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_INVOKER_SA",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_OIDC_AUDIENCE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_QUEUE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "utils/enrichment/outbox.py",
       "function": "owns_runtime",
       "name": "FIRESTORE_EMULATOR_HOST",
       "count": 1,
-      "why": "Moved, not new: lane 9 C2 relocates this existing read (lane 9 request via lead, 2026-10-19). Delete once it lands.",
-      "pending": true
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     }
   ]
 }

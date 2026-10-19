@@ -42,6 +42,7 @@ from prometheus_client import REGISTRY
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from utils.batch_pipeline.recovery_disposition import REASONS, STAGES, RecoveryFailure  # noqa: E402
 from utils.observability import reasons  # noqa: E402
 from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label  # noqa: E402
 from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, LIVE_STT_REASONS, normalize_live_stt_reason  # noqa: E402
@@ -248,11 +249,15 @@ def test_migrated_constants_are_unchanged_and_misses_are_counted():
     def count(family: str) -> float:
         return REGISTRY.get_sample_value('omi_reason_unknown_total', {'family': family}) or 0.0
 
-    live_before = count('live_stt')
+    assert 'unknown' not in REASONS and 'operation_failed' in REASONS and 'provider' in STAGES
+    live_before, recovery_before = count('live_stt'), count('recovery_failure')
     assert normalize_live_stt_reason(None, 'free text diagnostic') == 'connection_lost'
     assert normalize_live_stt_reason(None, None) == 'connection_lost'
     assert normalize_live_stt_reason('timeout') == 'timeout'
     assert count('live_stt') == live_before + 1
+    failure = RecoveryFailure('not_a_stage', 'not a reason')
+    assert (failure.stage, failure.reason) == ('provider', 'operation_failed')
+    assert count('recovery_failure') == recovery_before + 1
 
 
 def _write_debt() -> None:
