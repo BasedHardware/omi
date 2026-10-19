@@ -101,7 +101,20 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, u
         'read_ledger_row',
         lambda uid, content_id: {'dispatch_protocol': 'stt_cap_hold_v1', 'status': 'held', 'result': held},
     )
+    decisions = []
+    real_fence_response = legacy_dark.fence_response
+
+    def recording_fence_response(decision, **kwargs):
+        decisions.append(decision)
+        return real_fence_response(decision, **kwargs)
+
+    monkeypatch.setattr(legacy_dark, 'fence_response', recording_fence_response)
     response = client.post('/v2/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
     assert response.status_code == 202, response.text
     assert response.json()['status'] == 'completed'
+    # The held result the fence answers with (no legacy job is written in C9;
+    # before C9 this was mark_job_completed's result).
+    assert len(decisions) == 1
+    assert decisions[0].ownership is legacy_dark.LegacyOwnership.HELD
+    assert decisions[0].result['held_audio'] is True
     reject.assert_not_called()
