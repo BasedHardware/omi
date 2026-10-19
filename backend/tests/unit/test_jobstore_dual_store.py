@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+import database.batch_pipeline_store as batch_store
 from database.jobstore import dual_store
 from database.jobstore.dual_store import SHADOW_PARITY_TOTAL, DualStore, ShadowParityOutcome, compare
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -328,8 +329,6 @@ class TestRefresh:
 
 class TestMirrorRefreshHook:
     def test_firestore_mode_is_a_strict_no_op(self, monkeypatch):
-        import database.batch_pipeline_store as batch_store
-
         monkeypatch.delenv('BATCH_JOBSTORE_MODE', raising=False)
         monkeypatch.setattr(batch_store, 'FirestoreStore', lambda *a, **k: pytest.fail('constructed a store'))
         monkeypatch.setattr(dual_store, 'shadow_from_env', lambda *a: pytest.fail('consulted the shadow'))
