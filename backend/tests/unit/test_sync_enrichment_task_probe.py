@@ -26,7 +26,7 @@ def test_cloud_task_probe_uses_basic_and_distinguishes_not_found(monkeypatch):
 
 
 def test_scan_checkpoint_cas_conflict_cannot_overwrite_another_pass():
-    from utils.sync import enrichment_scan
+    from utils.enrichment import scan as enrichment_scan
 
     previous, last = Mock(), Mock()
     previous.exists = True
