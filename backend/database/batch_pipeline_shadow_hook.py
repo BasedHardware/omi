@@ -1,0 +1,42 @@
+"""A2 shadow seams and the hook for batch writers that commit outside ``Store.run`` (projection apply, purge).
+
+Kept outside ``database.jobstore`` on purpose: importing it costs one ``os`` lookup, and the job-store package
+(Postgres store, outbox, migrations) is imported only when this process runs ``BATCH_JOBSTORE_MODE=shadow``.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Iterable
+
+logger = logging.getLogger(__name__)
+
+
+def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
+    """After a commit outside ``Store.run``: re-copy ``keys`` [(table, key)] to the shadow. Never raises."""
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or namespace == 'batch_pipeline_prod':
+        return
+    try:
+        import database.jobstore.dual_store as dual_store
+
+        dual_store.mirror_refresh(namespace, list(keys))
+    except Exception:
+        logger.warning('event=jobstore_shadow op=refresh outcome=hook_error', exc_info=True)
+
+
+def shadow_from_env(primary):
+    """The A2 seam: ``primary`` unchanged unless this process runs ``BATCH_JOBSTORE_MODE=shadow``.
+
+    In shadow mode it defers to ``database.jobstore.dual_store.shadow_from_env`` (which still refuses prod,
+    a missing setting or a missing driver); any failure there keeps the plain primary.
+    """
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow':
+        return primary
+    try:
+        import database.jobstore.dual_store as dual_store
+
+        return dual_store.shadow_from_env(primary)
+    except Exception:
+        logger.warning('event=jobstore_shadow outcome=refused reason=seam_error', exc_info=True)
+        return primary

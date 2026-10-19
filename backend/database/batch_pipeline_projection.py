@@ -10,7 +10,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database.batch_pipeline_policy import load_stage_policy
-from database.jobstore.dual_store import mirror_refresh
+from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore

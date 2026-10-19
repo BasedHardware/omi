@@ -10,7 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
-from database.jobstore.dual_store import mirror_refresh
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100

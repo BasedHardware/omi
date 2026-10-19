@@ -349,3 +349,32 @@ class TestMirrorRefreshHook:
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
         monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: (_ for _ in ()).throw(RuntimeError('x')))
         dual_store.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
+
+
+class TestLightHook:
+    """database.batch_pipeline_shadow_hook: what projection and purge import."""
+
+    def test_firestore_mode_never_reaches_the_job_store(self, monkeypatch):
+        from database import batch_pipeline_shadow_hook as hook
+
+        monkeypatch.delenv('BATCH_JOBSTORE_MODE', raising=False)
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
+        hook.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
+
+    def test_prod_is_refused_even_in_shadow_mode(self, monkeypatch):
+        from database import batch_pipeline_shadow_hook as hook
+
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
+        hook.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+
+    def test_shadow_mode_delegates_and_never_raises(self, monkeypatch):
+        from database import batch_pipeline_shadow_hook as hook
+
+        calls = []
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
+        hook.mirror_refresh('batch_pipeline_dev', iter([('jobs', 'j')]))
+        assert calls == [('batch_pipeline_dev', [('jobs', 'j')])]
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: (_ for _ in ()).throw(RuntimeError('x')))
+        hook.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])

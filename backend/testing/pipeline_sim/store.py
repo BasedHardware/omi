@@ -404,7 +404,7 @@ class SimStore:
                 else:
                     self.delete('results', segment_id)
             removed += 1
-        from database.jobstore.dual_store import mirror_refresh
+        from database.batch_pipeline_shadow_hook import mirror_refresh
 
         mirror_refresh(self.namespace, touched)
         return removed

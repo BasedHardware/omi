@@ -37,7 +37,7 @@ from unittest.mock import patch
 
 from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
 from config.policy.stages import STAGE_TYPES
-from database.jobstore.dual_store import mirror_refresh
+from database.batch_pipeline_shadow_hook import mirror_refresh
 from database import batch_pipeline_policy as policy_store
 from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
