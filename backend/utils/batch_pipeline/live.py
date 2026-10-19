@@ -14,6 +14,8 @@ import logging
 import os
 import time
 
+from config.policy import resolve_batch_policy
+from database.batch_pipeline_policy import load_job_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
@@ -64,6 +66,11 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
     store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
+    # The immutable native owner is main's earlier admission receipt. A later
+    # cohort rollback cannot cancel it before finalization registers the unit.
+    policy = replace(
+        resolve_batch_policy(uid), batch_enabled=True, live_admission_enabled=True, live_record_enabled=True
+    )
     snapshot = {
         key: conversation.get(key)
         for key in (
@@ -98,6 +105,8 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
                 'enqueued_at': now,
                 'record_content_id': content,
                 'record_snapshot': snapshot,
+                'policy': policy.to_dict(),
+                'policy_source': 'admission',
                 'merge_pending': False,
             },
         )
@@ -244,6 +253,7 @@ async def admit_recording(store, pending, *, now=None):
         )
         for i, (start, duration, _) in enumerate(units)
     ]
+    _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
     binding = ProjectionBinding(
         uid,
         'bp_' + content,
@@ -293,6 +303,7 @@ async def admit_recording(store, pending, *, now=None):
         binding,
         now,
         namespace=store.namespace,
+        policy=policy,
         require_artifacts=True,
         intake={
             'owner_id': uid,
