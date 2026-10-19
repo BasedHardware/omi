@@ -9171,9 +9171,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+另外$count个';
-  }
+  String get quoteShowSources => '显示来源';
 
   @override
   String get jumpToLatestMessage => '跳转到最新消息';
@@ -10882,7 +10880,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+  String get captureRecoveryBannerTitle => 'Omi 未发送音频';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -10900,17 +10898,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureBannerRetrySync => '重试同步';
 
   @override
-  String get captureBannerWhatsWrong => '怎么了？';
-
-  @override
-  String get captureBannerDismiss => '忽略';
-
-  @override
   String get captureWedgeBleExplanation =>
       '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
-
-  @override
-  String get captureLinkStalledTranscribesLater => '音频连接已中断 — 恢复后将继续转写';
 
   @override
   String get captureIngressNeedsReconnect => '音频未送达应用 — 请重新连接您的 Omi';
@@ -13475,7 +13464,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityRetryAll => '全部重试';
 
   @override
+  String get activityAttentionStorageUnknownTitle => '无法检查存储空间';
+
+  @override
+  String get activityAttentionStorageSubtitle => '录音已暂停';
+
+  @override
+  String get activityAttentionUploadStalledTitle => '上传停滞';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get activityAttentionSemantics => '活动，需要关注';
 
   @override
   String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
@@ -14142,4 +14154,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '已保存 $saved / $total 的音频';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi 仍在录音';
 }

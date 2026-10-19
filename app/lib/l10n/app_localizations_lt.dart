@@ -9335,9 +9335,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ dar $count';
-  }
+  String get quoteShowSources => 'Rodyti šaltinius';
 
   @override
   String get jumpToLatestMessage => 'Peršokti į naujausią pranešimą';
@@ -11085,7 +11083,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openCall => 'Atidaryti skambutį';
 
   @override
-  String get captureRecoveryBanner => 'Omi nesiunčia garso — palieskite, kad prisijungtumėte iš naujo';
+  String get captureRecoveryBannerTitle => 'Omi nesiunčia garso';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11104,17 +11102,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureBannerRetrySync => 'Pakartoti sinchronizavimą';
 
   @override
-  String get captureBannerWhatsWrong => 'Kas vyksta?';
-
-  @override
-  String get captureBannerDismiss => 'Slėpti';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth ryšys su jūsų Omi nutrūko, todėl garsas nepasieka programos. Omi toliau įrašinėja įrenginyje ir sinchronizuos, kai ryšys atsistatys. Bandymas iš naujo vėl užmezga ryšį; jei tai ir toliau nepavyksta, patikrinkite įrenginį skiltyje Nustatymai > Įrenginys.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Garso ryšys nutrūko — transkripcija bus tęsiama jį atstačius';
 
   @override
   String get captureIngressNeedsReconnect => 'Garsas nepasiekia programos — iš naujo prijunkite Omi';
@@ -13708,7 +13697,30 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityRetryAll => 'Bandyti visus iš naujo';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Nepavyko patikrinti atminties';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Įrašai pristabdyti';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Įkėlimas sustojo';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Laukia $count įrašų',
+      one: 'Laukia 1 įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
+
+  @override
+  String get activityAttentionSemantics => 'Veikla, reikalauja dėmesio';
 
   @override
   String get connectAgentHeadline => 'Naudokite savo Omi atmintį ChatGPT ir savo DI agentuose';
@@ -14390,4 +14402,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Išsaugota $saved iš $total garso';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi vis dar įrašo';
 }

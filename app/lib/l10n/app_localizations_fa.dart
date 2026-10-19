@@ -9318,9 +9318,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count مورد دیگر';
-  }
+  String get quoteShowSources => 'نمایش منابع';
 
   @override
   String get jumpToLatestMessage => 'پرش به آخرین پیام';
@@ -11059,7 +11057,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openCall => 'باز کردن تماس';
 
   @override
-  String get captureRecoveryBanner => 'Omi صدا ارسال نمی‌کند — برای اتصال دوباره ضربه بزنید';
+  String get captureRecoveryBannerTitle => 'Omi صدا ارسال نمی‌کند';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.';
@@ -11077,17 +11075,8 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureBannerRetrySync => 'تلاش برای همگام‌سازی مجدد';
 
   @override
-  String get captureBannerWhatsWrong => 'چه اتفاقی افتاده است؟';
-
-  @override
-  String get captureBannerDismiss => 'رد کردن';
-
-  @override
   String get captureWedgeBleExplanation =>
       'اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'اتصال صدا قطع شده است — پس از بازیابی، گفتار به متن تبدیل می‌شود';
 
   @override
   String get captureIngressNeedsReconnect => 'صدا به برنامه نمی‌رسد — Omi را دوباره وصل کنید';
@@ -13679,7 +13668,30 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityRetryAll => 'تلاش دوباره برای همه';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'امکان بررسی حافظه نیست';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'ضبط‌ها متوقف شده‌اند';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'بارگذاری متوقف شده';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط در انتظار',
+      one: '1 ضبط در انتظار',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
+
+  @override
+  String get activityAttentionSemantics => 'فعالیت، نیاز به توجه';
 
   @override
   String get connectAgentHeadline => 'از حافظهٔ Omi خود در ChatGPT و عامل‌های هوش مصنوعی‌تان استفاده کنید';
@@ -14361,4 +14373,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved از $total صدا ذخیره شد';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi همچنان در حال ضبط است';
 }

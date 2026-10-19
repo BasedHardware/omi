@@ -750,7 +750,7 @@ def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.ge
             raise HTTPException(status_code=400, detail='No memory in progres')
     else:
         memory = get_conversation(uid, memory_id)
-    if not memory:
+    if not memory or memory.get('deleted', False):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
@@ -938,6 +938,9 @@ def update_transcription_preferences_endpoint(
     - single_language_mode: If True, uses exact language for higher accuracy but disables translation
     - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
     """
+    # Refuse a longer list: storing only its first 100 terms and answering ok made the rest look saved.
+    if data.vocabulary is not None and len(data.vocabulary) > 100:
+        raise HTTPException(status_code=400, detail='Custom vocabulary is limited to 100 terms')
     set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
     return {'status': 'ok'}
 

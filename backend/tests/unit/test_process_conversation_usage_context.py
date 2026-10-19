@@ -519,6 +519,74 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     assert all(call.args[1] is not process_conversation.save_structured_vector for call in submit.call_args_list)
 
 
+def _run_merge_created_webhook_flow(monkeypatch, **process_kwargs):
+    """Process a MERGE run with every submitted job run inline; return (result, delivered webhooks)."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = "conversation-merged"
+    completed_conversation.dict.return_value = {"id": "conversation-merged", "status": "completed"}
+    completed_conversation.structured = None  # skip analytics counting
+    completed_conversation.apps_results = []
+    completed_conversation.suggested_summarization_apps = []
+    completed_conversation.private_cloud_sync_enabled = False
+    completed_conversation.folder_id = "existing-folder"  # skip folder assignment
+
+    delivered: list = []
+
+    async def created_webhook(uid, conversation):
+        delivered.append((uid, conversation))
+
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        "submit_with_context",
+        MagicMock(side_effect=lambda _executor, fn, *args, **kwargs: fn(*args, **kwargs)),
+    )
+    monkeypatch.setattr(process_conversation, "conversation_created_webhook", created_webhook)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", MagicMock())
+    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(process_conversation, "save_structured_vector", MagicMock())
+    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+    monkeypatch.setattr(process_conversation, "update_goal_progress", MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", MagicMock())
+
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        trigger=process_conversation.ProcessingTrigger.MERGE,
+        **process_kwargs,
+    )
+    assert result is completed_conversation
+    return result, delivered
+
+
+def test_created_webhook_is_sent_during_processing_without_an_observer(monkeypatch):
+    result, delivered = _run_merge_created_webhook_flow(monkeypatch)
+
+    assert delivered == [("uid", result)]
+
+
+def test_created_webhook_observer_holds_the_webhook_until_the_caller_sends_it(monkeypatch):
+    """A merge can still delete its target after processing: a transfer conflict rolls
+    it back. Its created webhook must wait for the caller instead of going out here."""
+    held: list = []
+
+    result, delivered = _run_merge_created_webhook_flow(monkeypatch, created_webhook_observer=held.append)
+
+    assert delivered == []
+    assert len(held) == 1, "exactly one created-webhook send must be handed to the caller"
+    held[0]()
+    assert delivered == [("uid", result)]
+
+
 def _explicit_selection_flow_conversation():
     completed = MagicMock()
     completed.id = "conversation-explicit-selection"
