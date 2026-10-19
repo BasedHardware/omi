@@ -34,7 +34,7 @@ def test_no_allowance_without_a_valid_knob(monkeypatch, reached, env):
     else:
         monkeypatch.setenv('OMI_TEST_POSTGRES_IAM', env)
     with block_outbound_network():
-        for address in (('169.254.169.254', 80), (PG, 5432)):
+        for address in (('169.254.169.254', 80), ('metadata.google.internal', 80), (PG, 5432)):
             with pytest.raises(BlockedNetworkError):
                 _try_connect(address)
             with pytest.raises(BlockedNetworkError):
@@ -48,12 +48,21 @@ def test_knob_allows_exactly_the_metadata_server_and_the_pg_endpoint(monkeypatch
     monkeypatch.setenv('OMI_TEST_POSTGRES_IAM', f'{PG},jobstore_staging,staging-worker@p.iam')
     with block_outbound_network():
         _try_connect(('169.254.169.254', 80))
+        _try_connect(('metadata.google.internal', 80))  # google-auth dials the hostname
         _try_connect((PG, 5432))
         socket.create_connection(('169.254.169.254', 80))
+        socket.create_connection(('metadata.google.internal', 80))
         socket.getaddrinfo(PG, 5432)
         socket.getaddrinfo('metadata.google.internal', 80)
         # everything else stays blocked: other ports on those hosts, other hosts, the public internet
-        for address in (('169.254.169.254', 443), (PG, 5433), (PG, 80), ('10.20.0.6', 5432), ('8.8.8.8', 53)):
+        for address in (
+            ('metadata.google.internal', 443),
+            ('169.254.169.254', 443),
+            (PG, 5433),
+            (PG, 80),
+            ('10.20.0.6', 5432),
+            ('8.8.8.8', 53),
+        ):
             with pytest.raises(BlockedNetworkError):
                 _try_connect(address)
             with pytest.raises(BlockedNetworkError):
@@ -61,7 +70,7 @@ def test_knob_allows_exactly_the_metadata_server_and_the_pg_endpoint(monkeypatch
         for name in ('example.com', '10.20.0.6', 'oauth2.googleapis.com'):
             with pytest.raises(BlockedNetworkError):
                 socket.getaddrinfo(name, 443)
-    assert [kind for kind, _ in reached] == ['connect', 'connect', 'create', 'dns', 'dns']
+    assert [kind for kind, _ in reached] == ['connect', 'connect', 'connect', 'create', 'create', 'dns', 'dns']
 
 
 def test_allowance_ends_with_the_environment(monkeypatch, reached):

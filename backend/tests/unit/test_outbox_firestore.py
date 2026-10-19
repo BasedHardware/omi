@@ -188,10 +188,10 @@ def test_sweep_discards_privacy_fenced_rows_instead_of_rewaking(rows, monkeypatc
     assert counts.discarded == 1 and counts.rewoken == 0
 
 
-def test_selector_serves_only_the_enrichment_kind():
+def test_selector_serves_only_the_built_kinds():
     assert firestore_outbox(OutboxKind.ENRICHMENT) is outbox
     with pytest.raises(NotImplementedError):
-        firestore_outbox(OutboxKind.PROVIDER_STT)
+        firestore_outbox(OutboxKind.CAP_HOLD_REDRIVE)  # reserved; provider_stt is lane 8's
 
 
 def test_pull_claims_due_rows_by_their_stored_wake(rows, monkeypatch):
@@ -229,4 +229,4 @@ def test_conformance_factory_uses_the_injected_privacy_check_and_wake(rows, monk
     blocked.add(KEY)
     assert injected.claim_key(KEY, result.wake_token, 120, now=10) is Outcome.DISCARDED
     with pytest.raises(NotImplementedError):
-        FirestoreOutbox(OutboxKind.PROVIDER_STT)
+        FirestoreOutbox(OutboxKind.CAP_HOLD_REDRIVE)

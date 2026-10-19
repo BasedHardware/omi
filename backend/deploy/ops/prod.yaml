@@ -51,6 +51,10 @@ cloud_run:
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh
+      # C4 (lane 9): summary-debt repair moves to the enrichment-maintenance Scheduler job,
+      # which targets backend-integration. The manifest enables it on backend-sync only,
+      # so without this the new owner's tick is a no-op.
+      SUMMARY_DEBT_REPAIR_ENABLED: 'true'
     min_instances: 1
 
 cloud_tasks:

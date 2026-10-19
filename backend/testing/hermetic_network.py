@@ -34,6 +34,7 @@ def is_local_address(host: object) -> bool:
 
 
 METADATA_ENDPOINT = ('169.254.169.254', 80)
+METADATA_NAME_ENDPOINT = ('metadata.google.internal', 80)  # google-auth connects by hostname
 METADATA_NAMES = frozenset({'metadata.google.internal', '169.254.169.254'})
 POSTGRES_PORT = 5432
 
@@ -53,7 +54,7 @@ def _allowed_endpoint(address: object) -> bool:
     host = _cloudsql_iam_host()
     if host is None or not isinstance(address, tuple) or len(address) < 2:
         return False
-    return (address[0], address[1]) in {METADATA_ENDPOINT, (host, POSTGRES_PORT)}
+    return (address[0], address[1]) in {METADATA_ENDPOINT, METADATA_NAME_ENDPOINT, (host, POSTGRES_PORT)}
 
 
 def _allowed_dns(name: object) -> bool:

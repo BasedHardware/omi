@@ -38,7 +38,7 @@ def configure(conn: Any) -> Any:
 def dial(dsn: str) -> Any:
     psycopg = _psycopg()
     # autocommit: transaction boundaries are explicit (BEGIN ... COMMIT) in PostgresStore.
-    return configure(psycopg.connect(dsn, autocommit=True))
+    return psycopg.connect(dsn, autocommit=True)
 
 
 def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> Callable[[], Any]:

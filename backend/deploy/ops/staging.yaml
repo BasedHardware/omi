@@ -22,6 +22,7 @@ cloud_run:
   backend-integration-staging:
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
+      SUMMARY_DEBT_REPAIR_ENABLED: 'true'
     min_instances: 1
 
 cloud_tasks:
