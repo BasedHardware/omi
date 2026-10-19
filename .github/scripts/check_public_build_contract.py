@@ -41,11 +41,11 @@ DEFAULT_RETRY_TIMEOUT_SECONDS = 19
 BROWSER_EXIT_GRACE_SECONDS = 5
 SMOKE_RETRY_ATTEMPTS = 3
 SMOKE_RETRY_SLEEP_SECONDS = 5
-MAX_BROWSER_CANDIDATES = 5
-# The requested app values need 22m05s if all five browser names are present,
-# every attempt reaches its subprocess fallback, and retries use their grace.
-# Keep a small, explicit ceiling above that bound.
-MAX_TOTAL_SMOKE_SECONDS = 23 * 60
+MAX_BROWSER_CANDIDATES = 6
+# The requested app values need 26m30s if all six browser candidates are
+# present, every attempt reaches its subprocess fallback, and retries use
+# their grace. Keep a small, explicit ceiling above that bound.
+MAX_TOTAL_SMOKE_SECONDS = 28 * 60
 MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
     inputs:
       environment:
