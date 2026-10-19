@@ -44,7 +44,9 @@
 #                          workloadIdentityUser for KSA staging/staging-runtime (listen, pusher)
 #   staging-runtime/worker cloudsql.client + cloudsql.instanceUser conditioned to instance staging-jobs,
 #                          and IAM database users on it (lane 12's Postgres job store)
-#   staging-worker         storage.objectAdmin on staging-batch, objectViewer on staging-sync and
+#   staging-worker         datastore.user ONLY on databases/staging (IAM condition);
+#                          storage.objectCreator on staging-mirror under replays/ only (condition);
+#                          storage.objectAdmin on staging-batch, objectViewer on staging-sync and
 #                          staging-mirror; secretAccessor on staging-encryption-secret;
 #                          logging.logWriter, monitoring.metricWriter; workloadIdentityUser for
 #                          KSA staging/staging-worker (batch worker, parakeet, vad)
@@ -351,12 +353,21 @@ bootstrap() {
     roles/iam.workloadIdentityUser
 
   echo "== batch worker identity: staging-worker"
+  # The worker leases and publishes batch jobs in the staging database (its Firestore
+  # transactions failed closed without this: "transaction has no transaction ID").
+  project_binding "$wk" roles/datastore.user \
+    "resource.name == \"projects/${DEV}/databases/${DB}\"" "staging-db-only"
   for role in roles/logging.logWriter roles/monitoring.metricWriter; do
     project_binding "$wk" "$role"
   done
   bucket_binding "${DEV}-staging-batch" "$wk" roles/storage.objectAdmin
   bucket_binding "${DEV}-staging-sync" "$wk" roles/storage.objectViewer
   bucket_binding "${DEV}-staging-mirror" "$wk" roles/storage.objectViewer
+  # Lane 4's replay Job (KSA staging-worker) writes its aggregate results under replays/ only.
+  run gcloud storage buckets add-iam-policy-binding "gs://${DEV}-staging-mirror" --member="$wk" \
+    --role=roles/storage.objectCreator \
+    --condition="expression=resource.name.startsWith(\"projects/_/buckets/${DEV}-staging-mirror/objects/replays/\"),title=replays-prefix-only" \
+    --quiet --format=none
   sa_binding staging-worker "serviceAccount:${DEV}.svc.id.goog[${NAMESPACE}/staging-worker]" \
     roles/iam.workloadIdentityUser
 
