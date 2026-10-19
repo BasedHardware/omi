@@ -49,7 +49,9 @@ Privacy/deletion and paid-intent checks always remain live.
 Recovery discovery uses a bounded global cursor and checks each candidate's
 recorded part, so an owner-cohort rollback cannot hide accepted debt. Dispatch
 page size, startup, auth, provider packing, metrics and worker dispositions remain
-explicit process/worker exceptions in `guard.DEFERRED_READS`.
+outside E1 snapshot ownership. The guard fails direct reads of `SNAPSHOT_ENV_KEYS`
+and the live-switch keys outside `config/policy/`. Other `BATCH_PIPELINE_*` reads
+print nonblocking E1b-candidate warnings; no worker-key allowlist is required.
 
 ## Cohorts and live switches
 

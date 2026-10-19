@@ -9,70 +9,27 @@ import json
 from pathlib import Path
 import sys
 
-# Explicit E1b/process-control exceptions. An existing key may be read only in
-# its owning files; adding a new batch env read requires an explicit decision.
-DEFERRED_READS = {
-    'config/batch_pipeline.py': {
-        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
-        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
-        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',
-        'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED',
-        'BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED',
-        'BATCH_PIPELINE_SERVING_ENABLED',
-        'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE',
-        'BATCH_PIPELINE_WORKER_IO_CONCURRENCY',
-    },
-    # #22358 landed on main while E1 was in flight; its GPU worker controls are E1b.
-    'config/batch_pipeline_gpu_skip.py': {
-        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED',
-        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED',
-    },
-    'config/batch_pipeline_providers.py': {
-        'BATCH_PIPELINE_CONTEXT_SECONDS',
-        'BATCH_PIPELINE_DIARIZER',
-        'BATCH_PIPELINE_MODEL_BATCH_SIZE',
-        'BATCH_PIPELINE_PADDED_SECONDS',
-        'BATCH_PIPELINE_POOL_KIND',
-        'BATCH_PIPELINE_REUSE_LIVE_ENABLED',
-        'BATCH_PIPELINE_UNIT_SECONDS',
-        'BATCH_PIPELINE_WINDOW_SECONDS',
-        'BATCH_PIPELINE_WORDS_PROVIDER',
-    },
-    'utils/batch_pipeline/compute_client.py': {'BATCH_PIPELINE_API_URL', 'BATCH_PIPELINE_WORKER_AUDIENCE'},
-    'utils/batch_pipeline/correctness_metrics.py': {'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED'},
-    'utils/batch_pipeline/quarantine_recovery.py': {
-        'BATCH_PIPELINE_RECOVERY_TASKS_QUEUE',
-        'BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
-    },
-    'utils/batch_pipeline/serving.py': {'BATCH_PIPELINE_SERVING_ENABLED'},
-    'utils/conversations/summary_delivery.py': {'BATCH_PIPELINE_WORKER_ENABLED'},
-    'routers/batch_pipeline.py': {
-        'BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
-        'BATCH_PIPELINE_WORKER_AUDIENCE',
-        'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
-    },
-    'diarizer/batch_pipeline_runtime.py': {
-        'BATCH_PIPELINE_WORKER_ENABLED',
-        'BATCH_PIPELINE_WORKER_RELEASE',
-        'BATCH_PIPELINE_NAMESPACE',
-    },
-    'diarizer/batch_pipeline_startup.py': {'BATCH_PIPELINE_MODEL_BATCH_SIZE'},
-}
 
-
-# E1b pending: GPU batching / worker series #22368 owns these reads, newly
-# merged while E1 was in flight. Keep each key tied to its exact owning file;
-# neither another key in that file nor the same key elsewhere is exempt.
-E1B_PENDING_READS = {
-    'config/batch_pipeline_providers.py': {
-        'BATCH_PIPELINE_FLIGHT_BATCH_SECONDS': 'GPU batching / worker series #22368',
-        'BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED': 'GPU batching / worker series #22368',
-    },
-    'diarizer/batch_pipeline_flight_qualify.py': {
-        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'GPU batching / worker series #22368',
-        'BATCH_PIPELINE_MODEL_BATCH_SIZE': 'GPU batching / worker series #22368',
-    },
-}
+# The E1 boundary follows declared snapshot ownership, not the BATCH_PIPELINE_
+# namespace. Worker/process keys belong to E1b and must not block other teams.
+# Read declarations with AST so this check remains stdlib-only and import-pure.
+def protected_env_keys():
+    directory = Path(__file__).resolve().parent
+    snapshot = ast.parse((directory / 'batch.py').read_text())
+    switches = ast.parse((directory / 'kill_switches.py').read_text())
+    owned = next(
+        ast.literal_eval(node.value.args[0])
+        for node in snapshot.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == 'SNAPSHOT_ENV_KEYS' for target in node.targets)
+    )
+    live = next(
+        ast.literal_eval(node.value)
+        for node in switches.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == 'KILL_SWITCHES' for target in node.targets)
+    )
+    return frozenset(owned) | frozenset(live)
 
 
 def env_reads(source):
@@ -194,8 +151,10 @@ def stage_policy_reads(source, relative):
     return out
 
 
-def violations(root: Path):
-    out = []
+def scan(root: Path):
+    errors = []
+    warnings = set()
+    protected = protected_env_keys()
     backend = root / 'backend'
     for directory in ('config', 'database', 'utils', 'routers', 'diarizer', 'scripts'):
         for path in (backend / directory).rglob('*.py'):
@@ -203,16 +162,17 @@ def violations(root: Path):
             if relative.startswith('config/policy/'):
                 continue
             source = path.read_text()
-            out.extend(stage_policy_reads(source, relative))
+            errors.extend(stage_policy_reads(source, relative))
             for key in env_reads(source):
-                if isinstance(key, str) and (
-                    key.startswith('BATCH_PIPELINE_') or key == 'BATCH_LIVE_STT_RETIRE_PERCENT'
-                ):
-                    if key not in DEFERRED_READS.get(relative, set()) and key not in E1B_PENDING_READS.get(
-                        relative, {}
-                    ):
-                        out.append(f'{relative}: {key} must be resolved in config/policy/')
-    return out
+                if key in protected:
+                    errors.append(f'{relative}: {key} must be resolved in config/policy/')
+                elif isinstance(key, str) and key.startswith('BATCH_PIPELINE_'):
+                    warnings.add(f'{relative}: {key} is outside E1 policy ownership (E1b candidate)')
+    return errors, sorted(warnings)
+
+
+def violations(root: Path):
+    return scan(root)[0]
 
 
 def registry_violations(root: Path):
@@ -239,7 +199,10 @@ def registry_violations(root: Path):
 
 def main():
     root = Path(__file__).resolve().parents[3]
-    errors = violations(root) + registry_violations(root)
+    errors, warnings = scan(root)
+    errors.extend(registry_violations(root))
+    for warning in warnings:
+        print(f'WARNING: {warning}', file=sys.stderr)
     if errors:
         print('\n'.join(errors), file=sys.stderr)
         return 1

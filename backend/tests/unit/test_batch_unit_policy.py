@@ -435,29 +435,53 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
     )
 
 
+@pytest.mark.parametrize('key', sorted(SNAPSHOT_ENV_KEYS | KILL_SWITCHES.keys()))
+def test_guard_fails_owned_and_live_switch_reads_outside_policy(tmp_path, key):
+    from config.policy.guard import scan
+
+    path = tmp_path / 'backend/utils/new_stage.py'
+    path.parent.mkdir(parents=True)
+    path.write_text(f'import os\nos.getenv({key!r})\n')
+    errors, warnings = scan(tmp_path)
+    assert errors == [f'utils/new_stage.py: {key} must be resolved in config/policy/']
+    assert warnings == []
+
+
 @pytest.mark.parametrize(
-    'relative,key',
+    'key',
     [
-        ('config/batch_pipeline_providers.py', 'BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'),
-        ('config/batch_pipeline_providers.py', 'BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'),
-        ('diarizer/batch_pipeline_flight_qualify.py', 'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'),
-        ('diarizer/batch_pipeline_flight_qualify.py', 'BATCH_PIPELINE_MODEL_BATCH_SIZE'),
+        'BATCH_PIPELINE_PUBLISH_CONCURRENCY',
+        'BATCH_PIPELINE_FLIGHT_BATCH_SECONDS',
+        'BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED',
+        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED',
+        'BATCH_PIPELINE_MODEL_BATCH_SIZE',
+        'BATCH_PIPELINE_NEW_UNLISTED_WORKER_KEY',
     ],
 )
-def test_e1b_pending_guard_exceptions_are_exact_file_key_pairs(tmp_path, relative, key):
-    from config.policy.guard import E1B_PENDING_READS, violations
+def test_guard_warns_without_failing_unowned_batch_reads(tmp_path, key, monkeypatch, capsys):
+    from config.policy import guard
 
-    assert E1B_PENDING_READS[relative][key] == 'GPU batching / worker series #22368'
-    path = tmp_path / 'backend' / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / 'backend/utils/new_worker.py'
+    path.parent.mkdir(parents=True)
     path.write_text(f'import os\nos.getenv({key!r})\n')
-    assert not violations(tmp_path)
-    path.write_text("import os\nos.getenv('BATCH_PIPELINE_NEW_UNLISTED_WORKER_KEY')\n")
-    assert violations(tmp_path) == [
-        f'{relative}: BATCH_PIPELINE_NEW_UNLISTED_WORKER_KEY must be resolved in config/policy/'
-    ]
-    path.unlink()
-    other = tmp_path / 'backend/utils/new_worker.py'
-    other.parent.mkdir(parents=True, exist_ok=True)
-    other.write_text(f'import os\nos.getenv({key!r})\n')
-    assert violations(tmp_path) == [f'utils/new_worker.py: {key} must be resolved in config/policy/']
+    errors, warnings = guard.scan(tmp_path)
+    assert errors == []
+    assert warnings == [f'utils/new_worker.py: {key} is outside E1 policy ownership (E1b candidate)']
+    monkeypatch.setattr(guard, 'scan', lambda root: (errors, warnings))
+    monkeypatch.setattr(guard, 'registry_violations', lambda root: [])
+    assert guard.main() == 0
+    assert f'WARNING: utils/new_worker.py: {key}' in capsys.readouterr().err
+
+
+def test_guard_ownership_matches_batch_resolver_inputs():
+    # Adding a resolver-owned batch key must extend the ownership declaration;
+    # otherwise it could incorrectly become an advisory worker-key warning.
+    keys = set()
+    directory = ROOT / 'backend/config/policy'
+    for filename in ('batch.py', 'stages.py'):
+        tree = ast.parse((directory / filename).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if node.value.startswith('BATCH_PIPELINE_') or node.value == 'BATCH_LIVE_STT_RETIRE_PERCENT':
+                    keys.add(node.value)
+    assert keys == SNAPSHOT_ENV_KEYS
