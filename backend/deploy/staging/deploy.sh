@@ -186,7 +186,8 @@ COMPOSED="$WORK/staging.composed.yaml"
 if [[ "$SKIP_BUILD" != 1 ]]; then
   log "build: Cloud Build (backend$([[ "$WITH_WORKER" == true ]] && echo ', batch worker')) as staging-builder"
   source_object="${BUILD_SOURCE_DIR}/${SHA}.tgz"
-  tar -czf "$WORK/src.tgz" -C "$WORK/src" .
+  # Straight from git: re-tarring the extracted tree on macOS adds AppleDouble ._* files.
+  git -C "$REPO_ROOT" archive --format=tar.gz -o "$WORK/src.tgz" "$SHA"
   gcloud storage cp "$WORK/src.tgz" "$source_object" --quiet >/dev/null
   gcloud builds submit --no-source --project="$PROJECT" --region="$REGION" \
     --config="$WORK/src/backend/deploy/staging/cloudbuild.yaml" \
