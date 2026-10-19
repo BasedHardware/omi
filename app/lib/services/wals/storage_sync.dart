@@ -371,8 +371,9 @@ class StorageSyncImpl implements StorageSync {
 
   /// Delete the file from device after successful BLE transfer (per PR #5905),
   /// only on the connection that served it, then shift [remaining] down.
-  Future<void> _deleteTransferredFile(Wal wal, List<Wal> remaining) async {
-    if (wal.fileNum < 0) return;
+  /// Returns whether the device deleted the file.
+  Future<bool> _deleteTransferredFile(Wal wal, List<Wal> remaining) async {
+    if (wal.fileNum < 0) return false;
     try {
       final srcConn = _activeSyncConnection;
       final srcDeviceId = _activeSyncDeviceId;
@@ -400,10 +401,12 @@ class StorageSyncImpl implements StorageSync {
             }
           }
         }
+        return deleted;
       }
     } catch (e) {
       Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
     }
+    return false;
   }
 
   @override
@@ -426,7 +429,11 @@ class StorageSyncImpl implements StorageSync {
         throw Exception('Device transfer incomplete; recording kept on device');
       }
       wal.status = WalStatus.synced;
-      await _deleteTransferredFile(wal, _wals);
+      if (await _deleteTransferredFile(wal, _wals)) {
+        // Its index now belongs to the next file, so it must not stay listed
+        // for deleteAllSyncedWals to delete again.
+        _wals = _wals.where((w) => !identical(w, wal)).toList();
+      }
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
     } catch (e) {
       Logger.debug('StorageSync: Error syncing file: $e');

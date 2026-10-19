@@ -338,6 +338,12 @@ void main() {
     expect(wal.isSyncing, isFalse);
     expect(card.deletes, [1]);
     expect(later.fileNum, 1, reason: 'the firmware re-indexes the files above a deleted one');
+
+    // File 1 now holds the later recording, so clearing synced files must not delete it.
+    expect(syncs.storage.owns(wal), isFalse);
+    await syncs.storage.deleteAllSyncedWals();
+    expect(card.deletes, [1]);
+    expect(await syncs.storage.getMissingWals(), [later]);
     await card.controller.close();
     await syncs.storage.stop();
   });
