@@ -185,11 +185,13 @@ COMPOSED="$WORK/staging.composed.yaml"
 
 if [[ "$SKIP_BUILD" != 1 ]]; then
   log "build: Cloud Build (backend$([[ "$WITH_WORKER" == true ]] && echo ', batch worker')) as staging-builder"
-  gcloud builds submit "$WORK/src" --project="$PROJECT" --region="$REGION" \
+  source_object="${BUILD_SOURCE_DIR}/${SHA}.tgz"
+  tar -czf "$WORK/src.tgz" -C "$WORK/src" .
+  gcloud storage cp "$WORK/src.tgz" "$source_object" --quiet >/dev/null
+  gcloud builds submit --no-source --project="$PROJECT" --region="$REGION" \
     --config="$WORK/src/backend/deploy/staging/cloudbuild.yaml" \
-    --substitutions="_SHA=${SHA},_BUILD_WORKER=${WITH_WORKER}" \
+    --substitutions="_SHA=${SHA},_BUILD_WORKER=${WITH_WORKER},_SOURCE=${source_object}" \
     --service-account="$BUILDER_SA" \
-    --gcs-source-staging-dir="$BUILD_SOURCE_DIR" \
     --suppress-logs >/dev/null
 fi
 IMAGE="${IMAGE_REPO}/backend:${SHA}"
