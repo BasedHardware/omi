@@ -11,6 +11,7 @@ import yaml
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = BACKEND_ROOT / 'scripts' / 'check_cloud_run_env_drift.py'
+PROD_MANIFEST = BACKEND_ROOT / 'deploy' / 'runtime_env.yaml'
 
 
 @pytest.fixture(autouse=True)
@@ -35,8 +36,7 @@ def checker():
 
 @pytest.fixture(scope='module')
 def prod_declared(checker):
-    manifest_path = BACKEND_ROOT / 'deploy/runtime_env.yaml'
-    _, _, declared = checker.declared_manifest_keys(env='prod', manifest_path=manifest_path)
+    _, _, declared = checker.declared_manifest_keys(env='prod', manifest_path=PROD_MANIFEST)
     return declared
 
 
@@ -52,30 +52,14 @@ def test_script_runs_standalone_help() -> None:
 
 
 def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_declared) -> None:
-    manifest_path = BACKEND_ROOT / 'deploy/runtime_env.yaml'
     cloud_run_state = {
         'services': {
             'backend': {
-                'spec': {
-                    'template': {
-                        'spec': {
-                            'containers': [
-                                {
-                                    'name': 'backend-1',
-                                    'env': [
-                                        *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend'])),
-                                        {'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'deadbeef'},
-                                        {'name': 'BATCH_PIPELINE_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
-                                    ],
-                                },
-                                {
-                                    'name': 'collector',
-                                    'env': [{'name': 'SIDECAR_INTERNAL_ONLY', 'value': 'ignored'}],
-                                },
-                            ]
-                        }
-                    }
-                }
+                'env': [
+                    *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend'])),
+                    {'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'deadbeef'},
+                    {'name': 'BATCH_PIPELINE_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                ]
             },
             'backend-sync': {
                 'env': [
@@ -105,7 +89,7 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
 
     project, region, results = checker.inspect_services_drift(
         env='prod',
-        manifest_path=manifest_path,
+        manifest_path=PROD_MANIFEST,
         cloud_run_state=cloud_run_state,
     )
     assert project == 'based-hardware'
@@ -379,6 +363,8 @@ def test_replay_2026_10_18_reads_serving_revision_not_template(checker, tmp_path
     assert sync.allowlisted_live_only == ('FIRST_SUMMARY_UID_ALLOWLIST',)
     assert sync.value_unchecked_keys == 1  # env_var binding without rendered state
     assert sync.status == 'DRIFT'
+    # Published fingerprint is the redacted one (a sensitive key is present).
+    assert sync.serving[0].display_fingerprint != sync.serving[0].fingerprint
 
     # The template-reading misread: the template matches the manifest exactly.
     template_only = {'services': {'backend-sync': {'env': _sync_env(queue='sync-jobs', repair='true')}}}
@@ -430,6 +416,34 @@ def test_missing_traffic_never_falls_back_to_template(checker, tmp_path: Path) -
     assert 'status.traffic' in (sync.error or '')
 
 
+def test_offline_template_snapshot_without_status_is_rejected(checker, tmp_path: Path) -> None:
+    # A partial `services describe` fixture with spec.template but no status at all
+    # must not be compared as if the template were serving.
+    manifest_path = _two_service_manifest(tmp_path)
+    state = _replay_state(serving_env=_sync_env(queue='sync-jobs', repair='true'))
+    state['services']['backend-sync'].pop('status')
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod', services=('backend-sync',), manifest_path=manifest_path, cloud_run_state=state
+    )
+    assert sync.status == 'ERROR'
+    assert 'status.traffic' in (sync.error or '')
+
+
+def test_unresolved_bindings_are_still_presence_checked(checker, tmp_path: Path) -> None:
+    # A deploy-time `env_var` binding with no rendered state is value-unchecked,
+    # but its key must still be required on the serving revision.
+    manifest_path = _two_service_manifest(tmp_path)
+    serving_env = [e for e in _sync_env(queue='sync-jobs', repair='true') if e['name'] != 'SYNC_TASKS_HANDLER_URL']
+    state = _replay_state(serving_env=serving_env)
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod', services=('backend-sync',), manifest_path=manifest_path, cloud_run_state=state
+    )
+    assert sync.missing_from_live == ('SYNC_TASKS_HANDLER_URL',)
+    assert sync.value_unchecked_keys == 1
+    assert sync.status == 'DRIFT'
+    assert checker.exit_code((sync,), strict=True) == 1
+
+
 def test_live_reads_describe_serving_revisions_with_gcloud(checker, tmp_path: Path) -> None:
     manifest_path = _two_service_manifest(tmp_path)
     state = _replay_state(serving_env=_sync_env(queue=OPERATOR_QUEUE, repair='false'))
@@ -473,6 +487,18 @@ def test_rendered_state_supplies_exact_expected_values(checker, tmp_path: Path) 
     assert sync.value_unchecked_keys == 0
 
 
+def test_rendered_state_file_must_exist_and_have_services(checker, tmp_path: Path) -> None:
+    manifest_path = _two_service_manifest(tmp_path)
+    with pytest.raises(ValueError, match='not found'):
+        checker.expected_cloud_run_env(
+            env='prod', manifest_path=manifest_path, rendered_state_path=tmp_path / 'missing.json'
+        )
+    bad = tmp_path / 'bad.json'
+    bad.write_text(json.dumps({'jobs': {}}), encoding='utf-8')
+    with pytest.raises(ValueError, match='services'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=bad)
+
+
 def test_reports_never_print_values_and_redact_sensitive_hashes(checker, tmp_path: Path, capsys) -> None:
     manifest_path = _two_service_manifest(tmp_path)
     state = _replay_state(serving_env=_sync_env(queue=OPERATOR_QUEUE, repair='false', uid_allowlist=SENSITIVE_UID))
@@ -501,9 +527,34 @@ def test_reports_never_print_values_and_redact_sensitive_hashes(checker, tmp_pat
         assert 'DEMAND_PROCESSING_UID_ALLOWLIST' in out
         assert checker.value_hash('value', SENSITIVE_UID) not in out
         assert checker.value_hash('value', OPERATOR_QUEUE) in out
+        env_map = checker._env_list_to_live(
+            _sync_env(queue=OPERATOR_QUEUE, repair='false', uid_allowlist=SENSITIVE_UID), scope='backend-sync'
+        )
+        assert checker.env_fingerprint(env_map) not in out  # internal full fingerprint never prints
+        assert checker.env_fingerprint(env_map, redacted=True) in out  # the published one is the redacted form
     text = summary.read_text(encoding='utf-8')
     assert OPERATOR_QUEUE not in text and SENSITIVE_UID not in text
     assert 'Template `backend-sync-dbb7387-39171480834-1` differs' in text
+
+
+def test_fingerprint_display_redacts_sensitive_keys(checker) -> None:
+    env1 = {'A': 'h1', 'SECRET_TOKEN': 'x1'}
+    env2 = {'A': 'h1', 'SECRET_TOKEN': 'x2'}
+    assert checker.env_fingerprint(env1) != checker.env_fingerprint(env2)
+    assert checker.env_fingerprint(env1, redacted=True) == checker.env_fingerprint(env2, redacted=True)
+
+
+def test_secret_ref_hash_keeps_project_and_optionality(checker) -> None:
+    # A cross-project rebind of the same secret name must change the hash.
+    assert checker._secret_ref_hash('projects/a/secrets/x', 'v') != checker._secret_ref_hash(
+        'projects/b/secrets/x', 'v'
+    )
+    assert checker._secret_ref_hash('x', 'v') == checker._secret_ref_hash('x', 'v')
+    base = {'valueFrom': {'secretKeyRef': {'name': 'S', 'key': 'K'}}}
+    optional_false = {'valueFrom': {'secretKeyRef': {'name': 'S', 'key': 'K', 'optional': False}}}
+    optional_true = {'valueFrom': {'secretKeyRef': {'name': 'S', 'key': 'K', 'optional': True}}}
+    assert checker.env_entry_hash(base) == checker.env_entry_hash(optional_false)  # normalized default
+    assert checker.env_entry_hash(base) != checker.env_entry_hash(optional_true)
 
 
 def test_strict_exit_codes(checker, tmp_path: Path) -> None:
@@ -535,18 +586,100 @@ def test_strict_exit_codes(checker, tmp_path: Path) -> None:
     assert run(broken, '--strict') == 2
 
 
+def test_strict_exit_code_prefers_errors_over_drift(checker) -> None:
+    drift = checker.ServiceEnvDrift(
+        service='a', manifest_key_count=1, live_key_count=1, allowlisted_live_only=(), unallowlisted_live_only=('X',)
+    )
+    error = checker.ServiceEnvDrift(
+        service='b',
+        manifest_key_count=1,
+        live_key_count=1,
+        allowlisted_live_only=(),
+        unallowlisted_live_only=(),
+        error='fetch failed',
+    )
+    assert checker.exit_code((drift,), strict=True) == 1
+    assert checker.exit_code((error,), strict=True) == 2
+    assert checker.exit_code((drift, error), strict=True) == 2  # incomplete comparison outranks drift
+    assert checker.exit_code((drift, error), strict=False) == 0
+
+
+def test_render_failure_returns_render_error_code(checker, tmp_path: Path, capsys) -> None:
+    broken_manifest = tmp_path / 'broken_runtime_env.yaml'
+    broken_manifest.write_text('environments: [', encoding='utf-8')
+    assert checker.main(['--manifest', str(broken_manifest), '--strict']) == 2
+    assert checker.main(['--manifest', str(broken_manifest)]) == 0
+    assert 'could not render expected state' in capsys.readouterr().err
+
+    manifest_path = _two_service_manifest(tmp_path)
+    assert (
+        checker.main(['--manifest', str(manifest_path), '--rendered-state', str(tmp_path / 'nope.json'), '--strict'])
+        == 2
+    )
+
+
+def test_no_cloud_run_requires_a_gke_target(checker) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        checker.main(['--no-cloud-run', '--strict'])
+    assert excinfo.value.code == 2
+
+
+def test_env_var_default_is_compared_by_name_only(checker, tmp_path: Path) -> None:
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'cloud_run': {
+                    'services': {
+                        'backend': {'env': {'GATEWAY_URL': {'env_var': 'GATEWAY_URL_FOR_TEST', 'default': 'a'}}}
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path)
+    assert expected['backend'] == {'GATEWAY_URL': None}
+    _, _, expected = checker.expected_cloud_run_env(
+        env='prod', manifest_path=path, environ={'GATEWAY_URL_FOR_TEST': 'b'}
+    )
+    assert expected['backend'] == {'GATEWAY_URL': checker.value_hash('value', 'b')}
+
+
 # ── GKE ─────────────────────────────────────────────────────────────────────
 
 
-def _replicaset(name: str, owner: str, ready: int, env: list[dict], container: str = 'pusher') -> dict:
+def _replicaset(
+    name: str, owner: str, ready: int, env: list[dict], container: str = 'pusher', envfrom: list[dict] | None = None
+) -> dict:
+    container_doc: dict = {'name': container, 'env': env}
+    if envfrom is not None:
+        container_doc['envFrom'] = envfrom
     return {
         'metadata': {'name': name, 'ownerReferences': [{'kind': 'Deployment', 'name': owner}]},
-        'spec': {'template': {'spec': {'containers': [{'name': container, 'env': env}]}}},
+        'spec': {'template': {'spec': {'containers': [container_doc]}}},
         'status': {'replicas': ready, 'readyReplicas': ready},
     }
 
 
+def _prod_configmap_fixture(checker) -> tuple[str, dict[str, str]]:
+    cm_name, entries = checker.manifest_config_map('prod', PROD_MANIFEST)
+    data = {
+        key: (
+            str(raw['value'])
+            if isinstance(raw, dict) and raw.get('source') == 'literal' and isinstance(raw.get('value'), str)
+            else ''
+        )
+        for key, raw in entries.items()
+    }
+    return cm_name, data
+
+
 def test_gke_reads_ready_replicasets_and_flags_template_rollout(checker) -> None:
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    envfrom = [{'configMapRef': {'name': cm_name}}]
     expected = {
         'STT_SERVICE_MODELS': checker.value_hash('value', 'dg-nova-3,parakeet'),
         'REDIS_DB_PASSWORD': checker.env_entry_hash(
@@ -566,14 +699,26 @@ def test_gke_reads_ready_replicasets_and_flags_template_rollout(checker) -> None
         serving_env[1],
     ]
     gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
         'pusher': {
-            'deployment': {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': template_env}]}}}},
+            'deployment': {
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {'name': 'pusher', 'env': template_env, 'envFrom': envfrom},
+                                {'name': 'collector', 'env': []},
+                            ]
+                        }
+                    }
+                }
+            },
             'replicasets': [
-                _replicaset('prod-omi-pusher-new', 'prod-omi-pusher', 0, template_env),
-                _replicaset('prod-omi-pusher-old', 'prod-omi-pusher', 17, serving_env),
-                _replicaset('prod-omi-other-x', 'prod-omi-other', 3, []),
+                _replicaset('prod-omi-pusher-new', 'prod-omi-pusher', 0, template_env, envfrom=envfrom),
+                _replicaset('prod-omi-pusher-old', 'prod-omi-pusher', 17, serving_env, envfrom=envfrom),
+                _replicaset('prod-omi-other-x', 'prod-omi-other', 3, [], envfrom=envfrom),
             ],
-        }
+        },
     }
     (pusher,) = checker.inspect_gke_drift(
         env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides={'pusher': expected}
@@ -583,10 +728,111 @@ def test_gke_reads_ready_replicasets_and_flags_template_rollout(checker) -> None
     assert pusher.template_matches_serving is False
     assert [m.key for m in pusher.value_mismatches] == ['STT_SERVICE_MODELS']
     assert pusher.unallowlisted_live_only == ('OUT_OF_BAND',)
+    assert pusher.envfrom_refs == (cm_name,)
+    assert pusher.envfrom_mismatched_refs == ()
+    assert pusher.envfrom_unresolved == ()
     assert pusher.status == 'DRIFT'
 
 
+def test_gke_envfrom_configmap_keys_are_compared(checker) -> None:
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+
+    def run(configmaps: dict | None):
+        gke_state = {
+            **({'configmaps': configmaps} if configmaps is not None else {}),
+            'pusher': {
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                },
+                'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+        )
+        return result
+
+    ok = run({cm_name: {'data': cm_data}})
+    assert ok.status == 'OK', ok
+    assert ok.envfrom_refs == (cm_name,)
+    assert ok.envfrom_mismatched_refs == ()
+    assert ok.envfrom_unresolved == ()
+    assert ok.missing_from_live == ()
+    assert ok.value_unchecked_keys >= 1  # environment-sourced ConfigMap keys stay name-only
+
+    dropped = {k: v for k, v in cm_data.items() if k != 'GOOGLE_CLIENT_ID'}
+    missing = run({cm_name: {'data': dropped}})
+    assert missing.status == 'DRIFT'
+    assert 'GOOGLE_CLIENT_ID' in missing.missing_from_live
+    assert checker.exit_code((missing,), strict=True) == 1
+
+    tampered = dict(cm_data)
+    tampered['STT_SERVICE_MODELS'] = 'someone-kubectl-patched-this'
+    mismatched = run({cm_name: {'data': tampered}})
+    assert mismatched.status == 'DRIFT'
+    assert 'STT_SERVICE_MODELS' in {m.key for m in mismatched.value_mismatches}
+
+    unresolved = run(None)
+    assert unresolved.status == 'INVENTORY'
+    assert unresolved.envfrom_unresolved == (cm_name,)
+    assert not unresolved.has_drift
+    assert checker.exit_code((unresolved,), strict=True) == 0
+
+
+def test_gke_envfrom_reference_drift_is_flagged(checker) -> None:
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {
+                        'spec': {
+                            # Serving pods pull a different ConfigMap than the chart declares.
+                            'containers': [
+                                {
+                                    'name': 'pusher',
+                                    'env': serving_env,
+                                    'envFrom': [{'configMapRef': {'name': 'prod-omi-someone-elses-config'}}],
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            'replicasets': [
+                _replicaset(
+                    f'{deployment}-a',
+                    deployment,
+                    2,
+                    serving_env,
+                    'pusher',
+                    envfrom=[{'configMapRef': {'name': 'prod-omi-someone-elses-config'}}],
+                )
+            ],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+    )
+    assert result.envfrom_mismatched_refs == ('prod-omi-backend-config', 'prod-omi-someone-elses-config')
+    assert result.status == 'DRIFT'
+
+
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    envfrom = [{'configMapRef': {'name': cm_name}}]
     for workload in ('backend-listen', 'pusher'):
         spec = checker.GKE_WORKLOADS[workload]
         values = yaml.safe_load((BACKEND_ROOT.parent / spec.values_file.format(env='prod')).read_text(encoding='utf-8'))
@@ -601,15 +847,25 @@ def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
             live_env.append(entry)
         deployment = spec.deployment.format(env='prod')
         gke_state = {
+            'configmaps': {cm_name: {'data': cm_data}},
             workload: {
-                'deployment': {},
-                'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, live_env, spec.container)],
-            }
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': spec.container, 'env': live_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                },
+                'replicasets': [
+                    _replicaset(f'{deployment}-a', deployment, 2, live_env, spec.container, envfrom=envfrom)
+                ],
+            },
         }
         (result,) = checker.inspect_gke_drift(env='prod', workloads=(workload,), gke_state=gke_state)
         assert result.error is None, result.error
         assert result.status == 'OK', (workload, result)
-        assert result.manifest_key_count == len(live_env)
+        assert result.envfrom_refs == (cm_name,)
+        assert result.manifest_key_count == len({*(e['name'] for e in live_env), *cm_data})
 
 
 def test_gke_values_mode_reports_inventory_for_template_built_env(checker) -> None:
@@ -640,7 +896,17 @@ def test_gke_helm_render_uses_chart_and_values(checker) -> None:
                 'kind': 'Deployment',
                 'metadata': {'name': 'prod-omi-pusher'},
                 'spec': {
-                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': [{'name': 'A', 'value': 'x'}]}]}}
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {
+                                    'name': 'pusher',
+                                    'env': [{'name': 'A', 'value': 'x'}],
+                                    'envFrom': [{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                                }
+                            ]
+                        }
+                    }
                 },
             },
         ]
@@ -650,8 +916,9 @@ def test_gke_helm_render_uses_chart_and_values(checker) -> None:
         calls.append(argv)
         return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
 
-    expected = checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner)
+    expected, refs = checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner)
     assert expected == {'A': checker.value_hash('value', 'x')}
+    assert refs == ('prod-omi-backend-config',)
     assert calls[0][:3] == ['helm', 'template', 'prod-omi-pusher']
     assert calls[0][4:6] == ['-f', str(BACKEND_ROOT.parent / 'backend/charts/pusher/prod_omi_pusher_values.yaml')]
 
@@ -660,27 +927,3 @@ def test_field_ref_hash_ignores_server_defaulted_api_version(checker) -> None:
     rendered = {'valueFrom': {'fieldRef': {'fieldPath': 'metadata.namespace'}}}
     served = {'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}
     assert checker.env_entry_hash(rendered) == checker.env_entry_hash(served)
-
-
-def test_env_var_default_is_compared_by_name_only(checker, tmp_path: Path) -> None:
-    manifest = {
-        'schema_version': 2,
-        'environments': {
-            'prod': {
-                'compute_project': 'based-hardware',
-                'cloud_run': {
-                    'services': {
-                        'backend': {'env': {'GATEWAY_URL': {'env_var': 'GATEWAY_URL_FOR_TEST', 'default': 'a'}}}
-                    }
-                },
-            }
-        },
-    }
-    path = tmp_path / 'm.yaml'
-    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
-    _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path)
-    assert expected['backend'] == {'GATEWAY_URL': None}
-    _, _, expected = checker.expected_cloud_run_env(
-        env='prod', manifest_path=path, environ={'GATEWAY_URL_FOR_TEST': 'b'}
-    )
-    assert expected['backend'] == {'GATEWAY_URL': checker.value_hash('value', 'b')}

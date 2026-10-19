@@ -9,6 +9,10 @@ What is compared
   * GKE (``--gke``): the ReplicaSets of each Deployment that currently hold
     ready pods (listen, pusher, batch-pipeline-worker), never only the
     Deployment template.
+  * ``envFrom``: the ConfigMaps a GKE container bulk-loads through ``envFrom``
+    are resolved (live read or offline fixture) and their keys join the same
+    name/hash comparison, so a missing or out-of-date ConfigMap key is visible
+    instead of a silent ``OK``. Unresolvable references report ``INVENTORY``.
 
 Each serving target's application-container env is compared with the
 expected env (``runtime_env.yaml`` / rendered deploy state for Cloud Run,
@@ -17,7 +21,9 @@ the value or secret reference. Values are never printed; hashes of keys whose
 names look sensitive (UIDs, allowlists, secrets, tokens) are redacted too.
 
 By default this is a non-blocking visibility report (exit 0). ``--strict``
-exits 1 on drift and 2 on fetch/render errors, for use as a train post-gate.
+exits 1 on drift and 2 on fetch/render errors, for use as a train post-gate;
+when drift and fetch errors coexist, ``2`` wins (the comparison did not
+complete).
 """
 
 from __future__ import annotations
@@ -145,6 +151,7 @@ class ServingTarget:
     weight: int  # traffic percent (Cloud Run) or ready replicas (GKE)
     key_count: int
     fingerprint: str
+    display_fingerprint: str = ''  # redacted form; the only one safe to publish
 
 
 @dataclass(frozen=True)
@@ -164,10 +171,18 @@ class ServiceEnvDrift:
     template_name: str | None = None
     template_matches_serving: bool | None = None
     expected_available: bool = True
+    envfrom_refs: tuple[str, ...] = ()  # expected envFrom ConfigMap references
+    envfrom_mismatched_refs: tuple[str, ...] = ()  # live vs expected reference drift
+    envfrom_unresolved: tuple[str, ...] = ()  # references whose keys could not be compared
 
     @property
     def has_drift(self) -> bool:
-        return bool(self.unallowlisted_live_only or self.value_mismatches or self.missing_from_live)
+        return bool(
+            self.unallowlisted_live_only
+            or self.value_mismatches
+            or self.missing_from_live
+            or self.envfrom_mismatched_refs
+        )
 
     @property
     def status(self) -> str:
@@ -175,7 +190,7 @@ class ServiceEnvDrift:
             return 'ERROR'
         if self.has_drift:
             return 'DRIFT'
-        if not self.expected_available:
+        if not self.expected_available or self.envfrom_unresolved:
             return 'INVENTORY'
         return 'OK'
 
@@ -188,9 +203,14 @@ def value_hash(kind: str, payload: str) -> str:
     return hashlib.sha256(f'omi-env-v1\0{kind}\0{payload}'.encode('utf-8')).hexdigest()[:HASH_LENGTH]
 
 
-def _secret_ref_hash(resource: str, version: str) -> str:
-    # Cloud Run may report either a bare secret name or projects/<p>/secrets/<name>.
-    return value_hash('secret', f'{resource.rsplit("/", 1)[-1]}:{version or "latest"}')
+def _secret_ref_hash(resource: str, version: str, *, optional: bool = False) -> str:
+    # A project-qualified Secret Manager reference keeps its project so rebinding
+    # projects/a/secrets/x to projects/b/secrets/x is a visible hash change; a bare
+    # native-secret name hashes by name only, as before. ``optional`` joins the
+    # digest (normalized) so a chart/serving difference in optionality is drift.
+    ref = resource if '/' in resource else resource.rsplit('/', 1)[-1]
+    suffix = ':optional' if optional else ''
+    return value_hash('secret', f'{ref}:{version or "latest"}{suffix}')
 
 
 def env_entry_hash(entry: Mapping[str, Any]) -> str:
@@ -199,10 +219,13 @@ def env_entry_hash(entry: Mapping[str, Any]) -> str:
     if isinstance(value_from, Mapping):
         secret = value_from.get('secretKeyRef')
         if isinstance(secret, Mapping):
-            return _secret_ref_hash(str(secret.get('name', '')), str(secret.get('key', '')))
+            return _secret_ref_hash(
+                str(secret.get('name', '')), str(secret.get('key', '')), optional=bool(secret.get('optional'))
+            )
         config_map = value_from.get('configMapKeyRef')
         if isinstance(config_map, Mapping):
-            return value_hash('configmap', f'{config_map.get("name", "")}:{config_map.get("key", "")}')
+            optional = ':optional' if config_map.get('optional') else ''
+            return value_hash('configmap', f'{config_map.get("name", "")}:{config_map.get("key", "")}{optional}')
         field_ref = value_from.get('fieldRef')
         if isinstance(field_ref, Mapping):
             # The API server adds apiVersion: v1 to fieldRef; Helm output omits it.
@@ -212,12 +235,38 @@ def env_entry_hash(entry: Mapping[str, Any]) -> str:
     return value_hash('value', '' if raw is None else str(raw))
 
 
-def env_fingerprint(env: Mapping[str, str]) -> str:
-    return value_hash('env-set', '\n'.join(f'{name}={env[name]}' for name in sorted(env)))
+def env_fingerprint(env: Mapping[str, str], *, redacted: bool = False) -> str:
+    # `redacted` swaps sensitive-key hashes for a placeholder before hashing, so a
+    # published fingerprint cannot be brute-forced against candidate sensitive
+    # values; the full fingerprint stays internal for equality checks only.
+    parts = [
+        f'{name}={REDACTED_HASH if redacted and _SENSITIVE_KEY_RE.search(name) else env[name]}' for name in sorted(env)
+    ]
+    return value_hash('env-set', '\n'.join(parts))
 
 
 def display_hash(key: str, digest: str) -> str:
     return REDACTED_HASH if _SENSITIVE_KEY_RE.search(key) else digest
+
+
+def _envfrom_config_map_refs(container: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """ConfigMap names bulk-loaded through ``envFrom`` on one container."""
+    if not isinstance(container, Mapping):
+        return ()
+    names: list[str] = []
+    for source in container.get('envFrom') or []:
+        if not isinstance(source, Mapping):
+            continue
+        ref = source.get('configMapRef')
+        name = ref.get('name') if isinstance(ref, Mapping) else None
+        if isinstance(name, str) and name:
+            names.append(name)
+    return tuple(dict.fromkeys(names))
+
+
+def _config_map_data_keys(data: Mapping[str, Any]) -> LiveEnv:
+    """Hashes of the env keys a ConfigMap contributes through ``envFrom``."""
+    return {str(key): value_hash('value', str(value)) for key, value in sorted(data.items())}
 
 
 def _env_list_to_live(entries: object, *, scope: str) -> LiveEnv:
@@ -290,10 +339,16 @@ def expected_cloud_run_env(
     environ = {} if environ is None else environ
 
     rendered_services: dict[str, Any] = {}
-    if rendered_state_path is not None and rendered_state_path.is_file():
+    if rendered_state_path is not None:
+        # A supplied path must exist and be the renderer's state: silently falling
+        # back to the raw manifest would drop exact-value coverage for deploy-time
+        # bindings while appearing to have consumed the requested file.
+        if not rendered_state_path.is_file():
+            raise ValueError(f'Rendered state file not found: {rendered_state_path}')
         loaded_state = json.loads(rendered_state_path.read_text(encoding='utf-8'))
-        if isinstance(loaded_state, dict) and isinstance(loaded_state.get('services'), dict):
-            rendered_services = loaded_state['services']
+        if not (isinstance(loaded_state, dict) and isinstance(loaded_state.get('services'), dict)):
+            raise ValueError(f'Rendered state {rendered_state_path} must contain a "services" mapping')
+        rendered_services = loaded_state['services']
 
     expected: dict[str, ExpectedEnv] = {}
     for service_name, raw_service_config in services.items():
@@ -324,6 +379,47 @@ def declared_manifest_keys(
         env=env, manifest_path=manifest_path, rendered_state_path=rendered_state_path
     )
     return project, region, {service: frozenset(keys) for service, keys in expected.items()}
+
+
+def manifest_config_map(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tuple[str | None, dict[str, Any]]:
+    """The environment's shared GKE ConfigMap (name, entries) from the manifest."""
+    env_config = _manifest_env_config(env, manifest_path)
+    gke = render_backend_runtime_env._as_config_dict(env_config.get('gke')) or {}
+    config_map = render_backend_runtime_env._as_config_dict(gke.get('config_map')) or {}
+    name = config_map.get('name')
+    entries = render_backend_runtime_env._as_config_dict(config_map.get('entries')) or {}
+    return (str(name) if isinstance(name, str) and name else None), entries
+
+
+def _expected_envfrom_entries(entries: Mapping[str, Any]) -> ExpectedEnv:
+    """Expected hashes for envFrom ConfigMap keys; deploy-time sources stay name-only."""
+    expected: ExpectedEnv = {}
+    for key, raw in entries.items():
+        entry = render_backend_runtime_env._as_config_dict(raw) or {}
+        if entry.get('source') == 'literal' and isinstance(entry.get('value'), str):
+            expected[str(key)] = value_hash('value', str(entry['value']))
+        else:
+            expected[str(key)] = None  # environment-sourced: only deploy time knows the value
+    return expected
+
+
+def expected_gke_envfrom_refs(workload: str, *, env: str, root: Path = ROOT) -> tuple[str, ...]:
+    """envFrom ConfigMap references the chart declares for this workload."""
+    spec = GKE_WORKLOADS[workload]
+    values = _load_values(root / spec.values_file.format(env=env))
+    refs = [
+        str(source['configMapRef']['name'])
+        for source in values.get('envFrom') or []
+        if isinstance(source, dict)
+        and isinstance(source.get('configMapRef'), dict)
+        and isinstance(source['configMapRef'].get('name'), str)
+        and source['configMapRef']['name']
+    ]
+    if not refs:
+        name = values.get('runtimeConfigMapName')
+        if isinstance(name, str) and name:
+            refs = [name]
+    return tuple(dict.fromkeys(refs))
 
 
 def _load_values(path: Path) -> dict[str, Any]:
@@ -363,8 +459,9 @@ def expected_gke_env_from_helm(
     env: str,
     root: Path = ROOT,
     runner: Callable[..., Any] = subprocess.run,
-) -> ExpectedEnv:
-    """Expected env from ``helm template`` of the chart with its prod/dev values (exact chart semantics)."""
+) -> tuple[ExpectedEnv, tuple[str, ...]]:
+    """Expected env and envFrom ConfigMap refs from ``helm template`` of the chart
+    with its prod/dev values (exact chart semantics)."""
     spec = GKE_WORKLOADS[workload]
     deployment = spec.deployment.format(env=env)
     result = runner(
@@ -391,7 +488,8 @@ def expected_gke_env_from_helm(
             container = _application_container(
                 pod_spec.get('containers'), scope=f'helm {workload}', name=spec.container
             )
-            return cast(ExpectedEnv, _env_list_to_live(container.get('env', []), scope=f'helm {workload}'))
+            env = cast(ExpectedEnv, _env_list_to_live(container.get('env', []), scope=f'helm {workload}'))
+            return env, _envfrom_config_map_refs(container)
     raise ValueError(f'helm template rendered no Deployment {deployment!r}')
 
 
@@ -404,6 +502,8 @@ class LiveService:
     source: str = 'serving'
     template_name: str | None = None
     template_env: LiveEnv | None = None
+    envfrom_refs: tuple[str, ...] = ()  # envFrom ConfigMaps referenced by serving targets
+    envfrom_unresolved: tuple[str, ...] = ()  # referenced ConfigMaps whose data could not be read
 
 
 def _run_json(runner: Callable[..., Any], argv: list[str]) -> Any:
@@ -465,16 +565,18 @@ def read_cloud_run_service(
         service_doc = offline_services.get(service)
         if not isinstance(service_doc, Mapping):
             raise ValueError(f'Missing service {service!r} in offline Cloud Run state')
-        if isinstance(service_doc.get('env'), list) or not isinstance(service_doc.get('status'), Mapping):
+        if isinstance(service_doc.get('env'), list):
             # Env-only snapshot fixture (no traffic information): compare it as given.
-            if isinstance(service_doc.get('env'), list):
-                env = _env_list_to_live(service_doc['env'], scope=service)
-            else:
-                _, template_env = _template_env(service_doc, service=service)
-                if template_env is None:
-                    raise ValueError(f'Cloud Run service {service} has no containers list')
-                env = template_env
-            target = ServingTarget(name='snapshot', weight=100, key_count=len(env), fingerprint=env_fingerprint(env))
+            # Anything else — including a spec.template without status.traffic — is
+            # refused below by serving_revisions() instead of being misread as serving.
+            env = _env_list_to_live(service_doc['env'], scope=service)
+            target = ServingTarget(
+                name='snapshot',
+                weight=100,
+                key_count=len(env),
+                fingerprint=env_fingerprint(env),
+                display_fingerprint=env_fingerprint(env, redacted=True),
+            )
             return LiveService(targets=[(target, env)], source='snapshot')
     else:
         service_doc = _run_json(
@@ -516,7 +618,16 @@ def read_cloud_run_service(
             )
         env = _revision_env(revision_doc, revision=revision)
         live.targets.append(
-            (ServingTarget(name=revision, weight=percent, key_count=len(env), fingerprint=env_fingerprint(env)), env)
+            (
+                ServingTarget(
+                    name=revision,
+                    weight=percent,
+                    key_count=len(env),
+                    fingerprint=env_fingerprint(env),
+                    display_fingerprint=env_fingerprint(env, redacted=True),
+                ),
+                env,
+            )
         )
     return live
 
@@ -529,6 +640,7 @@ def read_gke_workload(
     offline_gke: Mapping[str, Any] | None = None,
     runner: Callable[..., Any] = subprocess.run,
     replicaset_cache: dict[str, Any] | None = None,
+    configmap_cache: dict[str, Any] | None = None,
 ) -> LiveService:
     """Env of every ReplicaSet of the Deployment that holds ready pods (what is actually serving)."""
     spec = GKE_WORKLOADS[workload]
@@ -540,6 +652,25 @@ def read_gke_workload(
             raise ValueError(f'Missing GKE workload {workload!r} in offline state')
         deployment = workload_doc.get('deployment') or {}
         replicasets = workload_doc.get('replicasets') or []
+        configmaps = workload_doc.get('configmaps')
+        if not isinstance(configmaps, Mapping):
+            shared = offline_gke.get('configmaps')
+            configmaps = shared if isinstance(shared, Mapping) else {}
+
+        def resolve_configmap(ref: str) -> Mapping[str, Any] | None:
+            # None marks an offline fixture that does not carry this ConfigMap's
+            # data; the workload reports INVENTORY rather than guessing.
+            doc = configmaps.get(ref)
+            if isinstance(doc, Mapping) and isinstance(doc.get('data'), Mapping):
+                return doc['data']
+            if (
+                isinstance(doc, Mapping)
+                and doc
+                and all(isinstance(k, str) and isinstance(v, str) for k, v in doc.items())
+            ):
+                return doc  # plain key -> value fixture
+            return None
+
     else:
         if not kube_context:
             raise ValueError('--kube-context is required for live GKE reads')
@@ -549,13 +680,37 @@ def read_gke_workload(
         if namespace not in cache:
             cache[namespace] = _run_json(runner, [*base, 'replicasets', '-o', 'json']).get('items', [])
         replicasets = cache[namespace]
+        cm_cache = configmap_cache if configmap_cache is not None else {}
+
+        def resolve_configmap(ref: str) -> Mapping[str, Any] | None:
+            # A live read that fails raises (fetch error); one that succeeds but has
+            # no data mapping resolves to an empty key set.
+            if ref not in cm_cache:
+                cm_doc = _run_json(runner, [*base, 'configmap', ref, '-o', 'json'])
+                cm_cache[ref] = cm_doc.get('data') if isinstance(cm_doc.get('data'), Mapping) else {}
+            return cm_cache[ref]
+
+    def envfrom_entries(container: Mapping[str, Any] | None) -> LiveEnv:
+        merged: LiveEnv = {}
+        for ref in _envfrom_config_map_refs(container):
+            data = resolve_configmap(ref)
+            if data is None:
+                continue
+            for key, digest in _config_map_data_keys(data).items():
+                merged.setdefault(key, digest)
+        return merged
 
     live = LiveService()
+    refs_seen: set[str] = set()
+    refs_unresolved: set[str] = set()
     template_spec = ((deployment.get('spec') or {}).get('template') or {}).get('spec') or {}
     if template_spec.get('containers') is not None:
         container = _application_container(template_spec['containers'], scope=deployment_name, name=spec.container)
         live.template_name = deployment_name
-        live.template_env = _env_list_to_live(container.get('env', []), scope=deployment_name)
+        template_env = _env_list_to_live(container.get('env', []), scope=deployment_name)
+        # envFrom keys join the template fingerprint too, so template vs serving
+        # stays comparable when both bulk-load the same ConfigMap.
+        live.template_env = {**envfrom_entries(container), **template_env}
     for rs in replicasets:
         if not isinstance(rs, Mapping):
             continue
@@ -569,14 +724,28 @@ def read_gke_workload(
         pod_spec = ((rs.get('spec') or {}).get('template') or {}).get('spec') or {}
         container = _application_container(pod_spec.get('containers'), scope=rs_name, name=spec.container)
         env_map = _env_list_to_live(container.get('env', []), scope=rs_name)
+        for ref in _envfrom_config_map_refs(container):
+            refs_seen.add(ref)
+            if resolve_configmap(ref) is None:
+                refs_unresolved.add(ref)
+        # Explicit env entries win over envFrom keys, matching pod runtime semantics.
+        env_map = {**envfrom_entries(container), **env_map}
         live.targets.append(
             (
-                ServingTarget(name=rs_name, weight=ready, key_count=len(env_map), fingerprint=env_fingerprint(env_map)),
+                ServingTarget(
+                    name=rs_name,
+                    weight=ready,
+                    key_count=len(env_map),
+                    fingerprint=env_fingerprint(env_map),
+                    display_fingerprint=env_fingerprint(env_map, redacted=True),
+                ),
                 env_map,
             )
         )
     if not live.targets:
         raise ValueError(f'Deployment {deployment_name} has no ReplicaSet with ready pods')
+    live.envfrom_refs = tuple(sorted(refs_seen))
+    live.envfrom_unresolved = tuple(sorted(refs_unresolved))
     live.targets.sort(key=lambda item: (-item[0].weight, item[0].name))
     return live
 
@@ -591,9 +760,26 @@ def compare_service(
     live: LiveService,
     allowed: frozenset[str],
     platform: str,
+    expected_envfrom_refs: tuple[str, ...] = (),
+    expected_envfrom_unresolved: tuple[str, ...] = (),
+    expected_envfrom_keys: frozenset[str] = frozenset(),
 ) -> ServiceEnvDrift:
     expected_env: ExpectedEnv = expected or {}
     declared = frozenset(expected_env)
+    envfrom_mismatched: tuple[str, ...] = ()
+    envfrom_unresolved: tuple[str, ...] = ()
+    unresolved_live_refs: set[str] = set()
+    if expected is not None:
+        mismatched = set(live.envfrom_refs) ^ set(expected_envfrom_refs)
+        envfrom_mismatched = tuple(sorted(mismatched))
+        envfrom_unresolved = tuple(
+            sorted((set(live.envfrom_unresolved) | set(expected_envfrom_unresolved)) - mismatched)
+        )
+        # If a live envFrom ConfigMap could not be read, its expected keys cannot be
+        # judged missing; excluding all envFrom keys (not just that ref's) is the
+        # conservative coarse grain — one shared ConfigMap per environment in practice.
+        unresolved_live_refs = set(live.envfrom_unresolved) & set(expected_envfrom_refs)
+    skip_missing = expected_envfrom_keys if unresolved_live_refs else frozenset()
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
@@ -601,7 +787,9 @@ def compare_service(
         live_only |= set(env_map) - declared
         if expected is None:
             continue
-        missing |= {key for key in declared if expected_env[key] is not None} - set(env_map)
+        # Key presence is checked even when the expected value is unknown (deploy-time
+        # binding): a None hash skips only the value comparison, never the key check.
+        missing |= declared - set(env_map) - skip_missing
         for key in sorted(declared & set(env_map)):
             want = expected_env[key]
             if want is not None and env_map[key] != want:
@@ -628,6 +816,9 @@ def compare_service(
         template_name=live.template_name,
         template_matches_serving=template_matches,
         expected_available=expected is not None,
+        envfrom_refs=expected_envfrom_refs if expected is not None else (),
+        envfrom_mismatched_refs=envfrom_mismatched,
+        envfrom_unresolved=envfrom_unresolved,
     )
 
 
@@ -732,20 +923,41 @@ def inspect_gke_drift(
     allowlist_map: Mapping[str, frozenset[str]] = LIVE_MANAGED_ENV_ALLOWLIST,
     runner: Any = subprocess.run,
     root: Path = ROOT,
+    manifest_path: Path = DEFAULT_MANIFEST,
 ) -> tuple[ServiceEnvDrift, ...]:
+    cm_name, cm_entries = manifest_config_map(env, manifest_path)
+    envfrom_expected = _expected_envfrom_entries(cm_entries) if cm_name else {}
     results: list[ServiceEnvDrift] = []
     replicaset_cache: dict[str, Any] = {}
+    configmap_cache: dict[str, Any] = {}
     for workload in workloads:
         if workload not in GKE_WORKLOADS:
             raise ValueError(f'Unknown GKE workload {workload!r}; known: {", ".join(GKE_WORKLOADS)}')
         expected: ExpectedEnv | None = None
+        expected_refs: tuple[str, ...] = ()
+        expected_unresolved: tuple[str, ...] = ()
+        expected_envfrom_keys: frozenset[str] = frozenset()
         try:
             if expected_overrides is not None and workload in expected_overrides:
-                expected = expected_overrides[workload]
+                expected = dict(expected_overrides[workload])
+                expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
             elif render == 'helm':
-                expected = expected_gke_env_from_helm(workload, env=env, root=root, runner=runner)
+                expected, expected_refs = expected_gke_env_from_helm(workload, env=env, root=root, runner=runner)
             else:
                 expected = expected_gke_env_from_values(workload, env=env, root=root)
+                expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
+            if expected is not None:
+                merged_keys: set[str] = set()
+                for ref in expected_refs:
+                    if ref == cm_name:
+                        for key, digest in envfrom_expected.items():
+                            expected.setdefault(key, digest)
+                            merged_keys.add(key)
+                    else:
+                        # The chart references a ConfigMap whose expected keys the
+                        # repository cannot enumerate; report inventory, not silence.
+                        expected_unresolved = (*expected_unresolved, ref)
+                expected_envfrom_keys = frozenset(merged_keys)
             live = read_gke_workload(
                 workload,
                 env=env,
@@ -753,6 +965,7 @@ def inspect_gke_drift(
                 offline_gke=gke_state,
                 runner=runner,
                 replicaset_cache=replicaset_cache,
+                configmap_cache=configmap_cache,
             )
             results.append(
                 compare_service(
@@ -761,6 +974,9 @@ def inspect_gke_drift(
                     live=live,
                     allowed=allowlist_for_service(workload, allowlist_map),
                     platform='gke',
+                    expected_envfrom_refs=expected_refs if expected is not None else (),
+                    expected_envfrom_unresolved=expected_unresolved,
+                    expected_envfrom_keys=expected_envfrom_keys,
                 )
             )
         except Exception as exc:
@@ -813,7 +1029,8 @@ def render_markdown_report(
             continue
         for target in item.serving:
             lines.append(
-                f'- Serving `{target.name}`: weight {target.weight}, {target.key_count} keys, env fingerprint `{target.fingerprint}`'
+                f'- Serving `{target.name}`: weight {target.weight}, {target.key_count} keys, '
+                f'env fingerprint `{target.display_fingerprint}`'
             )
         if item.template_matches_serving is False:
             lines.append(
@@ -823,6 +1040,15 @@ def render_markdown_report(
             lines.append(
                 '- Expected env unavailable in values mode (chart builds env in its template); use `--gke-render helm`.'
             )
+        if item.envfrom_unresolved:
+            refs_str = ', '.join(f'`{name}`' for name in item.envfrom_unresolved)
+            lines.append(f'- envFrom ConfigMap keys not compared (unresolved): {refs_str}')
+        if item.envfrom_mismatched_refs:
+            refs_str = ', '.join(f'`{name}`' for name in item.envfrom_mismatched_refs)
+            lines.append(f'- envFrom ConfigMap reference drift (live vs expected): {refs_str}')
+        elif item.envfrom_refs:
+            refs_str = ', '.join(f'`{name}`' for name in item.envfrom_refs)
+            lines.append(f'- envFrom ConfigMaps (expected and serving): {refs_str}')
         if item.value_unchecked_keys:
             lines.append(
                 f'- Keys compared by name only (deploy-time binding, no rendered state): {item.value_unchecked_keys}'
@@ -866,7 +1092,7 @@ def render_json_report(
                 'manifest_key_count': item.manifest_key_count,
                 'live_key_count': item.live_key_count,
                 'serving': [
-                    {'name': t.name, 'weight': t.weight, 'key_count': t.key_count, 'fingerprint': t.fingerprint}
+                    {'name': t.name, 'weight': t.weight, 'key_count': t.key_count, 'fingerprint': t.display_fingerprint}
                     for t in item.serving
                 ],
                 'template_name': item.template_name,
@@ -875,6 +1101,9 @@ def render_json_report(
                 'unallowlisted_live_only': list(item.unallowlisted_live_only),
                 'missing_from_live': list(item.missing_from_live),
                 'value_unchecked_keys': item.value_unchecked_keys,
+                'envfrom_refs': list(item.envfrom_refs),
+                'envfrom_mismatched_refs': list(item.envfrom_mismatched_refs),
+                'envfrom_unresolved': list(item.envfrom_unresolved),
                 'value_mismatches': [
                     {
                         'key': m.key,
@@ -895,10 +1124,12 @@ def render_json_report(
 def exit_code(results: Sequence[ServiceEnvDrift], *, strict: bool) -> int:
     if not strict:
         return 0
-    if any(item.has_drift for item in results):
-        return 1
+    # An incomplete comparison outranks drift found elsewhere: a train gate must not
+    # read a fetch/render failure as an ordinary, already-diagnosed drift case.
     if any(item.error for item in results):
         return 2
+    if any(item.has_drift for item in results):
+        return 1
     return 0
 
 
@@ -941,7 +1172,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help='Expected GKE env source: chart values env list, `helm template`, or helm when on PATH.',
     )
     parser.add_argument(
-        '--gke-state', type=Path, help='Offline GKE JSON fixture: {workload: {deployment, replicasets}}.'
+        '--gke-state',
+        type=Path,
+        help='Offline GKE JSON fixture: {workload: {deployment, replicasets}} plus optional '
+        'shared {"configmaps": {name: {"data": {...}}}} for envFrom resolution.',
     )
     parser.add_argument('--format', choices=('markdown', 'json'), default='markdown')
     parser.add_argument(
@@ -950,9 +1184,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         '--strict',
         action='store_true',
-        help='Exit 1 on drift (value mismatch, missing or unallowlisted key), 2 on fetch/render errors.',
+        help='Exit 1 on drift (value mismatch, missing or unallowlisted key), 2 on fetch/render errors '
+        '(2 wins when both: the comparison did not complete).',
     )
     args = parser.parse_args(argv)
+
+    if args.no_cloud_run and not (args.gke or args.gke_workloads):
+        parser.error('--no-cloud-run requires --gke or --gke-workload; otherwise there is nothing to check')
 
     allowlist_map = load_allowlist_file(args.allowlist_file) if args.allowlist_file else LIVE_MANAGED_ENV_ALLOWLIST
     offline_state = (
@@ -962,31 +1200,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     services = tuple(args.services or DEFAULT_SERVICES)
 
-    project, region, results = inspect_services_drift(
-        env=args.env,
-        services=() if args.no_cloud_run else services,
-        project=args.project,
-        region=args.region,
-        manifest_path=args.manifest,
-        rendered_state_path=args.rendered_state,
-        cloud_run_state=offline_state,
-        allowlist_map=allowlist_map,
-    )
-    if args.gke or args.gke_workloads:
-        render = args.gke_render
-        if render == 'auto':
-            render = 'helm' if shutil.which('helm') else 'values'
-        gke_state = (
-            cast(Mapping[str, Any], json.loads(args.gke_state.read_text(encoding='utf-8'))) if args.gke_state else None
-        )
-        results = results + inspect_gke_drift(
+    try:
+        project, region, results = inspect_services_drift(
             env=args.env,
-            workloads=tuple(args.gke_workloads or DEFAULT_GKE_WORKLOADS),
-            kube_context=args.kube_context,
-            render=render,
-            gke_state=gke_state,
+            services=() if args.no_cloud_run else services,
+            project=args.project,
+            region=args.region,
+            manifest_path=args.manifest,
+            rendered_state_path=args.rendered_state,
+            cloud_run_state=offline_state,
             allowlist_map=allowlist_map,
         )
+        if args.gke or args.gke_workloads:
+            render = args.gke_render
+            if render == 'auto':
+                render = 'helm' if shutil.which('helm') else 'values'
+            gke_state = (
+                cast(Mapping[str, Any], json.loads(args.gke_state.read_text(encoding='utf-8')))
+                if args.gke_state
+                else None
+            )
+            results = results + inspect_gke_drift(
+                env=args.env,
+                workloads=tuple(args.gke_workloads or DEFAULT_GKE_WORKLOADS),
+                kube_context=args.kube_context,
+                render=render,
+                gke_state=gke_state,
+                allowlist_map=allowlist_map,
+                manifest_path=args.manifest,
+            )
+    except Exception as exc:
+        # Expected-state render failures (unreadable/malformed manifest or rendered
+        # state) are operational errors, not drift: report and exit with the
+        # documented render-error status instead of a traceback and exit 1.
+        print(f'ERROR: could not render expected state: {exc}', file=sys.stderr)
+        return 2 if args.strict else 0
 
     markdown = render_markdown_report(env=args.env, project=project, region=region, results=results)
     if args.format == 'json':
