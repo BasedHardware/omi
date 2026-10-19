@@ -264,6 +264,15 @@ class TestSelection:
         primary = self.primary()
         assert dual_store.shadow_from_env(primary) is primary
 
+    def test_missing_driver_fails_closed(self, monkeypatch):
+        self.configure(monkeypatch)
+        real = dual_store.importlib.util.find_spec
+        monkeypatch.setattr(
+            dual_store.importlib.util, 'find_spec', lambda name, *a: None if name == 'psycopg' else real(name, *a)
+        )
+        primary = self.primary()
+        assert dual_store.shadow_from_env(primary) is primary
+
     def test_shadow_mode_wraps_without_dialing(self, monkeypatch):
         self.configure(monkeypatch)
         primary = self.primary()

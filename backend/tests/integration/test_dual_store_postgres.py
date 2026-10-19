@@ -23,11 +23,18 @@ pytestmark = pytest.mark.integration
 
 GOLDEN_DIR = Path(__file__).parent.parent / 'unit' / 'fixtures' / 'pipeline_sim_goldens'
 
-# Reads that diverge because a writer bypassed ``Store.run``. The purge model (production:
-# ``database/batch_pipeline_purge.purge_batch_owner``) deletes owner queues directly, so Postgres keeps a
-# copy Firestore no longer has. A known gap of a write-capture shadow, to be closed before cutover (A6/A7);
-# anything else is a mirror bug.
-KNOWN_BYPASS = {'deleted_merged_targets': {('queues', 'read', 'extra')}}
+# Reads that diverge because a writer bypassed ``Store.run``, so the write-capture shadow never saw it. Known
+# gaps to close before cutover (A6/A7); anything else is a mirror bug.
+# - purge (production ``database/batch_pipeline_purge.purge_batch_owner``) deletes owner queues and jobs
+#   directly: Postgres keeps a copy Firestore no longer has ('extra');
+# - the projection apply transaction (``database/batch_pipeline_projection.py``: ``client_status`` /
+#   ``client_result`` and E1's ``policy_parts`` pins on jobs) writes jobs in its own Firestore transaction
+#   ('mismatch').
+KNOWN_BYPASS = {
+    'deleted_merged_targets': {('queues', 'read', 'extra')},
+    'privacy_fence_midflight': {('jobs', 'read', 'extra')},
+    'duplicate_delivery': {('jobs', 'read', 'mismatch')},
+}
 
 
 @pytest.fixture(scope='module')

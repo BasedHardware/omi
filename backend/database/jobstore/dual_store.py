@@ -24,6 +24,7 @@ The ``batch_pipeline_prod`` namespace is refused until account deletion purges t
 from __future__ import annotations
 
 import contextvars
+import importlib.util
 import logging
 import os
 import queue
@@ -34,7 +35,7 @@ from typing import Any, Callable, TypeVar
 
 from prometheus_client import Counter
 
-from database.jobstore import codec
+import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
@@ -221,7 +222,8 @@ _SHADOWED_LOCK = threading.Lock()
 def shadow_from_env(primary: Any) -> Any:
     """``primary`` unchanged unless ``BATCH_JOBSTORE_MODE=shadow`` and the staging Postgres is configured.
 
-    Fails closed to Firestore-only: any other mode, the prod namespace, or a missing setting returns
+    Fails closed to Firestore-only: any other mode, the prod namespace, a missing setting, or an image
+    without the Postgres driver returns
     ``primary`` and logs why. One ``DualStore`` (one mirror thread, one pool) serves each namespace per
     process, so call sites that build a store per call share it. No Postgres connection is opened here
     (the pool dials lazily).
@@ -236,6 +238,9 @@ def shadow_from_env(primary: Any) -> Any:
     target = [os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')]
     if not all(target):
         logger.warning('event=jobstore_shadow outcome=refused reason=unconfigured')
+        return primary
+    if importlib.util.find_spec('psycopg') is None:  # an image without the driver would only count errors
+        logger.warning('event=jobstore_shadow outcome=refused reason=driver_missing')
         return primary
     with _SHADOWED_LOCK:
         if namespace in _SHADOWED:
