@@ -156,3 +156,29 @@ def test_server_reducer_refuses_reply_without_persisted_chat_or_exposure(store):
     item = ready(store, producer='conversation_mentor_v2')
     with pytest.raises(ProactivityDenied, match='chat_unconfirmed'):
         ledger.record_server_outcome(item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW)
+
+
+def test_mentor_reply_handles_iso_and_naive_delivered_at(store, monkeypatch):
+    item = ready(store, producer='conversation_mentor_v2')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    row['delivered_at'] = NOW.isoformat()
+    row['delivered'] = True
+    row['mentor_chat_message_id'] = 'msg-1'
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=5))
+    monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
+    mapping.record_mentor_reply('u', firestore_client=store)
+    assert row['acted_24h']
+
+
+def test_record_mentor_reply_and_task_completion_handle_missing_item_id(store, monkeypatch):
+    corrupt_query = SimpleNamespace(
+        stream=lambda: [
+            SimpleNamespace(to_dict=lambda: {'state': 'ready', 'delivered_at': NOW.isoformat()}),
+            SimpleNamespace(to_dict=lambda: {'state': 'ready', 'producer': 'commitment_followup'}),
+        ]
+    )
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW)
+    monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: corrupt_query)
+    monkeypatch.setattr(mapping, 'task_items_query', lambda *args: corrupt_query)
+    mapping.record_mentor_reply('u', firestore_client=store)
+    mapping.record_task_completion('u', 'task-1', firestore_client=store)
