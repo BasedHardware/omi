@@ -417,9 +417,9 @@ jobs:
           # leaving Helm's stored release ahead of the cluster, so the next chart upgrade
           # would silently reapply the bad revision.
           if [[ -n "$TARGET_REVISION" ]]; then
-            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m
+            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 50m
           else
-            helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m
+            helm -n "$NS" rollback "$RELEASE" --wait --timeout 50m
           fi
           AFTER="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           echo "Image after rollback: $AFTER"
