@@ -411,3 +411,64 @@ async def test_pipelined_maintenance_runs_off_lane_and_recovers_persisted_result
     await task
     assert store.rows['results', 'second']['previous_segment_id'] == 'first'
     assert lanes and not any(lanes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late', ['before_refund', 'after_refund'])
+async def test_stopped_waiting_lane_refunds_lease_lost_to_a_timed_out_heartbeat(monkeypatch, late):
+    """A timed-out renewal marks the lease lost while the token may still be ours.
+
+    SIGTERM must still hand it back (retry, attempt unchanged); a late renewal
+    landing before or after the refund must leave the job recoverable.
+    """
+    monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
+    monkeypatch.setattr(module, 'HEARTBEAT_TIMEOUT_SECONDS', 0.05)
+    release_chain = threading.Event()
+    worker = ExclusiveWorker()
+    process = worker.process_batch
+    worker.process_batch = lambda items: (release_chain.wait(5) and process(items))
+    store, queue, pump = pipelined(worker)
+    original = queue.heartbeat
+    late_started, release_late, late_result = threading.Event(), threading.Event(), []
+
+    def heartbeat(segment, token, now):
+        if segment != 'second':
+            return original(segment, token, now)
+        if not late_started.is_set():
+            late_started.set()
+            release_late.wait(5)  # outlives the renewal timeout, then lands
+            late_result.append(original(segment, token, time.time()))
+            return late_result[-1]
+        raise TimeoutError('synthetic renewal timeout')
+
+    monkeypatch.setattr(queue, 'heartbeat', heartbeat)
+    stop = asyncio.Event()
+    task = asyncio.create_task(pump.run(stop))
+    for _ in range(500):
+        if late_started.is_set() and store.rows['jobs', 'second']['state'] == 'leased':
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.1)  # the 0.05 s renewal wait has timed out: 'second' is lost
+    if late == 'before_refund':
+        release_late.set()
+        for _ in range(500):
+            if late_result:
+                break
+            await asyncio.sleep(0.01)
+        assert late_result == [True]  # the late beat extended the lease we still own
+    stop.set()
+    release_chain.set()
+    await task
+    second = store.rows['jobs', 'second']
+    assert second['state'] == 'retry' and second['attempt'] == 0 and second['token'] == ''
+    if late == 'after_refund':
+        release_late.set()
+        for _ in range(500):
+            if late_result:
+                break
+            await asyncio.sleep(0.01)
+        assert late_result == [False]  # fenced by the cleared token
+        assert store.rows['jobs', 'second']['state'] == 'retry'
+    assert worker.calls == 1 and store.rows['jobs', 'first']['state'] == 'committed'
+    assert queue.recover(store.rows['jobs', 'second']['available_at'] + 1) >= 1
+    assert store.rows['jobs', 'second']['state'] == 'ready'

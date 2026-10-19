@@ -24,6 +24,9 @@ from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
+# Bound on one lease-renewal round trip; a timeout marks the lease lost but the
+# blocking DB leaf may still land later, fenced by its token.
+HEARTBEAT_TIMEOUT_SECONDS = 8
 
 
 class Pump:
@@ -137,7 +140,7 @@ class Pump:
                         run_blocking(
                             db_executor, self.scheduler.heartbeat, lease.item.segment_id, lease.token, time.time()
                         ),
-                        timeout=8,
+                        timeout=HEARTBEAT_TIMEOUT_SECONDS,
                     )
                 except Exception:
                     # Ambiguous renewal cannot authorize publication. A late
@@ -241,10 +244,11 @@ class Pump:
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
                         # Claimed behind a sibling's chain when SIGTERM or a
                         # fatal GPU error arrived: refund without an attempt
-                        # charge rather than start another chain.
+                        # charge rather than start another chain. Leases marked
+                        # lost by a timed-out renewal are refunded too: the
+                        # token may still be ours, and defer is fenced by
+                        # owns_lease, so another owner's job is never touched.
                         for lease in leases:
-                            if lease.item.segment_id in lost:
-                                continue
                             try:
                                 await run_blocking(
                                     db_executor,
@@ -299,7 +303,7 @@ class Pump:
                     try:
                         current = await asyncio.wait_for(
                             run_blocking(db_executor, self.scheduler.heartbeat, segment, lease.token, time.time()),
-                            timeout=8,
+                            timeout=HEARTBEAT_TIMEOUT_SECONDS,
                         )
                     except Exception:
                         current = False
