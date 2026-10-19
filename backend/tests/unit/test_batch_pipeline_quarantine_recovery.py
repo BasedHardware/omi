@@ -657,7 +657,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     from utils.batch_pipeline.serving import Serving
     from unittest.mock import AsyncMock
 
-    _, store, _, _, stt, recovery = setup
+    _, store, binding, _, stt, recovery = setup
     service = Serving(store, recovery=recovery)
     service.reconcile_async = AsyncMock()
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
@@ -669,7 +669,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
     assert stt.call_count == 1
-    service.reconcile_async.assert_awaited_once_with()
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
 
 
 @pytest.mark.parametrize('delivery_wins', [False, True])

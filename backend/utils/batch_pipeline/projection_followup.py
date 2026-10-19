@@ -53,7 +53,15 @@ class ProjectionFollowups:
                 candidates.append(sid)
         return candidates
 
-    async def schedule(self):
+    async def schedule(self, priority=()):
+        if priority:
+            # A targeted owner-chain wake goes ahead of discovered rows. Slots,
+            # segment claims and receipt fences are unchanged; discovery resumes
+            # once the queue drains.
+            first = [segment for segment in dict.fromkeys(priority) if segment not in self.tasks]
+            self.pending = deque(first + [segment for segment in self.pending if segment not in first])
+            self.launch()
+            return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
         if self.pending:
