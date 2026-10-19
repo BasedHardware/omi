@@ -230,13 +230,21 @@ export function TaskHub() {
     [bulkSetDueDate],
   );
 
-  // Handle bulk toggle complete
+  // Handle bulk toggle complete (Enter): complete the selection's pending tasks, or
+  // reopen the selection when every selected task is already done. Completing a done
+  // task again would only reset its completion time.
   const handleBulkToggleComplete = useCallback(
     async (ids: string[]) => {
-      await bulkComplete(ids);
+      const selected = items.filter((i) => ids.includes(i.id));
+      const pendingIds = selected.filter((i) => !i.completed).map((i) => i.id);
+      if (pendingIds.length > 0) {
+        await bulkComplete(pendingIds);
+      } else {
+        await Promise.all(selected.map((i) => toggleComplete(i.id, false)));
+      }
       clearSelection();
     },
-    [bulkComplete, clearSelection],
+    [items, bulkComplete, toggleComplete, clearSelection],
   );
 
   // Handle bulk delete via keyboard
