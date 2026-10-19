@@ -95,11 +95,12 @@ class FrameTimer:
 
 
 def record_vad_windows(windows: int, seconds: float) -> None:
-    if windows <= 0:
-        return
     try:
-        VAD_WINDOWS_TOTAL.inc(windows)
-        VAD_INFERENCE_SECONDS_TOTAL.inc(seconds)
+        # Seconds count even when the call only converted and buffered (no full window yet).
+        if seconds > 0:
+            VAD_INFERENCE_SECONDS_TOTAL.inc(seconds)
+        if windows > 0:
+            VAD_WINDOWS_TOTAL.inc(windows)
     except Exception:
         pass
 

@@ -107,8 +107,12 @@ def test_frame_timer_disabled_is_noop(monkeypatch):
 
 def test_record_vad_windows_counts_windows_and_seconds():
     windows, seconds = _windows(), _sample(VAD_INFERENCE_SECONDS_TOTAL, '_total')
-    record_vad_windows(0, 1.0)
+    record_vad_windows(0, 1.0)  # buffering-only call: time counts, no window
     assert _windows() == windows
+    assert _sample(VAD_INFERENCE_SECONDS_TOTAL, '_total') == pytest.approx(seconds + 1.0)
+    seconds = _sample(VAD_INFERENCE_SECONDS_TOTAL, '_total')
+    record_vad_windows(0, 0.0)
+    assert _sample(VAD_INFERENCE_SECONDS_TOTAL, '_total') == seconds
     record_vad_windows(3, 0.002)
     assert _windows() == windows + 3
     assert _sample(VAD_INFERENCE_SECONDS_TOTAL, '_total') == pytest.approx(seconds + 0.002)
