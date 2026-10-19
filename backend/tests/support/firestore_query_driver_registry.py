@@ -1651,8 +1651,9 @@ def _memory_window_bookmark(client, combo, trial):
 _add(
     DriverEntry(
         'database.memories._stream_memory_list_index_window',
-        base={'memories_ref': ref_collection(f'users/{UID}/memories'), 'uid': UID},
+        base={'memories_ref': ref_collection(f'users/{UID}/memories')},
         domains={
+            'uid': [None, UID],
             'order_field': ['updated_at', 'created_at'],
             'cursor': [None, '', 'invalid', 'valid'],
             'full_documents': [False, True],
