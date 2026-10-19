@@ -669,11 +669,12 @@ export function ConversationSplitView() {
         await Promise.all([refreshFolders(), refresh()]);
       } catch (error) {
         console.error('Failed to move conversations:', error);
+        showToast('Failed to move conversations. Please try again.', 'error');
       } finally {
         setMovingToFolderId(null);
       }
     },
-    [selectedIds, refreshFolders, refresh],
+    [selectedIds, refreshFolders, refresh, showToast],
   );
 
   return (
