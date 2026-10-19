@@ -11082,6 +11082,32 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
 
   @override
+  String get captureBannerTryReconnect => 'Coba sambungkan kembali';
+
+  @override
+  String get captureBannerRetrySync => 'Coba sinkronkan lagi';
+
+  @override
+  String get captureBannerWhatsWrong => 'Ada apa?';
+
+  @override
+  String get captureBannerDismiss => 'Tutup';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'Tautan audio terputus — transkripsi berlanjut saat pulih';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikasi tidak lagi bisa menerima audio dari perangkat Omi dan tidak dapat memulihkan koneksi secara otomatis. Putuskan lalu sambungkan kembali perangkat — dari pengaturan perangkat, atau dengan mematikan lalu menyalakannya. Audio yang tersimpan di perangkat akan disinkronkan nanti.';
+
+  @override
   String get captureStillRecording => 'Masih merekam';
 
   @override

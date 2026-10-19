@@ -11078,6 +11078,32 @@ class AppLocalizationsCs extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
 
   @override
+  String get captureBannerTryReconnect => 'Zkusit znovu připojit';
+
+  @override
+  String get captureBannerRetrySync => 'Zopakovat synchronizaci';
+
+  @override
+  String get captureBannerWhatsWrong => 'Co se děje?';
+
+  @override
+  String get captureBannerDismiss => 'Skrýt';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth spojení s vaším zařízením Omi se zaseklo, takže zvuk se do aplikace nedostává. Omi na zařízení dál nahrává a po obnovení spojení se synchronizuje. Opakování pokusu spojení znovu naváže; pokud to dál nefunguje, zkontrolujte zařízení v Nastavení > Zařízení.';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'Zvukové spojení se zastavilo — přepis pokračuje po jeho obnovení';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Zvuk se do aplikace nedostává — znovu připojte Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikace už nedokáže přijímat zvuk ze zařízení Omi a nepodařilo se jí spojení automaticky obnovit. Odpojte a znovu připojte zařízení — v nastavení zařízení nebo jeho vypnutím a zapnutím. Zvuk uložený v zařízení se synchronizuje později.';
+
+  @override
   String get captureStillRecording => 'Stále se nahrává';
 
   @override
