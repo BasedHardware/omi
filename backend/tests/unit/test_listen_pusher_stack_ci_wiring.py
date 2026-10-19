@@ -182,8 +182,8 @@ def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
 def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
 
-    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
-    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
+    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 2
+    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 2
     assert 'sudo apt-get install --yes redis-server' not in workflow
 
 
