@@ -102,7 +102,7 @@ class _Loaded:
 
 
 def _submit_read(fn: Callable[[], None]) -> Future:
-    return executors.get_rollout_executor().submit(contextvars.copy_context().run, fn)
+    return executors.get_rollout_executor().submit(contextvars.Context().run, fn)  # never inherit request context
 
 
 _background_submitter: Callable[[Callable[[], None]], Any] | None = _submit_read

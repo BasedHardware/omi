@@ -1,6 +1,7 @@
 """Contract (f): `_ramp` runtime percents, LKG fail-safe, CAS writes and behaviour-neutral wiring."""
 
 import asyncio
+import contextvars
 import math
 from pathlib import Path
 
@@ -229,3 +230,11 @@ def test_writer_refuses_invalid_changes(change):
 def test_composition_root_binds_runtime_percent():
     text = (Path(__file__).parents[2] / 'utils/rollout_cohorts.py').read_text()
     assert 'configure_runtime_percent()' in text
+
+
+def test_shared_read_never_inherits_request_context():
+    request_uid = contextvars.ContextVar('request_uid', default=None)
+    request_uid.set('synthetic-owner')
+    seen = []
+    rp._submit_read(lambda: seen.append(request_uid.get())).result(timeout=5)
+    assert seen == [None]
