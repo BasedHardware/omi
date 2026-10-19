@@ -6663,20 +6663,57 @@ class ChatProvider: ObservableObject {
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
       await ensureBridgeStarted()
     else { return }
+    let session: AgentSurfaceSession
     do {
-      let session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
-      guard session.profile.adapterId != adapterId else { return }
-      let migrated = try await resolvedAgentClient().migrateSessionExecutionProfile(
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("ChatProvider: cleared main chat could not resolve its session", error: error)
+      return
+    }
+    let client = resolvedAgentClient()
+    let modelProfile =
+      modelOverride ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode)
+    let workingDirectory = effectiveAgentWorkingDirectory()
+    let outcome = await Self.moveSessionToSelectedProvider(
+      pinnedAdapterId: session.profile.adapterId,
+      selectedAdapterId: adapterId
+    ) {
+      try await client.migrateSessionExecutionProfile(
         sessionId: session.sessionId,
         expectedProfileGeneration: session.profile.profileGeneration,
         adapterId: adapterId,
-        modelProfile: modelOverride
-          ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode),
-        workingDirectory: effectiveAgentWorkingDirectory()
-      )
-      log("ChatProvider: cleared main chat moved from \(session.profile.adapterId) to \(migrated.profile.adapterId)")
-    } catch {
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      ).profile.adapterId
+    }
+    switch outcome {
+    case .unchanged:
+      break
+    case .moved(let from, let to):
+      log("ChatProvider: cleared main chat moved from \(from) to \(to)")
+    case .refused(let error):
       logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
+  }
+
+  enum ClearedChatProviderMove {
+    case unchanged
+    case moved(from: String, to: String)
+    case refused(Error)
+  }
+
+  /// The decision behind Clear Chat's provider move: no call when the chat is already on the
+  /// selected adapter; otherwise migrate, and a refused migration leaves the pinned provider.
+  static func moveSessionToSelectedProvider(
+    pinnedAdapterId: String,
+    selectedAdapterId: String,
+    migrate: () async throws -> String
+  ) async -> ClearedChatProviderMove {
+    guard pinnedAdapterId != selectedAdapterId else { return .unchanged }
+    do {
+      return .moved(from: pinnedAdapterId, to: try await migrate())
+    } catch {
+      return .refused(error)
     }
   }
 
