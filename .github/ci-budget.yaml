@@ -960,14 +960,14 @@
     "gcp_app.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_class": "estimated-non-pr-push-day",
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Keep the 5-minute p50; estimate one path-matched main/development push run per day as a non-PR deployment.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1224,42 +1224,6 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Planning budget increased from 5 to 7 minutes for canary-first import/readback and live-STT coverage; the trigger now spans both resilience.json and the GMP frontend overlay; no PR execution and no new runner.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_daily_memory_sweep_job.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_daily_memory_sweep_job_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1714,265 +1678,6 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/admit": {
-      "budget_p50_minutes": 5,
-      "display_name": "Admit exact proven main source",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/build": {
-      "budget_p50_minutes": 5,
-      "display_name": "Build immutable isolated QA images",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "Deploy gates-closed isolated QA resources",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/execute": {
-      "budget_p50_minutes": 5,
-      "display_name": "Execute explicit drain after durable-proof admission",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "inputs.run_once == true",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "provision",
-        "deploy",
-        "verify"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/provision": {
-      "budget_p50_minutes": 5,
-      "display_name": "Provision only named development QA dependencies",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/verify": {
-      "budget_p50_minutes": 5,
-      "display_name": "Verify exact QA resources and readiness candidate",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_manual_operator.yml/operate": {
-      "budget_p50_minutes": 15,
-      "display_name": "Run isolated JIT QA operator",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ github.ref == 'refs/heads/main' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Manual-only unsampled placeholder, not a measured p50: retain 5 minutes for setup and reserve 10 for the oracle's default 540-second query budget plus live inventory reads; PR frequency and global caps unchanged",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/admit": {
-      "budget_p50_minutes": 5,
-      "display_name": "Admit exact proven main source",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/bootstrap": {
-      "budget_p50_minutes": 5,
-      "display_name": "Bootstrap an intentionally unready Typesense service",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ inputs.mode == 'bootstrap' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/build": {
-      "budget_p50_minutes": 5,
-      "display_name": "Build immutable Typesense and projection runner images",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "Deploy one bounded ephemeral Typesense service",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/provision": {
-      "budget_p50_minutes": 5,
-      "display_name": "Verify named QA Firestore and provision dedicated key metadata",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/rehydrate": {
-      "budget_p50_minutes": 5,
-      "display_name": "Rehydrate and prove real current-ledger keyword retrieval",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ inputs.mode == 'prove' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2954,7 +2659,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3005,7 +2710,6 @@
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
             "scripts/pre-push-singleflight",
-            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
             "scripts/voice-provider-probe.sh"
           ]
         },
@@ -3061,7 +2765,6 @@
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
             "scripts/pre-push-singleflight",
-            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
             "scripts/voice-provider-probe.sh"
           ]
         },
@@ -3693,8 +3396,31 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
+      "rationale": "The app follows the frontend's main/development auto-deploy pattern for app, shared-package, and public-build configuration changes. The no-traffic candidate, browser smoke, and automatic rollback pipeline addresses the 2026-09-29 rejected-production-deploy concern; expect one path-matched main/development push run per day, outside the PR run budget.",
       "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/app/**",
+            "web/packages/note-shared/**",
+            "config/public-build-*.json",
+            ".dockerignore",
+            ".github/workflows/gcp_app.yml",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/check_public_build_contract.py",
+            ".github/scripts/smoke_public_build_browser.py",
+            ".github/scripts/public_build_acceptance_route.py",
+            "backend/scripts/wait_cloud_run_candidate_readiness.py",
+            "backend/scripts/resolve_cloud_run_tagged_url.py"
+          ]
+        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -4037,55 +3763,6 @@
               "type": "choice"
             }
           }
-        }
-      }
-    },
-    "gcp_daily_memory_sweep_job.yml": {
-      "name": "Deploy Daily Memory Sweep Job to Cloud RUN",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "environment": {
-              "default": "development",
-              "description": "Select the environment to deploy to",
-              "options": [
-                "development",
-                "prod"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "release_sha": {
-              "description": "Exact merged-main SHA with a successful Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "release_version": {
-              "default": "",
-              "description": "Release version (optional)",
-              "required": "false"
-            }
-          }
-        }
-      }
-    },
-    "gcp_daily_memory_sweep_job_auto_dev.yml": {
-      "name": "Auto Deploy Daily Memory Sweep Job to Development",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_run": {
-          "branches": [
-            "main"
-          ],
-          "types": [
-            "completed"
-          ],
-          "workflows": [
-            "Release Eligibility"
-          ]
         }
       }
     },
@@ -4773,145 +4450,6 @@
               ],
               "required": "true",
               "type": "choice"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_cloud_run.yml": {
-      "name": "JIT isolated QA Cloud Run plane",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "confirmation": {
-              "default": "",
-              "description": "Type RUN_ONCE to admit the drain execution",
-              "required": "false",
-              "type": "string"
-            },
-            "release_sha": {
-              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "run_once": {
-              "default": "false",
-              "description": "Run the bounded ledger drain after deployment",
-              "required": "true",
-              "type": "boolean"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_manual_operator.yml": {
-      "name": "Operate isolated JIT QA data plane",
-      "owner": "CI maintainers",
-      "rationale": "Add a read-only index-oracle choice to the existing manual dispatch; no new events, jobs, or automatic runs",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "confirmation": {
-              "description": "Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, SWEEP_REPAIR_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations",
-              "required": "false",
-              "type": "string"
-            },
-            "invocation_id": {
-              "default": "",
-              "description": "Tombstoned daily-sweep model invocation id to repair (sweep-repair only)",
-              "required": "false",
-              "type": "string"
-            },
-            "operation": {
-              "description": "Named QA operation to run",
-              "options": [
-                "bootstrap",
-                "ensure-infrastructure-api",
-                "indexes-plan",
-                "indexes-apply",
-                "index-oracle",
-                "prepare",
-                "inspect",
-                "drain-verify",
-                "sweep-verify",
-                "sweep-repair",
-                "rollback",
-                "rollforward"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "repair_attestation_confirmation": {
-              "default": "",
-              "description": "Optional human assertion ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED; never infer from absent accounting",
-              "required": "false",
-              "type": "string"
-            },
-            "repair_attestation_reference": {
-              "default": "",
-              "description": "Content-free reference to independently reviewed claim evidence (required with repair attestation)",
-              "required": "false",
-              "type": "string"
-            },
-            "resume_execution": {
-              "default": "",
-              "description": "Existing first drain execution to resume after a bounded launcher timeout",
-              "required": "false",
-              "type": "string"
-            },
-            "run_id": {
-              "description": "Lowercase synthetic fixture namespace (for example qa-proof-20260905)",
-              "required": "false",
-              "type": "string"
-            },
-            "source_sha": {
-              "description": "Immutable deployed QA source SHA with first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_typesense_projection.yml": {
-      "name": "JIT QA Typesense lexical projection",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "mode": {
-              "default": "prove",
-              "description": "Bootstrap an intentionally unready service, or rehydrate and prove current-ledger retrieval",
-              "options": [
-                "bootstrap",
-                "prove"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "query": {
-              "description": "A real lexical term present in an active QA ledger row; never use a fabricated response",
-              "required": "false",
-              "type": "string"
-            },
-            "release_sha": {
-              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "run_id": {
-              "description": "Lowercase namespaced projection run identifier",
-              "required": "true",
-              "type": "string"
-            },
-            "typesense_base_image": {
-              "default": "docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455",
-              "description": "Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)",
-              "required": "true",
-              "type": "string"
             }
           }
         }

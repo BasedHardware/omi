@@ -399,6 +399,7 @@ SCHEMA_GROUPS = {
             'FcmTokenResponse',
             'DeleteKnowledgeGraphResponse',
             'KnowledgeGraphResponse',
+            'CanonicalKnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
             'StatusResponse',
@@ -578,9 +579,6 @@ SCHEMA_GROUPS = {
         'schemas': (
             'Evidence',
             'MemoryCaptureContext',
-            'MemoryUseAction',
-            'MemoryUseRequest',
-            'MemoryUseResponse',
             'MemoryDB',
             'MemoryEditResponse',
             'MemoryRevertRequest',

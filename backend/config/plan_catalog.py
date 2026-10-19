@@ -253,6 +253,7 @@ def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> di
             'entitlement_version': version,
             'policy': deepcopy(get_plan_definition(plan)),
             'budget': None,
+            'capabilities': deepcopy(ENTITLEMENT_VERSIONS[version]['capabilities'][plan.value]),
         }
     if version != 'ladder_v1':
         raise ValueError(f'Unknown entitlement version: {version}')
@@ -265,6 +266,7 @@ def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> di
         'budget': deepcopy(ladder['monthly_budgets'][plan.value]),
         'rate_card_version': ladder['rate_card_version'],
         'unit_usd_micros': ladder['unit_usd_micros'],
+        'capabilities': deepcopy(ladder['capabilities'][plan.value]),
     }
 
 

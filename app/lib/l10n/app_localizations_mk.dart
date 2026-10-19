@@ -1997,12 +1997,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
-  String get memoryAllowUse => 'Дозволи употреба';
-
-  @override
-  String get memoryDontUse => 'Не користи';
-
-  @override
   String get undo => 'Врати';
 
   @override
@@ -9372,9 +9366,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ уште $count';
-  }
+  String get quoteShowSources => 'Прикажи извори';
 
   @override
   String get jumpToLatestMessage => 'Оди до последната порака';
@@ -11127,7 +11119,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get openCall => 'Отвори го повикот';
 
   @override
-  String get captureRecoveryBanner => 'Omi не испраќа звук — допрете за повторно поврзување';
+  String get captureRecoveryBannerTitle => 'Omi не испраќа звук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11138,6 +11130,23 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудиото е зачувано, транскрипција подоцна';
+
+  @override
+  String get captureBannerTryReconnect => 'Обиди се да поврзеш повторно';
+
+  @override
+  String get captureBannerRetrySync => 'Повтори ја синхронизацијата';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Аудиото не стига до апликацијата — повторно поврзете го Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Апликацијата повеќе не може да прима аудио од уредот Omi и не успеа автоматски да ја обнови врската. Исклучете и повторно поврзете го уредот — од поставките за уред или со гаснење и палење. Аудиото зачувано на уредот ќе се синхронизира подоцна.';
 
   @override
   String get captureStillRecording => 'Снимањето продолжува';
@@ -13230,6 +13239,19 @@ class AppLocalizationsMk extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Поврзете го вашиот Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Спарете го вашиот Omi и тој ќе ги снима вашите разговори без раце, цел ден.';
+
+  @override
+  String get firstCaptureConnect => 'Поврзи го мојот Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Сè уште немам Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13336,6 +13358,112 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Никогаш повеќе не пропуштајте ниту збор.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Еве како функционира вашиот бесплатен пробен период.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Неограничени резимеа, зачувани засекогаш';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Секој разговор станува чисто резиме со следни чекори, за ништо да не се пропушти.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Најдобра транскрипција во класата';
+
+  @override
+  String get paywallTrialChipDetails => 'Фаќа повеќе детали';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Разликува говорници';
+
+  @override
+  String get paywallTrialChipNoise => 'Работи во бучни простории';
+
+  @override
+  String get paywallTrialChipAccents => 'Се справува со акценти';
+
+  @override
+  String get paywallTrialChipJargon => 'Ги знае вашиот жаргон и имиња';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Имиња на говорници, автоматски детектирани';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Неограничени прашања, низ секој разговор';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Напишете follow-up е-пошта од овој состанок.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Има ли конфликти со она што Џон го кажа во вторник?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Најдете сè што може да нè забави.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Работи со вашите омилени апликации';
+
+  @override
+  String get paywallTrialTodayTitle => 'Денес';
+
+  @override
+  String get paywallTrialTodayBody => 'Сè во Pro е отклучено.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days дена бесплатно';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days дена Omi Pro, од нас.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'За $days дена';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Пробниот период завршува. Ќе ви биде наплатено освен ако не откажете.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Најновите AI модели';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Неограничен Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Се наплаќа месечно';
+
+  @override
+  String get paywallTrialBilledYearly => 'Се наплаќа годишно';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Заштедете $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Започнете за $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Продолжете со бесплатниот план';
+
+  @override
+  String get paywallTrialCancelNote => 'Откажете во секое време. Без надоместоци, без казни.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Вашиот $days-дневен бесплатен пробен период на Omi Pro започна.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Откажете во секое време.';
@@ -13606,7 +13734,30 @@ class AppLocalizationsMk extends AppLocalizations {
   String get activityRetryAll => 'Обиди ги сите повторно';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Складиштето не може да се провери';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Снимките се паузирани';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Преносот е запрен';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Чекаат $count снимки',
+      one: 'Чека 1 снимка',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
+
+  @override
+  String get activityAttentionSemantics => 'Активност, бара внимание';
 
   @override
   String get connectAgentHeadline => 'Користете ја вашата Omi меморија во ChatGPT и вашите AI агенти';
@@ -14292,4 +14443,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Зачувано $saved од $total аудио';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi продолжува да снима';
 }

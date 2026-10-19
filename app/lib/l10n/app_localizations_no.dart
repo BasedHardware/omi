@@ -1988,12 +1988,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get memoryHistory => 'Historikk';
 
   @override
-  String get memoryAllowUse => 'Tillat bruk';
-
-  @override
-  String get memoryDontUse => 'Ikke bruk';
-
-  @override
   String get undo => 'Angre';
 
   @override
@@ -9325,9 +9319,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count til';
-  }
+  String get quoteShowSources => 'Vis kilder';
 
   @override
   String get jumpToLatestMessage => 'Gå til nyeste melding';
@@ -11072,7 +11064,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
-  String get captureRecoveryBanner => 'Omi sender ikke lyd — trykk for å koble til igjen';
+  String get captureRecoveryBannerTitle => 'Omi sender ikke lyd';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11083,6 +11075,23 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
+
+  @override
+  String get captureBannerTryReconnect => 'Prøv å koble til på nytt';
+
+  @override
+  String get captureBannerRetrySync => 'Prøv synkronisering igjen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Lyden når ikke appen — koble til Omi-enheten din på nytt';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Appen kan ikke lenger motta lyd fra Omi-enheten og klarte ikke å gjenopprette forbindelsen automatisk. Koble fra og til igjen enheten — fra enhetsinnstillingene eller ved å slå den av og på. Lyd som er lagret på enheten, synkroniseres senere.';
 
   @override
   String get captureStillRecording => 'Tar fortsatt opp';
@@ -13170,6 +13179,18 @@ class AppLocalizationsNo extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Koble til din Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Par Omi-en din, så tar den opp samtalene dine håndfritt, hele dagen.';
+
+  @override
+  String get firstCaptureConnect => 'Koble til min Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Jeg har ingen Omi ennå';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13276,6 +13297,112 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Gå aldri glipp av et ord igjen.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Slik fungerer din gratis prøveperiode.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Ubegrenset med sammendrag, lagret for alltid';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Hver samtale blir et oversiktlig sammendrag med neste steg, slik at ingenting glipper.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Førsteklasses transkripsjon';
+
+  @override
+  String get paywallTrialChipDetails => 'Fanger opp flere detaljer';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Skiller mellom talere';
+
+  @override
+  String get paywallTrialChipNoise => 'Fungerer i støyende rom';
+
+  @override
+  String get paywallTrialChipAccents => 'Håndterer aksenter';
+
+  @override
+  String get paywallTrialChipJargon => 'Kjenner din sjargong og navn';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Talernavn, automatisk gjenkjent';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Ubegrenset med spørsmål, på tvers av alle samtaler';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Utkast til oppfølgings-e-post fra dette møtet.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Noen konflikter med det John sa på tirsdag?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Finn alt som kan bremse oss.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Fungerer med dine favorittapper';
+
+  @override
+  String get paywallTrialTodayTitle => 'I dag';
+
+  @override
+  String get paywallTrialTodayBody => 'Alt i Pro er låst opp.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dager gratis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dager med Omi Pro, fra oss.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Om $days dager';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Prøveperioden avsluttes. Du blir belastet med mindre du avbestiller.';
+
+  @override
+  String get paywallTrialFeatureModels => 'De nyeste AI-modellene';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Ubegrenset Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Faktureres månedlig';
+
+  @override
+  String get paywallTrialBilledYearly => 'Faktureres årlig';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Spar $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Start for $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Fortsett med gratisplanen';
+
+  @override
+  String get paywallTrialCancelNote => 'Avbryt når som helst. Ingen gebyrer, ingen straff.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Din $days-dagers gratis prøveperiode av Omi Pro har startet.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Avbryt når som helst.';
@@ -13547,7 +13674,30 @@ class AppLocalizationsNo extends AppLocalizations {
   String get activityRetryAll => 'Prøv alle på nytt';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Opptak satt på pause';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Opplastingen har stoppet';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak venter',
+      one: '1 opptak venter',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitet, krever oppmerksomhet';
 
   @override
   String get connectAgentHeadline => 'Bruk Omi-minnet ditt i ChatGPT og AI-agentene dine';
@@ -14232,4 +14382,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved av $total lyd lagret';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi tar fortsatt opp';
 }

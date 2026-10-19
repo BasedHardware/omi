@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed: on the day after a daylight-saving change, asking Omi what you did yesterday no longer pulls in the last hour of the day before or misses yesterday's first hour."
+  ]
+}

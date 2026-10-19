@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from uuid import uuid4
 
-from config.batch_pipeline import terminal_empty_disposition_enabled, recovery_enabled_for
+from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkResult
@@ -79,12 +79,15 @@ class TerminalEmptyStore:
         )
 
     def prepare(self, sid, uid, plan, snapshot, outcome, historical_attestation, now):
-        if not terminal_empty_disposition_enabled() or not recovery_enabled_for(uid):
-            raise ProjectionBlocked('terminal disposition disabled')
+        candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
+            observations.clear()
             job, binding = self.checked(tx, sid)
+            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            if not policy.terminal_empty_disposition or not policy.recovery_enabled:
+                raise ProjectionBlocked('terminal disposition disabled')
             existing = tx.get('results', sid)
             marker = job.get('terminal_disposition') or {}
             if (
@@ -128,10 +131,13 @@ class TerminalEmptyStore:
             tx.put('jobs', sid, job)
             return job
 
-        return self.store.run(commit)
+        result = self.store.run(commit)
+        record_policy_observations(observations)
+        return result
 
     def complete(self, sid, token, plan, uri, now):
-        if not terminal_empty_disposition_enabled():
+        _, policy = load_stage_policy(self.store, sid, 'recovery')
+        if policy is None or not policy.terminal_empty_disposition:
             return False
 
         def commit(tx):
@@ -139,7 +145,7 @@ class TerminalEmptyStore:
             existing = tx.get('results', sid)
             marker = job.get('terminal_disposition') or {}
             if (
-                not recovery_enabled_for(binding.owner_id)
+                not policy.recovery_enabled
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan
                 or marker.get('privacy_generation') != binding.privacy_generation

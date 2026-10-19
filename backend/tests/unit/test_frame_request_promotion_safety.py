@@ -7,7 +7,6 @@ from PIL import Image
 
 from models.frame_request import FrameRequest, FrameRequestCleanupState, FrameRequestPromotion, FrameRequestState
 from routers import frame_requests
-from utils.jit_rollout import JITDecisionStage, TriState
 from utils.retrieval import frame_request_authority
 
 
@@ -197,49 +196,6 @@ async def test_upload_rechecks_authority_after_canonicalization_before_gcs(monke
 
     assert error.value.status_code == 503
     assert authority_checks == [
-        (False, {"mutation": True}),
-        (True, {"mutation": True}),
+        (False, {}),
+        (True, {}),
     ]
-
-
-@pytest.mark.asyncio
-async def test_frame_authority_reuses_shared_rollout_and_generation_fence(monkeypatch):
-    calls = []
-
-    async def resolve(uid, *, stage, force_refresh):
-        calls.append((uid, stage, force_refresh))
-        return type("Rollout", (), {"permits_work": True, "kill_switch": TriState.DISABLED})()
-
-    async def run_blocking(_executor, function, uid):
-        assert function is frame_request_authority._account_generation
-        assert uid == "user-1"
-        return 9
-
-    monkeypatch.setattr(frame_request_authority, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(frame_request_authority, "run_blocking", run_blocking)
-
-    enabled = await frame_request_authority.resolve_frame_request_authority(
-        "user-1", stage=JITDecisionStage.PAID_BOUNDARY, force_refresh=True
-    )
-
-    assert enabled.enabled is True and enabled.account_generation == 9
-    assert calls == [("user-1", JITDecisionStage.PAID_BOUNDARY, True)]
-
-
-@pytest.mark.asyncio
-async def test_frame_authority_fails_closed_before_generation_read(monkeypatch):
-    async def resolve(*_args, **_kwargs):
-        return type("Rollout", (), {"permits_work": False, "kill_switch": TriState.ENABLED})()
-
-    monkeypatch.setattr(frame_request_authority, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(
-        frame_request_authority,
-        "run_blocking",
-        lambda *_args, **_kwargs: pytest.fail("disabled rollout must not read account generation"),
-    )
-
-    killed = await frame_request_authority.resolve_frame_request_authority(
-        "user-1", stage=JITDecisionStage.INGRESS, force_refresh=True
-    )
-
-    assert killed.enabled is False and killed.kill_switch is True

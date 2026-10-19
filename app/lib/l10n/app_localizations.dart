@@ -3867,18 +3867,6 @@ abstract class AppLocalizations {
   /// **'History'**
   String get memoryHistory;
 
-  /// Button that clears suppression so this memory may be used
-  ///
-  /// In en, this message translates to:
-  /// **'Allow Use'**
-  String get memoryAllowUse;
-
-  /// Button that suppresses this memory from future use
-  ///
-  /// In en, this message translates to:
-  /// **'Don\'t Use'**
-  String get memoryDontUse;
-
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -17385,11 +17373,11 @@ abstract class AppLocalizations {
   /// **'Jump to {duration}'**
   String quoteJumpToTime(String duration);
 
-  /// Expand the remaining supporting transcript timestamps in this summary section
+  /// Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it
   ///
   /// In en, this message translates to:
-  /// **'+{count} more'**
-  String quoteMoreTimestamps(int count);
+  /// **'Show sources'**
+  String get quoteShowSources;
 
   /// Accessibility label and tooltip for the jump-to-latest button in chat
   ///
@@ -20127,11 +20115,11 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
+  /// Capture banner title: the pendant's audio stopped reaching the app; the Reconnect button sits below
   ///
   /// In en, this message translates to:
-  /// **'Omi isn\'t sending audio — tap to reconnect'**
-  String get captureRecoveryBanner;
+  /// **'Omi isn\'t sending audio'**
+  String get captureRecoveryBannerTitle;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.
   ///
@@ -20150,6 +20138,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio saved, transcribes later'**
   String get captureAudioSavedTranscribesLater;
+
+  /// Banner button that retries the capture recovery in place (BLE/link episodes)
+  ///
+  /// In en, this message translates to:
+  /// **'Try reconnect'**
+  String get captureBannerTryReconnect;
+
+  /// Banner button that retries the pending transfer (phone-storage episodes)
+  ///
+  /// In en, this message translates to:
+  /// **'Retry sync'**
+  String get captureBannerRetrySync;
+
+  /// Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
+  String get captureWedgeBleExplanation;
+
+  /// Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio isn\'t reaching the app — reconnect your Omi'**
+  String get captureIngressNeedsReconnect;
+
+  /// Details sheet body for an ingress_recovery_failed capture episode: automatic recovery is exhausted; the manual fix is disconnect/reconnect. Sync-later wording is scoped to audio actually saved on the device.
+  ///
+  /// In en, this message translates to:
+  /// **'The app stopped receiving audio from your Omi and could not restore the connection automatically. Disconnect and reconnect the device — from device settings, or by powering it off and on. Any audio saved on the device will sync later.'**
+  String get captureIngressNeedsReconnectExplanation;
 
   /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
   ///
@@ -23409,6 +23427,30 @@ abstract class AppLocalizations {
   /// **'Apple Watch'**
   String get firstCaptureWatch;
 
+  /// Onboarding device step title
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Omi'**
+  String get firstCaptureConnectTitle;
+
+  /// Onboarding device step description
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your Omi and it captures your conversations hands-free, all day.'**
+  String get firstCaptureConnectDescription;
+
+  /// Onboarding device step primary button
+  ///
+  /// In en, this message translates to:
+  /// **'Connect my Omi'**
+  String get firstCaptureConnect;
+
+  /// Onboarding device step secondary button, opens the store
+  ///
+  /// In en, this message translates to:
+  /// **'I don\'t have an Omi yet'**
+  String get firstCaptureNoDevice;
+
   /// No description provided for @firstCaptureSkip.
   ///
   /// In en, this message translates to:
@@ -23606,6 +23648,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Never miss a word again.'**
   String get paywallOutlineHeadline;
+
+  /// Paywall header: plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Pro'**
+  String get paywallTrialBrand;
+
+  /// Paywall headline
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s how your free trial works.'**
+  String get paywallTrialHeadline;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited summaries, kept forever'**
+  String get paywallTrialSlideSummariesTitle;
+
+  /// Paywall carousel card body
+  ///
+  /// In en, this message translates to:
+  /// **'Every conversation becomes a clean summary with next steps, so nothing slips.'**
+  String get paywallTrialSlideSummariesBody;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Best-in-class transcription'**
+  String get paywallTrialSlideTranscriptionTitle;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Catches more details'**
+  String get paywallTrialChipDetails;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Tells speakers apart'**
+  String get paywallTrialChipSpeakers;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Works in noisy rooms'**
+  String get paywallTrialChipNoise;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Handles accents'**
+  String get paywallTrialChipAccents;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Knows your jargon and names'**
+  String get paywallTrialChipJargon;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker names, detected automatically'**
+  String get paywallTrialSlideSpeakersTitle;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited questions, across every conversation'**
+  String get paywallTrialSlideAskTitle;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Draft a follow-up email from this meeting.'**
+  String get paywallTrialBubbleFollowUp;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Any conflicts with what John said on Tuesday?'**
+  String get paywallTrialBubbleConflicts;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Find anything that could slow us down.'**
+  String get paywallTrialBubbleBlockers;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Works with your favorite apps'**
+  String get paywallTrialSlideAppsTitle;
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get paywallTrialTodayTitle;
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'Everything in Pro is unlocked.'**
+  String get paywallTrialTodayBody;
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'+ {days} days free'**
+  String paywallTrialFreeDaysTitle(int days);
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days of Omi Pro, on us.'**
+  String paywallTrialFreeDaysBody(int days);
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'In {days} days'**
+  String paywallTrialInDaysTitle(int days);
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'Trial ends. You\'ll be charged unless you cancel.'**
+  String get paywallTrialEndsBody;
+
+  /// Paywall feature row
+  ///
+  /// In en, this message translates to:
+  /// **'The latest AI models'**
+  String get paywallTrialFeatureModels;
+
+  /// Paywall feature row
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited Ask Omi'**
+  String get paywallTrialFeatureAsk;
+
+  /// Paywall plan card footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Billed monthly'**
+  String get paywallTrialBilledMonthly;
+
+  /// Paywall plan card footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Billed yearly'**
+  String get paywallTrialBilledYearly;
+
+  /// Paywall plan card saving; amount is a formatted price
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount}'**
+  String paywallTrialSaveAmount(String amount);
+
+  /// Paywall primary button; price is a formatted zero price like $0.00
+  ///
+  /// In en, this message translates to:
+  /// **'Start for {price}'**
+  String paywallTrialCta(String price);
+
+  /// Paywall secondary button
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with the free plan'**
+  String get paywallTrialSecondary;
+
+  /// Paywall footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime. No fees, no penalties.'**
+  String get paywallTrialCancelNote;
+
+  /// Toast after a trial checkout completes; days is the trial length
+  ///
+  /// In en, this message translates to:
+  /// **'Your {days}-day free trial of Omi Pro has started.'**
+  String paywallTrialStarted(int days);
 
   /// Caption under the upgrade button on the Outline paywall variant
   ///
@@ -24063,11 +24291,41 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get activityRetryAll;
 
+  /// Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t check storage'**
+  String get activityAttentionStorageUnknownTitle;
+
+  /// Needs attention row subtitle under the storage title: new recordings cannot be saved
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings paused'**
+  String get activityAttentionStorageSubtitle;
+
+  /// Needs attention row title: uploads made no progress long enough to need attention
+  ///
+  /// In en, this message translates to:
+  /// **'Upload stalled'**
+  String get activityAttentionUploadStalledTitle;
+
+  /// Needs attention row subtitle: how many recordings are waiting to upload
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
+  String activityAttentionUploadRecordings(int count);
+
   /// Needs attention row: the server gave up summarizing a conversation
   ///
   /// In en, this message translates to:
   /// **'Couldn\'t summarize this conversation'**
   String get attentionSummaryFailed;
+
+  /// Bell accessibility label when its warning dot is lit for attention items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, needs attention'**
+  String get activityAttentionSemantics;
 
   /// Headline at the top of the Connect an Agent screen
   ///
@@ -25214,6 +25472,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{saved} of {total} audio saved'**
   String playbackPartialAudioSaved(String saved, String total);
+
+  /// Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording on your Omi'**
+  String get activityAttentionLinkStalledSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1998,12 +1998,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
-  String get memoryAllowUse => 'Cho phép dùng';
-
-  @override
-  String get memoryDontUse => 'Không dùng';
-
-  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -9327,9 +9321,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count nữa';
-  }
+  String get quoteShowSources => 'Hiện nguồn';
 
   @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
@@ -11071,7 +11063,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
+  String get captureRecoveryBannerTitle => 'Omi không gửi âm thanh';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11082,6 +11074,23 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Đã lưu âm thanh, phiên âm sau';
+
+  @override
+  String get captureBannerTryReconnect => 'Thử kết nối lại';
+
+  @override
+  String get captureBannerRetrySync => 'Thử đồng bộ lại';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Ứng dụng không còn nhận được âm thanh từ thiết bị Omi và không thể khôi phục kết nối tự động. Hãy ngắt kết nối rồi kết nối lại thiết bị — trong cài đặt thiết bị hoặc bằng cách tắt rồi bật nó. Âm thanh đã lưu trên thiết bị sẽ được đồng bộ sau.';
 
   @override
   String get captureStillRecording => 'Vẫn đang ghi âm';
@@ -13167,6 +13176,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Kết nối Omi của bạn';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Ghép nối Omi của bạn và thiết bị sẽ ghi lại cuộc trò chuyện của bạn rảnh tay, cả ngày.';
+
+  @override
+  String get firstCaptureConnect => 'Kết nối Omi của tôi';
+
+  @override
+  String get firstCaptureNoDevice => 'Tôi chưa có Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13273,6 +13295,112 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Đây là cách dùng thử miễn phí của bạn hoạt động.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Tóm tắt Unlimited, lưu trữ vĩnh viễn';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Mọi cuộc trò chuyện đều được tóm tắt rõ ràng với các bước tiếp theo, không bỏ sót điều gì.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Phiên âm hàng đầu';
+
+  @override
+  String get paywallTrialChipDetails => 'Nắm bắt nhiều chi tiết hơn';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Phân biệt người nói';
+
+  @override
+  String get paywallTrialChipNoise => 'Hoạt động tốt trong phòng ồn ào';
+
+  @override
+  String get paywallTrialChipAccents => 'Xử lý các giọng điệu khác nhau';
+
+  @override
+  String get paywallTrialChipJargon => 'Hiểu thuật ngữ và tên riêng của bạn';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Tên người nói, tự động nhận diện';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Hỏi Unlimited, trong mọi cuộc trò chuyện';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Soạn email theo dõi từ cuộc họp này.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Có mâu thuẫn nào với những gì John nói vào thứ Ba không?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Tìm bất cứ điều gì có thể làm chúng ta chậm lại.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Hoạt động với các ứng dụng yêu thích của bạn';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hôm nay';
+
+  @override
+  String get paywallTrialTodayBody => 'Mọi thứ trong Pro đều được mở khóa.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days ngày miễn phí';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days ngày dùng Omi Pro, miễn phí.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Trong $days ngày';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Dùng thử kết thúc. Bạn sẽ bị tính phí trừ khi hủy.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Các mô hình AI mới nhất';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Thanh toán hàng tháng';
+
+  @override
+  String get paywallTrialBilledYearly => 'Thanh toán hàng năm';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Tiết kiệm $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Bắt đầu với $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Tiếp tục với gói miễn phí';
+
+  @override
+  String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Bản dùng thử miễn phí $days ngày của Omi Pro của bạn đã bắt đầu.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Hủy bất cứ lúc nào.';
@@ -13543,7 +13671,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityRetryAll => 'Thử lại tất cả';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi đang chờ',
+      one: '1 bản ghi đang chờ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
+
+  @override
+  String get activityAttentionSemantics => 'Hoạt động, cần chú ý';
 
   @override
   String get connectAgentHeadline => 'Dùng bộ nhớ Omi của bạn trong ChatGPT và các tác tử AI';
@@ -14228,4 +14379,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Đã lưu $saved trên $total âm thanh';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi vẫn đang ghi âm';
 }

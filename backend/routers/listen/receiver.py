@@ -10,6 +10,7 @@ import time
 import uuid
 
 from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
@@ -157,6 +158,7 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
     emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
@@ -262,11 +264,10 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
-        self.cap_admission = (
-            LiveAdmission(host.request.uid, host.request.source)
-            if stt_cap_dispatch_enabled() and not host.use_custom_stt
-            else None
-        )
+        self.cap_admission: LiveAdmission | None = None
+        if stt_cap_dispatch_configured() and not host.use_custom_stt:
+            if stt_cap_dispatch_enabled(host.request.uid, 'live'):
+                self.cap_admission = LiveAdmission(host.request.uid, host.request.source)
         self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None
         self._cap_init_lock = asyncio.Lock()
         self._cap_hold_stop = asyncio.Event()
@@ -2394,8 +2395,10 @@ class ListenReceiver(ReplayFilterMixin):
             if getattr(self, 'live_hold', None) is not None
             else None
         )
+        frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
         try:
             while self.host.state.active:
+                frame_timer.stop()
                 try:
                     message = await asyncio.wait_for(
                         request.websocket.receive(), timeout=self.host.limits.ws_receive_timeout
@@ -2420,6 +2423,7 @@ class ListenReceiver(ReplayFilterMixin):
                                 bytes(data), self.host.state.current_conversation_id, time.time(), 0
                             )
                         continue
+                    frame_timer.start()
                     now = time.time()
                     prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
@@ -2523,6 +2527,7 @@ class ListenReceiver(ReplayFilterMixin):
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            frame_timer.stop()
             self.client_closing = True
             self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:

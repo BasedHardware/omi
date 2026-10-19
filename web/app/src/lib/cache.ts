@@ -314,13 +314,20 @@ export function clearAllCache(): void {
 
 // Cache key generators for consistency
 export const cacheKeys = {
-  conversations: (folderId?: string, startDate?: string, endDate?: string) =>
-    `conversations:${folderId || 'all'}:${startDate || ''}:${endDate || ''}`,
+  conversations: (
+    folderId?: string,
+    startDate?: string,
+    endDate?: string,
+    starred?: boolean,
+  ) =>
+    `conversations:${folderId || 'all'}:${startDate || ''}:${endDate || ''}:${
+      starred ?? ''
+    }`,
 
   conversation: (id: string) => `conversation:${id}`,
 
-  memories: (categories: string[], view = 'default', scope?: MemoryCacheScope) =>
-    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${view}:${
+  memories: (categories: string[], scope?: MemoryCacheScope) =>
+    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${
       categories.length === 0 ? 'all' : [...categories].sort().join(',')
     }`,
 

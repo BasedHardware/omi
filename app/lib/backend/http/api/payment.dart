@@ -6,11 +6,16 @@ import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, String? promotionCode}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({
+  required String priceId,
+  String? promotionCode,
+  int? trialDays,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
   }
+  if (trialDays != null && trialDays > 0) body['trial_days'] = trialDays;
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},

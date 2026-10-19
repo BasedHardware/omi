@@ -1370,7 +1370,6 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
-  private var cachedLedgerPromptProjection: KnowledgeLedgerPromptProjection?
   private var memoriesLoaded = false
   private var cachedGoals: [Goal] = []
   private var goalsLoaded = false
@@ -1796,7 +1795,6 @@ class ChatProvider: ObservableObject {
     selectedAppId = nil
     selectedChatAppContext = nil
     cachedMemories = []
-    cachedLedgerPromptProjection = nil
     memoriesLoaded = false
     cachedGoals = []
     goalsLoaded = false
@@ -2321,11 +2319,13 @@ class ChatProvider: ObservableObject {
     return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
-  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+  nonisolated static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
     }
-    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
+    // The chat-first shell has no "new chat": clearing is what moves this chat to the selected provider.
+    return "This chat uses Claude and needs sign-in. Clear the chat to switch to your selected AI provider, "
+      + "or reconnect Claude in Settings."
   }
 
   func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
@@ -2522,12 +2522,8 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Load Context (Memories)
 
-  /// Loads prompt knowledge on every turn. The canonical path activates only
-  /// from an owner-pinned dedicated server receipt; any disabled/unknown
-  /// rollout, kill switch, incomplete migration, mixed schema, or auth race
-  /// retains the released local-cache behavior for rollback compatibility.
+  /// Loads prompt knowledge from the released local memory and profile stores.
   private func refreshMemoriesForPrompt() async {
-    cachedLedgerPromptProjection = nil
     do {
       cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
       memoriesLoaded = true
@@ -2537,59 +2533,11 @@ class ChatProvider: ObservableObject {
       // Continue without memories - non-critical
     }
 
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
-      await loadAIProfileIfNeeded()
-      return
-    }
-    do {
-      let snapshot = try await APIClient.shared.getKnowledgeLedgerPromptSnapshot(
-        authorizationSnapshot: authorization)
-      guard snapshot.isAuthoritative else {
-        await loadAIProfileIfNeeded()
-        return
-      }
-      Task {
-        do {
-          _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
-            authorizationSnapshot: authorization)
-        } catch {
-          log("ChatProvider: exhaustive ledger mirror convergence deferred")
-        }
-      }
-      let projection = KnowledgeLedgerPromptProjection(
-        memories: snapshot.memories,
-        hasAuthoritativeSnapshot: true)
-      guard projection.isCompleteLedgerSnapshot else {
-        log("ChatProvider: canonical ledger prompt snapshot rejected as incomplete or mixed-version")
-        await loadAIProfileIfNeeded()
-        return
-      }
-      try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
-        snapshot.memories,
-        authorizationSnapshot: authorization)
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-      cachedLedgerPromptProjection = projection
-      // Authoritative empty and non-empty ledgers both replace the independent
-      // synthesized profile. Mark it reloadable so a later flag-off or stale
-      // receipt can intentionally restore compatibility on the next turn.
-      cachedAIProfile = ""
-      aiProfileLoaded = false
-      log("ChatProvider: adopted authoritative ledger prompt snapshot (\(snapshot.memories.count) rows)")
-    } catch {
-      logError("ChatProvider: authoritative ledger prompt refresh failed closed", error: error)
-      await loadAIProfileIfNeeded()
-    }
+    await loadAIProfileIfNeeded()
   }
 
   /// Formats cached memories into a string for the prompt
   private func formatMemoriesSection(citations: ChatPromptCitationLedger) -> String {
-    if let projection = cachedLedgerPromptProjection,
-      let rendered = projection.render(
-        userName: AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName,
-        marker: { citations.marker(kind: .memory, sourceID: $0) })
-    {
-      return "<user_facts>\n\(rendered)</user_facts>"
-    }
     guard !cachedMemories.isEmpty else { return "" }
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
@@ -2610,16 +2558,14 @@ class ChatProvider: ObservableObject {
     additionalSources: [ChatPromptCitationSource] = []
   ) -> ChatPromptCitationLedger {
     let formatter = ISO8601DateFormatter()
-    var sources =
-      cachedLedgerPromptProjection?.citationSources
-      ?? cachedMemories.prefix(30).map {
-        ChatPromptCitationSource(
-          kind: .memory,
-          sourceID: $0.id,
-          title: $0.headline ?? "Memory",
-          preview: $0.content,
-          createdAt: formatter.string(from: $0.createdAt))
-      }
+    var sources = cachedMemories.prefix(30).map {
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: $0.id,
+        title: $0.headline ?? "Memory",
+        preview: $0.content,
+        createdAt: formatter.string(from: $0.createdAt))
+    }
     if includesLegacyGoals {
       sources.append(
         contentsOf: cachedGoals.filter(\.isActive).map {
@@ -2744,11 +2690,6 @@ class ChatProvider: ObservableObject {
 
   /// Fetches the latest AI-generated user profile from local database
   private func loadAIProfileIfNeeded() async {
-    guard promptKnowledgeSelection.shouldLoadLegacyAIProfile else {
-      cachedAIProfile = ""
-      aiProfileLoaded = false
-      return
-    }
     guard !aiProfileLoaded else { return }
 
     if let profile = await AIUserProfileService.shared.getLatestProfile() {
@@ -2760,11 +2701,9 @@ class ChatProvider: ObservableObject {
 
   /// Formats AI profile into a prompt section
   private func formatAIProfileSection() -> String {
-    promptKnowledgeSelection.legacyAIProfileSection(profileText: cachedAIProfile)
-  }
-
-  private var promptKnowledgeSelection: ChatPromptKnowledgeSelection {
-    ChatPromptKnowledgeSelection(authoritativeLedger: cachedLedgerPromptProjection)
+    let trimmed = cachedAIProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    return "\n<ai_user_profile>\n\(cachedAIProfile)\n</ai_user_profile>"
   }
 
   // MARK: - Load Database Schema
@@ -6666,9 +6605,73 @@ class ChatProvider: ObservableObject {
       return
     }
     log("Cleared default chat messages")
+    await moveClearedMainChatToSelectedProvider(surface: surface)
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
+  }
+
+  /// The main chat is one long-lived session pinned to the provider it was created on, and the
+  /// chat-first shell has no "new chat", so choosing another AI Provider in Settings never reached
+  /// it. Clearing is the explicit, idle point where that choice can apply: the emptied chat adopts
+  /// the selected provider. A refused migration (a revoked turn still finishing) keeps the old one.
+  private func moveClearedMainChatToSelectedProvider(surface: AgentSurfaceReference) async {
+    let harness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+    guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
+      await ensureBridgeStarted()
+    else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("ChatProvider: cleared main chat could not resolve its session", error: error)
+      return
+    }
+    let client = resolvedAgentClient()
+    let modelProfile =
+      modelOverride ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode)
+    let workingDirectory = effectiveAgentWorkingDirectory()
+    let outcome = await Self.moveSessionToSelectedProvider(
+      pinnedAdapterId: session.profile.adapterId,
+      selectedAdapterId: adapterId
+    ) {
+      try await client.migrateSessionExecutionProfile(
+        sessionId: session.sessionId,
+        expectedProfileGeneration: session.profile.profileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelProfile,
+        workingDirectory: workingDirectory
+      ).profile.adapterId
+    }
+    switch outcome {
+    case .unchanged:
+      break
+    case .moved(let from, let to):
+      log("ChatProvider: cleared main chat moved from \(from) to \(to)")
+    case .refused(let error):
+      logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
+  }
+
+  enum ClearedChatProviderMove {
+    case unchanged
+    case moved(from: String, to: String)
+    case refused(Error)
+  }
+
+  /// The decision behind Clear Chat's provider move: no call when the chat is already on the
+  /// selected adapter; otherwise migrate, and a refused migration leaves the pinned provider.
+  static func moveSessionToSelectedProvider(
+    pinnedAdapterId: String,
+    selectedAdapterId: String,
+    migrate: () async throws -> String
+  ) async -> ClearedChatProviderMove {
+    guard pinnedAdapterId != selectedAdapterId else { return .unchanged }
+    do {
+      return .moved(from: pinnedAdapterId, to: try await migrate())
+    } catch {
+      return .refused(error)
+    }
   }
 
   // MARK: - App Selection

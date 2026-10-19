@@ -1991,12 +1991,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistory => 'Riwayat';
 
   @override
-  String get memoryAllowUse => 'Izinkan penggunaan';
-
-  @override
-  String get memoryDontUse => 'Jangan gunakan';
-
-  @override
   String get undo => 'Batalkan';
 
   @override
@@ -9329,9 +9323,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lainnya';
-  }
+  String get quoteShowSources => 'Tampilkan sumber';
 
   @override
   String get jumpToLatestMessage => 'Lompat ke pesan terbaru';
@@ -11075,7 +11067,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
+  String get captureRecoveryBannerTitle => 'Omi tidak mengirim audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11086,6 +11078,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
+
+  @override
+  String get captureBannerTryReconnect => 'Coba sambungkan kembali';
+
+  @override
+  String get captureBannerRetrySync => 'Coba sinkronkan lagi';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikasi tidak lagi bisa menerima audio dari perangkat Omi dan tidak dapat memulihkan koneksi secara otomatis. Putuskan lalu sambungkan kembali perangkat — dari pengaturan perangkat, atau dengan mematikan lalu menyalakannya. Audio yang tersimpan di perangkat akan disinkronkan nanti.';
 
   @override
   String get captureStillRecording => 'Masih merekam';
@@ -13179,6 +13188,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Hubungkan Omi Anda';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Pasangkan Omi Anda, Omi merekam percakapan Anda bebas genggam, sepanjang hari.';
+
+  @override
+  String get firstCaptureConnect => 'Hubungkan Omi saya';
+
+  @override
+  String get firstCaptureNoDevice => 'Saya belum punya Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13285,6 +13307,112 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Jangan pernah melewatkan satu kata pun lagi.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Begini cara kerja uji coba gratis Anda.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited ringkasan, disimpan selamanya';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Setiap percakapan menjadi ringkasan yang rapi dengan langkah selanjutnya, agar tidak ada yang terlewat.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transkripsi terbaik di kelasnya';
+
+  @override
+  String get paywallTrialChipDetails => 'Menangkap lebih banyak detail';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Membedakan pembicara';
+
+  @override
+  String get paywallTrialChipNoise => 'Berfungsi di ruangan bising';
+
+  @override
+  String get paywallTrialChipAccents => 'Menangani aksen';
+
+  @override
+  String get paywallTrialChipJargon => 'Memahami jargon dan nama Anda';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Nama pembicara, terdeteksi otomatis';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited pertanyaan, di setiap percakapan';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Buat draf email tindak lanjut dari rapat ini.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Ada konflik dengan apa yang John katakan pada hari Selasa?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Temukan apa pun yang bisa memperlambat kita.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Berfungsi dengan aplikasi favorit Anda';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hari Ini';
+
+  @override
+  String get paywallTrialTodayBody => 'Semua fitur di Pro terbuka.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days hari gratis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days hari Omi Pro, dari kami.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Dalam $days hari';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Uji coba berakhir. Anda akan dikenakan biaya kecuali Anda membatalkan.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Model AI terbaru';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Ditagih bulanan';
+
+  @override
+  String get paywallTrialBilledYearly => 'Ditagih tahunan';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Hemat $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Mulai dengan $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Lanjutkan dengan paket gratis';
+
+  @override
+  String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Uji coba gratis $days hari Omi Pro Anda telah dimulai.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Batalkan kapan saja.';
@@ -13555,7 +13683,30 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityRetryAll => 'Coba lagi semua';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Rekaman dijeda';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Unggahan terhenti';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman menunggu',
+      one: '1 rekaman menunggu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitas, perlu perhatian';
 
   @override
   String get connectAgentHeadline => 'Gunakan memori Omi Anda di ChatGPT dan agen AI Anda';
@@ -14241,4 +14392,7 @@ class AppLocalizationsId extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved dari $total audio tersimpan';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi masih merekam';
 }

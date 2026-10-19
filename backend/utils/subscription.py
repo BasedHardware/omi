@@ -1,4 +1,4 @@
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
 from database.fsr_read_cache import fresh_reader
@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 import stripe
+from utils import screen_vector_entitlements
+from utils.observability.fallback import record_fallback
 
 import database.users as users_db
 import database.user_usage as user_usage_db
@@ -133,43 +135,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 #
 # Because the rows are retained, a user who upgrades can have their vectors backfilled from the
 # stored OCR text: this gate defers the cost, it does not destroy the ability to recover.
-_SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS = 300
-_screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
-
-
-def grants_cloud_screen_vectors(uid: str) -> bool:
-    """True when this user's synced screen rows should also be written to the vector store.
-
-    Uses the desktop access tier rather than `is_paid_plan`, because screen activity is a
-    desktop capability: a mobile-only paid plan did not buy it. BYOK does NOT grant it either
-    — BYOK means the user supplies their own LLM keys, but the vector store is ours and the
-    cost being avoided here is ours.
-
-    Fails OPEN (writes the vector) on any lookup error, matching
-    `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
-    user's screen search. The failure mode is a small overspend, not a lost capability.
-    """
-    ladder_allowed = ladder_v1.feature_allowed(uid, 'screen_context')
-    if ladder_allowed is not None:
-        return ladder_allowed
-    cached = _screen_vector_entitlement_cache.get(uid)
-    if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
-        return cached[0]
+async def grants_cloud_screen_vectors(uid: str) -> bool:
+    """Return established capability; unknown authority requires a batch retry."""
     try:
-        subscription = users_db.get_user_valid_subscription(
-            uid, firestore_client=get_customer_firestore_client(), provision=False
+        entitlement = await screen_vector_entitlements.resolve_for_uid(uid)
+        return entitlement['capabilities']['cloud_screen_vectors']
+    except Exception as error:
+        record_fallback(
+            component='firestore_read',
+            from_mode='screen_vectors',
+            to_mode='retry',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
         )
-        plan = subscription.plan if subscription else PlanType.basic
-        entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
-    except Exception as e:
-        logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
-        return True
-    _screen_vector_entitlement_cache[uid] = (entitled, time.monotonic())
-    return entitled
+        raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable(
+            'Screen vector authority unavailable'
+        ) from error
 
 
 def clear_cloud_screen_vector_entitlement_cache(uid: str) -> None:
-    _screen_vector_entitlement_cache.pop(uid, None)
+    screen_vector_entitlements.clear(uid)
 
 
 def should_defer_desktop_processing(uid: str) -> bool:
@@ -1654,7 +1640,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
-    if stt_cap_dispatch_enabled() and not subscription_launch_date_str:
+    if stt_cap_dispatch_enabled(uid) and not subscription_launch_date_str:
         CONFIG_ERRORS.labels(reason='missing').inc()
         logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
         raise ValueError('missing subscription launch date')
@@ -1666,7 +1652,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
-        if stt_cap_dispatch_enabled():
+        if stt_cap_dispatch_enabled(uid):
             CONFIG_ERRORS.labels(reason='invalid').inc()
             logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
             raise
@@ -2018,34 +2004,47 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         return subscription
 
     try:
-        if subscription.stripe_subscription_id and subscription.current_period_end:
-            period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-            if period_end_dt >= datetime.now(timezone.utc):
+        if subscription.stripe_subscription_id:
+            try:
                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
-                if stripe_sub_dict:
-                    items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
-                    price_id: Optional[str] = None
-                    if items and items[0].get('price'):
-                        price_id = items[0]['price'].get('id')
+            except Exception as e:
+                logger.warning(
+                    f"[reconcile_basic_plan_with_stripe] Could not retrieve sub {subscription.stripe_subscription_id}: {e}"
+                )
+                stripe_sub = None
+            stripe_sub_dict: Optional[Dict[str, Any]] = (
+                stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+            )
+            if stripe_sub_dict:
+                items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+                price_id: Optional[str] = None
+                if items and items[0].get('price'):
+                    price_id = items[0]['price'].get('id')
 
-                    stripe_status = stripe_sub_dict.get('status')
-                    if stripe_status in ('active', 'trialing') and price_id:
-                        try:
-                            plan_type = get_plan_type_from_price_id(price_id)
-                        except ValueError:
-                            plan_type = None
+                stripe_status = stripe_sub_dict.get('status')
+                if stripe_status in ('active', 'trialing') and price_id:
+                    try:
+                        plan_type = get_plan_type_from_price_id(price_id)
+                    except ValueError:
+                        plan_type = None
 
-                        if plan_type and is_paid_plan(plan_type):
-                            subscription.plan = plan_type
-                            subscription.status = SubscriptionStatus.active
-                            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-                            subscription.current_period_start = stripe_sub_dict.get('current_period_start')
-                            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-                            subscription.current_price_id = price_id
-                            subscription.limits = get_plan_limits(plan_type)
-                            users_db.update_user_subscription(uid, subscription.model_dump())
-                            return subscription
+                    if plan_type and is_paid_plan(plan_type):
+                        sub_period_end = stripe_sub_dict.get('current_period_end')
+                        if sub_period_end:
+                            period_end_dt = datetime.fromtimestamp(sub_period_end, tz=timezone.utc)
+                            if period_end_dt >= datetime.now(timezone.utc):
+                                subscription.plan = plan_type
+                                subscription.status = SubscriptionStatus.active
+                                subscription.current_period_end = sub_period_end
+                                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                                subscription.current_price_id = price_id
+                                subscription.limits = get_plan_limits(plan_type)
+                                customer_id = stripe_sub_dict.get('customer')
+                                if customer_id and isinstance(customer_id, str):
+                                    users_db.set_stripe_customer_id(uid, customer_id)
+                                users_db.update_user_subscription(uid, subscription.model_dump())
+                                return subscription
 
         active = find_active_paid_subscription_for_user(uid)
         if active:

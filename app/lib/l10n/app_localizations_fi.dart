@@ -1991,12 +1991,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
-  String get memoryAllowUse => 'Salli käyttö';
-
-  @override
-  String get memoryDontUse => 'Älä käytä';
-
-  @override
   String get undo => 'Kumoa';
 
   @override
@@ -9328,9 +9322,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lisää';
-  }
+  String get quoteShowSources => 'Näytä lähteet';
 
   @override
   String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
@@ -11073,7 +11065,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openCall => 'Avaa puhelu';
 
   @override
-  String get captureRecoveryBanner => 'Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla';
+  String get captureRecoveryBannerTitle => 'Omi ei lähetä ääntä';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11084,6 +11076,23 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
+
+  @override
+  String get captureBannerTryReconnect => 'Yritä yhdistää uudelleen';
+
+  @override
+  String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Sovellus ei enää saa ääntä Omi-laitteesta eikä onnistunut palauttamaan yhteyttä automaattisesti. Irrota ja yhdistä laite uudelleen — laiteasetuksista tai sammuttamalla ja käynnistämällä se. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.';
 
   @override
   String get captureStillRecording => 'Tallennus jatkuu';
@@ -13174,6 +13183,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Yhdistä Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Yhdistä Omi, niin se tallentaa keskustelusi hands-free koko päivän.';
+
+  @override
+  String get firstCaptureConnect => 'Yhdistä Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Minulla ei ole vielä Omia';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13280,6 +13301,112 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Älä enää koskaan missaa sanaakaan.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Näin ilmainen kokeilujaksosi toimii.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Rajoittamattomat yhteenvedot, tallessa ikuisesti';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Jokaisesta keskustelusta tulee selkeä yhteenveto seuraavine askelineen, joten mikään ei unohdu.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Luokkansa paras transkriptio';
+
+  @override
+  String get paywallTrialChipDetails => 'Tunnistaa enemmän yksityiskohtia';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Erottaa puhujat toisistaan';
+
+  @override
+  String get paywallTrialChipNoise => 'Toimii meluisissa tiloissa';
+
+  @override
+  String get paywallTrialChipAccents => 'Käsittelee aksentteja';
+
+  @override
+  String get paywallTrialChipJargon => 'Tuntee termistösi ja nimet';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Puhujien nimet tunnistetaan automaattisesti';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Rajoittamattomasti kysymyksiä, jokaisesta keskustelusta';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Laadi seurantaviesti tästä kokouksesta.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Onko ristiriitoja Johnin tiistaina sanoman kanssa?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Etsi kaikki, mikä voisi hidastaa meitä.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Toimii suosikkisovellustesi kanssa';
+
+  @override
+  String get paywallTrialTodayTitle => 'Tänään';
+
+  @override
+  String get paywallTrialTodayBody => 'Kaikki Prossa on avattu.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days päivää ilmaiseksi';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days päivää Omi Prota, meidän piikkiimme.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days päivän kuluttua';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Kokeilujakso päättyy. Sinua veloitetaan, ellet peruuta tilausta.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Uusimmat tekoälymallit';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Rajoittamaton Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Laskutetaan kuukausittain';
+
+  @override
+  String get paywallTrialBilledYearly => 'Laskutetaan vuosittain';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Säästä $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Aloita hintaan $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Jatka ilmaisella suunnitelmalla';
+
+  @override
+  String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Pro -palvelun $days päivän ilmainen kokeilujaksosi on alkanut.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Peruuta milloin tahansa.';
@@ -13550,7 +13677,30 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityRetryAll => 'Yritä kaikkia uudelleen';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta odottaa',
+      one: '1 tallenne odottaa',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
+
+  @override
+  String get activityAttentionSemantics => 'Aktiviteetti, vaatii huomiota';
 
   @override
   String get connectAgentHeadline => 'Käytä Omi-muistiasi ChatGPT:ssä ja tekoälyagenteissasi';
@@ -14233,4 +14383,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Ääntä tallennettu $saved / $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi tallentaa edelleen';
 }

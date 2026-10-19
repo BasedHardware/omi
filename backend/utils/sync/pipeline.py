@@ -39,6 +39,8 @@ from database._client import (
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
+from utils.sync import cap_recovery_provider
+
 from database import conversations as conversations_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
@@ -61,7 +63,6 @@ from database.sync_jobs import (
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
     fenced_finalize_sync_job,
-    fenced_finalize_sync_job_from_durable_ledger,
     fenced_mark_job_failed,
     fenced_mark_job_processing,
     fenced_update_sync_job,
@@ -78,11 +79,9 @@ from database.sync_jobs import (
 )
 from database.sync_ledger import (
     add_processed_sync_segment_id,
-    bind_sync_content_run_token,
     checkpoint_sync_content_partial_result,
     get_processed_sync_segment_ids,
     get_sync_content_partial_result,
-    is_valid_completed_sync_content_result,
     mark_sync_content_completed,
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
@@ -145,7 +144,7 @@ from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
-from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled, LANES
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import (
@@ -173,6 +172,14 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.input_limits import (
+    MAX_BACKFILL_FILES,
+    MAX_BACKFILL_RAW_BYTES,
+    validate_backfill_paths,
+    BackfillInputLimitExceeded,
+    BackfillStoragePressure,
+    raise_sync_storage_pressure,
+)
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
@@ -181,6 +188,11 @@ from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
 from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync import recording_lineage as sync_recording_lineage
+from utils.sync.ledger_completion import (  # noqa: F401  (re-exported seam)
+    SyncJobRunLeaseLost,
+    _require_run_owner,
+    bind_or_converge_sync_ledger_completion,
+)
 from utils.sync.recording_lineage import (
     ambiguous_binding_pending,
     fallback_segment_targets,
@@ -648,10 +660,6 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncJobRunLeaseLost(RuntimeError):
-    """A worker tried to write after its run token stopped owning the job."""
-
-
 class SyncConversationPersistenceFenced(RuntimeError):
     """Conversation lifecycle rejected this worker's stale processing result."""
 
@@ -666,13 +674,6 @@ def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
         raise result
-
-
-def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
-    """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if mutation.applied:
-        return mutation.job
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -771,51 +772,6 @@ def _add_processed_segment_for_run(job_id: str, run_lock_token: str | None, segm
         add_processed_segment(job_id, segment_path)
         return
     _require_run_owner(add_processed_segment_if_run_owner(job_id, run_lock_token, segment_path), job_id=job_id)
-
-
-def bind_or_converge_sync_ledger_completion(
-    *,
-    job_id: str,
-    uid: str,
-    content_id: str | None,
-    run_lock_token: str | None,
-) -> Dict | None:
-    """Bind a live lease to the durable ledger or converge a proven completion.
-
-    This synchronous DB-boundary helper is shared by Cloud Tasks, inline work,
-    and stale polling. A higher epoch displaces an old owner before any decode,
-    provider, ledger mutation, or stale failure can occur. A valid completion
-    that landed just before lease replacement becomes the current Redis result
-    through the caller's *current* fenced token rather than being overwritten
-    as a failure.
-    """
-    if not content_id or run_lock_token is None:
-        return None
-
-    binding = bind_sync_content_run_token(
-        uid,
-        content_id,
-        job_id,
-        run_lock_token,
-        get_sync_job_run_lock_epoch(run_lock_token),
-    )
-    if binding.bound:
-        return None
-    held = getattr(binding, 'held', False) is True
-    if not (
-        held
-        and isinstance(binding.result, dict)
-        and binding.result.get('held_audio') is True
-        or binding.completed
-        and is_valid_completed_sync_content_result(binding.result)
-    ):
-        raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
-
-    finalized = _require_run_owner(
-        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
-    )
-    delete_sync_job_run_lock_epoch(job_id)
-    return finalized
 
 
 async def finalize_sync_job_superseded(
@@ -1037,7 +993,11 @@ def retrieve_vad_segments(
                     segment_path = f'{path_dir}/dup{dup}_{segment_timestamp}.wav'
                 segmented_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
-            segment_aseg.export(segment_path, format='wav')
+            try:
+                segment_aseg.export(segment_path, format='wav')
+            except OSError as error:
+                raise_sync_storage_pressure(error)
+                raise
             if segment_source_maps is not None:
                 # Pydub's millisecond slice starts at this original WAV sample.
                 # The derivative STT clock resets to zero; retain its bridge.
@@ -1286,9 +1246,39 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
+def _first_word_offset(words: list[Any]) -> float:
+    """Seconds from the start of a VAD file to its first word.
+
+    postprocess_words starts the transcript clock at this word, while the file's
+    timestamp, stored audio and capture evidence start where VAD did. A word
+    without a start time keeps the file clock.
+    """
+    first = words[0] if words else None
+    timing = first.get('timestamp') if isinstance(first, dict) else None
+    return round(float(timing[0]), 2) if timing else 0.0
+
+
+def _shift_to_vad_file_clock(segments: list[TranscriptSegment], offset: float) -> None:
+    """Put lines timed from the first word back on the VAD file clock.
+
+    started_at, the stored audio chunk and capture evidence share that clock. The
+    file can open on a cough or noise well before the first word.
+    """
+    if offset:
+        for segment in segments:
+            segment.start = round(segment.start + offset, 2)
+            segment.end = round(segment.end + offset, 2)
+
+
 def _recover_empty_segment(
-    path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
-) -> tuple[list[TranscriptSegment], str] | None:
+    path: str,
+    uid: str,
+    provider: str,
+    lane: str,
+    job_id: str | None,
+    attempt_ref: str | None,
+    cap_dispatch_lane: str = 'sync',
+) -> tuple[list[TranscriptSegment], str, float] | None:
     def observe_inspection(duration: float | None, spans: list[dict] | None):
         logger.info(
             'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
@@ -1307,14 +1297,14 @@ def _recover_empty_segment(
             # Positive VAD after multilingual double-empty is unresolved;
             # buying the same call again is not independent recovery.
             raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if stt_cap_dispatch_enabled() and not sync_allowed(uid):
+        if stt_cap_dispatch_enabled(uid, cap_dispatch_lane) and not sync_allowed(uid, lane=cap_dispatch_lane):
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
 
     def multilingual_once(audio: bytes, **kwargs: Any):
         def dispatch():
             response = modulate_prerecorded_from_bytes(audio, **kwargs)
-            if stt_cap_dispatch_enabled():
-                allowance = funded_allowance(uid)
+            if stt_cap_dispatch_enabled(uid, cap_dispatch_lane):
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
                 record_cap_audio(
                     'sync',
                     'accepted',
@@ -1361,7 +1351,70 @@ def _recover_empty_segment(
         outcome='recovered',
         log=logger,
     )
-    return transcript_segments, recovered_language
+    return transcript_segments, recovered_language, _first_word_offset(words)
+
+
+def _assign_segment_speakers(
+    uid: str,
+    audio_bytes: bytes | None,
+    words: Any,
+    transcript_segments: list[TranscriptSegment],
+    person_embeddings_cache: dict | None,
+    *,
+    timestamp: float,
+    speech_offset: float,
+    segment_end_timestamp: float,
+    speaker_scope: Optional[str],
+    owner_reserved: bool,
+    model: str,
+    language: Any,
+    sync_lane: str,
+) -> tuple[list[TranscriptSegment], float]:
+    """Run the sync final pass or speaker identification; failures keep the input segments."""
+    try:
+        final_segments = None
+        if sync_enabled_for(uid) and audio_bytes is not None:
+            from utils.conversations.final_pass_sync import run_sync_final_pass
+
+            final_pass_started = time.monotonic()
+            final_segments, final_outcome = run_sync_final_pass(
+                uid,
+                audio_bytes,
+                words,
+                transcript_segments,
+                person_embeddings_cache or {},
+                scope=speaker_scope or f'sync:{timestamp}',
+                owner_reserved=owner_reserved,
+            )
+            logger.info(
+                'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
+                final_outcome['outcome'],
+                hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+                _bounded_sync_lane(sync_lane),
+                time.monotonic() - final_pass_started,
+            )
+        if final_segments and sync_enabled_for(uid):
+            transcript_segments = final_segments
+            for segment in transcript_segments:
+                segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
+                segment.stt_provider = model
+            segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
+        else:
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
+                uid,
+                language=language,
+                owner_reserved=owner_reserved,
+            )
+    except Exception as e:
+        logger.warning(
+            'event=sync_speaker_id outcome=failed exception_type=%s uid_hash=%s',
+            _bounded_exception_type(e),
+            hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+        )
+    return transcript_segments, segment_end_timestamp
 
 
 def process_segment(
@@ -1393,46 +1446,54 @@ def process_segment(
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
     cap_recovery_checkpoint: dict | None = None,
+    cap_dispatch_lane: str = 'sync',
 ):
+    if cap_dispatch_lane not in LANES:
+        raise ValueError('unknown cap dispatch lane')
+
+    def cap_enforced() -> bool:
+        return stt_cap_dispatch_enabled(uid, cap_dispatch_lane)
+
+    if cap_recovery and not cap_enforced():
+        return False
+    cap_context = {
+        'source': getattr(source, 'value', source),
+        'target_conversation_id': target_conversation_id,
+        'private_cloud_sync_enabled': private_cloud_sync_enabled,
+        'data_protection_level': data_protection_level,
+        'client_device_id': client_device_id,
+        'client_platform': client_platform,
+        'geolocation': geolocation,
+        'source_position_map': source_position_map,
+        'lineage_binding': lineage_binding,
+        'sync_lane': sync_lane,
+        'origin': cap_dispatch_lane,
+        'content_id': cap_content_id,
+        'job_id': job_id,
+    }
     conversation_id = None
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
-    if stt_cap_dispatch_enabled() and cap_recovery and deferred_outcome is not None:
+    if cap_enforced() and cap_recovery and deferred_outcome is not None:
         deferred_outcome['provider_called'] = False
+
+    def hold_for_cap() -> bool:
+        if not cap_recovery:
+            from utils.sync.cap_hold import defer_segment
+
+            defer_segment(uid, path, cap_context, response, lock)
+        if deferred_outcome is not None:
+            deferred_outcome['cap_held'] = True
+        return False
+
     try:
         if ambiguous_binding_pending(uid, lineage_binding):
             phase = 'persistence'
             raise SyncAssignmentConflict('sync lineage generation ownership remains ambiguous')
-        if stt_cap_dispatch_enabled():
-            if not sync_allowed(uid):
-                if not cap_recovery:
-                    from utils.sync.cap_hold import defer_segment
-
-                    defer_segment(
-                        uid,
-                        path,
-                        {
-                            'timestamp': get_timestamp_from_path(path),
-                            'source': getattr(source, 'value', source),
-                            'target_conversation_id': target_conversation_id,
-                            'private_cloud_sync_enabled': private_cloud_sync_enabled,
-                            'data_protection_level': data_protection_level,
-                            'client_device_id': client_device_id,
-                            'client_platform': client_platform,
-                            'geolocation': geolocation,
-                            'source_position_map': source_position_map,
-                            'lineage_binding': lineage_binding,
-                            'sync_lane': sync_lane,
-                            'content_id': cap_content_id,
-                            'job_id': job_id,
-                        },
-                        response,
-                        lock,
-                    )
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
-                return False
+        if cap_enforced():
+            if not sync_allowed(uid, lane=cap_dispatch_lane):
+                return hold_for_cap()
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
         url = get_syncing_file_temporal_signed_url(path)
@@ -1447,7 +1508,7 @@ def process_segment(
 
         req_language = user_language if (single_language_mode and user_language) else 'multi'
         recovery_dispatch = {}
-        if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_service is not None:
+        if cap_enforced() and cap_recovery and cap_recovery_service is not None:
             # The durable pre-dispatch intent owns this provider/model. Pin
             # actual serving too, rather than reselecting after the checkpoint.
             provider, _, model = cap_recovery_service
@@ -1483,41 +1544,19 @@ def process_segment(
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
+        speech_offset = 0.0
         while True:
             phase = 'provider_call'
-            if stt_cap_dispatch_enabled() and not sync_allowed(uid):
-                if not cap_recovery:
-                    from utils.sync.cap_hold import defer_segment
-
-                    defer_segment(
-                        uid,
-                        path,
-                        {
-                            'timestamp': get_timestamp_from_path(path),
-                            'source': getattr(source, 'value', source),
-                            'target_conversation_id': target_conversation_id,
-                            'private_cloud_sync_enabled': private_cloud_sync_enabled,
-                            'data_protection_level': data_protection_level,
-                            'client_device_id': client_device_id,
-                            'client_platform': client_platform,
-                            'geolocation': geolocation,
-                            'source_position_map': source_position_map,
-                            'lineage_binding': lineage_binding,
-                            'sync_lane': sync_lane,
-                            'content_id': cap_content_id,
-                            'job_id': job_id,
-                        },
-                        response,
-                        lock,
-                    )
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
-                return False
-            if stt_cap_dispatch_enabled() and cap_recovery and deferred_outcome is not None:
+            if cap_enforced() and not sync_allowed(uid, lane=cap_dispatch_lane):
+                return hold_for_cap()
+            if cap_enforced() and cap_recovery and deferred_outcome is not None:
                 # Explicit request-boundary signal survives later cap denial,
                 # parse/ingest errors, and the bounded empty-result retry.
                 deferred_outcome['provider_called'] = True
-            words, detected_language = prerecorded(
+            words, detected_language = cap_recovery_provider.transcribe(
+                uid,
+                cap_recovery_checkpoint if cap_enforced() and cap_recovery else None,
+                prerecorded,
                 url,
                 speakers_count=3,
                 attempts=0,
@@ -1526,14 +1565,15 @@ def process_segment(
                 keywords=vocabulary if vocabulary else None,
                 **recovery_dispatch,
             )
-            if stt_cap_dispatch_enabled():
-                allowance = funded_allowance(uid)
+            if cap_enforced():
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
                 record_cap_audio(
                     'sync', 'accepted', provider, get_wav_duration(path), allowance.reason == 'plan_allowance_exhausted'
                 )
             language = user_language if (single_language_mode and user_language) else detected_language
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
+            speech_offset = _first_word_offset(words)
             if sync_safety_wal_enabled():
                 for segment in transcript_segments:
                     segment.stt_provider = model
@@ -1542,7 +1582,7 @@ def process_segment(
                     _log_empty_retry('recovered', words=len(words or []), raw_empty=not words)
                     recovered_via_retry = True
                 break
-            if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None:
+            if cap_enforced() and cap_recovery and cap_recovery_checkpoint is not None:
                 # A held piece gets at most two persisted application dispatch
                 # attempts. Reconciliation owns the second, not this local retry.
                 if deferred_outcome is not None:
@@ -1552,9 +1592,11 @@ def process_segment(
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
                 if empty_recovery.enabled():
                     phase = 'provider_call'
-                    recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
+                    recovered = _recover_empty_segment(
+                        path, uid, provider, sync_lane, job_id, attempt_ref, cap_dispatch_lane
+                    )
                     if recovered is not None:
-                        transcript_segments, recovered_language = recovered
+                        transcript_segments, recovered_language, speech_offset = recovered
                         provider, model = 'modulate', 'velma-2'
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
@@ -1583,7 +1625,8 @@ def process_segment(
         # legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
-        segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+        # Lines are timed from the first word, speech_offset seconds into this file.
+        segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
         # Target eligibility (including live stubs and tombstones) is resolved
         # inside the same transaction as temporal assignment.
         closest_memory = (
@@ -1609,51 +1652,25 @@ def process_segment(
             else None
         )
         try:
-            final_segments = None
-            if sync_enabled_for(uid) and audio_bytes is not None:
-                from utils.conversations.final_pass_sync import run_sync_final_pass
-
-                final_pass_started = time.monotonic()
-                final_segments, final_outcome = run_sync_final_pass(
-                    uid,
-                    audio_bytes,
-                    words,
-                    transcript_segments,
-                    person_embeddings_cache or {},
-                    scope=speaker_scope or f'sync:{timestamp}',
-                    owner_reserved=owner_reserved,
-                )
-                logger.info(
-                    'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
-                    final_outcome['outcome'],
-                    hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
-                    _bounded_sync_lane(sync_lane),
-                    time.monotonic() - final_pass_started,
-                )
-            if final_segments and sync_enabled_for(uid):
-                transcript_segments = final_segments
-                for segment in transcript_segments:
-                    segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
-                    segment.stt_provider = model
-                segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
-            else:
-                identify_speakers_for_segments(
-                    transcript_segments,
-                    audio_bytes if person_embeddings_cache else None,
-                    person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
-                    uid,
-                    language=language,
-                    owner_reserved=owner_reserved,
-                )
-        except Exception as e:
-            logger.warning(
-                'event=sync_speaker_id outcome=failed exception_type=%s uid_hash=%s',
-                _bounded_exception_type(e),
-                hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+            transcript_segments, segment_end_timestamp = _assign_segment_speakers(
+                uid,
+                audio_bytes,
+                words,
+                transcript_segments,
+                person_embeddings_cache,
+                timestamp=timestamp,
+                speech_offset=speech_offset,
+                segment_end_timestamp=segment_end_timestamp,
+                speaker_scope=speaker_scope,
+                owner_reserved=owner_reserved,
+                model=model,
+                language=language,
+                sync_lane=sync_lane,
             )
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
+        _shift_to_vad_file_clock(transcript_segments, speech_offset)
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
@@ -1698,7 +1715,7 @@ def process_segment(
             target_id=target_conversation_id,
             **(
                 {'recovery_checkpoint': cap_recovery_checkpoint}
-                if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None
+                if cap_enforced() and cap_recovery and cap_recovery_checkpoint is not None
                 else {}
             ),
         )
@@ -2327,7 +2344,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # OIDC tasks and delayed inline work do not share an HTTP auth cache warmup.
     # Await fresh membership before choosing an irreversible whole-batch path.
     await warm_rollout_cohorts(uid)
-    if stt_cap_dispatch_enabled():
+    if stt_cap_dispatch_enabled(uid, 'sync'):
         # A hold is pending processing, not a locked transcript partition.
         should_lock = False
     # LocalRecordingsProvider uploads one explicitly selected native recording
@@ -2470,6 +2487,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 # expires rather than racing a destructive cleanup against it.
                 preserve_retry_material = True
                 raise
+            except BackfillStoragePressure:
+                raise
             except HTTPException as e:
                 await _finalize_sync_job_failure(
                     job_id=job_id,
@@ -2601,7 +2620,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     )
             cap_held = False
             cap_hold_receipts: dict = {}
-            if stt_cap_dispatch_enabled():
+            if stt_cap_dispatch_enabled(uid, 'sync'):
                 from utils.sync.cap_hold import hold_capture_if_exhausted
 
                 cap_held = await hold_capture_if_exhausted(
@@ -2681,6 +2700,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
+            if 'BackfillStoragePressure' in vad_errors:
+                raise BackfillStoragePressure('sync temporary storage full')
             if vad_errors:
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 segmented_paths = set()
@@ -3027,7 +3048,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
                     **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
-                    **({'cap_content_id': content_id} if stt_cap_dispatch_enabled() else {}),
+                    **({'cap_content_id': content_id} if stt_cap_dispatch_enabled(uid, 'sync') else {}),
                 )
                 if deferred_outcome.get('cap_held'):
                     return  # Durable policy hold, not success/silence/provider failure.
@@ -3228,7 +3249,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # Record DG usage after processing.
             job_phase = 'usage'
-            cap_holds = response.get('_cap_holds', {}) if stt_cap_dispatch_enabled() else {}
+            cap_holds = response.get('_cap_holds', {}) if stt_cap_dispatch_enabled(uid, 'sync') else {}
             cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
             await _record_restricted_sync_dg_usage(
                 enabled=fair_use_restrict_dg,
@@ -3536,12 +3557,27 @@ async def _delete_staged_blobs_async(blob_paths: list):
     await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
 
 
-def _download_staged_files(blob_paths: list) -> bool:
-    """Download staged blobs back to their local paths. False if any is gone."""
-    for p in blob_paths:
-        if not download_syncing_temporal_file(p):
-            return False
-    return True
+def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:
+    """Bound backfill downloads and expansion before any decode allocation."""
+    if bounded_backfill and len(blob_paths) > MAX_BACKFILL_FILES:
+        raise BackfillInputLimitExceeded('backfill staged file count exceeded')
+    remaining = MAX_BACKFILL_RAW_BYTES
+    try:
+        for p in blob_paths:
+            if bounded_backfill:
+                found = download_syncing_temporal_file(p, max_bytes=remaining)
+                if found:
+                    remaining -= os.path.getsize(p)
+            else:
+                found = download_syncing_temporal_file(p)
+            if not found:
+                return False
+        if bounded_backfill:
+            validate_backfill_paths(blob_paths)
+        return True
+    except (BackfillInputLimitExceeded, BackfillStoragePressure):
+        _cleanup_files(blob_paths)
+        raise
 
 
 def finalize_recovered_sync_segment(uid: str, response: dict, private: bool) -> None:

@@ -65,7 +65,7 @@ def test_recovery_targets_integration_with_declared_platform_timeout(environment
     assert targets['services']['backend-integration']['flags']['--timeout'] == timeout
 
 
-@pytest.mark.parametrize('inventory', ['present', 'absent', 'denied', 'unexpected'])
+@pytest.mark.parametrize('inventory', ['present', 'present_short', 'absent', 'denied', 'unexpected'])
 def test_recovery_queue_provisioning_is_bounded_and_inventory_errors_fail_closed(tmp_path, inventory):
     action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
     steps = action['runs']['steps']
@@ -87,6 +87,7 @@ printf '%s\\n' "$*" >> "$TRACE"
 if [[ "$3" == list ]]; then
   case "$INVENTORY" in
     present) echo projects/synthetic-project/locations/synthetic-region/queues/batch-quarantine-recovery ;;
+    present_short) echo batch-quarantine-recovery ;;
     absent) ;;
     denied) exit 1 ;;
     unexpected) echo unexpected ;;
@@ -101,16 +102,29 @@ fi
         text=True,
     )
     calls = trace.read_text().splitlines()
-    assert (result.returncode == 0) is (inventory in {'present', 'absent'})
-    assert len(calls) == (2 if inventory in {'present', 'absent'} else 1)
+    assert (result.returncode == 0) is (inventory in {'present', 'present_short', 'absent'})
+    assert len(calls) == (2 if inventory in {'present', 'present_short', 'absent'} else 1)
     if result.returncode == 0:
-        operation = 'update' if inventory == 'present' else 'create'
+        operation = 'update' if inventory in {'present', 'present_short'} else 'create'
         assert calls[1].startswith(f'tasks queues {operation} batch-quarantine-recovery ')
         for option in [
-            '--max-concurrent-dispatches=4',
-            '--max-dispatches-per-second=4',
+            # 10-19 01:27Z raise; the 07:07Z train reset it to 4/4 and failed the 5% re-qualification.
+            '--max-concurrent-dispatches=16',
+            '--max-dispatches-per-second=8',
             '--max-attempts=5',
             '--min-backoff=5s',
             '--max-backoff=60s',
         ]:
             assert option in calls[1]
+
+
+def test_prod_integration_pins_the_ramp_recovery_dispatch_batch(monkeypatch):
+    """Set live to 64 during the 10-19 ramp; without the manifest value every train restores 16."""
+    import importlib
+
+    overlay = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+    env = overlay['overlay']['cloud_run']['services']['backend-integration']['env']
+    assert env['BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE']['value'] == '64'
+    batch_pipeline = importlib.import_module('config.batch_pipeline')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '64')
+    assert batch_pipeline.recovery_dispatch_batch_size() == 64  # within the code bound, not clamped back to 16

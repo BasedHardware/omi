@@ -390,6 +390,7 @@ class GeneratedUserSubscriptionResponse {
   final int? chatQuotaResetAt;
   final String? chatQuotaUnit;
   final double chatQuotaUsed;
+  final bool? cloudScreenVectors;
   final int? desktopGrandfatherUntil;
   final GeneratedHeldAudioSummary? heldAudio;
   final int insightsGainedLimit;
@@ -401,6 +402,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedTranscriptionAllowanceSnapshot? transcriptionAllowance;
   final int transcriptionSecondsLimit;
   final int transcriptionSecondsUsed;
+  final bool trialEligible;
   final int wordsTranscribedLimit;
   final int wordsTranscribedUsed;
 
@@ -411,6 +413,7 @@ class GeneratedUserSubscriptionResponse {
     this.chatQuotaResetAt,
     this.chatQuotaUnit,
     this.chatQuotaUsed = 0.0,
+    this.cloudScreenVectors,
     this.desktopGrandfatherUntil,
     this.heldAudio,
     required this.insightsGainedLimit,
@@ -422,6 +425,7 @@ class GeneratedUserSubscriptionResponse {
     this.transcriptionAllowance,
     required this.transcriptionSecondsLimit,
     required this.transcriptionSecondsUsed,
+    this.trialEligible = false,
     required this.wordsTranscribedLimit,
     required this.wordsTranscribedUsed,
   });
@@ -434,6 +438,7 @@ class GeneratedUserSubscriptionResponse {
       chatQuotaResetAt: _readFieldValue<int>(_readField(json, const ["chat_quota_reset_at"]), "chat_quota_reset_at", _readInt, requiredField: false, nullable: true),
       chatQuotaUnit: _readFieldValue<String>(_readField(json, const ["chat_quota_unit"]), "chat_quota_unit", _readString, requiredField: false, nullable: true),
       chatQuotaUsed: _required(_readFieldValue<double>(_readField(json, const ["chat_quota_used"]), "chat_quota_used", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "chat_quota_used"),
+      cloudScreenVectors: _readFieldValue<bool>(_readField(json, const ["cloud_screen_vectors"]), "cloud_screen_vectors", _readBool, requiredField: false, nullable: true),
       desktopGrandfatherUntil: _readFieldValue<int>(_readField(json, const ["desktop_grandfather_until"]), "desktop_grandfather_until", _readInt, requiredField: false, nullable: true),
       heldAudio: _readFieldValue<GeneratedHeldAudioSummary>(_readField(json, const ["held_audio"]), "held_audio", (value) => _readObject(value, GeneratedHeldAudioSummary.fromJson), requiredField: false, nullable: true),
       insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
@@ -445,6 +450,7 @@ class GeneratedUserSubscriptionResponse {
       transcriptionAllowance: _readFieldValue<GeneratedTranscriptionAllowanceSnapshot>(_readField(json, const ["transcription_allowance"]), "transcription_allowance", (value) => _readObject(value, GeneratedTranscriptionAllowanceSnapshot.fromJson), requiredField: false, nullable: true),
       transcriptionSecondsLimit: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_limit"]), "transcription_seconds_limit", _readInt, requiredField: true, nullable: false), "transcription_seconds_limit"),
       transcriptionSecondsUsed: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_used"]), "transcription_seconds_used", _readInt, requiredField: true, nullable: false), "transcription_seconds_used"),
+      trialEligible: _required(_readFieldValue<bool>(_readField(json, const ["trial_eligible"]), "trial_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "trial_eligible"),
       wordsTranscribedLimit: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_limit"]), "words_transcribed_limit", _readInt, requiredField: true, nullable: false), "words_transcribed_limit"),
       wordsTranscribedUsed: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_used"]), "words_transcribed_used", _readInt, requiredField: true, nullable: false), "words_transcribed_used"),
     );
@@ -458,6 +464,7 @@ class GeneratedUserSubscriptionResponse {
       'chat_quota_reset_at': chatQuotaResetAt,
       'chat_quota_unit': chatQuotaUnit,
       'chat_quota_used': chatQuotaUsed,
+      'cloud_screen_vectors': cloudScreenVectors,
       'desktop_grandfather_until': desktopGrandfatherUntil,
       'held_audio': heldAudio?.toJson(),
       'insights_gained_limit': insightsGainedLimit,
@@ -469,6 +476,7 @@ class GeneratedUserSubscriptionResponse {
       'transcription_allowance': transcriptionAllowance?.toJson(),
       'transcription_seconds_limit': transcriptionSecondsLimit,
       'transcription_seconds_used': transcriptionSecondsUsed,
+      'trial_eligible': trialEligible,
       'words_transcribed_limit': wordsTranscribedLimit,
       'words_transcribed_used': wordsTranscribedUsed,
     };

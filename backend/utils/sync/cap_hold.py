@@ -71,6 +71,7 @@ def capture_identity(path: str, metadata: dict[str, Any]) -> str:
 
 def describe(path: str, metadata: dict[str, Any]) -> tuple[str, float, dict]:
     metadata = dict(metadata)
+    metadata.setdefault('origin', 'sync')
     geolocation = metadata.get('geolocation')
     if geolocation is not None and hasattr(geolocation, 'model_dump'):
         metadata['geolocation'] = geolocation.model_dump(mode='json')
@@ -370,7 +371,11 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
     def commit(tx: Any):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() if snapshot.exists else None
-        if not row or row.get('state') in {'completed', 'retained', 'purged'} or row.get('lease_until', 0) > now:
+        if (
+            not row
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('lease_until', 0) > now
+        ):
             return None
         token = uuid4().hex
         tx.update(ref, {'lease_until': now + 1800, 'lease_token': token})
@@ -417,7 +422,21 @@ def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
         with TemporaryDirectory(dir=Path(path).parent) as directory:
             compressed = str(Path(directory) / 'source.opus')
             _read_single_audio(uid, row, compressed)
-            decode(compressed, path, int(row['sample_rate']), int(row['source_frames']))
+            fragments = row.get('opus_fragments')
+            if fragments:
+                with open(compressed, 'rb') as source, wave.open(path, 'wb') as output:
+                    output.setparams((1, 2, int(row['sample_rate']), 0, 'NONE', 'not compressed'))
+                    for index, fragment in enumerate(fragments):
+                        opus = str(Path(directory) / f'{index}.opus')
+                        wav = str(Path(directory) / f'{index}.wav')
+                        Path(opus).write_bytes(source.read(fragment['bytes']))
+                        decode(opus, wav, int(row['sample_rate']), fragment['frames'])
+                        with wave.open(wav, 'rb') as audio:
+                            output.writeframesraw(audio.readframes(fragment['frames']))
+                    if source.read(1):
+                        raise ValueError('unexpected live fragment source tail')
+            else:
+                decode(compressed, path, int(row['sample_rate']), int(row['source_frames']))
         return
     parts = row.get('audio_parts')
     if not parts:
@@ -506,7 +525,7 @@ async def hold_capture_if_exhausted(
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
-    if not paths or not enabled():
+    if not paths or not enabled(uid, 'sync'):
         return False
     allowance = await run_blocking(db_executor, funded_allowance, uid)
     if allowance.managed:
@@ -522,6 +541,7 @@ async def hold_capture_if_exhausted(
                 **context,
                 'timestamp': get_timestamp_from_path(path),
                 'source': getattr(source, 'value', source),
+                'origin': 'sync',
                 'full_capture': True,
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
@@ -537,7 +557,12 @@ async def hold_capture_if_exhausted(
 def defer_segment(uid: str, path: str, metadata: dict, response: dict, lock: Any) -> None:
     """Report a durable late hold to both coordinators, never as silence."""
     receipt: dict = {}
-    hold_segment(uid, path, {**metadata, 'file_name': Path(path).name}, receipt=receipt)
+    hold_segment(
+        uid,
+        path,
+        {'timestamp': get_timestamp_from_path(path), **metadata, 'file_name': Path(path).name},
+        receipt=receipt,
+    )
     with lock:
         response.setdefault('_cap_holds', {})[receipt['id']] = receipt
 

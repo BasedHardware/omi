@@ -1,20 +1,15 @@
 import { memo } from 'react'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Info, ArrowUpRight, Monitor, ThumbsUp } from 'lucide-react'
-import type { Memory, MemoryUseAction } from '../../hooks/useMemories'
+import { Info, ArrowUpRight, Monitor } from 'lucide-react'
+import type { Memory } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
-  canUseMemory,
   categoryOf,
-  currencyBandLabel,
   displayTags,
-  formatMemoryAssessmentDate,
   formatMemoryDate,
-  formatMemoryEvidenceDate,
   isNewMemory,
   isProtectedContent,
-  layerLabel,
-  memoryUseSuppressed
+  layerLabel
 } from '../../lib/memoryFilters'
 import { memorySourceLabel } from '../../lib/memoryProvenance'
 import { Badge } from '../ui/Badge'
@@ -58,8 +53,6 @@ function InfoRows({ memory }: { memory: Memory }): React.JSX.Element {
 type MemoryCardProps = {
   memory: Memory
   onOpen: (m: Memory) => void
-  onUseAction?: (id: string, action: MemoryUseAction) => void
-  useActionBusy?: boolean
   // Injected so a whole list shares one "now" and the New badge stays consistent.
   now?: number
 }
@@ -78,23 +71,12 @@ type MemoryCardProps = {
 function MemoryCardImpl({
   memory,
   onOpen,
-  onUseAction,
-  useActionBusy,
   now
 }: MemoryCardProps): React.JSX.Element {
   const isNew = isNewMemory(memory, now)
   const protectedMem = isProtectedContent(memory.content)
   const layer = layerLabel(memory)
   const source = memorySourceLabel(memory)
-  const assessmentDate = formatMemoryAssessmentDate(memory)
-  const evidenceDate = formatMemoryEvidenceDate(memory)
-  const useFeedbackAllowed = canUseMemory(memory)
-  const hasAssessment =
-    memory.currency_band !== undefined ||
-    memory.currency !== undefined ||
-    memory.belief_computed_at !== undefined ||
-    memory.belief_class !== undefined
-  const suppressed = memoryUseSuppressed(memory)
   const open = (): void => onOpen(memory)
 
   return (
@@ -131,11 +113,6 @@ function MemoryCardImpl({
         <Badge tone="neutral" size="xs">
           {CATEGORY_LABEL[categoryOf(memory)]}
         </Badge>
-        {hasAssessment && (
-          <Badge tone="neutral" size="xs">
-            {currencyBandLabel(memory)}
-          </Badge>
-        )}
         {layer && (
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${
@@ -154,47 +131,6 @@ function MemoryCardImpl({
           </span>
         )}
 
-        {evidenceDate && (
-          <span className="text-text-quaternary" title="Server evidence time">
-            Evidence {evidenceDate}
-          </span>
-        )}
-        {assessmentDate && (
-          <span className="text-text-quaternary" title="Server evidence assessment time">
-            Assessed {assessmentDate}
-          </span>
-        )}
-
-        {/* Both events on the feedback group are fenced: a click is already
-            stopped, but Enter/Space on these buttons would otherwise bubble to
-            the li's onKeyDown and open the card on top of the feedback. */}
-        {onUseAction && useFeedbackAllowed && (
-          <span
-            className="flex items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              disabled={useActionBusy}
-              onClick={() => onUseAction(memory.id, suppressed ? 'allow' : 'suppress')}
-              className="rounded-md px-1.5 py-0.5 text-[10px] text-white/45 transition-colors hover:bg-white/5 hover:text-white/80 disabled:opacity-40"
-              aria-label={suppressed ? 'Allow this memory to be used' : 'Do not use this memory'}
-            >
-              {suppressed ? 'Allow use' : "Don't use"}
-            </button>
-            <button
-              type="button"
-              disabled={useActionBusy}
-              onClick={() => onUseAction(memory.id, 'useful')}
-              className="rounded-md p-1 text-white/35 transition-colors hover:bg-white/5 hover:text-white/80 disabled:opacity-40"
-              aria-label="Mark this memory useful"
-              title="Mark useful"
-            >
-              <ThumbsUp className="h-3 w-3" />
-            </button>
-          </span>
-        )}
 
         <span className="ml-auto flex items-center gap-1">
           <Tooltip.Provider delayDuration={200} disableHoverableContent={false}>

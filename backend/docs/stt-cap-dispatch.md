@@ -1,12 +1,135 @@
 # Transcription cap at provider dispatch
 
-`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. This PR
-adds no deployment binding and does not enable it. Enabling changes the policy
-for existing capped paid plans: exhausted sync uploads wait as audio rather than
-being transcribed into locked conversations. Product approval is required before
-activation. Ladder budget composition and its independent default-off execution
-admission are documented in [the listen pipeline](listen_pusher_pipeline.mdx#ladder-budget-refresh-and-execution-admission-default-off).
-No prices or deployment switches change.
+`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. Its
+approved activation is a small cohort and live only. The shared cohort/lane
+scope below also applies when only ladder budget execution is enabled. Outside
+that scope the existing behavior stays unchanged.
+
+## Cohort and lane rollout (David 2026-10-18)
+
+Execution admission requires **both** an admission switch and a selected owner /
+original lane. `STT_CAP_DISPATCH_ENFORCEMENT` remains default false.
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` alone uses the same scope; it cannot widen
+STT execution to the fleet. `STT_CAP_DISPATCH_COHORT` unset or empty admits nobody.
+Use `uid:<COORDINATOR_TEST_UID>` (replace the placeholder before deployment),
+comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
+`all` is the explicit universal cohort. The token grammar and stable
+`sha256("free-tier-cohort:" + uid)[:8] % 100` bucket come from the retired free-tier
+parser, now shared in pure `config/rollout_cohorts.py`; no PostHog or Firestore
+membership call is added. Malformed tokens invalidate the whole cohort.
+
+`STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset, empty
+or whitespace-only values select **live only**. Unknown tokens or empty tokens
+inside a list (for example `live,` or `live,,sync`) disable the whole selection.
+Unknown call-site lanes are never mapped to a permitted lane.
+
+Batch is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
+for both admission switches and every cohort, even with explicit `batch` and
+`all`. Before that constant can change, lane8 must write `provider_reason=byok`
+into `binding.policy` at batch admission. This is a source readiness condition,
+not an environment flag. A valid lane list containing batch emits one static
+warning per process; it does not prevent explicit live/sync selection. Thus
+`live,batch` selects only live and `batch` selects nothing while the fence is
+closed. No UID or configuration data is included in the warning.
+Live receiver and provider constructors pass the authenticated UID and `live`;
+v1 intake, v2 coordinator and ordinary segment retries pass `sync`; queued GPU
+jobs, quarantine/speech retries and generated/text processing pass `batch`.
+Every GPU microbatch checks each owner separately. Generic generated work belongs
+to `batch`, so a live-only rollout does not enable its budget denial paths.
+Owner-facing summaries, consent and worker entrypoints require membership in at
+least one selected lane, then each paid audio dispatch checks the original lane.
+
+Listen checks the raw admission switches and custom-STT bypass before reading
+request identity. Active non-custom admission still requires the authenticated
+UID and live-lane scope; there is no missing-UID fallback.
+
+Managed compute uses the same batch selection before treating shared admission
+as a completed ladder budget check. An excluded UID, empty cohort or live-only
+scope falls through the existing paid-plan/free-feature policy without reading
+budget snapshots or allowance. Independent Pro feature gates still apply.
+
+### Original held-audio provenance
+
+Encrypted hold metadata owns `origin`. New sync intake and late-segment holds
+write `origin=sync`; the live writer already writes `origin=live`. Recovery reads
+that value before audio download/claim and propagates it as `cap_dispatch_lane`
+through the shared segment processor, per-call allowance and empty-result retry.
+It never replaces origin with the execution method (`batch`), device `source`, or
+sync freshness (`sync_lane=fresh|backfill`). Legacy metadata **without** `origin`
+is sync: all pre-origin hold producers were sync; every live custody version
+already supplied `origin=live`: the first live writer in `f6a358902db1` (#21488)
+wrote that marker, and the durability rewrite preserved it. An explicit
+unknown/null origin pauses recovery
+and retains the manifest/audio. No historical rewrite or new index is needed.
+Excluded backlog items spend no chosen allowance. The worker scans past disabled
+lanes for selected work and rewinds its cursors before stopping, retaining the
+choice for widening. A reserved excluded item can yield to later selected work
+only when a transaction proves it never started: the active choice token/lease,
+current month and exact debit must match; an audio manifest must still match the
+decrypted provenance and have `state=held`, zero lease, `next_attempt_at=0`,
+and no `lease_token` or `piece_plan` key at all. Key presence records claim/plan
+history even when its value is empty or null; the real release writer leaves an
+empty token and retry timestamp. Missing/nonzero retry timestamps also retain
+the reservation. There must be no dispatch receipts, ingest proofs or completion
+markers. Text must have no claim history. The same
+transaction refunds the chosen estimate once (preserving unlimited remaining),
+clears the reservation and records `scope_skipped`. It does not refund metered
+usage or remove the source; cursor rewind keeps excluded work discoverable.
+Any intent/receipt (including ambiguous dispatch), audio lease/token, text claim
+(even expired), missing legacy lease proof, unknown origin or failed read retains
+the reservation. Such ambiguous reservations conservatively block that choice
+until their lane is restored and normal recovery resolves them. A lost refund
+response leaves the choice active for a fresh read, never a second refund.
+At page completion the store refuses any actual reservation first, then consumes
+an already-authorized current-month pending upgrade into a fresh token, allowance
+and cutoff. Excluded rows do not block that upgrade. Without an eligible upgrade,
+skipped scope keeps the choice processing and atomically rewinds its cursors;
+it never finishes to waiting-choice solely because excluded rows remain.
+Custody sealing/cleanup stays active during rollback because it is
+owed persistence, not permission to dispatch STT.
+
+### Controlled expansion and rollback
+
+Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
+`live`. These are inert configuration declarations, not activation. The first
+cohort requires the same values on listen and the CPU recovery/sync hosts:
+
+```text
+STT_CAP_DISPATCH_ENFORCEMENT=true
+STT_CAP_DISPATCH_COHORT=uid:<COORDINATOR_TEST_UID>
+STT_CAP_DISPATCH_LANES=live
+```
+
+No authorized coordinator-test UID was identified in local project docs; the
+placeholder is intentionally unresolved and must never be deployed literally.
+Keep the ladder switch at its separately approved value; setting it true still
+cannot bypass these cohort/lane controls. Apply the scope consistently to all
+serving hosts/readers before enrolling any UID. The dedicated GPU chart exposes
+`worker.capDispatchEnforcement`, `capDispatchCohort`, `capDispatchLanes` and
+`ladderBudgetEnforcement` with the same dark/live-only defaults; future approved
+batch widening must configure it and the CPU policy host together.
+
+Ramp owner **dazheng**: coordinator test accounts -> `pct:1` -> `pct:5` held for
+**3 hours** -> `pct:25` -> `all` (100%). At each expansion, record held-audio count,
+backlog stalls, live STT error rate and client 5xx against the pre-ramp baseline;
+advance only with no unexplained regression and a synthetic consented live hold
+recovering across instance replacement. Dazheng owns each expansion and the
+**2026-10-19 18:00 UTC** decision/checkpoint; a missed checkpoint or an incomplete
+three-hour soak is a blocker to report, never authority to skip a stage. Keep
+`STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
+batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
+approved widening. Batch also requires the lane8 binding-policy readiness change
+above before its code-owned fence can open; configuration alone cannot enable
+it. This change does not relocate that authorization.
+
+Rollback: set **both** admission switches false (or clear the cohort to stop only
+this execution rollout), preserving audio, processing choice and receipts. Keep
+the current reader and custody redrive running to seal/clean owed fragments;
+excluded recovery dispatch stays paused until scope is restored. Existing live
+sessions use their admitted state until reconnect/revision drain; roll the same
+configuration to all hosts and drain old sessions when changing scope. No new
+Scheduler jobs or Firestore indexes are introduced here; the existing durability
+job/index prerequisites below remain independently owned.
 
 ## Boundaries
 
@@ -112,7 +235,10 @@ normally. If a call may have happened, the piece waits 30 minutes. Then:
 2. Without a proof, current allowance/abuse admission permits **one** additional
    application dispatch, persisted as `attempt=2`. Recovery owns retries; the
    ordinary segment's local empty-result retry is disabled for these checkpointed
-   recovery attempts. Provider-internal SDK retries remain outside this ledger.
+   recovery attempts. Nested URL/provider retries are disabled for held recovery. Nonempty provider
+   results are encrypted and fenced before ingest, so a restart reuses them; the
+   vendor-acceptance-to-checkpoint crash window remains irreducible. See the
+   [durability runbook](runbooks/cap-hold-durability.md) for bounds and rollout.
 3. A second ambiguous attempt gets the same cooldown/proof check, then becomes
    `failed_reconciliation`. Its audio and manifest remain retained. Successful
    siblings still settle usage and finalize independently; their paths checkpoint
@@ -131,7 +257,7 @@ source and frozen pieces only after content/usage settlement.
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
-accounts wait for their next authenticated HTTP request; there is no new cron.
+accounts can also resume through the existing durable-redrive sweep after an explicit processing choice.
 Turning both admission switches off pauses recovery, preserving its audio.
 
 ## Launch configuration and measurement
@@ -209,7 +335,7 @@ activation decision for David; default-off deployment preserves today's policy.
 
 ## Ladder-v1 admission in #21488
 
-`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
+Within the selected cohort/lanes, `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` installs the live provider
 suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
@@ -270,104 +396,25 @@ spans. Paid prefixes and replay spans never become holds; the capture observer
 and client WAL behavior are unchanged. Owner, rate, channel, UTC capture month
 and real clock-gap boundaries remain separate. Source timestamps and conversation
 ownership follow the existing recovery/ingestion path. Funded resume publishes
-the final tail before forwarding new audio, then schedules recovery after its
-existing cooldown. Close and cancellation use supervised, shielded publication.
+the final tail before forwarding new audio, then the periodic server sweep re-drives existing processing consent. Close and cancellation use supervised, shielded publication.
 
-A contiguous mono minute now produces **one immutable Ogg Opus object**, at
-16 kbit/s constrained VBR. The existing Docker FFmpeg/libopus dependency encodes
-and decodes it; no dependency was added. CBR fallback enforces a **128 KiB encoded
-ceiling**, plus one 32-byte authenticated encryption frame. Explicit source-frame
-metadata trims padded short tails back to the exact capture clock. Opus is lossy;
-FLAC cannot bound noisy microphone input to this storage footprint. Recovery still
-runs VAD with short segments enabled; silence makes no STT call.
+The default writer now stages at-most-15-second encrypted Opus fragments and
+seals/composes them into **one immutable retained source per contiguous minute**.
+The sample-duration memory bound is 15 seconds; SIGKILL can still lose its current
+unpublished fragment. Expired writer staging is independently sealed by the
+periodic server sweep, including when no processing consent exists. Publication
+and capacity replies are reconciled before consuming slots or refunding capacity;
+privacy/deletion and immutable published-source authority remain unchanged.
 
-Each minute is born sealed in one transaction: two account-deletion/destructive-
-operation authority reads, the existing encrypted owner-prefix upload, one hold
-create and one summary increment. Transaction read locks span the bounded GCS
-upload (`timeout=10`, no automatic GCS retry) and manifest commit. Nested storage
-fences reuse only the exact synchronous uid/client/transaction scope; there is no
-TTL authority cache. A deleter either precedes those reads and blocks publication,
-or serializes after publication and purges the existing prefix/subcollections.
-Recovery retains its existing 30-minute claim/renew/checkpoint lease. Live writers
-never append to a published group, so no stream lease-release write is needed.
-
-Capacity is reserved in idempotent blocks of 64 minute slots (four reads/two
-writes per block, including both authorities). Unused slots are refunded once on
-clean close or month switch (four reads/two writes). An ambiguous acquisition
-retains its identity, and an ambiguous publication retains its consumed slot.
-Crashes conservatively strand unused reservations. The new source ceiling is
-**8 GiB / 100,000 slots per user/capture UTC month**, shared by sessions/channels;
-failed reservations cannot bypass it. Legacy v3 captures retain their old-format
-recovery/reservation handling. Capacity/backpressure failures close with an error,
-never a successful custody receipt. No flag or retention policy changed.
-
-Accepted custody is bounded to 60 seconds across all channels/rates. Async receive
-entry points split a straddling ingress packet at the exact remaining sample,
-await publication, then accept its tail. They preserve full minute objects without
-accepting a 61st second or flushing an unnecessary short object. Synchronous
-capture callbacks retain the strict aggregate guard. The one-second updater
-flushes aged partial buffers; minute rollover starts a new tail timer.
-SIGKILL/pod loss can lose buffered/in-flight accepted audio; only published seconds
-are reported. There is no client acknowledgement protocol.
-
-Each pending source owns a fresh, opaque server UUID publication token. Callers
-cannot provide/reconstruct its identity or reset a `retry=False` flag. The token
-serializes attempts, consumes its fresh grant before IO, and every later attempt
-checks the durable hold before any upload. A failed commit cleans its uncommitted
-object with an exact generation precondition; a lost successful commit reply is
-protected by the durable receipt. Unknown upload replies use an exceptional
-metadata lookup before guarded cleanup. These failure reads do not affect the
-steady count. Pessimistic server transactions also block non-transactional
-writers; cleanup covers unsuccessful/optimistic publication as well.
-
-Successful recovery keeps a compact purged receipt, so a lost writer reply cannot
-recreate a source after deletion/recovery. Its frozen piece plan stores source
-pointer, exact sample offset/count and decoded PCM hash. Retries decode one local
-cached source and reconstruct those slices without rerunning VAD. **Recovery
-uploads no second audio copy for v4**; hash mismatch fails closed. Local decoded
-PCM is bounded to one minute and removed with the recovery directory. Existing
-account deletion removes all generations under `chunks/{uid}/` and recursively
-purges holds, receipts, summary and reservations.
-
-The real loopback Firestore emulator instruments every DocumentReference.get and
-transaction write, with the real nested privacy fence and a deterministic GCS
-adapter. For 64 continuous mono minutes including ready-summary startup and quota
-acquisition: **133 reads / 130 writes / 64 uploads**, or **2.078125 reads /
-2.03125 writes / 1 upload per capped minute**. A 60-minute socket including partial
-block refund is 129 reads / 124 writes / 60 uploads. A one-minute cold socket is
-11 reads / 6 writes / 1 upload; setup cannot be amortized over very short sockets.
-Summary migration, retries/contention and ownership/gap/seal/close/month boundary
-fragments are additional; steady-state figures do not claim otherwise. Existing
-allowance refresh and downstream conversation/usage work are separate.
-
-At illustrative colocated us-central1 Standard rates, capture operations cost
-$0.0004503/capped hour including hourly socket setup/refund. With a full billing
-month of retention, an 8 KiB per-hold document/index allowance plus quota receipts
-adds $0.00006974/hour. GCS source storage adds at most $0.00014652/hour at the
-object ceiling: **$0.00066656/capped hour for capture custody operations and
-storage**, excluding STT and subsequent recovery operations. This is a model,
-not a cloud invoice; no bucket settings or production data were read. Free tiers,
-discounts and network egress are not credited. Regional Standard/flat namespace,
-no cross-region transfer, backup/PITR or noncurrent copies are assumed. Soft-delete
-retention adds proportional byte-days after purge. Repeated retained months and
-compact receipts accumulate; there is no lifetime retention bound.
-
-A 31-day 24/7 mono month has 44,640 uploads and at most **5.45055 GiB** encrypted
-source audio (8 GiB is the conservative reservation ceiling). A local existing
-voice-fixture/silence experiment at the previously documented ~32% speech share
-measured 59,039 encoded bytes/minute: **2.45583 GiB** for 24/7, or **0.81861 GiB**
-for an explicit planning scenario of 8 capped hours/day for 31 days. The respective
-hard bounds are 5.45055 / 1.81685 GiB. This retains quiet audio, so upload counts
-are never multiplied by speech share. Ambient noise can approach the hard bound;
-these fixture bytes are not a measured fleet average. The rate-card evidence's
-32% proxy is incomplete for paths without accepted-speech metering.
-
-Sources: [Firestore pricing](https://cloud.google.com/firestore/pricing),
-[GCS pricing](https://cloud.google.com/storage/pricing),
-[transaction lock semantics](https://docs.cloud.google.com/firestore/native/docs/transaction-data-contention),
-[document/index accounting](https://docs.cloud.google.com/firestore/native/docs/storage-size).
-The workspace evidence/report records the speech-share citations, operation
-counting recipe, recovery overhead and retention sensitivity.
+The existing 8 GiB monthly quota reserves 64 source slots plus one overlap slot
+per writer block. New collection-group indexes and Scheduler reconciliation are
+deployment prerequisites. The [durability runbook](runbooks/cap-hold-durability.md)
+owns exact retry/shutdown behavior, kill switches, unavoidable vendor-spend window,
+measured operation counts and costs. Current 64-minute emulator custody counts are
+1221 reads / 514 writes / 256 fragment PUTs / 64 composes, leaving 64 retained
+sources. This replaces v4's one-PUT/two-write economics: the explicit modeled
+custody increase is roughly $0.00183/capped hour for the smaller volatile window.
+The original 60-second path remains available via the fragment kill switch.
 
 Summary v2 lazily rebuilds older/missing totals under a short initializer lease
 in transactions of at most 400 rows. Each page fences the cursor and listing

@@ -1,6 +1,8 @@
 """Cutover policy contracts: dark path, retained legacy entitlements, and cap boundaries."""
 
 from datetime import datetime, timedelta, timezone
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import inspect
 import json
 from pathlib import Path

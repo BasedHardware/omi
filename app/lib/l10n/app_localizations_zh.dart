@@ -1952,12 +1952,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
-  String get memoryAllowUse => '允许使用';
-
-  @override
-  String get memoryDontUse => '不使用';
-
-  @override
   String get undo => '撤销';
 
   @override
@@ -9177,9 +9171,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+另外$count个';
-  }
+  String get quoteShowSources => '显示来源';
 
   @override
   String get jumpToLatestMessage => '跳转到最新消息';
@@ -10888,7 +10880,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+  String get captureRecoveryBannerTitle => 'Omi 未发送音频';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -10898,6 +10890,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureBannerTryReconnect => '尝试重新连接';
+
+  @override
+  String get captureBannerRetrySync => '重试同步';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
+
+  @override
+  String get captureIngressNeedsReconnect => '音频未送达应用 — 请重新连接您的 Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      '应用已无法再从 Omi 设备接收音频，且未能自动恢复连接。请断开并重新连接设备 — 在设备设置中操作，或将设备关机后重启。设备上已保存的音频稍后会同步。';
 
   @override
   String get captureStillRecording => '仍在录音';
@@ -12964,6 +12973,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => '连接你的 Omi';
+
+  @override
+  String get firstCaptureConnectDescription => '配对你的 Omi，全天候免提记录对话。';
+
+  @override
+  String get firstCaptureConnect => '连接我的 Omi';
+
+  @override
+  String get firstCaptureNoDevice => '我还没有 Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13070,6 +13091,111 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => '再也不错过任何一句话。';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => '您的免费试用这样运作。';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => '无限摘要，永久保存';
+
+  @override
+  String get paywallTrialSlideSummariesBody => '每次对话都将生成清晰的摘要和后续步骤，确保万无一失。';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => '顶尖转录技术';
+
+  @override
+  String get paywallTrialChipDetails => '捕捉更多细节';
+
+  @override
+  String get paywallTrialChipSpeakers => '区分不同发言人';
+
+  @override
+  String get paywallTrialChipNoise => '嘈杂环境中也能使用';
+
+  @override
+  String get paywallTrialChipAccents => '处理各种口音';
+
+  @override
+  String get paywallTrialChipJargon => '了解您的术语和名称';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => '自动识别发言人姓名';
+
+  @override
+  String get paywallTrialSlideAskTitle => '无限提问，贯穿每次对话';
+
+  @override
+  String get paywallTrialBubbleFollowUp => '根据本次会议起草一封后续邮件。';
+
+  @override
+  String get paywallTrialBubbleConflicts => '与约翰周二所说有冲突吗？';
+
+  @override
+  String get paywallTrialBubbleBlockers => '找出任何可能阻碍我们的因素。';
+
+  @override
+  String get paywallTrialSlideAppsTitle => '与您喜爱的应用协同工作';
+
+  @override
+  String get paywallTrialTodayTitle => '今天';
+
+  @override
+  String get paywallTrialTodayBody => 'Pro 中的所有功能均已解锁。';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days 天免费';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '我们为您提供 $days 天 Omi Pro 免费试用。';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days 天后';
+  }
+
+  @override
+  String get paywallTrialEndsBody => '试用期结束。除非您取消，否则将开始收费。';
+
+  @override
+  String get paywallTrialFeatureModels => '最新 AI 模型';
+
+  @override
+  String get paywallTrialFeatureAsk => '无限 Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => '按月计费';
+
+  @override
+  String get paywallTrialBilledYearly => '按年计费';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '节省 $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '以 $price 开始';
+  }
+
+  @override
+  String get paywallTrialSecondary => '继续使用免费计划';
+
+  @override
+  String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return '您的 Omi Pro $days 天免费试用已开始。';
+  }
 
   @override
   String get paywallCancelAnytime => '随时取消。';
@@ -13338,7 +13464,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityRetryAll => '全部重试';
 
   @override
+  String get activityAttentionStorageUnknownTitle => '无法检查存储空间';
+
+  @override
+  String get activityAttentionStorageSubtitle => '录音已暂停';
+
+  @override
+  String get activityAttentionUploadStalledTitle => '上传停滞';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get activityAttentionSemantics => '活动，需要关注';
 
   @override
   String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
@@ -14005,4 +14154,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '已保存 $saved / $total 的音频';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi 仍在录音';
 }

@@ -1991,12 +1991,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
-  String get memoryAllowUse => 'Povolit použití';
-
-  @override
-  String get memoryDontUse => 'Nepoužívat';
-
-  @override
   String get undo => 'Vrátit zpět';
 
   @override
@@ -9327,9 +9321,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count dalších';
-  }
+  String get quoteShowSources => 'Zobrazit zdroje';
 
   @override
   String get jumpToLatestMessage => 'Přejít na nejnovější zprávu';
@@ -11071,7 +11063,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get openCall => 'Otevřít hovor';
 
   @override
-  String get captureRecoveryBanner => 'Omi neodesílá zvuk — klepnutím se znovu připojte';
+  String get captureRecoveryBannerTitle => 'Omi neodesílá zvuk';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11082,6 +11074,23 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
+
+  @override
+  String get captureBannerTryReconnect => 'Zkusit znovu připojit';
+
+  @override
+  String get captureBannerRetrySync => 'Zopakovat synchronizaci';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth spojení s vaším zařízením Omi se zaseklo, takže zvuk se do aplikace nedostává. Omi na zařízení dál nahrává a po obnovení spojení se synchronizuje. Opakování pokusu spojení znovu naváže; pokud to dál nefunguje, zkontrolujte zařízení v Nastavení > Zařízení.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Zvuk se do aplikace nedostává — znovu připojte Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikace už nedokáže přijímat zvuk ze zařízení Omi a nepodařilo se jí spojení automaticky obnovit. Odpojte a znovu připojte zařízení — v nastavení zařízení nebo jeho vypnutím a zapnutím. Zvuk uložený v zařízení se synchronizuje později.';
 
   @override
   String get captureStillRecording => 'Stále se nahrává';
@@ -13171,6 +13180,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Připojte svůj Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Spárujte Omi a bude nahrávat vaše konverzace hands-free po celý den.';
+
+  @override
+  String get firstCaptureConnect => 'Připojit můj Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Ještě nemám Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13277,6 +13298,112 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Už vám neunikne ani slovo.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Takto funguje vaše bezplatná zkušební verze.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Neomezené souhrny, uchované navždy';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Každá konverzace se stane přehledným souhrnem s dalšími kroky, takže nic neunikne.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Nejlepší transkripce ve své třídě';
+
+  @override
+  String get paywallTrialChipDetails => 'Zachytí více detailů';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Rozpozná mluvčí';
+
+  @override
+  String get paywallTrialChipNoise => 'Funguje v hlučných místnostech';
+
+  @override
+  String get paywallTrialChipAccents => 'Zvládá akcenty';
+
+  @override
+  String get paywallTrialChipJargon => 'Zná váš žargon a jména';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Jména mluvčích, detekována automaticky';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Neomezené otázky napříč každou konverzací';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Navrhněte následný e-mail z této schůzky.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Nějaké rozpory s tím, co řekl John v úterý?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Najděte cokoli, co by nás mohlo zpomalit.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funguje s vašimi oblíbenými aplikacemi';
+
+  @override
+  String get paywallTrialTodayTitle => 'Dnes';
+
+  @override
+  String get paywallTrialTodayBody => 'Vše v Pro je odemčeno.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dní zdarma';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dní Omi Pro, na nás.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Za $days dní';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Zkušební verze končí. Budete účtováni, pokud nezrušíte.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Nejnovější modely AI';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Účtováno měsíčně';
+
+  @override
+  String get paywallTrialBilledYearly => 'Účtováno ročně';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Ušetřete $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Začněte za $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Pokračovat s bezplatným plánem';
+
+  @override
+  String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Vaše ${days}denní bezplatná zkušební verze Omi Pro byla spuštěna.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Zrušte kdykoli.';
@@ -13547,7 +13674,30 @@ class AppLocalizationsCs extends AppLocalizations {
   String get activityRetryAll => 'Zkusit vše znovu';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Úložiště se nepodařilo zkontrolovat';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Nahrávky pozastaveny';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Odesílání pozastaveno';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Čeká $count nahrávek',
+      one: 'Čeká 1 nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivita, vyžaduje pozornost';
 
   @override
   String get connectAgentHeadline => 'Používejte svou paměť Omi v ChatGPT a svých AI agentech';
@@ -14228,4 +14378,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Uloženo $saved z $total zvuku';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi stále nahrává';
 }

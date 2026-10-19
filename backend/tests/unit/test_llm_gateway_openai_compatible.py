@@ -16,7 +16,6 @@ from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway import executor as gateway_executor
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
-from llm_gateway.gateway.request_context import jit_budget_headers_for
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
@@ -98,45 +97,6 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
-
-
-def test_jit_budget_header_parser_is_absent_for_normal_chat_and_bounded_for_qa(monkeypatch):
-    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
-    normal_request = Request({'type': 'http', 'headers': []})
-    assert jit_budget_headers_for(normal_request) is None
-
-    headers = [
-        (b'x-omi-jit-contract-version', b'jit-cloud-qa-v1'),
-        (b'x-omi-jit-run-id', b'jit-run-1'),
-        (b'x-omi-jit-max-attempts', b'3'),
-        (b'x-omi-jit-max-output-tokens', b'2048'),
-        (b'x-omi-jit-max-input-tokens', b'32768'),
-        (b'x-omi-jit-max-spend-micro-usd', b'50000'),
-    ]
-    qa_request = Request({'type': 'http', 'headers': headers})
-    parsed = jit_budget_headers_for(qa_request)
-    assert parsed is not None
-    assert parsed.run_id == 'jit-run-1'
-    assert parsed.max_spend_micro_usd == 50_000
-
-
-def test_jit_budget_header_parser_fails_closed_when_gateway_capability_is_off(monkeypatch):
-    monkeypatch.delenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', raising=False)
-    request = Request(
-        {
-            'type': 'http',
-            'headers': [
-                (b'x-omi-jit-contract-version', b'jit-cloud-qa-v1'),
-                (b'x-omi-jit-run-id', b'jit-run-1'),
-                (b'x-omi-jit-max-attempts', b'3'),
-                (b'x-omi-jit-max-output-tokens', b'2048'),
-                (b'x-omi-jit-max-input-tokens', b'32768'),
-                (b'x-omi-jit-max-spend-micro-usd', b'50000'),
-            ],
-        }
-    )
-    with pytest.raises(ValueError, match='capability is unavailable'):
-        jit_budget_headers_for(request)
 
 
 @pytest.mark.parametrize(
@@ -899,7 +859,7 @@ async def test_streaming_successful_fallback_is_classified_as_actual_fallback(mo
 
 
 @pytest.mark.asyncio
-async def test_non_jit_stream_returns_provider_chunks_byte_for_byte():
+async def test_normal_stream_returns_provider_chunks_byte_for_byte():
     raw_chunks = [b'data: hello\r', b'\n\r\ndata: [DONE]\r\n\r\n']
 
     async def remaining_stream():
@@ -989,22 +949,3 @@ def valid_request(**overrides):
     }
     request.update(overrides)
     return request
-
-
-@pytest.mark.parametrize('stream', [False, True])
-def test_retired_jit_headers_never_dispatch_paid_provider(monkeypatch, stream):
-    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
-    provider = FakeChatCompletionProvider()
-    app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
-    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
-    try:
-        response = TestClient(app).post(
-            '/v1/chat/completions',
-            json=valid_request(stream=stream),
-            headers={**auth_headers(), 'x-omi-jit-run-id': 'retired-run'},
-        )
-        assert response.status_code == 410
-        assert response.json()['error']['code'] == 'feature_retired'
-        assert provider.calls == []
-    finally:
-        app.dependency_overrides.clear()

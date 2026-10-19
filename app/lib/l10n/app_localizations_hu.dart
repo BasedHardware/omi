@@ -2006,12 +2006,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryHistory => 'Előzmények';
 
   @override
-  String get memoryAllowUse => 'Használat engedélyezése';
-
-  @override
-  String get memoryDontUse => 'Ne használd';
-
-  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -9367,9 +9361,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count további';
-  }
+  String get quoteShowSources => 'Források megjelenítése';
 
   @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
@@ -11116,7 +11108,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
-  String get captureRecoveryBanner => 'Az Omi nem küld hangot — koppintson az újracsatlakozáshoz';
+  String get captureRecoveryBannerTitle => 'Az Omi nem küld hangot';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11127,6 +11119,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
+
+  @override
+  String get captureBannerTryReconnect => 'Próbálja újra a csatlakozást';
+
+  @override
+  String get captureBannerRetrySync => 'Szinkronizálás újrapróbálása';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'A hang nem ér el az appba — csatlakoztasd újra az Omit';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Az app már nem tud hangot fogadni az Omi eszköztől, és nem sikerült automatikusan helyreállítania a kapcsolatot. Válaszd le és csatlakoztasd újra az eszközt — az eszközbeállításokban, vagy kikapcsolással majd bekapcsolással. Az eszközön mentett hang később szinkronizálódik.';
 
   @override
   String get captureStillRecording => 'A felvétel folytatódik';
@@ -13221,6 +13230,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Omi csatlakoztatása';
+
+  @override
+  String get firstCaptureConnectDescription => 'Párosítsa az Omi-t, és egész nap rögzíti a beszélgetéseit, szabadon.';
+
+  @override
+  String get firstCaptureConnect => 'Omi-m csatlakoztatása';
+
+  @override
+  String get firstCaptureNoDevice => 'Még nincs Omi-m';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13327,6 +13348,112 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Így működik az ingyenes próbaidőszakod.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited összefoglalók, örökre megőrizve';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Minden beszélgetésből tiszta összefoglaló készül a következő lépésekkel, így semmi sem marad ki.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Kategóriájában legjobb átírás';
+
+  @override
+  String get paywallTrialChipDetails => 'Több részletet rögzít';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Megkülönbözteti a beszélőket';
+
+  @override
+  String get paywallTrialChipNoise => 'Zajos szobákban is működik';
+
+  @override
+  String get paywallTrialChipAccents => 'Kezeli az akcentusokat';
+
+  @override
+  String get paywallTrialChipJargon => 'Ismeri a szakzsargont és a neveket';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Beszélők nevei, automatikusan felismerve';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited kérdések, minden beszélgetésben';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Készíts egy követő e-mailt ebből a megbeszélésből.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Van valami ellentmondás azzal, amit John mondott kedden?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Találj bármit, ami lelassíthat minket.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Működik a kedvenc alkalmazásaiddal';
+
+  @override
+  String get paywallTrialTodayTitle => 'Ma';
+
+  @override
+  String get paywallTrialTodayBody => 'Minden fel van oldva a Pro-ban.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days nap ingyen';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days nap Omi Pro, tőlünk.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days nap múlva';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'A próbaidőszak lejár. Terhelésre kerül a számlád, hacsak nem mondod le.';
+
+  @override
+  String get paywallTrialFeatureModels => 'A legújabb AI modellek';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Havi számlázás';
+
+  @override
+  String get paywallTrialBilledYearly => 'Éves számlázás';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Spórolj $amount-t';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Kezdd el $price-ért';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Folytatás az ingyenes csomaggal';
+
+  @override
+  String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Elindult az Omi Pro $days napos ingyenes próbaverziója.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Bármikor lemondható.';
@@ -13597,7 +13724,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityRetryAll => 'Összes újrapróbálása';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel várakozik',
+      one: '1 felvétel várakozik',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
+
+  @override
+  String get activityAttentionSemantics => 'Tevékenység, figyelmet igényel';
 
   @override
   String get connectAgentHeadline => 'Használd az Omi-memóriádat a ChatGPT-ben és az AI-ügynökeidben';
@@ -14286,4 +14436,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved / $total hang elmentve';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Az Omi tovább rögzít';
 }

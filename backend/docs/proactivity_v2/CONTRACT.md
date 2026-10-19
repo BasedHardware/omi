@@ -43,7 +43,7 @@ original measurement-before-enable restrictions below.
 | `utils/llm/managed_spend_ledger.py` | Same `llm_gateway_attempts` event schema; do not introduce direct provider calls. Its best-effort background write is not budget authority. |
 | `llm_gateway/gateway/accounting.py` | `rate_card_for`, normalized provider usage, `build_accounting_event`, `estimated_cost_micro_usd`; count every attempt, including errors. |
 | `database/llm_gateway_accounting.py` | Immutable attempt IDs and create-once persistence; existing rollups are projections, never available balance. |
-| `llm_gateway/gateway/jit_budget.py`, `executor.py` | Existing durable reservation and immediately-before-provider-call pattern. Port the narrow pattern into v2 ownership before the other lane removes JIT; no runtime dependency on retired JIT modules. |
+| `llm_gateway/gateway/executor.py` | The legacy JIT budget module was removed on 2026-10-18. V2 keeps its own durable reservation immediately before provider calls and has no runtime dependency on JIT modules. |
 | `routers/chat.py`, plan catalog | Dollars already have quota unit `cost_usd`. Keep proactivity a separate daily allowance, not a debit against Architect monthly chat. |
 | `config/plan_catalog.json` and generator | Canonical plan IDs, paid status, aliases and a generated budget policy; no Stripe request at admission. |
 | `database/redis_db.py` | Shared lazy connection and atomic/token-owned Lua conventions. Do not reuse expiring notification leases as refundable money reservations. |
@@ -267,7 +267,7 @@ the complete serialized request plus provider framing with the supported model's
 conservative token upper bound; reject models whose framing/tokenization cannot
 be bounded. Price all input as uncached, at the applicable highest context tier;
 no speculative cache savings or Flex discount in the reservation. The existing
-JIT UTF-8 byte method is a precedent, not permission to ignore provider framing.
+The retired JIT UTF-8 byte method was a precedent, not permission to ignore provider framing.
 
 Actual estimate above hold is an invariant failure: retain actual spend, block the
 user day and producer, emit critical telemetry. It cannot undo a provider charge;
@@ -590,8 +590,10 @@ required to start with `phc_`. This is the Omi project's public client token
 with zero new Secret Manager references. `PROACTIVITY_V2_POSTHOG_HOST` defaults
 to `https://us.posthog.com`, including when unset or whitespace-only.
 The shared `POSTHOG_PROJECT_API_KEY` is intentionally `disabled`: **do not
-repoint it**, `POSTHOG_API_KEY`, or generic `POSTHOG_HOST` to enable v2. JIT
-rollout flags and backend capture telemetry keep their existing configuration.
+repoint it**, `POSTHOG_API_KEY`, or generic `POSTHOG_HOST` to enable v2. The
+legacy `jit-processing-*` controls were retired on 2026-10-18; `proactivity_v2`
+admission remains an independent feature. Backend capture telemetry keeps its
+existing configuration.
 Missing, blank, `disabled`, or non-`phc_` dedicated tokens fail closed with
 `flag_unavailable`; diagnostics contain no token and are rate-limited to once
 per 60 seconds per process. There is no shared-key fallback in dev, local,
@@ -718,8 +720,8 @@ Phase 2 spine modifications:
 No `.github/` workflow additions. If live generator output ownership includes
 another required derived file, list it in the reviewed contract before building
 rather than hand-editing or bypassing its drift guard. Shared gateway/deletion
-files must be integrated against the deletion lane's current diff; preserve the
-v2 attempt hook when JIT qualification code is removed.
+files must be integrated against the deletion lane's current diff; the v2
+attempt hook remains self-contained and does not depend on retired JIT code.
 
 Other lanes own producer source hooks, prompts, model selection experiments,
 `MENTOR_PIPELINE` dispatch, client UI, old-path removal and deployment manifests.

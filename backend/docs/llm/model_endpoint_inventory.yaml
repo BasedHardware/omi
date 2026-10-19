@@ -38,8 +38,6 @@ model_config_features:
     - learnings
     - memories
     - memory_category
-    - memory_conflict
-    - memory_conflict_flex
     - memory_l1
     - memory_l2_flex
     - notifications
@@ -147,8 +145,6 @@ surfaces:
   - utils/llm/trends.py::feature:trends
   - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
   - utils/llm/working_observations.py::feature:memory_l1
-  - utils/memory/belief_backfill.py::feature:<dynamic>
-  - utils/memory/belief_evidence.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation
@@ -267,8 +263,9 @@ surfaces:
   gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider;
     OpenAI-shaped /v1/embeddings with task_type pass-through
   migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
-    plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge for generate/stream and both embed
-    actions), redis metering, body limits, and model
+    plan gate (authorize_managed_compute on screen_frame_judge); embed actions instead require the exact
+    X-Omi-Local-Embeddings capability header and catalog cloud_screen_vectors entitlement, with a default-on
+    refusal kill switch and owner-validated Gemini BYOK exemption; redis metering, body limits, and model
     allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
     keeps the legacy direct Vertex path; operator pins (OMI_VERTEX_PT_MODEL, OMI_GEMINI_OVERFLOW_MODEL) are
     validated against vertex_pt_routing.COMPANY_PAID_VERTEX_TEXT_MODELS and Pro/image-output shapes fail closed
@@ -398,7 +395,6 @@ surfaces:
   - utils/llm/memories.py::feature:memories
   - utils/llm/memories.py::feature:learnings
   - utils/llm/memories.py::feature:memory_category
-  - utils/llm/memories.py::feature:memory_conflict
   current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only memory-log JSON (memories + profile)
   gateway_lane_capability_needed: generated omi:auto:memories lane
@@ -616,7 +612,7 @@ surfaces:
   current_provider_model: process_conversation coordinator (conv_* features)
   request_shape: conversation processing bundle
   gateway_lane_capability_needed: generated conv_* lanes
-  migration_status: S6 FREE_TIER_LOCAL_PROCESSING gates desktop sources only; phone is non-desktop so process_normally today
+  migration_status: Funded allowance admission defers all sources at cap; client summaries remain display-only backlog projections
     (follow-up)
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: external_integrations

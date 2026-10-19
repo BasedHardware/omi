@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 9,
+  "catalog_revision": 10,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -773,7 +773,27 @@
   },
   "entitlement_versions": {
     "legacy": {
-      "budget": null
+      "budget": null,
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited_v2": {
+          "cloud_screen_vectors": true
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
+      }
     },
     "ladder_v1": {
       "rate_card_version": "v1",
@@ -809,6 +829,20 @@
         "plus": 5000,
         "operator": 25000,
         "architect": 25000
+      },
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": false
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
       }
     }
   },

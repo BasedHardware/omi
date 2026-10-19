@@ -67,7 +67,7 @@ async def test_owned_byok_refusal_is_terminal_without_source_reads(monkeypatch):
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-async def test_serving_dark_tick_adds_no_pending_record_query(monkeypatch, enabled):
+async def test_serving_tick_drains_admitted_recordings_after_admission_rollback(monkeypatch, enabled):
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', str(enabled).lower())
     service = SimpleNamespace(store=object())
@@ -79,8 +79,8 @@ async def test_serving_dark_tick_adds_no_pending_record_query(monkeypatch, enabl
     reconcile = AsyncMock(side_effect=lambda **kwargs: stop.set())
     service.reconcile_async = reconcile
     await asyncio.wait_for(coro, timeout=1)
-    reconcile.assert_awaited_once_with(recover_quarantine=True)
-    assert drain.await_count == int(enabled)
+    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    assert drain.await_count == 1  # Discovery must retain already-admitted work after rollback.
 
 
 def test_dark_legacy_shadow_uses_its_existing_read_without_claim_or_reload(monkeypatch):

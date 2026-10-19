@@ -1999,12 +1999,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryHistory => 'చరిత్ర';
 
   @override
-  String get memoryAllowUse => 'ఉపయోగాన్ని అనుమతించు';
-
-  @override
-  String get memoryDontUse => 'ఉపయోగించవద్దు';
-
-  @override
   String get undo => 'మరలుచేయండి';
 
   @override
@@ -9374,9 +9368,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+మరో $count';
-  }
+  String get quoteShowSources => 'మూలాలను చూపించు';
 
   @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
@@ -11120,7 +11112,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBannerTitle => 'Omi ఆడియో పంపడం లేదు';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11131,6 +11123,23 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది';
+
+  @override
+  String get captureBannerTryReconnect => 'మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి';
+
+  @override
+  String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'యాప్ ఇక Omi పరికరం నుండి ఆడియోను స్వీకరించలేకపోతోంది మరియు కనెక్షన్‌ను స్వయంచాలకంగా పునరుద్ధరించలేకపోయింది. పరికరాన్ని డిస్‌కనెక్ట్ చేసి మళ్లీ కనెక్ట్ చేయండి — పరికర సెట్టింగ్‌ల నుండి లేదా ఆఫ్ చేసి ఆన్ చేసి. పరికరంలో సేవ్ చేసిన ఆడియో తర్వాత సింక్ అవుతుంది.';
 
   @override
   String get captureStillRecording => 'ఇంకా రికార్డ్ అవుతోంది';
@@ -13221,6 +13230,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'మీ Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'మీ Omiని జత చేయండి, రోజంతా హ్యాండ్స్-ఫ్రీగా సంభాషణలను రికార్డ్ చేస్తుంది.';
+
+  @override
+  String get firstCaptureConnect => 'నా Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureNoDevice => 'నాకు ఇంకా Omi లేదు';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13327,6 +13349,112 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'మీ ఉచిత ట్రయల్ ఎలా పనిచేస్తుందో ఇక్కడ ఉంది.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited సారాంశాలు, శాశ్వతంగా భద్రపరచబడతాయి';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'ప్రతి సంభాషణ తదుపరి దశలతో కూడిన స్పష్టమైన సారాంశంగా మారుతుంది, కాబట్టి ఏదీ తప్పిపోదు.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'ఉత్తమమైన ట్రాన్స్‌క్రిప్షన్';
+
+  @override
+  String get paywallTrialChipDetails => 'మరిన్ని వివరాలను పసిగడుతుంది';
+
+  @override
+  String get paywallTrialChipSpeakers => 'మాట్లాడేవారిని వేరు చేస్తుంది';
+
+  @override
+  String get paywallTrialChipNoise => 'శబ్దంతో కూడిన గదులలో కూడా పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialChipAccents => 'యాసలను గుర్తిస్తుంది';
+
+  @override
+  String get paywallTrialChipJargon => 'మీ పరిభాష మరియు పేర్లను తెలుసుకుంటుంది';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'మాట్లాడేవారి పేర్లు, స్వయంచాలకంగా గుర్తించబడతాయి';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'ప్రతి సంభాషణలో Unlimited ప్రశ్నలు';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'ఈ మీటింగ్ నుండి ఫాలో-అప్ ఇమెయిల్‌ను రూపొందించండి.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'జాన్ మంగళవారం చెప్పినదానితో ఏమైనా విభేదాలు ఉన్నాయా?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'మనల్ని నెమ్మదింపజేసే ఏదైనా కనుగొనండి.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'మీకు ఇష్టమైన యాప్‌లతో పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialTodayTitle => 'ఈరోజు';
+
+  @override
+  String get paywallTrialTodayBody => 'Proలోని ప్రతిదీ అన్‌లాక్ చేయబడింది.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days రోజులు ఉచితం';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days రోజుల Omi Pro, మా ఖర్చుతో.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days రోజులలో';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'ట్రయల్ ముగుస్తుంది. మీరు రద్దు చేయకపోతే మీకు ఛార్జ్ చేయబడుతుంది.';
+
+  @override
+  String get paywallTrialFeatureModels => 'తాజా AI మోడల్స్';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'నెలవారీ బిల్ చేయబడుతుంది';
+
+  @override
+  String get paywallTrialBilledYearly => 'వార్షికంగా బిల్ చేయబడుతుంది';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amount ఆదా చేయండి';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$priceకి ప్రారంభించండి';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'ఉచిత ప్లాన్‌తో కొనసాగండి';
+
+  @override
+  String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'మీ $days-రోజుల Omi Pro ఉచిత ట్రయల్ ప్రారంభమైంది.';
+  }
 
   @override
   String get paywallCancelAnytime => 'ఎప్పుడైనా రద్దు చేసుకోవచ్చు.';
@@ -13597,7 +13725,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'అప్‌లోడ్ ఆగిపోయింది';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
+      one: '1 రికార్డింగ్ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
+
+  @override
+  String get activityAttentionSemantics => 'యాక్టివిటీ, శ్రద్ధ అవసరం';
 
   @override
   String get connectAgentHeadline => 'ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి';
@@ -14286,4 +14437,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omiలో రికార్డింగ్ కొనసాగుతోంది';
 }

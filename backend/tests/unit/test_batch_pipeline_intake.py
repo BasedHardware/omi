@@ -290,3 +290,17 @@ def test_admitted_duration_emits_only_after_new_committed_ownership(cohort, monk
     submit(store, works, binding)
     submit(store, works, binding)
     metric.assert_called_once_with('admitted', seconds=works[0].duration_seconds)
+
+
+@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running', 'failed_held', 'cancelled', None])
+def test_quarantine_poll_distinguishes_recoverable_and_terminal(cohort, recovery_state):
+    store = MemoryStore()
+    submit(store, *proposal())
+    job = store.rows['jobs', 'segment']
+    job.update(state='quarantined', recovery_state=recovery_state, merge_pending=False)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    recoverable = recovery_state in {'held', 'prepared', 'running'}
+    assert status['status'] == ('processing' if recoverable else 'failed')
+    assert status['failed_segments'] == (0 if recoverable else 1)
+    assert status['poll_after_ms'] == (3000 if recoverable else 0)
+    assert status['errors'] == ([] if recoverable else ['batch_worker_quarantined'])

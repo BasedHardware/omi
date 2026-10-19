@@ -252,6 +252,10 @@ class UserSubscriptionResponse(BaseModel):
     insights_gained_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # True only for a reader who can still get an introductory free trial on checkout: on the free
+    # plan with no Stripe customer yet. A former subscriber is False; clients must not promise a
+    # trial they will not get (the checkout refuses a trial request for such a reader).
+    trial_eligible: bool = False
     # Chat quota usage — derived from llm_usage collection
     chat_quota_used: float = 0.0
     chat_quota_unit: Optional[ChatQuotaUnit] = None
@@ -274,10 +278,14 @@ class UserSubscriptionResponse(BaseModel):
     # Older clients ignore the field.
     held_audio: Optional[HeldAudioSummary] = None
     processing_backlog: Optional[ProcessingBacklog] = None
+    # Server catalog capability, independent of BYOK and usage-budget availability.
+    cloud_screen_vectors: Optional[bool] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
         data = handler(self)
+        if data.get('cloud_screen_vectors') is None:
+            data.pop('cloud_screen_vectors', None)
         if data.get('held_audio') is None:
             data.pop('held_audio', None)
         if data.get('processing_backlog') is None:
