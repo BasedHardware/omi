@@ -1,5 +1,7 @@
 """Advisory maintenance lease over the atomic snapshot store; no Firestore IO."""
 
+import threading
+import time
 from unittest.mock import Mock
 
 import pytest
@@ -73,3 +75,60 @@ def test_lease_store_errors_fail_open_and_kill_switch_bypasses_store(monkeypatch
 def test_role_and_ttl_are_bounded(role, ttl):
     with pytest.raises(ValueError):
         LeaderLease(MemoryStore(), role, ttl_seconds=ttl)
+
+
+class LostAckStore(MemoryStore):
+    """Commits the transaction, then reports failure once (ambiguous acknowledgement)."""
+
+    def __init__(self):
+        super().__init__()
+        self.lose_next = False
+
+    def run(self, body):
+        result = super().run(body)
+        if self.lose_next:
+            self.lose_next = False
+            raise RuntimeError('commit acknowledgement lost')
+        return result
+
+
+def test_lost_commit_acknowledgement_heals_on_the_next_tick():
+    store, clock = LostAckStore(), Clock()
+    lease = LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30, clock=clock)
+    other = LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30, clock=clock)
+    store.lose_next = True
+    assert lease.acquire()  # Fail-open; the row landed but our token did not.
+    assert lease.token is None and store.rows[TABLE, PUMP_RECOVERY]['holder'] == lease.holder
+    clock.now += 1
+    assert lease.acquire()  # Adopts its own live row instead of standing down.
+    assert lease.token == store.rows[TABLE, PUMP_RECOVERY]['token']
+    assert not other.acquire()
+    lease.token = 'stale-in-memory-token'
+    clock.now += 1
+    assert lease.acquire() and lease.token == store.rows[TABLE, PUMP_RECOVERY]['token']
+
+
+def test_overlapping_acquires_on_one_lease_never_leave_a_stall():
+    class SlowStore(MemoryStore):
+        def __init__(self):
+            super().__init__()
+            self.inside = threading.Event()
+
+        def run(self, body):
+            self.inside.set()
+            time.sleep(0.01)  # Hold the transaction so the other thread overlaps.
+            return super().run(body)
+
+    store, clock = SlowStore(), Clock()
+    lease = LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, clock=clock)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(lease.acquire())) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(2)
+    assert results == [True] * 4
+    assert lease.token == store.rows[TABLE, SERVING_MAINTENANCE]['token']
+    assert not LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, clock=clock).acquire()
+    clock.now += 1
+    assert lease.acquire()  # Still the holder on the next tick; no full-TTL stall.

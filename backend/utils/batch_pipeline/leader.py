@@ -8,14 +8,17 @@ cost and contention control only, never a correctness fence:
 
 - One holder per role renews a TTL row in ``{namespace}_leases``. Another
   replica takes over only after the TTL lapses (crash, long GPU batch, drain).
-- Each fresh acquisition mints a new token; a holder whose row was taken over
-  sees a foreign token and stops leading until the TTL lapses again.
+- Each fresh acquisition mints a new token. Ownership is the row's holder
+  identity: a live row naming this process is adopted with its stored token
+  (so a lost commit acknowledgement heals next tick); a row naming another
+  holder makes this process follow until that TTL lapses.
 - Any lease-store error fails open: the caller runs its loop exactly as it did
   before this lease existed. ``BATCH_PIPELINE_LEADER_LEASE_ENABLED=false`` does
   the same unconditionally.
 """
 
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -51,23 +54,33 @@ class LeaderLease:
         self.holder = holder or uuid.uuid4().hex
         self.clock = clock
         self.token: str | None = None
+        self._lock = threading.Lock()
 
     def acquire(self) -> bool:
         """True when this replica should run the guarded loop this tick."""
         if not leader_lease_enabled():
             return True
+        # One process-local holder may be acquired from several executor
+        # threads (serving supervisor and /metrics); serialize so a losing
+        # overlap can never clear the winner's token.
+        with self._lock:
+            return self._acquire()
+
+    def _acquire(self) -> bool:
         now = self.clock()
         current, candidate = self.token, uuid.uuid4().hex  # Minted outside the retryable body.
 
         def body(tx):
             row = tx.get(TABLE, self.role)
             expires_at = float(row.get('expires_at') or 0)
-            ours = bool(row) and row.get('holder') == self.holder and row.get('token') == current
-            if row and not ours and expires_at > now:
+            live = bool(row) and expires_at > now
+            if live and row.get('holder') != self.holder:
                 return None  # Another live replica leads this role.
-            if ours and expires_at - now > self.ttl_seconds / 2:
-                return current  # Still well inside our TTL: read-only renewal.
-            token = current if ours else candidate
+            # A live row naming this holder is ours even when the in-memory
+            # token was lost (ambiguous commit acknowledgement): adopt it.
+            token = (row.get('token') or candidate) if live else candidate
+            if live and token == row.get('token') and expires_at - now > self.ttl_seconds / 2:
+                return token  # Still well inside our TTL: read-only renewal.
             tx.put(
                 TABLE,
                 self.role,
