@@ -31,8 +31,8 @@ def _signature(payload: bytes) -> bytes:
 
 
 def encode_cursor(timestamp: datetime, document_id: str, scope: str) -> str:
-    if not isinstance(timestamp, datetime) or timestamp.tzinfo is None:
-        raise ValueError('cursor ordering key must be a timestamp')
+    if timestamp.tzinfo is None:
+        raise ValueError('cursor ordering key must be a timezone-aware timestamp')
     # Firestore timestamps can contain nanoseconds; datetime.isoformat loses them.
     stamp = (
         timestamp.rfc3339()
@@ -50,7 +50,7 @@ def encode_cursor(timestamp: datetime, document_id: str, scope: str) -> str:
 def decode_cursor(token: str, scope: str) -> tuple[datetime, str]:
     """Reject bad, expired, cross-user/filter or tampered cursors as ValueError."""
     try:
-        if not isinstance(token, str) or not 0 < len(token) <= 4096:
+        if not 0 < len(token) <= 4096:
             raise ValueError('invalid cursor size')
         packed = base64.b64decode(token + '=' * (-len(token) % 4), altchars=b'-_', validate=True)
         signature, payload = packed[:32], packed[32:]
