@@ -55,6 +55,8 @@
 #                          invoker policy); serviceAccountUser on the four staging SAs;
 #                          storage.objectAdmin on the three staging buckets (deploy lock, build
 #                          source, lane 4's mirror writes); edit in GKE namespace `staging`;
+#                          secretAccessor on staging-encryption-secret and staging-admin-key ONLY
+#                          (lane 4: mirror re-encryption, synthetic-user replay);
 #                          compute.networkUser on subnet omi-us-central1-dev-vpc-1-subnet-1 only
 #                          (Direct VPC egress so staging Cloud Run reaches in-cluster Redis;
 #                          the agent has compute.subnetworks.get there but not .use)
@@ -355,6 +357,14 @@ bootstrap() {
     grant_secret "$(secret_name "$name")" staging-runtime
   done
   grant_secret "$(secret_name ENCRYPTION_SECRET)" staging-worker
+  # Lane 4 (mirror/replay), run on agent-dev-operator: re-encrypt David's mirrored recordings under the
+  # staging key, and act as synthetic users through the staging admin key. Secret-level bindings on
+  # these two staging secrets only; no other secret, and nothing in dev or prod.
+  for name in ENCRYPTION_SECRET ADMIN_KEY; do
+    run gcloud secrets add-iam-policy-binding "$(secret_name "$name")" --project="$DEV" \
+      --member="serviceAccount:${AGENT}" --role=roles/secretmanager.secretAccessor \
+      --condition=None --quiet --format=none
+  done
 
   echo "== Cloud Tasks queue access (queues come from create_queues.sh, run first on dev-operator)"
   if [[ "$MODE" == apply ]]; then
