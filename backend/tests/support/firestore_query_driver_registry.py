@@ -283,7 +283,10 @@ _add(
         'database.action_items.create_action_item',
         base={'uid': UID, 'action_item_data': {'description': 'shape-task'}},
         domains={'idempotency_key': [None, 'shape-key']},
-        neutrals={'document_id': (None, 'optional doc id; absent does not change query')},
+        neutrals={
+            'document_id': (None, 'optional doc id; absent does not change query'),
+            'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+        },
         setup=_seed_action_items_control,
         trials=2,
     )
