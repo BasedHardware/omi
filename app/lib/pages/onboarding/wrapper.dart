@@ -59,12 +59,11 @@ class OnboardingWrapper extends StatefulWidget {
     required int currentIndex,
     required bool setupPageEnabled,
     required bool knowledgeGraphStepEnabled,
-  }) =>
-      _OnboardingWrapperState.previousStepForTesting(
-        currentIndex: currentIndex,
-        setupPageEnabled: setupPageEnabled,
-        knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
-      );
+  }) => _OnboardingWrapperState.previousStepForTesting(
+    currentIndex: currentIndex,
+    setupPageEnabled: setupPageEnabled,
+    knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
+  );
 
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
@@ -152,8 +151,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       );
     }
     final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
-    final initialIndex =
-        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    final initialIndex = signedIn
+        ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep())
+        : kAuthPage;
     _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
     _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
@@ -306,10 +306,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (!mounted) return;
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
-    PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
-      'variant': arm.variant.wireName,
-      '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
-    });
+    PlatformManager.instance.analytics.track(
+      'Onboarding Variant Shown',
+      properties: {
+        'variant': arm.variant.wireName,
+        '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
+      },
+    );
     switch (arm.variant) {
       case OnboardingVariant.yinka:
         await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
@@ -478,6 +481,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<void> _prebuildKnowledgeGraph() async {
     try {
       final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      // Canonical graphs are derived on read, even when no relationships exist.
+      // Do not schedule the legacy mutation rejected by the canonical fence.
+      if (current['canonical'] == true) return;
       final nodes = current['nodes'] as List<dynamic>? ?? const [];
       final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
       if (hasGraph) return;
@@ -670,10 +676,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _controller!.animateTo(kCompletePage);
         },
       ),
-      OnboardingCompleteScreen(
-        onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: _finishOnboarding,
-      ),
+      OnboardingCompleteScreen(onSkipped: () => _stepTelemetry.skipped = true, onComplete: _finishOnboarding),
     ];
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,

@@ -21,6 +21,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -35,7 +36,7 @@ import 'package:omi/widgets/header_circle_button.dart';
 import '../fakes.dart';
 import '../harness.dart';
 
-enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant }
+enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant, pendantOutage }
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
@@ -47,18 +48,21 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get pendantCaptureVerified => true;
 
-  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
+  /// The outage variant: the pendant streams but the server said transcription cannot run.
+  bool get _outage => live == AuditLive.pendantOutage;
+
+  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantOutage;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
   @override
   String? get liveCaptureSource => _pendant ? 'omi' : (_phone ? 'phone' : null);
   @override
   RecordingState get recordingState => switch (live) {
-        AuditLive.idle => RecordingState.stop,
-        AuditLive.pendant => RecordingState.deviceRecord,
-        AuditLive.pendantPaused || AuditLive.phonePaused => RecordingState.pause,
-        _ => RecordingState.record,
-      };
+    AuditLive.idle => RecordingState.stop,
+    AuditLive.pendant || AuditLive.pendantOutage => RecordingState.deviceRecord,
+    AuditLive.pendantPaused || AuditLive.phonePaused => RecordingState.pause,
+    _ => RecordingState.record,
+  };
   @override
   bool get havingRecordingDevice => _pendant || live == AuditLive.phoneAfterPendant;
   @override
@@ -81,27 +85,29 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   String? get activeCaptureSessionId => live == AuditLive.idle ? null : 'live-audit';
   @override
-  List<TranscriptSegment> get segments => live == AuditLive.idle
+  List<TranscriptSegment> get segments => (live == AuditLive.idle || live == AuditLive.pendantOutage)
       ? []
       : [
           TranscriptSegment(
-              id: 's1',
-              text: 'So the plan is to ship the recording changes on Friday.',
-              speaker: 'SPEAKER_0',
-              isUser: true,
-              personId: null,
-              start: 0,
-              end: 4,
-              translations: []),
+            id: 's1',
+            text: 'So the plan is to ship the recording changes on Friday.',
+            speaker: 'SPEAKER_0',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 4,
+            translations: [],
+          ),
           TranscriptSegment(
-              id: 's2',
-              text: 'And let us keep the pendant flow exactly as it is.',
-              speaker: 'SPEAKER_1',
-              isUser: false,
-              personId: null,
-              start: 4,
-              end: 9,
-              translations: []),
+            id: 's2',
+            text: 'And let us keep the pendant flow exactly as it is.',
+            speaker: 'SPEAKER_1',
+            isUser: false,
+            personId: null,
+            start: 4,
+            end: 9,
+            translations: [],
+          ),
         ];
   @override
   List<ConversationPhoto> get photos => const [];
@@ -110,7 +116,15 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   Duration? get customSttBufferingDuration => null;
   @override
-  MessageServiceStatusEvent? get terminalTranscriptionFailure => null;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => _outage
+      ? MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: true,
+          reason: 'send_failed',
+        )
+      : null;
   @override
   bool get recordingDeviceServiceReady => true;
   @override
@@ -152,16 +166,17 @@ class _CallInProgress extends ChangeNotifier implements PhoneCallProvider {
   Duration get callDuration => const Duration(minutes: 3, seconds: 10);
   @override
   List<TranscriptSegment> get transcriptSegments => [
-        TranscriptSegment(
-            id: 'c1',
-            text: 'Thanks for calling back, I have the quote ready.',
-            speaker: 'SPEAKER_1',
-            isUser: false,
-            personId: null,
-            start: 0,
-            end: 4,
-            translations: []),
-      ];
+    TranscriptSegment(
+      id: 'c1',
+      text: 'Thanks for calling back, I have the quote ready.',
+      speaker: 'SPEAKER_1',
+      isUser: false,
+      personId: null,
+      start: 0,
+      end: 4,
+      translations: [],
+    ),
+  ];
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -193,47 +208,62 @@ class HomeFrame extends StatelessWidget {
         automaticallyImplyLeading: false,
         backgroundColor: Theme.of(context).colorScheme.surface,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
-        title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Flexible(
-            child: Padding(
-              padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
-              child: BatteryInfoWidget(),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Flexible(
+              child: Padding(
+                padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+                child: BatteryInfoWidget(),
+              ),
             ),
-          ),
-          Row(children: [
-            HeaderCircleButton(
-              semanticLabel: 'Filter by date',
-              onTap: () {},
-              icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+            Row(
+              children: [
+                HeaderCircleButton(
+                  semanticLabel: 'Filter by date',
+                  onTap: () {},
+                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+                ),
+                HeaderCircleButton(
+                  semanticLabel: 'Search',
+                  onTap: () {},
+                  icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+                ),
+                ActivityBellButton(seen: activitySeen),
+                HeaderCircleButton(
+                  semanticLabel: 'Settings',
+                  onTap: () {},
+                  icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                ),
+              ],
             ),
-            HeaderCircleButton(
-              semanticLabel: 'Search',
-              onTap: () {},
-              icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
-            ),
-            ActivityBellButton(seen: activitySeen),
-            HeaderCircleButton(
-              semanticLabel: 'Settings',
-              onTap: () {},
-              icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
-            ),
-          ]),
-        ]),
+          ],
+        ),
       ),
-      body: Stack(children: [
-        Column(children: [
-          HomeTabSwitcher(onTabTap: (_, __) {}),
-          Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
-        ]),
-        if (tasks == null) const HomeChatBarBackdrop(),
-        if (tasks == null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: homeChatBarOffset(context),
-            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              HomeTabSwitcher(onTabTap: (_, __) {}),
+              Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
+            ],
           ),
-      ]),
+          if (tasks == null) const HomeChatBarBackdrop(),
+          if (tasks == null)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: homeChatBarOffset(context),
+              child: const Row(
+                children: [
+                  Expanded(child: _AskOmiBar()),
+                  SizedBox(width: 10),
+                  HomeRecordButton(),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -244,25 +274,29 @@ class _AskOmiBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        height: kHomeChatBarHeight,
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.pillAll,
-          border: Border.all(color: OmiColors.border, width: 1),
+    height: kHomeChatBarHeight,
+    decoration: BoxDecoration(
+      color: OmiColors.surface1,
+      borderRadius: OmiRadius.pillAll,
+      border: Border.all(color: OmiColors.border, width: 1),
+    ),
+    child: Row(
+      children: [
+        const SizedBox(width: 18),
+        Expanded(
+          child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
         ),
-        child: Row(children: [
-          const SizedBox(width: 18),
-          Expanded(child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary))),
-          Container(
-            width: 42,
-            height: 42,
-            margin: const EdgeInsets.only(right: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-          ),
-        ]),
-      );
+        Container(
+          width: 42,
+          height: 42,
+          margin: const EdgeInsets.only(right: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+          child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+        ),
+      ],
+    ),
+  );
 }
 
 Future<void> _runHome(
@@ -274,14 +308,19 @@ Future<void> _runHome(
   Finder? longPress,
   String action = 'Home',
 }) async {
-  await a.pump(const HomeFrame(), scaffold: false, providers: [
-    ChangeNotifierProvider<DeviceProvider>.value(
+  await a.pump(
+    const HomeFrame(),
+    scaffold: false,
+    providers: [
+      ChangeNotifierProvider<DeviceProvider>.value(
         value: pendantConnected
             ? AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)
-            : AuditDeviceProvider()),
-    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    if (call) ChangeNotifierProvider<PhoneCallProvider>.value(value: _CallInProgress()),
-  ]);
+            : AuditDeviceProvider(),
+      ),
+      ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
+      if (call) ChangeNotifierProvider<PhoneCallProvider>.value(value: _CallInProgress()),
+    ],
+  );
   if (tap != null) await a.tap(tap);
   if (longPress != null) await a.longPress(longPress);
   await a.shot(action);
@@ -291,35 +330,39 @@ Future<void> _runHome(
 Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
   final now = DateTime.now();
   ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
-        id: id,
-        createdAt: at,
-        startedAt: at,
-        finishedAt: at.add(Duration(minutes: minutes)),
-        structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
-        status: ConversationStatus.completed,
-      );
+    id: id,
+    createdAt: at,
+    startedAt: at,
+    finishedAt: at.add(Duration(minutes: minutes)),
+    structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
+    status: ConversationStatus.completed,
+  );
   final today = DateTime(now.year, now.month, now.day);
   final items = [
     convo('h1', 'Device Connection Troubleshooting', '🔧', today.add(const Duration(hours: 9, minutes: 12)), 2),
     convo('h2', 'Trying to Identify a Place', '📍', today.subtract(const Duration(hours: 1, minutes: 42)), 3),
-    convo('h3', 'Dinner, a Mall Walk, and Plans for Tomorrow', '🍽️',
-        today.subtract(const Duration(hours: 2, minutes: 50)), 49),
+    convo(
+      'h3',
+      'Dinner, a Mall Walk, and Plans for Tomorrow',
+      '🍽️',
+      today.subtract(const Duration(hours: 2, minutes: 50)),
+      49,
+    ),
     convo('h4', 'Omi Reliability Talk on Stage', '🎤', today.subtract(const Duration(hours: 9)), 31),
     convo('h5', 'Weekly Sync', '📅', today.subtract(const Duration(days: 6, hours: 7)), 32),
   ];
-  final conversations = ConversationProvider(
-    conversationListFetcher: () async => (items: items, ok: true),
-    isSignedIn: () => true,
-  )
-    ..conversations = items
-    ..groupConversationsByDate();
+  final conversations =
+      ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
+        ..conversations = items
+        ..groupConversationsByDate();
   final recaps = [
     DailySummary(
       id: 'r1',
       date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
       createdAt: today,
       headline: 'Rewrite, equity, and product polish dominated',
-      overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
+      overview:
+          'Most of the day went to the v5 rewrite plan and a long equity conversation, '
           'with a late push on the mobile polish list.',
       dayEmoji: '🛠️',
       stats: DayStats(totalConversations: 6, actionItemsCount: 2),
@@ -333,25 +376,60 @@ Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
       stats: DayStats(totalConversations: 4, actionItemsCount: 1),
     ),
   ];
-  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true)), scaffold: false, providers: [
-    ChangeNotifierProvider<DeviceProvider>.value(
+  await a.pump(
+    HomeFrame(recaps: () async => (items: recaps, ok: true)),
+    scaffold: false,
+    providers: [
+      ChangeNotifierProvider<DeviceProvider>.value(
         value: live == AuditLive.idle
             ? AuditDeviceProvider()
-            : AuditDeviceProvider(connected: true, battery: 89, device: auditPendant)),
-    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-  ]);
+            : AuditDeviceProvider(connected: true, battery: 89, device: auditPendant),
+      ),
+      ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
+      ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+    ],
+  );
   await a.shot(live == AuditLive.idle ? 'Open the app: Home' : 'Open the app while recording');
 }
 
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
-  await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
-    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    if (live == AuditLive.pendant || live == AuditLive.pendantPaused)
-      ChangeNotifierProvider<DeviceProvider>.value(
-          value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
-  ]);
+  await a.pump(
+    const ConversationCapturingPage(),
+    scaffold: false,
+    providers: [
+      ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
+      if (live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantOutage)
+        ChangeNotifierProvider<DeviceProvider>.value(
+          value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant),
+        ),
+    ],
+  );
   await a.shot('The live page');
+}
+
+/// Swaps in a quiet monitor owning one visible BLE episode, so the recovery banner renders on
+/// whatever page the scenario pumps. The episode is the zero-byte streak a real stalled link
+/// declares (three empty capture sessions — the same seeding the banner widget test uses), so
+/// the banner offers the retry-in-place affordances this PR is about. The declaration awaits
+/// the feature gate; the audit harness's settle() flushes it long before the first shot.
+void _seedVisibleWedgeEpisode() {
+  final previous = CaptureWedgeMonitor.instance;
+  final monitor = CaptureWedgeMonitor(
+    featureGate: () async => true,
+    track: (_, __) {},
+    bleRetry: (_) async {},
+    appBuild: () => 'audit',
+    platform: () => 'audit',
+  );
+  CaptureWedgeMonitor.instance = monitor;
+  for (var i = 0; i < CaptureWedgeMonitor.zeroByteThreshold; i++) {
+    final handle = monitor.onCaptureSessionConnected(deviceId: auditPendant.id, source: 'omi');
+    monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+  }
+  addTearDown(() {
+    CaptureWedgeMonitor.instance = previous;
+    monitor.dispose();
+  });
 }
 
 const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
@@ -362,7 +440,8 @@ final captureScenarios = <AuditScenario>[
     id: 'home-feed',
     title: 'Home: daily recaps, then every conversation',
     page: _home,
-    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
+    state:
+        'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
         'one recording waiting to transcribe',
     run: (a) => _runFeed(a),
   ),
@@ -406,8 +485,13 @@ final captureScenarios = <AuditScenario>[
     title: 'Tap the record button while the pendant records',
     page: _home,
     state: 'The pendant streams; the record button is tapped',
-    run: (a) => _runHome(a, AuditLive.pendant,
-        pendantConnected: true, tap: find.byType(HomeRecordButton), action: 'Tap the record button'),
+    run: (a) => _runHome(
+      a,
+      AuditLive.pendant,
+      pendantConnected: true,
+      tap: find.byType(HomeRecordButton),
+      action: 'Tap the record button',
+    ),
   ),
   AuditScenario(
     id: 'home-capture-phone-after-pendant',
@@ -452,5 +536,36 @@ final captureScenarios = <AuditScenario>[
     page: _live,
     state: 'The phone recording is paused; two transcript lines',
     run: (a) => _runLivePage(a, AuditLive.phonePaused),
+  ),
+  AuditScenario(
+    id: 'home-capture-recovery-banner',
+    title: 'Home, pendant live, recovery banner',
+    page: _home,
+    state:
+        'The pendant streams, but the BLE link stalled: the banner retries in place '
+        '(never opens settings), explains itself on demand, and can be dismissed',
+    run: (a) {
+      _seedVisibleWedgeEpisode();
+      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
+        // The seeded episode is the retryable kind: the card must offer the in-place
+        // affordances this scenario exists to audit, not the manual-reconnect variant.
+        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
+        expect(find.byKey(const Key('capture_recovery_banner_dismiss')), findsOneWidget);
+      });
+    },
+  ),
+  AuditScenario(
+    id: 'conversation-live-outage',
+    title: 'Live page, transcription unavailable',
+    page: _live,
+    state:
+        'The pendant streams but transcription is down: a short Not-transcribing app bar, '
+        'no wedge banner (the STT outage owns none), and the truthful unavailable placeholder',
+    run: (a) => _runLivePage(a, AuditLive.pendantOutage).then((_) async {
+      // A terminal transcription failure is not a BLE wedge: it must not grow a
+      // recovery banner for an unrelated failure the page never declared.
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+    }),
   ),
 ];

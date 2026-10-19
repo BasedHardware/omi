@@ -337,7 +337,7 @@ def test_operator_storage_loss_reconciles_and_counts_terminal_once(setup, monkey
     alternate.assert_not_called()
 
 
-def test_nonpaid_artifact_requires_current_disposition_token_and_flag(setup, monkeypatch, legacy_dependencies):
+def test_nonpaid_artifact_requires_current_token_and_recorded_disposition(setup, monkeypatch, legacy_dependencies):
     from utils.batch_pipeline.retention import register_batch_artifact
 
     client, store, binding, _, _, _, old = terminal_setup(setup, monkeypatch, legacy_dependencies)
@@ -355,8 +355,11 @@ def test_nonpaid_artifact_requires_current_disposition_token_and_flag(setup, mon
             store, binding.owner_id, 'bad', f"gs://synthetic/results/bad/{old['token']}.enc", 'results', 0
         )
     monkeypatch.delenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED')
+    register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
     with pytest.raises(BatchPrivacyBlocked):
-        register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
+        register_batch_artifact(
+            store, binding.owner_id, 'bad', f"gs://synthetic/results/bad/{old['token']}.enc", 'results', 0
+        )
 
 
 def test_worker_proof_survives_the_real_lease_cas_and_unknown_failures_do_not_gain_it():

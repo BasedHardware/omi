@@ -10894,6 +10894,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
 
   @override
+  String get captureBannerTryReconnect => '尝试重新连接';
+
+  @override
+  String get captureBannerRetrySync => '重试同步';
+
+  @override
+  String get captureBannerWhatsWrong => '怎么了？';
+
+  @override
+  String get captureBannerDismiss => '忽略';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
+
+  @override
+  String get captureLinkStalledTranscribesLater => '音频连接已中断 — 恢复后将继续转写';
+
+  @override
+  String get captureIngressNeedsReconnect => '音频未送达应用 — 请重新连接您的 Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      '应用已无法再从 Omi 设备接收音频，且未能自动恢复连接。请断开并重新连接设备 — 在设备设置中操作，或将设备关机后重启。设备上已保存的音频稍后会同步。';
+
+  @override
   String get captureStillRecording => '仍在录音';
 
   @override

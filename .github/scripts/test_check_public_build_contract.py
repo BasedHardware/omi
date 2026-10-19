@@ -1152,7 +1152,7 @@ jobs:
     def test_browser_smoke_retries_render_failures_then_passes(self) -> None:
         failures = (
             OSError("browser unavailable"),
-            subprocess.TimeoutExpired("fake-browser", 45),
+            subprocess.TimeoutExpired("fake-browser", 50),
             SimpleNamespace(returncode=1, stdout=""),
         )
         ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
@@ -1162,6 +1162,7 @@ jobs:
                     with (
                         patch.object(SMOKE.subprocess, "run", side_effect=[failure] * failed_attempts + [ready]) as run,
                         patch.object(SMOKE.time, "sleep") as sleep,
+                        contextlib.redirect_stderr(io.StringIO()),
                     ):
                         SMOKE.smoke(
                             target="fake",
@@ -1184,7 +1185,7 @@ jobs:
             patch.object(
                 SMOKE.subprocess,
                 "run",
-                side_effect=[subprocess.TimeoutExpired("fake-browser", 120), ready],
+                side_effect=[subprocess.TimeoutExpired("fake-browser", 125), ready],
             ) as run,
             patch.object(SMOKE.time, "sleep") as sleep,
         ):
@@ -1194,26 +1195,101 @@ jobs:
                 contract_path=self.root / "config/public-build-contract.json",
                 environment={"OMI_BROWSER_BIN": "fake-browser"},
             )
-        self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [120, 60])
+        self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [125, 65])
+        browser_args = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(
+            [[arg for arg in args if arg.startswith("--timeout=")] for args in browser_args],
+            [["--timeout=120000"], ["--timeout=60000"]],
+        )
+        for args in browser_args:
+            self.assertIn("--virtual-time-budget=10000", args)
+            self.assertNotIn("--run-all-compositor-stages-before-draw", args)
         self.assertEqual(sleep.call_args_list, [call(5)])
 
         self.write_json("config/public-build-contract.json", fixture_contract())
         defaults = self.target().candidate_acceptance
         self.assertEqual((defaults.timeout_seconds, defaults.retry_timeout_seconds), (45, 19))
 
+    def test_browser_smoke_virtual_time_budget_is_configurable(self) -> None:
+        ready = SimpleNamespace(
+            returncode=0,
+            stdout='<span data-omi-public-build-canary="fake:ready" />',
+            stderr="",
+        )
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                virtual_time_budget_ms=2_500,
+            )
+        self.assertIn("--virtual-time-budget=2500", run.call_args.args[0])
+
+    def test_browser_smoke_logs_stderr_tail_and_stdout_presence_on_failure(self) -> None:
+        stderr = "discarded-prefix\n" + ("x" * 2_050) + "\nlast chrome error"
+        failed = SimpleNamespace(returncode=1, stdout="partial DOM", stderr=stderr)
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=[failed, failed, failed]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        diagnostics = output.getvalue()
+        self.assertIn("stdout_bytes=yes", diagnostics)
+        self.assertIn("last chrome error", diagnostics)
+        self.assertNotIn("discarded-prefix", diagnostics)
+
+    def test_browser_smoke_logs_partial_timeout_output(self) -> None:
+        timed_out = subprocess.TimeoutExpired(
+            "fake-browser",
+            50,
+            output=b"partial DOM",
+            stderr=b"last timeout diagnostic",
+        )
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=[timed_out, timed_out, timed_out]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        self.assertIn("stdout_bytes=yes", output.getvalue())
+        self.assertIn("chrome_stderr_tail:\nlast timeout diagnostic", output.getvalue())
+
+    def test_browser_smoke_logs_output_when_the_ready_marker_is_missing(self) -> None:
+        rendered = SimpleNamespace(returncode=0, stdout="partial DOM", stderr="Firebase boot still pending")
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", return_value=rendered),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaisesRegex(SMOKE.BrowserSmokeError, "canary did not become ready"):
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                )
+        self.assertIn("stdout_bytes=yes", output.getvalue())
+        self.assertIn("chrome_stderr_tail:\nFirebase boot still pending", output.getvalue())
+
     def test_browser_smoke_logs_duration_for_each_attempt(self) -> None:
         stderr = io.StringIO()
         with (
-            patch.object(SMOKE.subprocess, "run", side_effect=subprocess.TimeoutExpired("fake-browser", 45)),
-            patch.object(SMOKE.time, "monotonic", side_effect=[0.0, 45.0, 50.0, 69.0, 70.0, 89.0]),
+            patch.object(SMOKE.subprocess, "run", side_effect=subprocess.TimeoutExpired("fake-browser", 50)),
+            patch.object(SMOKE.time, "monotonic", side_effect=[0.0, 50.0, 55.0, 79.0, 80.0, 104.0]),
             patch.object(SMOKE.time, "sleep"),
             contextlib.redirect_stderr(stderr),
         ):
             with self.assertRaises(SMOKE.BrowserSmokeError):
                 SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
-        self.assertIn("attempt=1 browser=fake-browser duration=45.0s", stderr.getvalue())
-        self.assertIn("attempt=2 browser=fake-browser duration=19.0s", stderr.getvalue())
-        self.assertIn("attempt=3 browser=fake-browser duration=19.0s", stderr.getvalue())
+        self.assertIn("attempt=1 browser=fake-browser duration=50.0s", stderr.getvalue())
+        self.assertIn("attempt=2 browser=fake-browser duration=24.0s", stderr.getvalue())
+        self.assertIn("attempt=3 browser=fake-browser duration=24.0s", stderr.getvalue())
 
     def test_browser_smoke_does_not_retry_acceptance_failures(self) -> None:
         contract = fixture_contract()
@@ -1236,6 +1312,7 @@ jobs:
                     with (
                         patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
                         patch.object(SMOKE.time, "sleep") as sleep,
+                        contextlib.redirect_stderr(io.StringIO()),
                     ):
                         with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
                             SMOKE.smoke(
@@ -1255,14 +1332,14 @@ jobs:
         for last_failure, reason in (
             (OSError("sensitive details"), "headless browser did not run"),
             (
-                subprocess.TimeoutExpired("sensitive command", 19),
+                subprocess.TimeoutExpired("sensitive command", 24),
                 "headless browser timed out rendering the candidate",
             ),
             (SimpleNamespace(returncode=1, stdout=""), "headless browser could not render the candidate"),
         ):
             with self.subTest(reason=reason):
                 results = [
-                    subprocess.TimeoutExpired("fake-browser", 45),
+                    subprocess.TimeoutExpired("fake-browser", 50),
                     OSError("browser unavailable"),
                     SimpleNamespace(returncode=1, stdout=""),
                 ] * len(browsers)
@@ -1270,6 +1347,7 @@ jobs:
                 with (
                     patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
                     patch.object(SMOKE.time, "sleep") as sleep,
+                    contextlib.redirect_stderr(io.StringIO()),
                 ):
                     with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
                         SMOKE.smoke(
@@ -1288,11 +1366,11 @@ jobs:
                 )
                 self.assertEqual(sleep.call_args_list, [call(5)] * (2 * len(browsers)))
                 timeouts = [args.kwargs["timeout"] for args in run.call_args_list]
-                self.assertEqual(timeouts[::3], [45] * len(browsers))
-                self.assertEqual(timeouts[1::3], [19] * len(browsers))
-                self.assertEqual(timeouts[2::3], [19] * len(browsers))
+                self.assertEqual(timeouts[::3], [50] * len(browsers))
+                self.assertEqual(timeouts[1::3], [24] * len(browsers))
+                self.assertEqual(timeouts[2::3], [24] * len(browsers))
                 extra_runtime = sum(timeouts) + sum(args.args[0] for args in sleep.call_args_list) - 45 * len(browsers)
-                self.assertLessEqual(extra_runtime, len(browsers) * 48)
+                self.assertLessEqual(extra_runtime, len(browsers) * 63)
 
     def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
         original = SMOKE.smoke

@@ -11080,6 +11080,32 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
 
   @override
+  String get captureBannerTryReconnect => 'Yritä yhdistää uudelleen';
+
+  @override
+  String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
+
+  @override
+  String get captureBannerWhatsWrong => 'Mitä on meneillään?';
+
+  @override
+  String get captureBannerDismiss => 'Hylkää';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'Ääneyhteys katkesi — tekstitys jatkuu yhteyden palattua';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Sovellus ei enää saa ääntä Omi-laitteesta eikä onnistunut palauttamaan yhteyttä automaattisesti. Irrota ja yhdistä laite uudelleen — laiteasetuksista tai sammuttamalla ja käynnistämällä se. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.';
+
+  @override
   String get captureStillRecording => 'Tallennus jatkuu';
 
   @override

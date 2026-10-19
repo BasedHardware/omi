@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -37,26 +38,66 @@ Future<Map<String, dynamic>> _graphNeverLoads() => Completer<Map<String, dynamic
 Future<Map<String, dynamic>> _graphFails() async => throw Exception('graph fixture failure');
 
 Future<Map<String, dynamic>> _graphLoaded() async => {
-      'nodes': [
-        {'id': 'me', 'label': 'Me', 'node_type': 'user'},
-        {'id': 'meetings', 'label': 'Meetings', 'node_type': 'concept'},
-        {'id': 'fridays', 'label': 'Fridays', 'node_type': 'concept'},
-        {'id': 'running', 'label': 'Half marathon', 'node_type': 'concept'},
-        {'id': 'priya', 'label': 'Priya', 'node_type': 'person'},
-        {'id': 'austin', 'label': 'Austin', 'node_type': 'place'},
-        {'id': 'pendant', 'label': 'Pendant', 'node_type': 'thing'},
-      ],
-      'edges': [
-        {'id': 'e1', 'source_id': 'me', 'target_id': 'meetings', 'label': 'prefers'},
-        {'id': 'e2', 'source_id': 'meetings', 'target_id': 'fridays', 'label': 'avoids'},
-        {'id': 'e3', 'source_id': 'me', 'target_id': 'running', 'label': 'trains for'},
-        {'id': 'e4', 'source_id': 'me', 'target_id': 'priya', 'label': 'sister'},
-        {'id': 'e5', 'source_id': 'priya', 'target_id': 'austin', 'label': 'lives in'},
-        {'id': 'e6', 'source_id': 'me', 'target_id': 'pendant', 'label': 'uses'},
-      ],
-    };
+  'nodes': [
+    {'id': 'me', 'label': 'Me', 'node_type': 'user'},
+    {'id': 'meetings', 'label': 'Meetings', 'node_type': 'concept'},
+    {'id': 'fridays', 'label': 'Fridays', 'node_type': 'concept'},
+    {'id': 'running', 'label': 'Half marathon', 'node_type': 'concept'},
+    {'id': 'priya', 'label': 'Priya', 'node_type': 'person'},
+    {'id': 'austin', 'label': 'Austin', 'node_type': 'place'},
+    {'id': 'pendant', 'label': 'Pendant', 'node_type': 'thing'},
+  ],
+  'edges': [
+    {'id': 'e1', 'source_id': 'me', 'target_id': 'meetings', 'label': 'prefers'},
+    {'id': 'e2', 'source_id': 'meetings', 'target_id': 'fridays', 'label': 'avoids'},
+    {'id': 'e3', 'source_id': 'me', 'target_id': 'running', 'label': 'trains for'},
+    {'id': 'e4', 'source_id': 'me', 'target_id': 'priya', 'label': 'sister'},
+    {'id': 'e5', 'source_id': 'priya', 'target_id': 'austin', 'label': 'lives in'},
+    {'id': 'e6', 'source_id': 'me', 'target_id': 'pendant', 'label': 'uses'},
+  ],
+};
 
 final memoriesScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'memories-mind-map-recovery',
+    title: 'Mind Map: saved memories without assertions, then a later graph page',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'A canonical page with saved memories and a signed cursor; a later page contains relationships',
+    run: (a) async {
+      await a.pump(
+        MemoryGraphPage(
+          trackOpenEvent: false,
+          loadGraph: () async => {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              for (var i = 0; i < _listed.length; i++) {'id': 'memory:$i', 'label': _listed[i]},
+            ],
+            'has_more': true,
+            'next_cursor': 'fixture-page-2',
+          },
+          loadMoreGraph: (_) => _graphLoaded(),
+        ),
+        scaffold: false,
+      );
+      await a.shot('Saved memories remain readable without invented relationships', step: 'catalog');
+      await a.tap(find.byKey(const ValueKey('mind_map_load_more')));
+      await a.shot('Load a later page containing supported relationships', step: 'graph');
+    },
+  ),
+  AuditScenario(
+    id: 'memories-mind-map-empty',
+    title: 'Mind Map: genuinely empty account with refresh',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'A successful canonical read has no eligible memories or relationships',
+    run: (a) async {
+      await a.pump(
+        MemoryGraphPage(trackOpenEvent: false, loadGraph: () async => {'nodes': [], 'edges': []}),
+        scaffold: false,
+      );
+      await a.shot('Refresh remains reachable on an empty Mind Map');
+    },
+  ),
   AuditScenario(
     id: 'memories-manual-memory',
     title: 'Memories: empty, create, save, quick edit, no results, filtered out',

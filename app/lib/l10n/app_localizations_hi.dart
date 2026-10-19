@@ -11058,6 +11058,32 @@ class AppLocalizationsHi extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ऑडियो सहेजा गया, बाद में ट्रांसक्राइब होगा';
 
   @override
+  String get captureBannerTryReconnect => 'पुनः कनेक्ट करने का प्रयास करें';
+
+  @override
+  String get captureBannerRetrySync => 'सिंक पुनः प्रयास करें';
+
+  @override
+  String get captureBannerWhatsWrong => 'क्या हो रहा है?';
+
+  @override
+  String get captureBannerDismiss => 'हटाएँ';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'आपके Omi से ब्लूटूथ कनेक्शन रुक गया है, इसलिए ऑडियो ऐप तक नहीं पहुँच रहा है। Omi डिवाइस पर रिकॉर्डिंग जारी रखता है और कनेक्शन लौटते ही सिंक हो जाएगा। फिर से कोशिश करने पर कनेक्शन दोबारा जुड़ता है; अगर यह बार-बार विफल रहे, तो सेटिंग > डिवाइस में अपना डिवाइस जाँचें।';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'ऑडियो लिंक रुक गया — कनेक्शन लौटने पर ट्रांसक्रिप्ट होगा';
+
+  @override
+  String get captureIngressNeedsReconnect => 'ऑडियो ऐप तक नहीं पहुँच रहा — अपना Omi फिर से कनेक्ट करें';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'ऐप अब Omi डिवाइस से ऑडियो नहीं ले पा रही है और कनेक्शन अपने आप बहाल नहीं हो सका। डिवाइस को डिस्कनेक्ट करके फिर से कनेक्ट करें — डिवाइस सेटिंग से, या उसे बंद करके चालू करके। डिवाइस पर सहेजा गया ऑडियो बाद में सिंक होगा।';
+
+  @override
   String get captureStillRecording => 'अभी भी रिकॉर्ड हो रहा है';
 
   @override
