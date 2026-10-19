@@ -179,3 +179,33 @@ def test_budget_exhaustion_preserves_truncation_without_4xx(monkeypatch):
     page, allowance = read(service, monkeypatch, enabled=True, allowed={'system'}, documents=400)
     assert allowance.truncated and store.physical == allowance.docs_scanned
     assert all(row['category'] == 'system' for row in page)
+
+
+def test_provider_retry_drops_retained_prefix_and_sees_new_history(monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    class RetryStore(Store):
+        failed = False
+
+        def get_all(self, refs, **kwargs):
+            if not self.failed:
+                self.failed = True
+                # The first attempt has already read metadata. A fresh attempt
+                # must not trust those cursors or miss an intervening new row.
+                assert self.windows
+                self.rows['users/owner/memories/arrived'] = {
+                    'id': 'arrived',
+                    'content': 'New fact during provider recovery',
+                    'category': 'interesting',
+                    'created_at': datetime(2026, 10, 21, tzinfo=timezone.utc),
+                    'data_protection_level': 'standard',
+                }
+                raise ServiceUnavailable('synthetic transient status read')
+            return super().get_all(refs, **kwargs)
+
+    store = RetryStore(legacy_rows(60))
+    service = MemoryService(db_client=store)
+    monkeypatch.setattr(service._canonical, 'read', lambda *a, **k: [])
+    page, allowance = read(service, monkeypatch, enabled=True, limit=1)
+    assert store.failed and page[0]['id'] == 'arrived'
+    assert allowance.docs_scanned == store.physical and not allowance.truncated
