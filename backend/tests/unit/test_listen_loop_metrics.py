@@ -305,37 +305,41 @@ def test_listen_metrics_endpoint_renders_lag_histogram():
     the only histogram samples it can see are the ones rendered at import time, and the
     request itself goes through the real app's routing and auth stack.
     """
-    child = textwrap.dedent('''
+    child = textwrap.dedent('''\
         import asyncio
-
-        from testing.hermetic_network import block_outbound_network
-
-        # Prove the exposition path is hermetic: no network is needed to import the app
-        # or serve /metrics, so this stays valid in the no-Redis CI unit lane.
-        block_outbound_network().__enter__()
+        from contextlib import ExitStack
 
         import httpx
 
-        import main  # the deployed listen entrypoint (`uvicorn main:app`)
-        from utils.observability import listen_loop
+        # Prove the exposition path is hermetic: no network is needed to import the app
+        # or serve /metrics, so this stays valid in the no-Redis CI unit lane. The guard
+        # must stay referenced for the whole block: a bare __enter__() lets CPython
+        # collect the context manager immediately and restore the sockets early.
+        with ExitStack() as stack:
+            from testing.hermetic_network import block_outbound_network
 
-        assert listen_loop._probe is None, 'probe must not be running before any session'
+            stack.enter_context(block_outbound_network())
 
-        async def _fetch(headers):
-            transport = httpx.ASGITransport(app=main.app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://listen") as client:
-                return await client.get("/metrics", headers=headers)
+            import main  # the deployed listen entrypoint (`uvicorn main:app`)
+            from utils.observability import listen_loop
 
-        denied = asyncio.run(_fetch({}))
-        assert denied.status_code == 401, denied.status_code
-        response = asyncio.run(_fetch({"Authorization": "Bearer scrape-token"}))
-        assert response.status_code == 200, response.status_code
-        body = response.text
-        count_lines = [line for line in body.splitlines() if line.startswith("omi_listen_event_loop_lag_seconds_count ")]
-        assert count_lines == ["omi_listen_event_loop_lag_seconds_count 0.0"], count_lines
-        assert 'omi_listen_event_loop_lag_seconds_bucket{le="0.05"}' in body
-        # Serving /metrics must not start the probe either: only run_listen_session does.
-        assert listen_loop._probe is None
+            assert listen_loop._probe is None, 'probe must not be running before any session'
+
+            async def _fetch(headers):
+                transport = httpx.ASGITransport(app=main.app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://listen") as client:
+                    return await client.get("/metrics", headers=headers)
+
+            denied = asyncio.run(_fetch({}))
+            assert denied.status_code == 401, denied.status_code
+            response = asyncio.run(_fetch({"Authorization": "Bearer scrape-token"}))
+            assert response.status_code == 200, response.status_code
+            body = response.text
+            count_lines = [line for line in body.splitlines() if line.startswith("omi_listen_event_loop_lag_seconds_count ")]
+            assert count_lines == ["omi_listen_event_loop_lag_seconds_count 0.0"], count_lines
+            assert 'omi_listen_event_loop_lag_seconds_bucket{le="0.05"}' in body
+            # Serving /metrics must not start the probe either: only run_listen_session does.
+            assert listen_loop._probe is None
         ''')
     env = {
         **os.environ,
