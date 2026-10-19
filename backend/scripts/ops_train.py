@@ -329,7 +329,15 @@ def template_drift(template: Mapping[str, Any], serving: Mapping[str, Any], ops_
     drift: list[str] = []
     left, right = _containers(template), _containers(serving)
     if set(left) != set(right):
-        return [f'containers:{sorted(left)}!={sorted(right)}']
+        # Cloud Run names an unnamed template container on the revision it creates
+        # (`#0` in the template, `backend-1` on the revision): pair them by position.
+        lc, rc = template.get('containers') or [], serving.get('containers') or []
+        if len(lc) != len(rc) or any(
+            a.get('name') and b.get('name') and a['name'] != b['name'] for a, b in zip(lc, rc)
+        ):
+            return [f'containers:{sorted(left)}!={sorted(right)}']
+        left = {f'#{i}': c for i, c in enumerate(lc)}
+        right = {f'#{i}': c for i, c in enumerate(rc)}
     for name in sorted(left):
         a, b = left[name], right[name]
         for key in ('image', 'command', 'args', 'resources'):
