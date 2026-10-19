@@ -9,11 +9,9 @@ extent growth of the live row. All ids and text are synthetic.
 """
 
 import logging
-import sys
 from copy import deepcopy
 from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -25,8 +23,6 @@ from tests.unit.test_sync_lineage_dedupe_replay import (
     LIVE,
     LIVE_ID,
     NEW,
-    T0 as DEDUPE_T0,
-    _drive_process_segment,
     live_row,
     prove,
     reworded,
@@ -523,35 +519,9 @@ def test_dedupe_off_persistence_is_unchanged(monkeypatch):
 @pytest.fixture(scope='module')
 def pipeline_module():
     from database import conversations  # noqa: F401
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     return pipeline
-
-
-def test_append_telemetry_carries_the_span_bucket(pipeline_module, monkeypatch, caplog):
-    pipeline = pipeline_module
-    store = seeded_store([live_row()])
-    texts = [reworded(text) for text in LIVE] + NEW
-    with caplog.at_level(logging.INFO):
-        ok, _, _ = _drive_process_segment(pipeline, monkeypatch, store, texts, lineage_binding='stamp_fallback')
-    assert ok is True
-    lines = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append' in r.getMessage()]
-    assert len(lines) == 1 and 'span_delta_bucket=60_300' in lines[0]
-
-
-def test_dedupe_off_emits_no_lineage_append_or_stamp_event(pipeline_module, monkeypatch, caplog):
-    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
-    pipeline = pipeline_module
-    store = seeded_store([live_row()])
-    with caplog.at_level(logging.INFO):
-        ok, _, _ = _drive_process_segment(
-            pipeline, monkeypatch, store, NEW, lineage_binding='stamp_fallback', wal_ts=DEDUPE_T0 + 20
-        )
-    assert ok is True
-    stamp = [r.getMessage() for r in caplog.records if 'event=sync_lineage_stamp_append' in r.getMessage()]
-    dedupe = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append ' in r.getMessage()]
-    assert stamp == []
-    assert dedupe == []
 
 
 @pytest.fixture
@@ -561,92 +531,3 @@ def coordinator():
         yield module, stubs
     finally:
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
-
-
-@pytest.mark.asyncio
-async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, monkeypatch):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
-    chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
-    paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
-    pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
-    pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
-    pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
-    pipeline.users_db = MagicMock()
-    pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-    pipeline.build_person_embeddings_cache = MagicMock(return_value={})
-    pipeline.record_usage = MagicMock()
-    captured = {}
-
-    def capture(path, uid, response, lock, errors, source, is_locked, prefs, cache, target, *args, **kwargs):
-        captured[paths[path]['id']] = (target, kwargs.get('lineage_binding'))
-        response['updated_memories'].add(target or 'sync-row')
-        return True
-
-    pipeline.process_segment = capture
-    monkeypatch.setattr(
-        sys.modules[pipeline.plan_segment_targets.__module__],
-        '_load_lineage',
-        lambda *_args, **_kwargs: ([], None, False),
-    )
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
-        '_candidate_rows',
-        lambda *_args, **_kwargs: [generation(0)],
-    )
-    kwargs = SimpleNamespace(
-        target_conversation_id='STAMP',
-        client_device_id='pendant',
-        recording_session_id=ORIGIN,
-        audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
-        audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
-    )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured[chunks[0]['id']] == ('STAMP', 'stamp_fallback')
-
-
-@pytest.mark.asyncio
-async def test_coordinator_lineage_off_passes_no_binding_kwarg(coordinator, monkeypatch):
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'off')
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
-    paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
-    pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
-    pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
-    pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
-    pipeline.users_db = MagicMock()
-    pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-    pipeline.build_person_embeddings_cache = MagicMock(return_value={})
-    pipeline.record_usage = MagicMock()
-    captured = {}
-
-    def capture(path, uid, response, lock, errors, source, is_locked, prefs, cache, target, *args, **kwargs):
-        captured[paths[path]['id']] = (target, 'lineage_binding' in kwargs)
-        response['updated_memories'].add(target or 'sync-row')
-        return True
-
-    pipeline.process_segment = capture
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
-        '_candidate_rows',
-        lambda *_args, **_kwargs: [],
-    )
-    kwargs = SimpleNamespace(
-        target_conversation_id='STAMP',
-        client_device_id='pendant',
-        recording_session_id=ORIGIN,
-        audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
-        audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
-    )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured[chunks[0]['id']] == (None, False)

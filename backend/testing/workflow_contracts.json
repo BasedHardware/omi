@@ -239,7 +239,7 @@
       "risk": "high",
       "sources": [
         "backend/routers/sync.py",
-        "backend/utils/sync/pipeline.py",
+        "backend/utils/sync/legacy_segment_core.py",
         "backend/database/sync_jobs.py",
         "backend/utils/sync/*.py",
         "backend/testing/sync_cloud_tasks_stack/**",
@@ -475,7 +475,7 @@
         "backend/routers/conversations.py",
         "backend/routers/sync.py",
         "backend/routers/developer.py",
-        "backend/utils/sync/pipeline.py",
+        "backend/utils/sync/legacy_segment_core.py",
         "backend/utils/conversations/process_conversation.py",
         "backend/utils/app_integrations.py",
         "backend/utils/conversations/merge_conversations.py",

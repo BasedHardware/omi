@@ -22,11 +22,10 @@ from utils.sync.assignment_errors import SyncAssignmentSuperseded
 @pytest.fixture(scope='module', autouse=True)
 def load_dependencies():
     # Imports belong to fixture setup, not the fast-unit behavior timing budget.
-    from database import conversations
-    from models import conversation, conversation_enums, transcript_segment
-    from utils.conversations import deterministic_minimum
-    from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
-    from tests.unit.test_conversation_discard_revival import _persist
+    from database import conversations  # noqa: F401
+    from models import conversation, conversation_enums, transcript_segment  # noqa: F401
+    from utils.conversations import deterministic_minimum  # noqa: F401
+    from tests.unit.test_conversation_discard_revival import _persist  # noqa: F401
 
 
 def chunk(key, timestamp, text='A narrated explanation of this chapter.', device='pendant'):
@@ -269,7 +268,7 @@ def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_fill
 def independent_job_pipeline():
     """Load the isolated coordinator in setup; the CPU gate measures behavior only."""
     from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
-    from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+    from tests.unit._sync_pipeline_fakes import _build_pipeline_fakes
     from models import conversation, conversation_enums, transcript_segment
     from utils.conversations import deterministic_minimum
 
@@ -289,7 +288,7 @@ def independent_job_pipeline():
     fakes['utils.sync.bridge'] = bridge
     with stub_modules(fakes):
         pipeline = load_module_fresh(
-            'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
+            'utils.sync.legacy_segment_core', Path(__file__).resolve().parents[2] / 'utils/sync/legacy_segment_core.py'
         )
         yield pipeline, transcript_segment, lifecycle
 

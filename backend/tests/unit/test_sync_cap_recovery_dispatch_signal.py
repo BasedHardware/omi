@@ -5,7 +5,7 @@ from unittest.mock import Mock, AsyncMock
 
 import pytest
 
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
 
 
 @pytest.mark.parametrize('enforce', [False, True])

@@ -416,7 +416,7 @@ def test_sync_finalizer_raced_by_delete_is_not_an_error(monkeypatch, caplog):
     the persist a no-op (the conversation is gone, there is nothing to persist
     onto) and the ERROR signature disappears.
     """
-    from utils.sync import pipeline as sync_pipeline
+    from utils.sync import legacy_segment_core as sync_pipeline
 
     def update_conversation(uid, conversation_id, update_data):
         return False  # the race outcome after the fix
@@ -429,7 +429,7 @@ def test_sync_finalizer_raced_by_delete_is_not_an_error(monkeypatch, caplog):
     monkeypatch.setattr(sync_pipeline, 'is_audio_merge_dispatch_enabled', lambda: False)
 
     response = {'new_memories': {CONVERSATION_ID}, 'updated_memories': set()}
-    with caplog.at_level(logging.ERROR, logger='utils.sync.pipeline'):
+    with caplog.at_level(logging.ERROR, logger='utils.sync.legacy_segment_core'):
         sync_pipeline._finalize_sync_audio_files(UID, response)
 
     assert not [r for r in caplog.records if 'sync_audio_finalize' in r.getMessage()]
@@ -437,7 +437,7 @@ def test_sync_finalizer_raced_by_delete_is_not_an_error(monkeypatch, caplog):
 
 def test_sync_finalizer_still_errors_on_a_real_failure(monkeypatch, caplog):
     """Over-broad suppression guard: a genuine finalizer failure still logs."""
-    from utils.sync import pipeline as sync_pipeline
+    from utils.sync import legacy_segment_core as sync_pipeline
 
     def boom(uid, cid):
         raise RuntimeError('storage exploded')
@@ -447,7 +447,7 @@ def test_sync_finalizer_still_errors_on_a_real_failure(monkeypatch, caplog):
     monkeypatch.setattr(sync_pipeline, 'is_audio_merge_dispatch_enabled', lambda: False)
 
     response = {'new_memories': {CONVERSATION_ID}, 'updated_memories': set()}
-    with caplog.at_level(logging.ERROR, logger='utils.sync.pipeline'):
+    with caplog.at_level(logging.ERROR, logger='utils.sync.legacy_segment_core'):
         sync_pipeline._finalize_sync_audio_files(UID, response)
 
     assert [r for r in caplog.records if 'sync_audio_finalize' in r.getMessage()]

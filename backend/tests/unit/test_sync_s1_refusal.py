@@ -14,15 +14,10 @@ from unittest.mock import MagicMock
 import pytest
 
 import tests.unit.test_sync_v2 as sync_v2_harness
-from tests.unit.test_sync_recording_lineage import ORIGIN, generation
+from tests.unit.test_sync_recording_lineage import ORIGIN
 from tests.unit.test_wal_audio_coverage_pipeline import (
     BIN_NAME,
     _claim,
-    _coverage_env,
-    _run_batch,
-    _s1_spies,
-    _WHOLE_BATCH_ARGS,
-    _wire,
 )
 from utils.sync import recording_lineage
 from utils.sync.recording_lineage import (
@@ -179,28 +174,3 @@ def test_emit_s1_refusal_clamps_unknown_reasons(monkeypatch, caplog):
     assert 'reason=parse_failed' in lines[0]
     assert 'reason=count_mismatch' in lines[1]
     assert 'attacker-supplied' not in lines[0]
-
-
-@pytest.mark.asyncio
-async def test_observed_map_count_mismatch_emits_one_s1_refusal(coordinator, monkeypatch, tmp_path):
-    """Post-decode: source-map count != surviving WAV count emits count_mismatch
-    exactly once before the legacy whole-batch resolution runs."""
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
-    refusals = []
-    lineage_module = getattr(pipeline, 'sync_recording_lineage', recording_lineage)
-    monkeypatch.setattr(lineage_module, 'emit_s1_refusal', lambda reason: refusals.append(reason))
-
-    async def coverage(uid, source, should_lock, client_device_id, session, claims, wav_paths, decoded_frames, **kw):
-        return (list(wav_paths), {}, False)
-
-    pipeline.apply_sync_wal_audio_coverage = coverage
-    spies = _s1_spies(pipeline, monkeypatch)
-    await _run_batch(module, stubs, tmp_path)
-    assert refusals == ['count_mismatch']
-    assert spies.plan_calls == []
-    assert spies.resolver_calls == [_WHOLE_BATCH_ARGS]
-    assert state.outcomes[-1].value == 'success'

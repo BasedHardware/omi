@@ -9,7 +9,6 @@ target-attach path consults the same predicate.
 """
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -19,8 +18,7 @@ from database.conversations import eligible_merge_target, select_closest_convers
 
 @pytest.fixture(scope="module", autouse=True)
 def warm_pipeline():
-    from utils.sync import pipeline
-    from utils.conversations import lifecycle
+    from utils.conversations import lifecycle  # noqa: F401
 
 
 _BASE = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
@@ -65,13 +63,17 @@ def test_eligible_merge_target_predicate():
     assert eligible_merge_target(discarded) is True
 
 
-@patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='url')
-@patch('utils.sync.pipeline.schedule_syncing_temporal_file_deletion')
-@patch('utils.sync.pipeline.prerecorded', return_value=(['word'], 'en'))
-@patch('utils.sync.pipeline.postprocess_words')
-@patch('utils.sync.pipeline.conversations_db.get_conversation', return_value={'id': 'deleted', 'deleted': True})
-@patch('utils.sync.pipeline.get_timestamp_from_path', return_value=123)
-@patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=RuntimeError("FALLBACK_TAKEN"))
+@patch('utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='url')
+@patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+@patch('utils.sync.legacy_segment_core.prerecorded', return_value=(['word'], 'en'))
+@patch('utils.sync.legacy_segment_core.postprocess_words')
+@patch(
+    'utils.sync.legacy_segment_core.conversations_db.get_conversation', return_value={'id': 'deleted', 'deleted': True}
+)
+@patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=123)
+@patch(
+    'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', side_effect=RuntimeError("FALLBACK_TAKEN")
+)
 def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     mock_closest, mock_timestamp, mock_get_conv, mock_postprocess, mock_prerecorded, mock_schedule, mock_signed_url
 ):
@@ -81,7 +83,7 @@ def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     the original assertion that deleted content never absorbs speech remains.
     """
     from models.transcript_segment import TranscriptSegment
-    from utils.sync.pipeline import process_segment
+    from utils.sync.legacy_segment_core import process_segment
     from tests.unit.test_sync_cross_job_assignment import intake, chunk
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -90,11 +92,11 @@ def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     mock_postprocess.return_value = [TranscriptSegment(text='Retain this speech', start=0, end=1, is_user=False)]
     response = {'new_memories': set(), 'updated_memories': set()}
     errors = []
-    with patch('utils.sync.pipeline.get_wav_duration', return_value=60), patch(
+    with patch('utils.sync.legacy_segment_core.get_wav_duration', return_value=60), patch(
         'utils.conversations.lifecycle.ingest_sync_conversation',
         side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
-    ), patch('utils.sync.pipeline.identify_speakers_for_segments'), patch(
-        'utils.sync.pipeline.conversations_db.get_manual_speaker_receipt', return_value={}
+    ), patch('utils.sync.legacy_segment_core.identify_speakers_for_segments'), patch(
+        'utils.sync.legacy_segment_core.conversations_db.get_manual_speaker_receipt', return_value={}
     ):
         result = process_segment('seg_123.wav', 'u', response, MagicMock(), errors, target_conversation_id='deleted')
     assert result and errors == []

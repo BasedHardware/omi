@@ -26,7 +26,7 @@ from utils.capture_evidence import (
     sync_segment_receipt,
 )
 from utils.sync.files import decode_files_to_wav
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
 
 ROOT = '12345678-1234-4234-8234-123456789abc'
 NAME = 'audio_phonemic_pcm16_16000_1_fs160_1710000000.bin'

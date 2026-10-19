@@ -534,21 +534,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     )
 
 
-def test_static_processed_segment_marker_follows_partial_result_checkpoint():
-    """Static ordering contract for retry-safe partial-result persistence."""
-    pipeline = (Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py').read_text()
-    checkpoint = pipeline.index("_update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})")
-    durable_checkpoint = pipeline.index('checkpoint_sync_content_partial_result(', checkpoint)
-    marker = pipeline.index('_add_processed_segment_for_run(job_id, active_run_lock_token, path)', checkpoint)
-
-    assert checkpoint < durable_checkpoint < marker
-    durable_call = pipeline[durable_checkpoint:marker]
-    assert 'run_token=active_run_lock_token' in durable_call
-    assert 'run_epoch=active_run_lock_epoch' in durable_call
-    assert "set(partial_result.get('new_memories') or [])" in pipeline
-    assert 'get_sync_content_partial_result' in pipeline
-
-
 def test_segment_identity_survives_job_directory_change(tmp_path, monkeypatch):
     monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
     first = tmp_path / 'job-1'

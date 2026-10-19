@@ -10,7 +10,7 @@ from database import sync_ledger, sync_jobs
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from routers.sync import _terminal_repeat_failure_kwargs
 from utils.sync.assignment_errors import SyncAssignmentConflict
-from utils.sync.pipeline import _persistence_failure_fingerprint, _whole_job_persistence_fingerprint
+from utils.sync.legacy_segment_core import _persistence_failure_fingerprint
 
 
 class _Snapshot:
@@ -171,33 +171,6 @@ def test_bad_deploy_for_an_hour_does_not_pause_before_the_third_strike_and_recov
     assert paused.data['status'] == 'completed'
 
 
-def test_partial_batch_earns_strikes_pauses_after_three_and_keeps_sibling_checkpoints():
-    """Two healthy siblings must not let one failing segment retry forever."""
-    ref = _Ref()
-    start = datetime(2026, 9, 27, tzinfo=timezone.utc)
-    release = sync_ledger._release_claim_after_job_retired_transaction.to_wrap
-    for index in range(3):
-        now = start + timedelta(minutes=index)
-        job_id = f'job-{index}'
-        assert _claim(ref, job_id, now)['outcome'] == 'owned'
-        ref.data['partial_result'] = {'new_memories': ['sibling-a', 'sibling-b']}
-        ref.data['processed_segment_ids'] = ['sibling-a', 'sibling-b']
-        fingerprint = _whole_job_persistence_fingerprint(1, 3, ['persistence:provenance_mismatch'])
-        job = {
-            'status': 'partial_failure',
-            'result': {'repeat_failure_key': 'persistent_persistence', 'repeat_failure_fingerprint': fingerprint},
-        }
-        # The router's terminal cleanup carries the same strike as the worker.
-        assert release(_Transaction(), ref, job_id, now, **_terminal_repeat_failure_kwargs(job))
-        assert ref.data['repeat_failure_count'] == index + 1
-    capped = _claim(ref, 'job-3', start + timedelta(minutes=3))
-    assert capped['outcome'] == 'capped' and capped['failure_key'] == 'persistent_persistence'
-    assert ref.data['partial_result'] == {'new_memories': ['sibling-a', 'sibling-b']}
-    assert ref.data['processed_segment_ids'] == ['sibling-a', 'sibling-b']
-    assert 'expires_at' in ref.data
-    assert _claim(ref, 'job-4', start + timedelta(minutes=2) + sync_ledger.REPEAT_FAILURE_PAUSE)['outcome'] == 'owned'
-
-
 def test_polling_release_records_strike_once_for_the_terminal_owner():
     ref = _Ref()
     now = datetime(2026, 9, 27, tzinfo=timezone.utc)
@@ -234,26 +207,6 @@ def test_only_known_data_shape_persistence_errors_receive_fingerprints():
     assert _persistence_failure_fingerprint(wrapped_shape, 'persistence') is None
     assert _persistence_failure_fingerprint(ServiceUnavailable('unavailable'), 'persistence') is None
     assert _persistence_failure_fingerprint(TimeoutError('timeout'), 'persistence') is None
-
-
-def test_one_classified_segment_failure_gives_a_partial_or_mixed_batch_a_strike():
-    fingerprint = 'persistence:ValueError'
-    assert _whole_job_persistence_fingerprint(2, 2, [fingerprint, fingerprint]) == fingerprint
-    # Differing fingerprints collapse to one bounded token on the same cap.
-    mixed = _whole_job_persistence_fingerprint(2, 2, [fingerprint, 'persistence:TypeError'])
-    assert mixed == 'persistence:mixed'
-    assert sync_ledger._validated_failure_fingerprint('persistent_persistence', mixed) == mixed
-    assert _whole_job_persistence_fingerprint(2, 3, [fingerprint, fingerprint]) == fingerprint
-    assert _whole_job_persistence_fingerprint(2, 2, [fingerprint]) == fingerprint
-    # No classified failure, or no failure at all: never a strike.
-    assert _whole_job_persistence_fingerprint(2, 2, []) is None
-    assert _whole_job_persistence_fingerprint(0, 2, [fingerprint]) is None
-    result = {'repeat_failure_key': 'persistent_persistence', 'repeat_failure_fingerprint': fingerprint}
-    assert _terminal_repeat_failure_kwargs({'status': 'partial_failure', 'result': result}) == {
-        'failure_key': 'persistent_persistence',
-        'failure_fingerprint': fingerprint,
-    }
-    assert _terminal_repeat_failure_kwargs({'status': 'completed', 'result': result}) == {}
 
 
 def test_different_or_unclassified_persistence_failures_reset_the_streak():

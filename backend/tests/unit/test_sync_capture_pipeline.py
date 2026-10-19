@@ -16,7 +16,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
 from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
-from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+from tests.unit._sync_pipeline_fakes import _build_pipeline_fakes
 from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
 
@@ -46,7 +46,7 @@ def pipeline():
     )
     with stub_modules(fakes):
         module = load_module_fresh(
-            'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
+            'utils.sync.legacy_segment_core', Path(__file__).resolve().parents[2] / 'utils/sync/legacy_segment_core.py'
         )
         module.ingest_test_seam = lifecycle
         module.final_pass_test_seam = final_pass

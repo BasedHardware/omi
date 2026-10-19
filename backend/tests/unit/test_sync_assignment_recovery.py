@@ -7,11 +7,7 @@ ones; only a genuine difference is a mismatch.
 
 from copy import deepcopy
 from pathlib import Path
-import json
-import sys
-from unittest.mock import MagicMock
 
-from starlette.datastructures import UploadFile
 
 from google.api_core.exceptions import InvalidArgument
 import pytest
@@ -20,12 +16,11 @@ import yaml
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
 from utils.sync.assignment import auto_mergeable, capture_mismatch
 from utils.sync.live_overlap import compatible_capture
 from utils.sync.assignment_errors import SyncAssignmentConflict
-from utils.sync.pipeline import _firestore_error_class
+from utils.sync.legacy_segment_core import _firestore_error_class
 
 _ALL_TOKENS = {
     'none',
@@ -290,22 +285,6 @@ def test_recovery_flag_reaches_every_sync_host_in_both_environments():
         ]
         hosts.append(env['gke']['backend-listen'])
         assert all(host['env']['SYNC_ASSIGNMENT_RECOVERY_ENABLED']['value'] == 'true' for host in hosts)
-
-
-@pytest.fixture
-def admission_router():
-    module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
-    try:
-        yield module, jobs, bytes_io
-    finally:
-        sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
-        sys.modules.pop('utils.sync.ledger_completion', None)
-        for name, original in saved.items():
-            if original is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = original
 
 
 def test_batch_explicit_live_target_missing_holds_and_replays_after_live_create():

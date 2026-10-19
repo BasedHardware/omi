@@ -24,7 +24,7 @@ import tests.unit.test_sync_v2 as sync_v2_harness
 from config import sync_lineage
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import conversations, intake
-from utils.sync import recording_lineage, recording_session_target
+from utils.sync import recording_lineage
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.recording_lineage import (
     lineage_resolution_requested,
@@ -43,7 +43,7 @@ L = 11  # the generation the phone stamped
 @pytest.fixture(scope='module', autouse=True)
 def dependencies():
     from database import conversations  # noqa: F401
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     return pipeline
 
@@ -374,31 +374,6 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
     )
     fresh = next(s for s in written.segments if s.get('id') == 'LIVE-FRESH')
     assert result['started_at'].timestamp() + fresh['start'] == origin + 20
-
-
-@pytest.mark.asyncio
-async def test_kill_switch_off_reproduces_the_whole_batch_outcome(monkeypatch, dependencies):
-    """Today's behavior: only the origin-id row is a candidate, so the batch loses its stamp."""
-    pipeline = dependencies
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'off')
-    store = seeded_store()
-    candidates = [row for row in lineage(store) if row['external_data']['recording_session_id'] == ORIGIN]
-    monkeypatch.setattr(recording_session_target, '_candidate_rows', lambda *_args, **_kwargs: candidates)
-
-    async def run_inline(_executor, fn, *args):
-        return fn(*args)
-
-    monkeypatch.setattr(pipeline, 'run_blocking', run_inline)
-    chunks = upload_stamped_for_l()
-    start, end = chunks[0]['started_at'].timestamp() - 1, chunks[-1]['finished_at'].timestamp()
-    assert not lineage_resolution_requested('u', ORIGIN, start, end)
-    target = await pipeline._resolve_safety_wal_target(
-        'u', gen_id(L), ORIGIN, pipeline.ConversationSource.omi, 'pendant', False, start, end
-    )
-    assert target is None
-    before = {row['id'] for row in conversations(store)}
-    replay(store, chunks, {chunk['id']: target for chunk in chunks})
-    assert {row['id'] for row in conversations(store)} - before == {chunks[0]['id']}
 
 
 def test_upload_without_recording_id_keeps_temporal_assignment():
@@ -1197,75 +1172,6 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
         audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
         capture_evidence_claims=s1_claims,
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('flag', ['', 'off'])
-async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
-    module, stubs = coordinator
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
-    chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if flag == '' else [None] * 4
-    assert [captured[chunk['id']] for chunk in chunks] == expected
-
-
-@pytest.mark.asyncio
-async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
-    module, stubs = coordinator
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
-    chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
-
-    def failed(*_args, **_kwargs):
-        raise RuntimeError('synthetic planner failure')
-
-    monkeypatch.setattr(stubs['pipeline'], 'plan_segment_targets', failed)
-    metrics = MagicMock()
-    lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
-    monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
-    caplog.set_level(logging.INFO, logger=lineage_module.__name__)
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
-    metrics.labels.assert_called_once_with(outcome='lookup_failed')
-    metrics.labels.return_value.inc.assert_called_once()
-    assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('flag', ['', 'off'])
-async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
-    module, stubs = coordinator
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
-    chunks = upload_straddling_next_two()[:1]
-    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
-    pipeline = stubs['pipeline']
-    pipeline.get_sync_job = MagicMock(
-        return_value={
-            'partial_result': {'updated_memories': [gen_id(L + 1), 'FENCED'], 'fenced_conversation_ids': ['FENCED']}
-        }
-    )
-    pipeline.get_processed_segments = MagicMock(
-        return_value={f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav" for chunk in chunks}
-    )
-    enriched = []
-
-    def reprocess(_uid, response, *_args, **_kwargs):
-        enriched.append(dict(response.pop('_merged', {})))
-
-    pipeline._reprocess_merged_conversations = reprocess
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-    )
-    assert captured == {}  # landed audio never returns to STT or assignment
-    assert enriched == ([{gen_id(L + 1): pipeline._LINEAGE_RETRY_LANGUAGE}] if flag == '' else [{}])
 
 
 def test_sync_reprocess_does_not_complete_an_open_live_recording(dependencies, monkeypatch):

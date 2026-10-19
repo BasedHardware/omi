@@ -252,7 +252,7 @@ def test_loopback_http_acks_redirect_deferred_busy_and_real_deletion(custody, mo
     import uvicorn
     from routers import sync as router
     from utils.batch_pipeline import enrichment
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     client, uid, tasks, user = custody
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')

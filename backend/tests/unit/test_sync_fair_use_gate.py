@@ -511,7 +511,7 @@ class TestSyncEndpointCodeStructure:
     def _read_pipeline_source():
         import os
 
-        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
         with open(pipeline_path, encoding='utf-8') as f:
             return f.read()
 

@@ -2,8 +2,9 @@
 """Legacy segment transcription core kept for cap-hold recovery after C11.
 
 Extracted verbatim from the deleted utils/sync/pipeline.py (legacy-retire C11).
-Only utils/sync/cap_hold_recovery.py and utils/sync/cap_recovery_audio.py may import
-this module. The sr- enrichment callback lives in utils/enrichment/callback.py (lane 9).
+Importers: utils/sync/cap_hold_recovery.py and utils/sync/cap_recovery_audio.py
+(cap holds), and routers/sync.py (v2 upload staging and the status poll's
+stale-job reaper for legacy jobs that were in flight at deletion). The sr- enrichment callback lives in utils/enrichment/callback.py (lane 9).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import hashlib
 import io
 import logging
 import os
+import shutil
 import threading
 import time
 from collections import deque
@@ -30,6 +32,7 @@ from database._client import (
     is_document_size_limit_error,
     is_expired_transaction_error,
 )
+from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 from utils.sync import cap_recovery_provider
 from database import conversations as conversations_db
@@ -45,7 +48,14 @@ from database import users as users_db
 from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
 from database.sync_jobs import (
+    delete_sync_job_run_lock_epoch,
+    fenced_mark_job_failed,
+    mark_job_failed,
     try_mark_once,
+)
+from database.sync_ledger import (
+    release_sync_content_claim_after_job_retired,
+    release_sync_content_claim,
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
@@ -164,6 +174,29 @@ _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
+_SYNC_FAILURE_REASON_CODES = {
+    'backfill_capacity',
+    'backfill_paced',
+    'destructive_operation_in_progress',
+    'stt_empty_unexpected',
+    'stt_invalid_input',
+    'stt_provider_configuration_error',
+    'stt_timeout',
+    'stt_upstream_error',
+    'sync_backfill_dispatch_unavailable',
+    'sync_backfill_paced',
+    'sync_conversation_persistence_fenced',
+    'sync_dispatch_staging_failed',
+    'sync_decode_failed',
+    'sync_invalid_audio',
+    'sync_persistence_failed',
+    'sync_staged_audio_expired',
+    'sync_transcription_budget_exhausted',
+    'sync_vad_failed',
+    'sync_worker_stale',
+}
+
+
 def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
     """Identify a bounded, classified persistence failure, never an unknown error.
 
@@ -230,6 +263,10 @@ def _firestore_doc_kind(error: BaseException) -> str:
     if isinstance(stamped, str) and stamped in FIRESTORE_DOCUMENT_KINDS:
         return stamped
     return firestore_document_kind(error)
+
+
+def _bounded_sync_failure_reason(reason: str | None) -> str:
+    return reason if reason in _SYNC_FAILURE_REASON_CODES else 'other'
 
 
 def _sync_assignment_failure_subtype(error: object) -> str:
@@ -382,6 +419,32 @@ def _set_deferred_segment_outcome(
             deferred_outcome['failure_subtype'] = bounded_sync_assignment_subtype(failure_subtype)
 
 
+def _record_sync_job_outcome(
+    outcome: TranscriptionOutcome,
+    *,
+    provider: str,
+    model: str,
+    lane: str,
+    job_id: str | None = None,
+) -> None:
+    if isinstance(job_id, str):
+        try:
+            if not try_mark_once(job_id, 'terminal_outcome_metric'):
+                return
+        except Exception:
+            logger.warning('event=sync_transcription_metric outcome=dedupe_failed kind=job')
+    try:
+        record_sync_transcription_outcome(
+            kind='job',
+            provider=provider,
+            model=model,
+            lane=lane,
+            outcome=outcome,
+        )
+    except Exception:
+        logger.warning('event=sync_transcription_metric outcome=emit_failed kind=job')
+
+
 class SyncConversationPersistenceFenced(RuntimeError):
     """Conversation lifecycle rejected this worker's stale processing result."""
 
@@ -390,6 +453,111 @@ def _require_current_conversation_persistence(persisted: bool) -> None:
     """Turn a lifecycle fence into the worker's terminal supersession signal."""
     if not persisted:
         raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
+
+
+def _mark_job_failed_for_run(
+    job_id: str,
+    run_lock_token: str | None,
+    error: str,
+    *,
+    reason_code: str | None = None,
+    retry_after: int | None = None,
+) -> Dict | None:
+    if run_lock_token is None:
+        failed = mark_job_failed(job_id, error, reason_code=reason_code, retry_after=retry_after)
+        if failed is None:
+            raise SyncJobRunLeaseLost(f'sync job legacy state is no longer mutable: job={job_id}')
+        return failed
+    return _require_run_owner(
+        fenced_mark_job_failed(
+            job_id,
+            run_lock_token,
+            error,
+            reason_code=reason_code,
+            retry_after=retry_after,
+        ),
+        job_id=job_id,
+    )
+
+
+def finalize_sync_job_failure_now(
+    *,
+    job_id: str,
+    uid: str,
+    content_id: str | None,
+    error_code: str,
+    outcome: TranscriptionOutcome,
+    provider: str,
+    model: str,
+    lane: str,
+    reason_code: str | None = None,
+    retry_after: int | None = None,
+    run_lock_token: str | None = None,
+    attempt_ref: str | None = None,
+    failure_phase: str | None = None,
+    failure_class: str | None = None,
+    failure_subtype: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
+) -> Optional[Dict]:
+    """Publish one truthful failure and then make its retry claim available.
+
+    This synchronous boundary is shared by async workers and the polling stale
+    reaper. A run-token owner fences the Redis terminal transition first; only
+    that winning owner may release the durable retry claim afterward.
+    """
+    if run_lock_token is None:
+        finalized = mark_job_failed(
+            job_id,
+            error_code,
+            reason_code=reason_code or error_code,
+            retry_after=retry_after,
+        )
+    else:
+        try:
+            finalized = _mark_job_failed_for_run(
+                job_id,
+                run_lock_token,
+                error_code,
+                reason_code=reason_code or error_code,
+                retry_after=retry_after,
+            )
+        except SyncJobRunLeaseLost:
+            return None
+    if finalized is None:
+        return None
+    if content_id:
+        failure_kwargs = {'failure_key': failure_key} if failure_key else {}
+        if failure_fingerprint:
+            failure_kwargs['failure_fingerprint'] = failure_fingerprint
+        if run_lock_token is None:
+            # The pre-cutover protocol has no epoch binding. Keep all ledger
+            # operations tokenless while legacy revisions may still exist.
+            release_sync_content_claim(uid, content_id, job_id, **failure_kwargs)
+        else:
+            # The fenced Redis terminal transition already succeeded. A lease
+            # can expire between that CAS and Firestore release, so use the
+            # deliberately retired-job transaction rather than treating this
+            # as a live write.
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id, **failure_kwargs)
+    if run_lock_token is not None:
+        delete_sync_job_run_lock_epoch(job_id)
+    logger.error(
+        'event=sync_transcription_job outcome=%s status=failed provider=%s model=%s lane=%s reason_code=%s '
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
+        outcome.value,
+        bounded_provider(provider),
+        _bounded_sync_model(model),
+        _bounded_sync_lane(lane),
+        _bounded_sync_failure_reason(reason_code or error_code),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+        _bounded_sync_phase(failure_phase),
+        bounded_exception_class(failure_class),
+        bounded_sync_assignment_subtype(failure_subtype),
+    )
+    _record_sync_job_outcome(outcome, provider=provider, model=model, lane=lane, job_id=job_id)
+    return finalized
 
 
 def _merge_and_cap_vad_segments(voice_segments: list) -> list:
@@ -1433,6 +1601,40 @@ def _cleanup_files(file_paths: Iterable[str]):
                 os.remove(path)
         except Exception as e:
             logger.error('event=sync_cleanup outcome=failed exception_type=%s', type(e).__name__)
+
+
+def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
+    """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
+    directory = f'syncing/{uid}/{job_id}/'
+    os.makedirs(directory, exist_ok=True)
+    paths = []
+    for file in files:
+        filename = file.filename
+        if not filename:
+            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
+        if not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail='Invalid sync file format')
+        if '_' not in filename:
+            raise HTTPException(status_code=400, detail='Invalid sync file format')
+        try:
+            timestamp = get_timestamp_from_path(filename)
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+
+        time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
+            raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
+
+        path = f"{directory}{filename}"
+        try:
+            with open(path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            paths.append(path)
+        except Exception as error:
+            if os.path.exists(path):
+                os.remove(path)
+            raise HTTPException(status_code=500, detail='Unable to stage sync file') from error
+    return paths
 
 
 def finalize_recovered_sync_segment(uid: str, response: dict, private: bool) -> None:

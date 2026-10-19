@@ -15,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from tests.unit import test_sync_lineage_dedupe_replay as helpers
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_lineage_overlap import overlap_rows, straddling_rows
 from tests.unit.test_sync_recording_lineage import ORIGIN, spans, sync_chunk
 from utils.sync import assignment, recording_lineage
@@ -157,7 +156,7 @@ def off(monkeypatch, request):
 
 @pytest.fixture
 def frozen(monkeypatch):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     assert callable(pipeline.process_segment)
     return (
@@ -269,13 +268,17 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
 ):
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true' if capture_enabled else 'false')
     from utils import capture_evidence, metrics
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     old_assignment, _ = frozen
     module = _load('frozen_main_process', _source('process_segment'), monkeypatch, pipeline.__dict__)
     for name in ('bounded_envelope', 'merge_track_receipts', 'sync_segment_receipt', 'unknown_envelope'):
         module.__dict__[name] = getattr(capture_evidence, name)
     module.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = metrics.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+    # Frozen main read this through utils/sync/pipeline.py's imports (deleted in C11).
+    from config.capture_evidence import capture_evidence_dark_write_enabled
+
+    module.capture_evidence_dark_write_enabled = capture_evidence_dark_write_enabled
     original = module.process_segment
 
     def old_process(*args, lineage_binding=None, **kwargs):

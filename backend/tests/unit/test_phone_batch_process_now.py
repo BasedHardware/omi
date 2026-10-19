@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
-from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes, _prepare
+from tests.unit._sync_pipeline_fakes import _build_pipeline_fakes, _prepare
 from utils.conversations.relevance import decide_relevance
 
 
@@ -21,7 +21,8 @@ from utils.conversations.relevance import decide_relevance
 def pipeline():
     with stub_modules(_build_pipeline_fakes()):
         yield load_module_fresh(
-            'utils.sync.pipeline', str(Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py')
+            'utils.sync.legacy_segment_core',
+            str(Path(__file__).resolve().parents[2] / 'utils/sync/legacy_segment_core.py'),
         )
 
 
@@ -84,31 +85,6 @@ def prepare_recording(pipeline, *, discarded=True):
 
     pipeline.process_conversation = MagicMock(side_effect=process)
     return row
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('discarded', [True, False])
-async def test_process_now_keeps_short_phone_recording_before_enrichment(pipeline, discarded):
-    row = prepare_recording(pipeline, discarded=discarded)
-
-    await pipeline._run_full_pipeline_background_async('job', 'uid', [EXPLICIT], 'phone', False, '/tmp/job')
-
-    pipeline.lifecycle_service.restore_discarded.assert_called_once_with('uid', 'recording')
-    pipeline.process_conversation.assert_called_once()
-    assert pipeline.process_conversation.call_args.kwargs['user_kept'] is True
-    assert row['discarded'] is False
-    assert row['relevance_decision']['decided_by'] == 'user'
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('paths', [[AUTO], [EXPLICIT, AUTO], [EXPLICIT, EXPLICIT], ['/tmp/audio_phonemic_pcm16_1.bin']])
-async def test_automatic_or_mixed_uploads_keep_existing_discard_policy(pipeline, paths):
-    row = prepare_recording(pipeline)
-
-    await pipeline._run_full_pipeline_background_async('job', 'uid', paths, 'phone', False, '/tmp/job')
-
-    pipeline.lifecycle_service.restore_discarded.assert_not_called()
-    assert row['discarded'] is True
 
 
 def test_failed_keep_write_is_not_acknowledged_as_success(pipeline):

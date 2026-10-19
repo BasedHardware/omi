@@ -429,7 +429,7 @@ def test_merge_gates_still_reject_live_and_shared_rows():
 @pytest.fixture
 def pipeline(monkeypatch):
     from database import conversations as conversations_db
-    from utils.sync import pipeline as module
+    from utils.sync import legacy_segment_core as module
 
     calls = []
     real = module.lifecycle_service.discard_by_relevance

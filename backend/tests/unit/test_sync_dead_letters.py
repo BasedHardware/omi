@@ -12,11 +12,9 @@ only ACKs ``completed`` — verified here against the Dart terminal policy.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from copy import deepcopy
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,7 +23,6 @@ import database.sync_dead_letters as ledger
 import database.sync_jobs as sync_jobs
 import routers.sync as sync_router
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
 
 
 class _Snapshot:
@@ -618,124 +615,3 @@ class _FakeRequest:
 
     async def json(self):
         return self._payload
-
-
-def _run_job_harness(monkeypatch, job, *, ensure_error=None):
-    calls: list[str] = []
-    monkeypatch.setattr(sync_router, 'get_sync_job', MagicMock(return_value=deepcopy(job)))
-    monkeypatch.setattr(
-        sync_router,
-        'get_sync_ledger_fence_mode',
-        MagicMock(return_value=sync_router.SyncLedgerFenceMode.LEGACY),
-    )
-    monkeypatch.setattr(sync_router, 'get_sync_job', MagicMock(return_value=deepcopy(job)))
-    monkeypatch.setattr(sync_router, 'geolocation_from_private_header', lambda _header: None)
-
-    async def passthrough(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(sync_router, 'run_blocking', passthrough)
-    monkeypatch.setattr(sync_router, 'try_acquire_job_run_lock', MagicMock(return_value='tok'))
-    monkeypatch.setattr(sync_router, 'release_job_run_lock', MagicMock())
-
-    def record(name):
-        def inner(*_a, **_kw):
-            calls.append(name)
-
-        return inner
-
-    async def delete_blobs(_paths):
-        calls.append('delete_blobs')
-
-    def ensure(*_a, **_kw):
-        calls.append('ensure')
-        if ensure_error is not None:
-            raise ensure_error
-
-    monkeypatch.setattr(sync_router, '_delete_staged_blobs_async', delete_blobs)
-    monkeypatch.setattr(sync_router, 'release_backfill_slot', record('release_slot'))
-    monkeypatch.setattr(sync_router, 'release_sync_content_claim', record('release_claim'))
-    monkeypatch.setattr(sync_router.sync_dead_letters, 'ensure_dead_letter_confirmed', ensure)
-    return calls
-
-
-def _terminal_run_payload():
-    return {
-        'job_id': 'job-1',
-        'uid': 'u1',
-        'raw_blob_paths': ['blob-1'],
-        'source': 'omi',
-        'lane': 'backfill',
-        'content_id': 'content-1',
-    }
-
-
-def test_terminal_delivery_confirms_ledger_before_ack(monkeypatch):
-    job = _backfill_job(status='failed', ledger_fence_mode='legacy')
-    calls = _run_job_harness(monkeypatch, job)
-
-    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
-
-    assert isinstance(resp, JSONResponse)
-    assert resp.status_code == 200
-    assert calls == ['ensure', 'release_slot', 'release_claim']
-
-
-def test_failed_backfill_terminal_delivery_never_deletes_staged_audio(monkeypatch):
-    job = _backfill_job(status='partial_failure', ledger_fence_mode='legacy')
-    calls = _run_job_harness(monkeypatch, job)
-
-    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
-
-    assert resp.status_code == 200
-    assert 'delete_blobs' not in calls
-    assert calls == ['ensure', 'release_slot', 'release_claim']
-
-
-def test_terminal_delivery_uses_persisted_lane_not_payload_lane(monkeypatch):
-    job = _backfill_job(status='failed', ledger_fence_mode='legacy')
-    calls = _run_job_harness(monkeypatch, job)
-    payload = {**_terminal_run_payload(), 'lane': 'fresh'}
-
-    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(payload), task_retry_count=0))
-
-    assert resp.status_code == 200
-    assert calls == ['ensure', 'release_slot', 'release_claim']
-
-
-def test_terminal_delivery_passes_raw_reason_code_to_ledger(monkeypatch):
-    job = _backfill_job(status='failed', ledger_fence_mode='legacy', reason_code='sync_decode_failed')
-    _run_job_harness(monkeypatch, job)
-    captured: dict = {}
-
-    def ensure(job_id, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(sync_router.sync_dead_letters, 'ensure_dead_letter_confirmed', ensure)
-
-    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
-
-    assert resp.status_code == 200
-    assert captured['failure_code'] == 'sync_decode_failed'
-
-
-def test_terminal_delivery_skips_ledger_for_completed(monkeypatch):
-    job = _backfill_job(status='completed', ledger_fence_mode='legacy')
-    calls = _run_job_harness(monkeypatch, job)
-
-    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
-
-    assert resp.status_code == 200
-    assert 'ensure' not in calls
-    assert calls == ['delete_blobs', 'release_slot']
-
-
-def test_terminal_delivery_ensure_failure_blocks_ack(monkeypatch):
-    job = _backfill_job(status='failed', ledger_fence_mode='legacy')
-    calls = _run_job_harness(monkeypatch, job, ensure_error=RuntimeError('firestore down'))
-
-    with pytest.raises(RuntimeError):
-        asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
-
-    assert 'delete_blobs' not in calls
-    assert 'release_slot' not in calls

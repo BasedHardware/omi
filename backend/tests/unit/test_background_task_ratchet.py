@@ -291,7 +291,7 @@ def test_scope_includes_handler_routers_and_owned_packages(scanned):
     modules = {path.relative_to(BACKEND_DIR).as_posix() for path in scanned[0]}
     assert set(ROOT_MODULES) <= modules
     assert 'utils/batch_pipeline/quarantine_recovery.py' in modules
-    assert 'utils/sync/pipeline.py' in modules
+    assert 'utils/sync/legacy_segment_core.py' in modules
     assert 'utils/executors.py' in modules
     # routers/users.py delegates the wipe handler to services.users.account_deletion.
     assert 'services/users/account_deletion.py' in modules
