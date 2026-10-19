@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-19 -->
+<!-- feature-flag-registry as-of: 2026-10-20 -->
 
 # Feature-flag authority registry
 
@@ -78,7 +78,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-19.
+None as of 2026-10-20.
 
 ## Flags
 
@@ -280,7 +280,6 @@ and an explicit empty literal renders as `''`.
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |
-| `screen_task_jev_gate` | Screen OCR text dedupe gate using Jev; privacy approved by David 2026-10-18 for all users (OCR text to Jev) | macos | posthog | closed | — | — | — | absent (enable) | keep | 2026-11-01 | dazheng |
 | `summary-generation-v2` | Mobile conversation-detail summary redesign: Not summarized yet card, Summarize with template sheet, summary source chips and inline failure cards; client-evaluated, default off; reliability fixes and the single in-tab progress state ship without it | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-16 | dazheng |
 | `web-contextual-upsells` | Web 80% budget nudge and exhausted-budget entry to the plans sheet (trigger=usage_budget); default off; requires web-plan-storefront | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
 | `web-plan-storefront` | Web backend-driven ladder-v1 plans sheet in Settings > Plan; default off; existing checkout and upgrade rails unchanged | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
@@ -368,6 +367,7 @@ and an explicit empty literal renders as `''`.
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | — | dazheng |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
+| `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | — | dazheng |
 
 ### config_switch
 
