@@ -11,6 +11,26 @@ import yaml
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 
 
+def test_production_adapter_has_queue_age_rule_and_its_own_prometheus_scrape():
+    monitoring = CHART.parent / 'monitoring'
+    values = yaml.safe_load((monitoring / 'prometheus-adapter/prod_omi_prometheus_adapter.yaml').read_text())
+    rule = next(r for r in values['rules']['external'] if r['name'].get('as') == 'omi_batch_pipeline_ready_age_seconds')
+    supplied = yaml.safe_load((CHART / 'prometheus-adapter-rules.yaml').read_text())['external'][0]
+    assert rule == supplied
+    prom = yaml.safe_load((monitoring / 'kube-prometheus-stack/prod_omi_monitoring_values.yaml').read_text())
+    scrape = next(
+        s
+        for s in prom['prometheus']['prometheusSpec']['additionalScrapeConfigs']
+        if s['job_name'] == 'batch-pipeline-worker-metrics'
+    )
+    assert scrape['scrape_interval'] == '15s'
+    assert scrape['kubernetes_sd_configs'] == [{'role': 'pod', 'namespaces': {'names': ['prod-omi-backend']}}]
+    filters = {tuple(r['source_labels']): r['regex'] for r in scrape['relabel_configs'] if r.get('action') == 'keep'}
+    assert filters[('__meta_kubernetes_pod_label_app_kubernetes_io_name',)] == 'batch-pipeline-worker'
+    assert filters[('__meta_kubernetes_pod_container_port_name',)] == 'http'
+    assert {r.get('target_label') for r in scrape['relabel_configs']} >= {'namespace', 'pod'}
+
+
 def render(*arguments):
     helm = shutil.which('helm')
     if helm is None:

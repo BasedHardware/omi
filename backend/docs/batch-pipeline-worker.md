@@ -212,6 +212,27 @@ Completion-only retention never expires pending work.
 
 ## Capacity and autoscaling
 
+The dedicated runtime exports `omi_batch_pipeline_stage_seconds{stage=...}`
+for pull, maintenance, admission, full worker flight, publication, ordered merge,
+and projection, plus fetch/decode, VAD, window assembly, ASR, padded retry,
+diarization, encrypted result persistence, and final CUDA synchronization.
+Timings include failed operations and executor wait. `pump_cycle` contains the
+whole pass; `worker_flight` contains worker leaves and CUDA synchronization.
+Do not add parent and child sums. Model leaves measure host-observed wall time,
+not isolated CUDA kernel occupancy. Unattributed worker time includes validation,
+packing and policy callbacks. No owner, segment, URI, or exception labels exist.
+Divide a stage's rate of `_sum` by the worker-scoped leased-event rate for an
+amortized seconds-per-leased-job view; use its `_count` for per-call means.
+
+The production adapter reads local Prometheus, while the worker's `PodMonitoring`
+feeds managed Prometheus. Both the local `batch-pipeline-worker-metrics` scrape
+and the external queue-age rule must be installed. Verify the external metrics
+API returns fresh values for the exact namespace/release and all three classes
+before enabling HPA. A healthy adapter APIService alone is insufficient. Samples
+older than 60 seconds must be absent, including a pump blocked in a long flight.
+Prewarm replicas before admission ramps: the chart records cold GPU/model startup
+exceeding 600 seconds; queue-age HPA is overflow protection, not immediate capacity.
+
 Conversation units run only on dedicated batch GPUs. Shared-live stays off;
 future admission requires explicit capture spans ≤120 seconds, fresh slack,
 empty live queue, utilization/memory headroom and one durable reservation per

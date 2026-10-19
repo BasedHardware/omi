@@ -30,6 +30,7 @@ from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
@@ -55,11 +56,13 @@ class SynchronizedWorker:
         synchronize: Callable[[], None] = synchronize_gpu,
         on_fatal: Callable[[], None] | None = None,
         memory_probe: Any = None,
+        timings: StageTimings | None = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
         self.memory_probe = memory_probe
+        self.timings = timings or StageTimings()
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
@@ -72,7 +75,7 @@ class SynchronizedWorker:
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
-                self.synchronize()
+                self.timings.call('cuda_sync', self.synchronize)
                 if self.memory_probe:
                     sample = self.memory_probe.finish(baseline)
                     logger.info(
@@ -178,6 +181,8 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        timings = StageTimings(registry)
+        worker.timings = timings
         metrics = QueueMetrics(
             registry,
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
@@ -185,8 +190,9 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
+            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
             metrics=metrics,
+            timings=timings,
             batch_size=config.batch_size,
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds

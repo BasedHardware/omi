@@ -254,7 +254,7 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
 
 def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     captured = {}
-    model_worker = object()
+    model_worker = SimpleNamespace()
     monkeypatch.setattr(runtime, 'load_worker', lambda artifacts: model_worker)
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
@@ -267,6 +267,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
         async def run(self, stop):
             assert captured['scheduler'].pool == 'batch'
             assert captured['worker'].worker is model_worker
+            assert captured['timings'] is model_worker.timings is captured['worker'].timings
             snapshot = captured['capacity']()
             assert snapshot.available_slots == 4 and snapshot.max_item_seconds == 3600
             assert (

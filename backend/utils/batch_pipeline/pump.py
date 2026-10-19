@@ -22,6 +22,7 @@ from utils.batch_pipeline.compute_client import from_env as compute_client_from_
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class Pump:
         authorize_compute: Callable[[list[LeasedWork]], dict] | None = None,
         leader: LeaderLease | None = None,
         inline_metrics: bool = True,
+        timings: StageTimings | None = None,
     ):
         if not 1 <= batch_size <= 32 or not 0 < poll_seconds <= 30:
             raise ValueError('invalid bounded pump configuration')
@@ -62,6 +64,7 @@ class Pump:
         # False when a supervisor samples queue metrics on its own task, so
         # gauges stay fresh while this pump awaits a long GPU batch.
         self.inline_metrics = inline_metrics
+        self.timings = timings or StageTimings()
         self._last_recovery = float('-inf')
         self._last_metrics = float('-inf')
 
@@ -109,6 +112,14 @@ class Pump:
             await asyncio.gather(*(renew_one(lease) for lease in leases))
 
     async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
+        with self.timings.measure('pump_cycle'):
+            return await self._run_once(stop_event=stop_event)
+
+    async def _run_blocking(self, stage, executor, function, *args, **kwargs):
+        with self.timings.measure(stage):
+            return await run_blocking(executor, function, *args, **kwargs)
+
+    async def _run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
             # Expired-lease recovery and the global result_ready drain are
@@ -117,12 +128,16 @@ class Pump:
             # its own completions below. The lease fails open on store errors.
             if self.leader is None or await run_blocking(db_executor, self.leader.acquire):
                 if self.project_pending:
-                    await run_blocking(sync_executor, self.project_pending)
-                await run_blocking(db_executor, self.scheduler.recover, time.time())
-                ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
+                    await self._run_blocking('projection', sync_executor, self.project_pending)
+                await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
+                ready = await self._run_blocking(
+                    'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+                )
                 owners = set()
                 for segment in ready:
-                    job = await run_blocking(db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment))
+                    job = await self._run_blocking(
+                        'maintenance', db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment)
+                    )
                     if job and job['owner_id'] not in owners:
                         owners.add(job['owner_id'])
                         await self.drain_owner(job['owner_id'])
@@ -144,7 +159,7 @@ class Pump:
                 return []
             return self.scheduler.pull(time.time(), self.batch_size, capacity=snapshot)
 
-        leases = await run_blocking(db_executor, claim)
+        leases = await self._run_blocking('pull', db_executor, claim)
         if not leases:
             return 0
         done = asyncio.Event()
@@ -162,7 +177,7 @@ class Pump:
                 if self.authorize_compute:
                     try:
                         receipt = await asyncio.wait_for(
-                            run_blocking(db_executor, self.authorize_compute, required), timeout=10
+                            self._run_blocking('admission', db_executor, self.authorize_compute, required), timeout=10
                         )
                     except Exception:
                         receipt = {}
@@ -171,7 +186,8 @@ class Pump:
                 for lease in required:
                     if lease.item.segment_id not in permitted:
                         lost.add(lease.item.segment_id)
-                        await run_blocking(
+                        await self._run_blocking(
+                            'publication',
                             db_executor,
                             self.scheduler.defer,
                             lease.item.segment_id,
@@ -192,7 +208,13 @@ class Pump:
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
             compute = asyncio.create_task(
-                run_blocking(sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs)
+                self._run_blocking(
+                    'worker_flight',
+                    sync_executor,
+                    self.worker.process_batch,
+                    [v.item for v in leases],
+                    **dispatch_kwargs,
+                )
             )
             # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal and
             # wait for the bounded model operation before leaving this process.
@@ -206,8 +228,13 @@ class Pump:
                 # without charging an attempt; preserve its ordered position.
                 for lease in leases:
                     try:
-                        await run_blocking(
-                            db_executor, self.scheduler.defer, lease.item.segment_id, lease.token, time.time()
+                        await self._run_blocking(
+                            'publication',
+                            db_executor,
+                            self.scheduler.defer,
+                            lease.item.segment_id,
+                            lease.token,
+                            time.time(),
                         )
                     except Exception as error:
                         # A revoked owner / ambiguous DB response must not stop
@@ -238,12 +265,19 @@ class Pump:
                 try:
                     result = result_map.get(segment)
                     if isinstance(result, HeldWork):
-                        await run_blocking(
-                            db_executor, self.scheduler.defer, segment, lease.token, time.time(), result.retry_after
+                        await self._run_blocking(
+                            'publication',
+                            db_executor,
+                            self.scheduler.defer,
+                            segment,
+                            lease.token,
+                            time.time(),
+                            result.retry_after,
                         )
                         continue
                     if isinstance(result, ValidationFailureWork):
-                        failed = await run_blocking(
+                        failed = await self._run_blocking(
+                            'publication',
                             db_executor,
                             self.scheduler.fail,
                             segment,
@@ -256,7 +290,8 @@ class Pump:
                         continue
                     if result is None or isinstance(result, RecoveryWork):
                         failed = await (
-                            run_blocking(
+                            self._run_blocking(
+                                'publication',
                                 db_executor,
                                 self.scheduler.fail,
                                 segment,
@@ -268,13 +303,15 @@ class Pump:
                                 worker_failure={'stage': 'assemble_words', 'reason': result.reason},
                             )
                             if isinstance(result, RecoveryWork)
-                            else run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time())
+                            else self._run_blocking(
+                                'publication', db_executor, self.scheduler.fail, segment, lease.token, time.time()
+                            )
                         )
                         if failed:
                             await self.drain_owner(lease.item.owner_id)
                         continue
-                    accepted = await run_blocking(
-                        db_executor, self.scheduler.complete, result, lease.token, time.time()
+                    accepted = await self._run_blocking(
+                        'publication', db_executor, self.scheduler.complete, result, lease.token, time.time()
                     )
                     if accepted:
                         await self.drain_owner(lease.item.owner_id)
@@ -296,8 +333,10 @@ class Pump:
 
     async def drain_owner(self, owner_id: str) -> None:
         for _ in range(100):
-            entry = await run_blocking(db_executor, self.merge.commit_next, owner_id, time.time())
+            entry = await self._run_blocking(
+                'ordered_merge', db_executor, self.merge.commit_next, owner_id, time.time()
+            )
             if entry is None:
                 return
             if self.on_committed:
-                await run_blocking(sync_executor, self.on_committed, entry)
+                await self._run_blocking('projection', sync_executor, self.on_committed, entry)
