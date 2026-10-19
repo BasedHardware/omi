@@ -361,6 +361,9 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            STT_CAP_DISPATCH_ENFORCEMENT=false
+            STT_CAP_DISPATCH_COHORT=
+            STT_CAP_DISPATCH_LANES=live
             DEMAND_PROCESSING_ENABLED=false
             DEMAND_PROCESSING_LAZY_ENABLED=false
             DEMAND_PROCESSING_TOOL_ENABLED=false

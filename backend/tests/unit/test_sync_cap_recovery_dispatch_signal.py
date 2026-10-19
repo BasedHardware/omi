@@ -1,5 +1,7 @@
 """Explicit provider-call signal covers real pre-dispatch exits in both modes."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import threading
 from unittest.mock import Mock, AsyncMock
 
@@ -62,6 +64,6 @@ def test_real_segment_reports_provider_boundary_without_changing_flag_off_calls(
     else:
         assert 'provider_called' not in outcome
         assert 'recovery_ambiguous' not in outcome
-        assert stt.call_count == (0 if exit_at in {'url', 'keyterms'} else 1 if exit_at == 'provider_error' else 2)
+        assert stt.call_count == 0  # Recovery remains paused when execution is disabled.
         gate.assert_not_called()
         checkpoint.assert_not_called()

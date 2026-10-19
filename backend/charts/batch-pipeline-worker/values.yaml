@@ -26,6 +26,12 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Same original-lane/owner policy as CPU admission. Non-live widening is
+  # blocked by #22352 and needs separate approval; these defaults are inert.
+  capDispatchEnforcement: false
+  capDispatchCohort: ""
+  capDispatchLanes: live
+  ladderBudgetEnforcement: false
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""

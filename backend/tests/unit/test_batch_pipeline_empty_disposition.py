@@ -79,7 +79,7 @@ def test_strict_silence_is_success_without_provider_and_releases_siblings(setup,
     monkeypatch.setattr(llm_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
     monkeypatch.setattr(hourly_usage_updates, 'prepare_hourly_usage_updates', lambda *args, **kwargs: {})
     monkeypatch.setattr(fair_use, 'record_speech_ms', Mock())
-    monkeypatch.setattr('utils.batch_pipeline.retention.expire_completed_segment', lambda *args: True)
+    monkeypatch.setattr('utils.batch_pipeline.retention.expire_completed_segment', lambda *args, **kwargs: True)
     publish = Mock()
     projector = Projector(store, Mock(), publish=publish, clock=lambda: 102)
     assert projector.project('bad')['outcome'] == 'expected_silence'
@@ -321,7 +321,7 @@ def test_silence_does_not_require_paid_allowance(setup, monkeypatch, legacy_depe
     provider = enable(monkeypatch, legacy_dependencies)
     artifacts.fetch_audio.return_value = wav()
     recovery.stt = transcribe
-    monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *args: False)
+    monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *args, **kwargs: False)
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     provider.assert_not_called()
 

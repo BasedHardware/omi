@@ -142,7 +142,7 @@ except ImportError:
 
 
 from utils.llm.usage_tracker import get_usage_callback
-from utils.generated_compute import require_current_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
 from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -401,7 +401,7 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
                     )
-                    if generated_compute_enabled():
+                    if generated_compute_configured():
                         await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', allow_byok=False)
                     return await ainvoke_openai_embeddings_gateway(texts)
             raise
@@ -443,14 +443,14 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     async def aembed_query(self, text: str) -> List[float]:
-        if generated_compute_enabled():
+        if generated_compute_configured():
             await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return (await self._agateway_embed_texts([text]))[0]
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_query')
-        inst = await run_blocking(db_executor, self._resolve) if generated_compute_enabled() else self._resolve()
+        inst = await run_blocking(db_executor, self._resolve) if generated_compute_configured() else self._resolve()
         try:
             return await inst.aembed_query(text)
         except Exception as e:
@@ -462,21 +462,21 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     client = (
                         await run_blocking(db_executor, self._default_client)
-                        if generated_compute_enabled()
+                        if generated_compute_configured()
                         else self._default_client()
                     )
                     return await client.aembed_query(text)
             raise
 
     async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
-        if generated_compute_enabled():
+        if generated_compute_configured():
             await run_blocking(db_executor, _require_client_budget, 'openai_embeddings', provider='openai')
         if self._gateway_mode():
             try:
                 return await self._agateway_embed_texts(texts)
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_documents')
-        inst = await run_blocking(db_executor, self._resolve) if generated_compute_enabled() else self._resolve()
+        inst = await run_blocking(db_executor, self._resolve) if generated_compute_configured() else self._resolve()
         try:
             return await inst.aembed_documents(texts)
         except Exception as e:
@@ -488,7 +488,7 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     client = (
                         await run_blocking(db_executor, self._default_client)
-                        if generated_compute_enabled()
+                        if generated_compute_configured()
                         else self._default_client()
                     )
                     return await client.aembed_documents(texts)

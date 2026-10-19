@@ -646,7 +646,7 @@ def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
 PAGE_CLASS_JOURNEY_RULES = {
     "omi-journey-capture-success-critical": ("speech-processing", "NoData", "$A >= 20 && $B < 0.90"),
     "omi-journey-pusher-success-critical": ("live-transcription", "NoData", "$A >= 20 && $B < 0.90"),
-    "omi-journey-chat-success-critical": ("ai-chat", "NoData", "$A >= 20 && $B < 0.90"),
+    "omi-journey-chat-success-critical": ("ai-chat", "NoData", "$A >= 20 && $B < 0.90 && $E >= 5"),
     "omi-journey-capture-settle-gap": ("speech-processing", "NoData", "$A >= 100 && $B > 50"),
     "omi-capture-oldest-nonterminal": ("speech-processing", "Alerting", None),
     "omi-capture-dead-letter-surge": ("speech-processing", "Alerting", None),
@@ -1868,3 +1868,17 @@ def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_
         assert 'outcome="success"' in term["A"]["expr"], export_name
         assert "omi_live_stt_terminal_failures_total" in term["B"]["expr"], export_name
         assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name
+
+
+def test_chat_journey_rules_require_a_failure_floor_before_firing():
+    # 2026-10-19: ~22 chat terminals in a quiet half hour with 4 provider
+    # rejects drove success to 0.81; the floor keeps that from paging.
+    failures = 'sum(increase(omi_journey_terminal_total{journey="chat_response",outcome="failure"}[30m]))'
+    for export_name, rules in _all_rule_exports().items():
+        for uid, gate in (
+            ("omi-journey-chat-success-critical", "$A >= 20 && $B < 0.90 && $E >= 5"),
+            ("omi-journey-chat-fail", "$A >= 20 && $B > 0.10 && $E >= 5"),
+        ):
+            nodes = {node["refId"]: node["model"] for node in rules[uid]["data"]}
+            assert nodes["E"]["expr"] == failures, f"{export_name}:{uid}"
+            assert nodes["C"]["expression"] == gate, f"{export_name}:{uid}"

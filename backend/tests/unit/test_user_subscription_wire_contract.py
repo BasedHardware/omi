@@ -1,4 +1,6 @@
 import pytest
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 from pydantic import ValidationError
 
 from config.plan_catalog import PLAN_TYPE_VALUES

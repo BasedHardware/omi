@@ -1,5 +1,7 @@
 """Admission must not load enabled-only dependencies in a flag-off process."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import os
 from pathlib import Path
 import subprocess
@@ -74,7 +76,7 @@ def test_enabled_non_byok_call_uses_real_budget_owner_without_importing_byok(mon
 
     from utils import funded_processing, generated_compute
 
-    monkeypatch.setattr(generated_compute, 'generated_compute_enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     admission = Mock(return_value=False)
     monkeypatch.setattr(funded_processing, 'processing_allowed', admission)
     original = builtins.__import__

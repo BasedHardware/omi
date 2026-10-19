@@ -628,7 +628,7 @@ def _get_structured(
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
-        if funded_processing.enabled() and _is_funded_budget_denial(e):
+        if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
             raise
         raise conversation_processing_http_exception(e) from e
 
@@ -2424,7 +2424,7 @@ def _is_funded_budget_denial(error):
 def _preserve_capture_on_budget_denial(function):
     @wraps(function)
     def preserve_capture(uid, language_code, conversation, *args, **kwargs):
-        if not funded_processing.enabled():
+        if not funded_processing.enabled(uid, 'batch'):
             return function(uid, language_code, conversation, *args, **kwargs)
         # A later model dispatch can observe a cap crossed by earlier usage.
         # Keep the ingress snapshot, even when a downstream step mutated it.
@@ -2543,7 +2543,7 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
-    if funded_processing.enabled():
+    if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
             raw_capture = (

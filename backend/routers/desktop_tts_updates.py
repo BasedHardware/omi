@@ -1,5 +1,5 @@
 from __future__ import annotations
-from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 
 from datetime import datetime, timezone
 from html import escape
@@ -224,7 +224,7 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
         byok_exempt=legacy_openai,
     ):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(
             db_executor,
             require_generated_compute,

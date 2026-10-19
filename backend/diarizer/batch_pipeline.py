@@ -742,19 +742,21 @@ class PipelineWorker:
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
-                if cap_dispatch_enabled():
+                required = {
+                    w.segment_id for w in batch if cap_dispatch_enabled(states[w.segment_id]['item'].owner_id, 'batch')
+                }
+                if required:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    required = {w.segment_id for w in batch}
                     held.update(required - allowed(required))
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
                 try:
                     hypotheses = self.words.transcribe_batch([w.samples for w in batch])
-                    if cap_dispatch_enabled():
-                        for window in batch:
+                    for window in batch:
+                        if cap_dispatch_enabled(states[window.segment_id]['item'].owner_id, 'batch'):
                             accepted(window.segment_id, window.duration)
                     if len(hypotheses) != len(batch):
                         raise ValueError('provider result cardinality mismatch')
@@ -819,7 +821,7 @@ class PipelineWorker:
                                 )
                             )
                         else:
-                            if cap_dispatch_enabled():
+                            if cap_dispatch_enabled(item.owner_id, 'batch'):
                                 recovered = self.recover_words(
                                     state['samples'],
                                     self.config.max_padded_seconds,
@@ -949,7 +951,7 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
-                    if cap_dispatch_enabled():
+                    if cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
                             'admission': 'authorized_compute',

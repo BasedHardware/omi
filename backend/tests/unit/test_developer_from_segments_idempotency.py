@@ -192,7 +192,8 @@ def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatc
         lambda _request: SimpleNamespace(client_device_id=None, platform=None),
     )
 
-    def process(_uid, _language, conversation, **_kwargs):
+    def process(_uid, _language, conversation, *, trigger):
+        assert trigger is developer.ProcessingTrigger.CLIENT_FINALIZE
         captured.append(conversation)
         return Conversation(
             **conversation.model_dump(exclude={'id', 'created_at', 'structured', 'status'}),
@@ -948,7 +949,8 @@ def test_folder_and_calendar_reach_create_conversation(monkeypatch):
         lambda _request: SimpleNamespace(client_device_id=None, platform=None),
     )
 
-    def process(_uid, _language, conversation, **_kwargs):
+    def process(_uid, _language, conversation, *, trigger):
+        assert trigger is developer.ProcessingTrigger.CLIENT_FINALIZE
         captured['conversation'] = conversation
         return Conversation(
             **conversation.model_dump(exclude={'calendar_meeting_context'}),
@@ -988,7 +990,8 @@ def test_folder_and_calendar_reach_idempotent_conversation(monkeypatch):
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
 
-    def process(_uid, _language, conversation, **_kwargs):
+    def process(_uid, _language, conversation, *, trigger):
+        assert trigger is developer.ProcessingTrigger.CLIENT_FINALIZE
         captured['conversation'] = conversation
         conversation.status = ConversationStatus.completed
         return conversation
@@ -1016,7 +1019,8 @@ def test_without_folder_id_ai_assignment_stays_in_charge(monkeypatch):
     monkeypatch.setattr(developer.folders_db, 'get_folder', get_folder)
     monkeypatch.setattr(developer.folders_db, 'update_folder_conversation_count', refresh)
 
-    def process(_uid, _language, conversation, **_kwargs):
+    def process(_uid, _language, conversation, *, trigger):
+        assert trigger is developer.ProcessingTrigger.CLIENT_FINALIZE
         captured['conversation'] = conversation
         return Conversation(
             **conversation.model_dump(exclude={'calendar_meeting_context'}),
