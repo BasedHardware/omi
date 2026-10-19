@@ -87,6 +87,11 @@ WINDOW_REPLAY_SAFE_TRIMS = Counter(
     'omi_stt_window_replay_safe_trims_total',
     'Window replay ring trims through emitted anchors or speech-free capture',
 )
+NONWINDOW_REPLAY_SETTLES = Counter(
+    'omi_stt_nonwindow_replay_settles_total',
+    'Non-window replacement legs that settled horizon-aged quiet replay capture instead of failing over',
+    ['provider'],
+)
 WINDOW_REPLAY_CUT_REQUESTS = Counter(
     'omi_stt_window_replay_cut_requests_total', 'Coalesced requests to cut a held TDT tail under capture-ring pressure'
 )

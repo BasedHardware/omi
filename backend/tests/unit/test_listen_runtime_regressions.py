@@ -32,6 +32,18 @@ def anyio_backend():
     return 'asyncio'
 
 
+@pytest.fixture(autouse=True)
+def _policy_storage_boundary(monkeypatch):
+    # These partial runtimes exercise onboarding/selection rather than storage.
+    # Full policy startup and Redis faults have their own runtime-boundary suite.
+    from config.policy.listen import resolve_listen_policy
+
+    monkeypatch.setattr(
+        'routers.listen.runtime.initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('runtime-regression', flags={})),
+    )
+
+
 def _capture_product_event_inputs(monkeypatch, module):
     events = []
     emit_product_event = module.emit_product_event

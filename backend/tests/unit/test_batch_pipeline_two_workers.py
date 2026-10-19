@@ -9,6 +9,8 @@ Correctness under real Firestore transactions is covered by
 
 from collections import Counter
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from tests.support.batch_two_workers import FakeGpu, Recorder, build_pump, item, run_pumps

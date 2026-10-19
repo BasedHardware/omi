@@ -11,7 +11,7 @@ import time
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.stt_cap_dispatch import execution_admission_enabled as enabled, any_execution_admission_enabled, hold_lane
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage
@@ -100,26 +100,29 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
     return saved
 
 
-def _new_dispatch_allowed(uid: str) -> bool:
-    if not sync_allowed(uid):
+def _new_dispatch_allowed(uid: str, lane: str) -> bool:
+    if not enabled(uid, lane) or not sync_allowed(uid, lane=lane):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)
 
 
 async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
-    if not enabled():
+    if not any_execution_admission_enabled(uid):
         return False
     if row.get('finalized'):
         return True
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
+    lane = hold_lane(meta)
+    if lane is None or not enabled(uid, lane):
+        return False
     if meta.get('content_id'):
         status = await run_blocking(db_executor, sync_cap_holds.recovery_status, uid, meta['content_id'], snapshot.id)
         if status in {'completed', 'settled'}:
             return await _save(uid, snapshot, row, {'finalized': True, 'ledger_already_settled': True})
         if status != 'ready':
             return False
-    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
         return False
     prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid) or {}
     private = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
@@ -199,7 +202,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     attempt = 2
             if receipt is None or receipt.get('state') == 'dispatched':
                 cached_result = (receipt or {}).get('provider_result')
-                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                     pending = True
                     continue
                 previous = receipt
@@ -262,6 +265,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         lineage_binding=context.get('lineage_binding'),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
+                        cap_dispatch_lane=lane,
                         deferred_outcome=outcome,
                         cap_recovery_service=service,
                         cap_recovery_checkpoint={
@@ -375,9 +379,19 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
+async def selected_for_recovery(uid: str, row: dict) -> bool:
+    if not any_execution_admission_enabled(uid):
+        return False
+    meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
+    lane = hold_lane(meta)
+    return lane is not None and enabled(uid, lane)
+
+
 async def recover_selected(uid: str, snapshot: Any) -> bool:
     """One explicitly selected manifest, retaining existing claim/receipt fences."""
     row = snapshot.to_dict() or {}
+    if not await selected_for_recovery(uid, row):
+        return False
     if row.get('state') == 'completed':
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
         return True
@@ -398,5 +412,5 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
 async def recover(uid: str) -> None:
     # Legacy request/reset/resume hooks may wake an approved run, but never
     # create consent. Worker is imported lazily to avoid pipeline import cycles.
-    if enabled() and _backlog_runner is not None:
+    if any_execution_admission_enabled(uid) and _backlog_runner is not None:
         await _backlog_runner(uid)

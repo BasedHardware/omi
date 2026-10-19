@@ -18,9 +18,12 @@ COHORT_SALTS = {
 LEGACY_CORRELATED_COHORTS = frozenset({'first-summary', 'transcription-final-pass'})
 
 
-def cohort_bucket(uid: str, salt: str) -> float:
+def cohort_bucket(uid: str, salt: str, *, bits: int = 32) -> float:
+    # Listen deployed 64-bit buckets; batch retains its original 32-bit buckets.
+    if bits not in (32, 64):
+        raise ValueError('cohort bucket requires 32 or 64 bits')
     payload = uid if not salt else f'{salt}:{uid}'
-    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[:4], 'big') / 2**32 * 100
+    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big') / 2**bits * 100
 
 
 @dataclass(frozen=True)

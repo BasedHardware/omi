@@ -19,7 +19,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
-import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -41,7 +40,7 @@ import 'package:omi/widgets/photos_grid.dart';
 
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
-import 'capture_state_header.dart';
+import 'capture_recovery_status.dart';
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
@@ -169,7 +168,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
-          appBar: ConversationStateAppBar(
+          appBar: CaptureWedgeAppBar(
             showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
@@ -181,7 +180,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           ),
           body: Column(
             children: [
-              const CaptureRecoveryBanner(),
+              const CaptureRecoveryStatus(),
               const HeldAudioLiveBanner(),
               if (provider.localSttFailure case final failure?)
                 LocalSttRecoveryNotice(

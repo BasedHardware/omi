@@ -13,7 +13,6 @@ import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
@@ -307,7 +306,6 @@ void main() {
             const Scaffold(
               body: CustomScrollView(
                 slivers: [
-                  SliverToBoxAdapter(child: CaptureRecoveryBanner()),
                   SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
                 ],
               ),

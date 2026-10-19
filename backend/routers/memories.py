@@ -1,4 +1,4 @@
-from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
 import hashlib
 import hmac
@@ -448,7 +448,7 @@ async def extract_memory_log(
     Does not write Firestore. Desktop onboarding/import should call this instead of inventing
     memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
     """
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     # Deferred with the LLM helper: this router is covered by a module-isolation test
     # that stubs a minimal dependency graph, and utils.subscription pulls database.users

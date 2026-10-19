@@ -9,17 +9,20 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
@@ -372,6 +375,37 @@ void _seedVisibleWedgeEpisode() {
   });
 }
 
+/// A monitor owning every capture problem Activity lists, so all Needs attention rows render: a
+/// pendant that stopped sending audio, a phone disk refusing new recordings, and an upload stalled
+/// for hours. Passed into the page directly; the app's instance is untouched.
+CaptureWedgeMonitor _seededCaptureAttention() {
+  final monitor = CaptureWedgeMonitor(
+    featureGate: () async => true,
+    track: (_, __) {},
+    bleRetry: (_) async {},
+    transferRetry: () async {},
+    appBuild: () => 'audit',
+    platform: () => 'audit',
+  );
+  final now = DateTime.now();
+  monitor.observeStorageAtRisk(
+    engagedAt: now.subtract(const Duration(minutes: 95)),
+    blockedCount: 3,
+    retainedCount: 720,
+    reason: 'disk_reserve',
+  );
+  monitor.observeWalBacklog(
+    pendingCount: 5,
+    oldestPendingAt: now.subtract(const Duration(hours: 3, minutes: 10)),
+    pendingSeconds: 47 * 60,
+  );
+  for (var i = 0; i < CaptureWedgeMonitor.zeroByteThreshold; i++) {
+    final handle = monitor.onCaptureSessionConnected(deviceId: auditPendant.id, source: 'omi');
+    monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+  }
+  return monitor;
+}
+
 const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
 
@@ -411,6 +445,17 @@ final captureScenarios = <AuditScenario>[
     page: _home,
     state: 'The pendant streams; the pill shows the latest line, not the session clock',
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
+  ),
+  AuditScenario(
+    id: 'home-capture-link-stall',
+    title: 'Pendant recording, link stalled',
+    page: _home,
+    state: 'The pendant streams, but the BLE link stalled: Home shows no banner; the bell\'s amber '
+        'dot is the only signal, and Activity lists the stall',
+    run: (a) {
+      _seedVisibleWedgeEpisode();
+      return _runHome(a, AuditLive.pendant, pendantConnected: true);
+    },
   ),
   AuditScenario(
     id: 'home-capture-pendant-paused',
@@ -472,20 +517,51 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runLivePage(a, AuditLive.phonePaused),
   ),
   AuditScenario(
-    id: 'home-capture-recovery-banner',
-    title: 'Home, pendant live, recovery banner',
-    page: _home,
-    state: 'The pendant streams, but the BLE link stalled: the banner retries in place '
-        '(never opens settings), explains itself on demand, and can be dismissed',
+    id: 'conversation-live-recovery-banner',
+    title: 'Live page, pendant, link stalled',
+    page: _live,
+    state: 'The pendant streams, but the BLE link stalled: the header reads Reconnecting and one '
+        'line under it names the cause with Reconnect, which retries in place. No card, no dismiss',
     run: (a) {
       _seedVisibleWedgeEpisode();
-      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
-        // The seeded episode is the retryable kind: the card must offer the in-place
-        // affordances this scenario exists to audit, not the manual-reconnect variant.
-        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
-        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
-        expect(find.byKey(const Key('capture_recovery_banner_dismiss')), findsOneWidget);
+      return _runLivePage(a, AuditLive.pendant).then((_) async {
+        // The seeded episode is the retryable kind (zero-byte streak), so the line must offer
+        // the in-place retry this scenario exists to audit, not the manual-reconnect variant.
+        expect(find.text('Omi isn\'t sending audio'), findsOneWidget);
+        expect(find.text('Reconnect'), findsOneWidget);
       });
+    },
+  ),
+  AuditScenario(
+    id: 'activity-capture-attention',
+    title: 'Activity: capture problems under Needs attention',
+    page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
+    state: 'The pendant stopped sending audio, phone storage is full with three recordings blocked, '
+        'and an upload stalled three hours with five recordings (47 minutes of audio) waiting; no '
+        'recaps, changes, or server attention',
+    run: (a) async {
+      final monitor = _seededCaptureAttention();
+      addTearDown(monitor.dispose);
+      var stored = DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v);
+      await a.pump(
+        ActivityPage(
+          seen: seen,
+          captureWedgeMonitor: monitor,
+          probeDreamReport: () async => false,
+          loadRecaps: _noRecaps,
+          loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+        ),
+        scaffold: false,
+      );
+      // The seeded link stall declares behind the feature gate and one automatic retry; let both
+      // settle so its row is on screen with the others.
+      await a.tester.pump();
+      await a.tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
+      await a.shot('Open the bell: capture problems sit under Needs attention');
     },
   ),
   AuditScenario(
@@ -497,7 +573,7 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runLivePage(a, AuditLive.pendantOutage).then((_) async {
       // A terminal transcription failure is not a BLE wedge: it must not grow a
       // recovery banner for an unrelated failure the page never declared.
-      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+      expect(find.text('Omi isn\'t sending audio'), findsNothing);
     }),
   ),
 ];

@@ -114,6 +114,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
     value: "false"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
