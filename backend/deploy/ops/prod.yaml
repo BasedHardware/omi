@@ -44,10 +44,11 @@ cloud_run:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
       SYNC_BACKFILL_TASKS_QUEUE: sync-backfill-fresh
-    # redis_guard.sh moves this between 8 and 40 from Redis memory. It is
+    # redis_guard.sh moves this between 8 and its ceiling from Redis memory. It is
     # deleted with the sequencer (C10); until then the config-train only
-    # enforces the bounds.
-    max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
+    # enforces the bounds. G3 bridge: ceiling back to the pre-10-15 18 (#21679);
+    # redis_guard.sh's top step must drop to 18 in the same change or the two fight.
+    max_instances: {owner: redis_guard, floor: 8, ceiling: 18}
   backend-integration:
     env:
       SYNC_TASKS_QUEUE: sync-jobs-fresh
@@ -73,11 +74,11 @@ cloud_tasks:
     max_backoff: 300s
     log_sampling_ratio: 1.0
   sync-backfill-fresh:
-    # Same rate and retry as sync-backfill (train ceiling 90 = 15 x 6 bounded by
-    # the worker cap x concurrency 6). Attempts and doublings are unmanaged
+    # G3 bridge: back to the pre-10-15 60/10 (#21679), sized to the 18-instance
+    # ceiling (10 x concurrency 6). Attempts and doublings are unmanaged
     # until the first config-train plan reads them.
-    max_concurrent_dispatches: 90
-    max_dispatches_per_second: 15
+    max_concurrent_dispatches: 60
+    max_dispatches_per_second: 10
     min_backoff: 5s
     max_backoff: 60s
     log_sampling_ratio: 1.0

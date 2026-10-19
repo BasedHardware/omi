@@ -39,8 +39,9 @@ cloud_tasks:
     max_backoff: 300s
     log_sampling_ratio: 1.0
   staging-sync-backfill-fresh:
-    max_concurrent_dispatches: 90
-    max_dispatches_per_second: 15
+    # G3 bridge, mirrors prod (apply staging first).
+    max_concurrent_dispatches: 60
+    max_dispatches_per_second: 10
     min_backoff: 5s
     max_backoff: 60s
     log_sampling_ratio: 1.0
