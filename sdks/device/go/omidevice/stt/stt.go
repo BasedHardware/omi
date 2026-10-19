@@ -249,9 +249,15 @@ type whisperBatch struct {
 	onTranscript Handler
 	buf          []byte
 	batch        int
+	stopped      bool
 }
 
 func (w *whisperBatch) AppendPCM(pcm []byte) error {
+	// Audio that arrives after Stop belongs to no session. Buffering it would
+	// run the model and deliver transcripts after Stop had returned.
+	if w.stopped {
+		return fmt.Errorf("whisper transcriber stopped")
+	}
 	w.buf = append(w.buf, pcm...)
 	if len(w.buf) < w.batch {
 		return nil
@@ -271,6 +277,7 @@ func (w *whisperBatch) AppendPCM(pcm []byte) error {
 }
 
 func (w *whisperBatch) Stop() error {
+	w.stopped = true
 	if len(w.buf) == 0 {
 		return nil
 	}
