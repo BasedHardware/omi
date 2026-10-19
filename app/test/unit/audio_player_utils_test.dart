@@ -224,11 +224,8 @@ void main() {
 
       final wav = await out!.readAsBytes();
       expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
-      expect(
-        ByteData.sublistView(wav).getUint32(40, Endian.little),
-        8,
-        reason: 'both files\' PCM, nothing from the device',
-      );
+      expect(ByteData.sublistView(wav).getUint32(40, Endian.little), 8,
+          reason: 'both files\' PCM, nothing from the device');
       expect(wav.sublist(44), [1, 1, 2, 2, 3, 3, 4, 4]);
     });
 

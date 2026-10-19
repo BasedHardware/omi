@@ -148,11 +148,8 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_recovery_banner_retry')));
       await tester.pump();
 
-      expect(
-        bleRetries,
-        retriesBeforeTap + 1,
-        reason: 'the button runs the same recovery as the card tap, and only once',
-      );
+      expect(bleRetries, retriesBeforeTap + 1,
+          reason: 'the button runs the same recovery as the card tap, and only once');
       expect(forEvent('Capture Recovery Actioned'), hasLength(1));
     });
 
@@ -168,11 +165,8 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_recovery_banner_info')));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text(l10n.captureRecoveryBanner),
-        findsNWidgets(2),
-        reason: 'the banner and the sheet title both name the episode',
-      );
+      expect(find.text(l10n.captureRecoveryBanner), findsNWidgets(2),
+          reason: 'the banner and the sheet title both name the episode');
       expect(find.text(l10n.captureWedgeBleExplanation), findsOneWidget);
 
       await tester.tap(find.text(l10n.gotIt));
@@ -211,26 +205,14 @@ void main() {
 
       final context = tester.element(find.byType(CaptureRecoveryBanner));
       final l10n = AppLocalizations.of(context);
-      expect(
-        find.text(l10n.captureIngressNeedsReconnect),
-        findsOneWidget,
-        reason: 'the title names the required manual action, not a wait or a retry',
-      );
-      expect(
-        find.text(l10n.captureRecoveryBanner),
-        findsNothing,
-        reason: '"tap to reconnect" would promise an action this trigger cannot perform',
-      );
-      expect(
-        find.text(l10n.captureAudioSavedTranscribesLater),
-        findsNothing,
-        reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)',
-      );
-      expect(
-        find.byKey(const Key('capture_recovery_banner_retry')),
-        findsNothing,
-        reason: 'no retry affordance when the Dart-side retry would no-op',
-      );
+      expect(find.text(l10n.captureIngressNeedsReconnect), findsOneWidget,
+          reason: 'the title names the required manual action, not a wait or a retry');
+      expect(find.text(l10n.captureRecoveryBanner), findsNothing,
+          reason: '"tap to reconnect" would promise an action this trigger cannot perform');
+      expect(find.text(l10n.captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)');
+      expect(find.byKey(const Key('capture_recovery_banner_retry')), findsNothing,
+          reason: 'no retry affordance when the Dart-side retry would no-op');
     });
 
     testWidgets('every banner action keeps a 44-point target', (tester) async {
@@ -253,37 +235,24 @@ void main() {
       var retries = 0;
       final monitor = makeMonitor(transferRetry: () async => retries++);
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
 
       await pumpBanner(tester, monitor);
       final retriesBeforeTap = retries;
       final context = tester.element(find.byType(CaptureRecoveryBanner));
       final l10n = AppLocalizations.of(context);
-      expect(
-        find.text(l10n.captureBannerRetrySync),
-        findsOneWidget,
-        reason: 'the storage primary action names what its retry does',
-      );
+      expect(find.text(l10n.captureBannerRetrySync), findsOneWidget,
+          reason: 'the storage primary action names what its retry does');
       expect(find.text(l10n.captureBannerTryReconnect), findsNothing);
 
       await tester.tap(find.byKey(const Key('capture_recovery_banner_retry')));
       await tester.pump();
 
       expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
-      expect(
-        find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater),
-        findsNothing,
-        reason: 'the storage title already says what is unsynced',
-      );
-      expect(
-        find.text(AppLocalizations.of(context).captureLinkStalledTranscribesLater),
-        findsNothing,
-        reason: 'the storage title already says what is unsynced',
-      );
+      expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'the storage title already says what is unsynced');
+      expect(find.text(AppLocalizations.of(context).captureLinkStalledTranscribesLater), findsNothing,
+          reason: 'the storage title already says what is unsynced');
     });
 
     testWidgets('stale upload backlog retries transfer without a duplicate banner', (tester) async {
@@ -323,11 +292,7 @@ void main() {
     testWidgets('admission-blocked storage shows a localized phone-storage risk warning', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
 
       await pumpBanner(tester, monitor);
 
@@ -384,13 +349,13 @@ void main() {
 /// received them without trusting the banner's disappearance alone.
 class _DismissRecordingMonitor extends CaptureWedgeMonitor {
   _DismissRecordingMonitor()
-    : super(
-        featureGate: () async => true,
-        track: (event, properties) {},
-        bleRetry: (_) async {},
-        appBuild: () => '1',
-        platform: () => 'ios',
-      );
+      : super(
+          featureGate: () async => true,
+          track: (event, properties) {},
+          bleRetry: (_) async {},
+          appBuild: () => '1',
+          platform: () => 'ios',
+        );
 
   final List<String> dismissedDeviceIds = [];
 

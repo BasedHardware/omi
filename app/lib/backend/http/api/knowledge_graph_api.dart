@@ -43,9 +43,8 @@ class KnowledgeGraphApi {
     final baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
     final canonicalUrl = '${Env.apiBaseUrl}v1/knowledge-graph/canonical';
     final session = apiCaller == null ? AuthService.instance.captureSessionSnapshot() : null;
-    final ownerLabels = memoryGraphKnownUserLabels(
-      apiCaller == null ? SharedPreferencesUtil().givenName : ownerGivenName,
-    );
+    final ownerLabels =
+        memoryGraphKnownUserLabels(apiCaller == null ? SharedPreferencesUtil().givenName : ownerGivenName);
     bool current() =>
         Env.apiBaseUrl == origin &&
         (isCurrent?.call() ??
@@ -78,38 +77,37 @@ class KnowledgeGraphApi {
       if (compatibility == null || compatibility.statusCode != 200) {
         _throwHttpFailure(action: 'load', statusCode: compatibility?.statusCode, body: compatibility?.body);
       }
-      legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(
-        jsonDecode(compatibility.body) as Map<String, dynamic>,
-      ).toJson();
+      legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility.body) as Map<String, dynamic>)
+          .toJson();
       if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map, ownerLabels))) {
         return {
           ...legacy,
           '_backend_origin': baseUrl,
-          '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
+          '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
         };
       }
     }
-    final uri = Uri.parse(
-      canonicalUrl,
-    ).replace(queryParameters: {'limit': '100', if (cursor != null) 'cursor': cursor});
+    final uri = Uri.parse(canonicalUrl).replace(queryParameters: {
+      'limit': '100',
+      if (cursor != null) 'cursor': cursor,
+    });
     final response = await read(uri.toString());
     if (response?.statusCode == 200) {
-      final page = wire.GeneratedCanonicalKnowledgeGraphResponse.fromJson(
-        jsonDecode(response!.body) as Map<String, dynamic>,
-      );
+      final page =
+          wire.GeneratedCanonicalKnowledgeGraphResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
       if (page.hasMore && (page.nextCursor == null || page.nextCursor!.isEmpty || page.nextCursor == cursor)) {
         throw const FormatException('Invalid knowledge graph cursor');
       }
-      return mergeKnowledgeGraphPages(
-        {'nodes': [], 'edges': []},
-        {
-          ...page.toJson(),
-          'canonical': true,
-          '_backend_origin': baseUrl,
-          'truncated': page.hasMore,
-          '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
-        },
-      );
+      return mergeKnowledgeGraphPages({
+        'nodes': [],
+        'edges': []
+      }, {
+        ...page.toJson(),
+        'canonical': true,
+        '_backend_origin': baseUrl,
+        'truncated': page.hasMore,
+        '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
+      });
     }
     if (cursor != null && response?.statusCode == 400) {
       throw const KnowledgeGraphCursorExpired();
@@ -126,7 +124,7 @@ class KnowledgeGraphApi {
       return {
         ...legacy,
         '_backend_origin': baseUrl,
-        '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
+        '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
       };
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
@@ -147,16 +145,11 @@ class KnowledgeGraphApi {
       required Map<String, String> headers,
       required String body,
       required String method,
-    })?
-    apiCaller,
+    })? apiCaller,
   }) async {
     final makeCall = apiCaller ?? makeApiCall;
-    final response = await makeCall(
-      url: '${Env.apiBaseUrl}v1/knowledge-graph/rebuild',
-      headers: {},
-      body: '{}',
-      method: 'POST',
-    );
+    final response =
+        await makeCall(url: '${Env.apiBaseUrl}v1/knowledge-graph/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
@@ -164,7 +157,11 @@ class KnowledgeGraphApi {
     if (response != null && response.statusCode == 409) {
       Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
       // Historical status name: mutation is disabled; this is not a freshness check.
-      return const wire.GeneratedRebuildResponse(edgesCount: 0, nodesCount: 0, status: 'canonical_up_to_date').toJson();
+      return const wire.GeneratedRebuildResponse(
+        edgesCount: 0,
+        nodesCount: 0,
+        status: 'canonical_up_to_date',
+      ).toJson();
     }
     _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }
@@ -232,9 +229,8 @@ Map<String, dynamic> mergeKnowledgeGraphPages(Map<String, dynamic> earlier, Map<
 
   final nodes = records('nodes');
   final ids = nodes.map((node) => node['id']).toSet();
-  final edges = records(
-    'edges',
-  ).where((edge) => ids.contains(edge['source_id']) && ids.contains(edge['target_id'])).toList();
+  final edges =
+      records('edges').where((edge) => ids.contains(edge['source_id']) && ids.contains(edge['target_id'])).toList();
   final sharedTruncated = earlier['shared_truncated'] ?? earlier['truncated'] ?? false;
   return {
     'canonical': page['canonical'] == true,

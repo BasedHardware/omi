@@ -130,13 +130,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(
-      _app(
-        const Scaffold(
-          appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable, sourceLabel: 'Pendant'),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_app(const Scaffold(
+        appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable, sourceLabel: 'Pendant'))));
     await tester.pump();
 
     expect(find.text('Not transcribing · Pendant'), findsOneWidget);
@@ -175,10 +170,8 @@ void main() {
   });
 
   group('audio download sheet (nav #14)', () {
-    Future<(AudioDownloadSheetHandle, NavigatorState)> openOverPage(
-      WidgetTester tester, {
-      VoidCallback? onCancel,
-    }) async {
+    Future<(AudioDownloadSheetHandle, NavigatorState)> openOverPage(WidgetTester tester,
+        {VoidCallback? onCancel}) async {
       late BuildContext pageContext;
       await tester.pumpWidget(
         _app(
