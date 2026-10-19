@@ -91,13 +91,19 @@ runs:
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
+        # The manifest owns the live backfill queue (prod: sync-backfill-fresh since the 10-19
+        # 04:52Z stall); sync-backfill is only the default when the manifest declares none.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"$BACKFILL_ENV" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"
-          echo "SYNC_BACKFILL_TASKS_QUEUE=sync-backfill"
+          echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"
           echo "SYNC_BACKFILL_TASKS_HANDLER_URL=${URL}/v2/sync-jobs/run"
           echo "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${URL}/v2/sync-jobs/run"
           echo "EOF"
@@ -109,8 +115,8 @@ runs:
       shell: bash
       env:
         ENV_OVERLAY: |-
-          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_QUEUE=sync-backfill
+          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}

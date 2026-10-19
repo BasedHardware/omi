@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+import pytest
 import yaml
 from google.cloud import firestore
 
@@ -1201,3 +1202,35 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
             assert rendered[key] == stages['A'][key]
     assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
     assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))
+
+
+@pytest.mark.parametrize(
+    'manifest_env, expected',
+    [
+        ('SYNC_TASKS_QUEUE=sync-backfill-fresh\nSYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh', 'sync-backfill-fresh'),
+        ('REDIS_DB_HOST=10.0.0.2', 'sync-backfill'),
+    ],
+)
+def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest_env, expected):
+    """10-19 04:52Z: the train re-pointed backfill at the stalled sync-backfill queue on every deploy."""
+
+    import os
+    import subprocess
+
+    action = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    steps = {step.get('id'): step for step in action['runs']['steps']}
+    service_step = steps['backfill-service']['run']
+    script = service_step.split('PROJECT_NUMBER=', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env={**os.environ, 'BACKFILL_ENV': manifest_env},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f'SYNC_BACKFILL_TASKS_QUEUE={expected}'
+    overlay = steps['backfill-runtime']['env']['ENV_OVERLAY'].splitlines()
+    # The legacy default comes first so the manifest overlay (later lines win) overrides it.
+    assert overlay.index('SYNC_TASKS_QUEUE=sync-backfill') < overlay.index('${{ inputs.backfill_env_vars }}')
