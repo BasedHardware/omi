@@ -65,3 +65,43 @@ def test_v2_typed_result_preserves_flag_off_wire_and_exposes_only_present_hold()
     }
     body['result']['held_audio'] = True
     assert SyncJobStatusResponse(**body).model_dump(exclude_none=True)['result']['held_audio'] is True
+
+
+@pytest.mark.parametrize('unavailable', [False, True])
+def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, unavailable):
+    from utils import ladder_v1
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+
+    def snapshot(*args, **kwargs):
+        if unavailable:
+            raise RuntimeError('synthetic ledger read failure')
+        return {'budget_percent': 100, 'used_units': 100, 'budget_units': 100}
+
+    monkeypatch.setattr(ladder_v1, 'usage_snapshot', snapshot)
+    reject = Mock(side_effect=AssertionError('upload must hold instead of raising 402'))
+    monkeypatch.setattr(ladder_v1, 'enforce_budget', reject)
+    monkeypatch.setattr(
+        router,
+        'resolve_transcription_allowance',
+        lambda _: SimpleNamespace(reason='allowance_unavailable' if unavailable else 'usage_budget_exhausted'),
+    )
+    # C9 (legacy-retire): v2 has no legacy admission arm. A held capture's ledger
+    # row is answered by the legacy-dark fence (202 completed), never 402.
+    from utils.sync import legacy_dark
+
+    held = {'held_audio': True, 'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
+    monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
+    monkeypatch.setattr(router, 'batch_enabled_for', lambda _: False)
+    monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
+    monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
+    monkeypatch.setattr(
+        legacy_dark,
+        'read_ledger_row',
+        lambda uid, content_id: {'dispatch_protocol': 'stt_cap_hold_v1', 'status': 'held', 'result': held},
+    )
+    response = client.post('/v2/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+    assert response.status_code == 202, response.text
+    assert response.json()['status'] == 'completed'
+    reject.assert_not_called()
