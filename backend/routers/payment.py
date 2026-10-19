@@ -30,7 +30,7 @@ from utils.subscription_state_machine import (
 )
 from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
-from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -804,7 +804,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
-                    if funded_processing_enabled():
+                    if funded_processing_enabled(uid):
                         from utils.processing_backlog import allowance_increased
                         from utils.processing_backlog_worker import upgrade
 
@@ -1077,7 +1077,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
-                if funded_processing_enabled():
+                if funded_processing_enabled(uid):
                     from utils.processing_backlog import allowance_increased
                     from utils.processing_backlog_worker import upgrade_async
 
@@ -1291,7 +1291,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
-                    if funded_processing_enabled() and not adopted_active_paid:
+                    if funded_processing_enabled(uid) and not adopted_active_paid:
                         from utils.processing_backlog import allowance_increased
                         from utils.processing_backlog_worker import upgrade_async
 

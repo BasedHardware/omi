@@ -265,7 +265,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.host = host
         self.cap_admission = (
             LiveAdmission(host.request.uid, host.request.source)
-            if stt_cap_dispatch_enabled() and not host.use_custom_stt
+            if stt_cap_dispatch_enabled(host.request.uid, 'live') and not host.use_custom_stt
             else None
         )
         self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None

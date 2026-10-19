@@ -12,6 +12,7 @@ from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from database.batch_pipeline_store import FirestoreStore
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
@@ -1049,7 +1050,7 @@ def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
     module, enqueue = _wake_env(monkeypatch)
     client, store, binding, _, stt, recovery = setup
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
-    monkeypatch.setattr(module, 'sync_allowed', lambda *args: False)  # Allowance refuses the start.
+    monkeypatch.setattr(module, 'sync_allowed', lambda *args, **kwargs: False)  # Allowance refuses the start.
     service = Serving(store, recovery=recovery)
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
     app = FastAPI()

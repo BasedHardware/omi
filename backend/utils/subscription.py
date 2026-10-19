@@ -1,4 +1,4 @@
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
 from database.fsr_read_cache import fresh_reader
@@ -1640,7 +1640,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
-    if stt_cap_dispatch_enabled() and not subscription_launch_date_str:
+    if stt_cap_dispatch_enabled(uid) and not subscription_launch_date_str:
         CONFIG_ERRORS.labels(reason='missing').inc()
         logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
         raise ValueError('missing subscription launch date')
@@ -1652,7 +1652,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
-        if stt_cap_dispatch_enabled():
+        if stt_cap_dispatch_enabled(uid):
             CONFIG_ERRORS.labels(reason='invalid').inc()
             logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
             raise

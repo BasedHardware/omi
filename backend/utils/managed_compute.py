@@ -39,7 +39,7 @@ from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.llm.model_config import get_all_configured_features, get_byok_provider, get_provider
 from utils.subscription import request_has_llm_byok_key
 from utils import ladder_v1
-from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 
 logger = logging.getLogger(__name__)
 
@@ -472,7 +472,7 @@ def _authorize_omi(uid: str, feature: str, *, subscription: Any) -> Decision:
                 plan=plan,
                 plan_resolved=plan_resolved,
             )
-        if generated_compute_enabled():
+        if generated_compute_configured():
             # Funded admission above already checked the cached ledger. Only
             # identify ladder policy here; never read the monthly projection twice.
             entitlement = (

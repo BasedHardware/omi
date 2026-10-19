@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import hashlib
 from typing import Any
 import pytest

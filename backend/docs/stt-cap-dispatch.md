@@ -1,12 +1,93 @@
 # Transcription cap at provider dispatch
 
-`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. This PR
-adds no deployment binding and does not enable it. Enabling changes the policy
-for existing capped paid plans: exhausted sync uploads wait as audio rather than
-being transcribed into locked conversations. Product approval is required before
-activation. Ladder budget composition and its independent default-off execution
-admission are documented in [the listen pipeline](listen_pusher_pipeline.mdx#ladder-budget-refresh-and-execution-admission-default-off).
-No prices or deployment switches change.
+`STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. Its
+approved activation is a small cohort and live only. The shared cohort/lane
+scope below also applies when only ladder budget execution is enabled. Outside
+that scope the existing behavior stays unchanged.
+
+## Cohort and lane rollout (David 2026-10-18)
+
+Execution admission requires **both** an admission switch and a selected owner /
+original lane. `STT_CAP_DISPATCH_ENFORCEMENT` remains default false.
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` alone uses the same scope; it cannot widen
+STT execution to the fleet. `STT_CAP_DISPATCH_COHORT` unset or empty admits nobody.
+Use `uid:<COORDINATOR_TEST_UID>` (replace the placeholder before deployment),
+comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
+`all` is the explicit universal cohort. The token grammar and stable
+`sha256("free-tier-cohort:" + uid)[:8] % 100` bucket come from the retired free-tier
+parser, now shared in pure `config/rollout_cohorts.py`; no PostHog or Firestore
+membership call is added. Malformed tokens invalidate the whole cohort.
+
+`STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset retains
+the old all-lane meaning; an empty list or unknown token disables the whole
+selection. Unknown call-site lanes are never mapped to a permitted lane.
+Live receiver and provider constructors pass the authenticated UID and `live`;
+v1 intake, v2 coordinator and ordinary segment retries pass `sync`; queued GPU
+jobs, quarantine/speech retries and generated/text processing pass `batch`.
+Every GPU microbatch checks each owner separately. Generic generated work belongs
+to `batch`, so a live-only rollout does not enable its budget denial paths.
+Owner-facing summaries, consent and worker entrypoints require membership in at
+least one selected lane, then each paid audio dispatch checks the original lane.
+
+### Original held-audio provenance
+
+Encrypted hold metadata owns `origin`. New sync intake and late-segment holds
+write `origin=sync`; the live writer already writes `origin=live`. Recovery reads
+that value before audio download/claim and propagates it as `cap_dispatch_lane`
+through the shared segment processor, per-call allowance and empty-result retry.
+It never replaces origin with the execution method (`batch`), device `source`, or
+sync freshness (`sync_lane=fresh|backfill`). Legacy metadata **without** `origin`
+is sync: all pre-origin hold producers were sync; every live custody version
+already supplied `origin=live`: the first live writer in `f6a358902db1` (#21488)
+wrote that marker, and the durability rewrite preserved it. An explicit
+unknown/null origin pauses recovery
+and retains the manifest/audio. No historical rewrite or new index is needed.
+Excluded backlog items spend no chosen allowance. The worker scans past disabled
+lanes for selected work and rewinds its cursors before stopping, retaining the
+choice for widening. A reserved excluded item remains paused under its existing
+reservation. Custody sealing/cleanup stays active during rollback because it is
+owed persistence, not permission to dispatch STT.
+
+### Controlled expansion and rollback
+
+Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
+`live`. These are inert configuration declarations, not activation. The first
+cohort requires the same values on listen and the CPU recovery/sync hosts:
+
+```text
+STT_CAP_DISPATCH_ENFORCEMENT=true
+STT_CAP_DISPATCH_COHORT=uid:<COORDINATOR_TEST_UID>
+STT_CAP_DISPATCH_LANES=live
+```
+
+No authorized coordinator-test UID was identified in local project docs; the
+placeholder is intentionally unresolved and must never be deployed literally.
+Keep the ladder switch at its separately approved value; setting it true still
+cannot bypass these cohort/lane controls. Apply the scope consistently to all
+serving hosts/readers before enrolling any UID. The dedicated GPU chart exposes
+`worker.capDispatchEnforcement`, `capDispatchCohort`, `capDispatchLanes` and
+`ladderBudgetEnforcement` with the same dark/live-only defaults; future approved
+batch widening must configure it and the CPU policy host together.
+
+Ramp owner **dazheng**: coordinator test accounts -> `pct:1` -> `pct:5` held for
+**3 hours** -> `pct:25` -> `all` (100%). At each expansion, record held-audio count,
+backlog stalls, live STT error rate and client 5xx against the pre-ramp baseline;
+advance only with no unexplained regression and a synthetic consented live hold
+recovering across instance replacement. Dazheng owns each expansion and the
+**2026-10-19 18:00 UTC** decision/checkpoint; a missed checkpoint or an incomplete
+three-hour soak is a blocker to report, never authority to skip a stage. Keep
+`STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
+batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
+approved widening. This change does not relocate that authorization.
+
+Rollback: set **both** admission switches false (or clear the cohort to stop only
+this execution rollout), preserving audio, processing choice and receipts. Keep
+the current reader and custody redrive running to seal/clean owed fragments;
+excluded recovery dispatch stays paused until scope is restored. Existing live
+sessions use their admitted state until reconnect/revision drain; roll the same
+configuration to all hosts and drain old sessions when changing scope. No new
+Scheduler jobs or Firestore indexes are introduced here; the existing durability
+job/index prerequisites below remain independently owned.
 
 ## Boundaries
 
@@ -134,7 +215,7 @@ source and frozen pieces only after content/usage settlement.
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
-accounts wait for their next authenticated HTTP request; there is no new cron.
+accounts can also resume through the existing durable-redrive sweep after an explicit processing choice.
 Turning both admission switches off pauses recovery, preserving its audio.
 
 ## Launch configuration and measurement
@@ -212,7 +293,7 @@ activation decision for David; default-off deployment preserves today's policy.
 
 ## Ladder-v1 admission in #21488
 
-`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
+Within the selected cohort/lanes, `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` installs the live provider
 suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds

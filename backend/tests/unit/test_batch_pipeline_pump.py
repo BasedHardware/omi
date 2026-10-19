@@ -1,5 +1,7 @@
 """Worker lifetime, lease loss and restart recovery without GPU/cloud IO."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import asyncio
 from dataclasses import replace
 import threading

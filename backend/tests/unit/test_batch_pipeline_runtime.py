@@ -1,5 +1,7 @@
 """Deployment process checks with fakes; no GPU, Firestore or vendor calls."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import asyncio
 from copy import deepcopy
 from types import SimpleNamespace

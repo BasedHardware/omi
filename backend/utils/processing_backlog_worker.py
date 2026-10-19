@@ -93,8 +93,21 @@ def _process_text(uid, identity) -> AttemptOutcome:
         store.release_item(uid, identity, lease)
 
 
+async def _selected(uid, item) -> bool:
+    if item['kind'] == 'text':
+        return funded_processing.enabled(uid, 'batch')
+    try:
+        snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
+        return not snap.exists or await cap_hold_recovery.selected_for_recovery(uid, snap.to_dict() or {})
+    except Exception as error:
+        logger.warning('event=processing_backlog outcome=scope_deferred exception_type=%s', type(error).__name__)
+        return False
+
+
 async def _process(uid, item) -> AttemptOutcome:
     if item['kind'] == 'text':
+        if not funded_processing.enabled(uid, 'batch'):
+            return AttemptOutcome.RETRY
         return await run_blocking(postprocess_executor, _process_text, uid, item['id'])
     snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
     if not snap.exists or (snap.to_dict() or {}).get('state') == 'purged':
@@ -104,7 +117,7 @@ async def _process(uid, item) -> AttemptOutcome:
 
 
 async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None):
-    if not funded_processing.enabled():
+    if not funded_processing.enabled(uid):
         return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
@@ -174,22 +187,25 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             if (
                 cap_work_budget.exhausted()
                 or fence_lost.is_set()
-                or not funded_processing.enabled()
+                or not funded_processing.enabled(uid)
                 or job['period'] != funded_processing.period_id()
             ):
                 return False
+            remaining = job.get('remaining')
+            cursor = {'at': item['at'], 'id': item['id']}
+            updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
+            if _timestamp(item['queued_at']) > _timestamp(job['cutoff']):
+                if not await save(updates):
+                    return False
+                continue
+            if not await _selected(uid, item):
+                if not await save({**updates, 'scope_skipped': True}):
+                    return False
+                continue
             current = await run_blocking(db_executor, funded_processing.allowance, uid)
             if not current.managed:
                 return await finish()
-            remaining = job.get('remaining')
-            # Keep the original Firestore field type in the durable cursor.
-            cursor = {'at': item['at'], 'id': item['id']}
-            updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
-            if (
-                _timestamp(item['queued_at']) > _timestamp(job['cutoff'])
-                or remaining is not None
-                and item['units'] > remaining
-            ):
+            if remaining is not None and item['units'] > remaining:
                 if not await save(updates):
                     return False
                 continue
@@ -209,6 +225,9 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
                 return False
         if len(candidates) == limit:
             return True
+        if job.get('scope_skipped'):
+            await save({'cursor_audio': None, 'cursor_text': None, 'scope_skipped': False})
+            return False
         return await finish()
 
     continuation = False

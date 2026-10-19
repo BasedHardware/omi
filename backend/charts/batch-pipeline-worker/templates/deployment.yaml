@@ -53,6 +53,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
+            - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
+            - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            - {name: LADDER_V1_BUDGET_ENFORCEMENT_ENABLED, value: {{ .Values.worker.ladderBudgetEnforcement | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:
