@@ -4,7 +4,7 @@ Importing this package never imports the Postgres driver (``connection`` loads p
 processes that do not select Postgres pay nothing.
 """
 
-from database.jobstore import connection, migrate, postgres_store
+from database.jobstore import connection, migrate, outbox_pg, postgres_store
 from database.jobstore.postgres_store import PostgresStore
 
-__all__ = ['PostgresStore', 'connection', 'migrate', 'postgres_store']
+__all__ = ['PostgresStore', 'connection', 'migrate', 'outbox_pg', 'postgres_store']

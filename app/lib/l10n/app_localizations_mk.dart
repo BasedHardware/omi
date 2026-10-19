@@ -11134,6 +11134,33 @@ class AppLocalizationsMk extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аудиото е зачувано, транскрипција подоцна';
 
   @override
+  String get captureBannerTryReconnect => 'Обиди се да поврзеш повторно';
+
+  @override
+  String get captureBannerRetrySync => 'Повтори ја синхронизацијата';
+
+  @override
+  String get captureBannerWhatsWrong => 'Што се случува?';
+
+  @override
+  String get captureBannerDismiss => 'Сокриј';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.';
+
+  @override
+  String get captureLinkStalledTranscribesLater =>
+      'Аудиоврската застана — транскрипцијата продолжува по нејзиното обновување';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Аудиото не стига до апликацијата — повторно поврзете го Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Апликацијата повеќе не може да прима аудио од уредот Omi и не успеа автоматски да ја обнови врската. Исклучете и повторно поврзете го уредот — од поставките за уред или со гаснење и палење. Аудиото зачувано на уредот ќе се синхронизира подоцна.';
+
+  @override
   String get captureStillRecording => 'Снимањето продолжува';
 
   @override

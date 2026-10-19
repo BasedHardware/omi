@@ -280,8 +280,14 @@ runs:
         BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
-        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
-        # retired sync-backfill queue is left as it is.
+        # B4: in prod the live backfill queue's name and rates are ops values
+        # (backend/deploy/ops/prod.yaml cloud_tasks), applied and verified only by the
+        # config-train, so a train never rewrites them (one source, not train + ops file).
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          echo "prod backfill queue is owned by the ops file and config-train; train does not reconcile it"
+          exit 0
+        fi
+        # Elsewhere reconcile the queue the manifest routes backfill to, defaulting to sync-backfill.
         BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
         BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
