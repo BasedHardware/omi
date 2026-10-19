@@ -281,9 +281,15 @@ EOF
 with_dev_kubeconfig() { # runs "$@" with a private kubeconfig for the dev cluster, explicit context
   local kc
   kc="$(mktemp -t staging-kubeconfig.XXXXXX)"
-  trap 'rm -f "$kc"' RETURN
-  KUBECONFIG="$kc" gcloud container clusters get-credentials "$CLUSTER" --region="$REGION" --project="$DEV" >/dev/null
-  KUBECONFIG="$kc" "$@" --context="gke_${DEV}_${REGION}_${CLUSTER}"
+  # Explicit cleanup, not a RETURN trap: the trap outlives this function and fires under set -u
+  # after the local is gone ("kc: unbound variable").
+  local rc=0
+  KUBECONFIG="$kc" gcloud container clusters get-credentials "$CLUSTER" --region="$REGION" --project="$DEV" >/dev/null || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    KUBECONFIG="$kc" "$@" --context="gke_${DEV}_${REGION}_${CLUSTER}" || rc=$?
+  fi
+  rm -f "$kc"
+  return "$rc"
 }
 
 bootstrap() {
