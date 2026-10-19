@@ -1281,6 +1281,22 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/sync/legacy_dark.py",
+      "function": "record_dark_ack",
+      "label": "reason",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "lane 10: value is folded through its own enum helper (_label -> LegacyAdmissionReason/...) so it is closed; scanner cannot see it. Lane 10 can switch to reason_label() to drop this entry."
+    },
+    {
+      "path": "utils/sync/legacy_dark.py",
+      "function": "record_legacy_admission",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "lane 10: value is folded through its own enum helper (_label -> LegacyAdmissionReason/...) so it is closed; scanner cannot see it. Lane 10 can switch to reason_label() to drop this entry."
+    },
+    {
       "path": "utils/sync/recording_lineage.py",
       "function": "_emit",
       "label": "outcome",
