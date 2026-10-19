@@ -1378,6 +1378,37 @@ def process_segment(
     cap_recovery_service: tuple[str, str | None, str] | None = None,
     cap_recovery_checkpoint: dict | None = None,
 ):
+    def _defer_if_cap_denied() -> bool:
+        if sync_allowed(uid):
+            return False
+        if not cap_recovery:
+            from utils.sync.cap_hold import defer_segment
+
+            defer_segment(
+                uid,
+                path,
+                {
+                    'timestamp': get_timestamp_from_path(path),
+                    'source': getattr(source, 'value', source),
+                    'target_conversation_id': target_conversation_id,
+                    'private_cloud_sync_enabled': private_cloud_sync_enabled,
+                    'data_protection_level': data_protection_level,
+                    'client_device_id': client_device_id,
+                    'client_platform': client_platform,
+                    'geolocation': geolocation,
+                    'source_position_map': source_position_map,
+                    'lineage_binding': lineage_binding,
+                    'sync_lane': sync_lane,
+                    'content_id': cap_content_id,
+                    'job_id': job_id,
+                },
+                response,
+                lock,
+            )
+        if deferred_outcome is not None:
+            deferred_outcome['cap_held'] = True
+        return True
+
     conversation_id = None
     provider = 'unknown'
     model = 'unknown'
@@ -1389,33 +1420,7 @@ def process_segment(
             phase = 'persistence'
             raise SyncAssignmentConflict('sync lineage generation ownership remains ambiguous')
         if stt_cap_dispatch_enabled():
-            if not sync_allowed(uid):
-                if not cap_recovery:
-                    from utils.sync.cap_hold import defer_segment
-
-                    defer_segment(
-                        uid,
-                        path,
-                        {
-                            'timestamp': get_timestamp_from_path(path),
-                            'source': getattr(source, 'value', source),
-                            'target_conversation_id': target_conversation_id,
-                            'private_cloud_sync_enabled': private_cloud_sync_enabled,
-                            'data_protection_level': data_protection_level,
-                            'client_device_id': client_device_id,
-                            'client_platform': client_platform,
-                            'geolocation': geolocation,
-                            'source_position_map': source_position_map,
-                            'lineage_binding': lineage_binding,
-                            'sync_lane': sync_lane,
-                            'content_id': cap_content_id,
-                            'job_id': job_id,
-                        },
-                        response,
-                        lock,
-                    )
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
+            if _defer_if_cap_denied():
                 return False
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
@@ -1470,33 +1475,7 @@ def process_segment(
         speech_offset = 0.0
         while True:
             phase = 'provider_call'
-            if stt_cap_dispatch_enabled() and not sync_allowed(uid):
-                if not cap_recovery:
-                    from utils.sync.cap_hold import defer_segment
-
-                    defer_segment(
-                        uid,
-                        path,
-                        {
-                            'timestamp': get_timestamp_from_path(path),
-                            'source': getattr(source, 'value', source),
-                            'target_conversation_id': target_conversation_id,
-                            'private_cloud_sync_enabled': private_cloud_sync_enabled,
-                            'data_protection_level': data_protection_level,
-                            'client_device_id': client_device_id,
-                            'client_platform': client_platform,
-                            'geolocation': geolocation,
-                            'source_position_map': source_position_map,
-                            'lineage_binding': lineage_binding,
-                            'sync_lane': sync_lane,
-                            'content_id': cap_content_id,
-                            'job_id': job_id,
-                        },
-                        response,
-                        lock,
-                    )
-                if deferred_outcome is not None:
-                    deferred_outcome['cap_held'] = True
+            if stt_cap_dispatch_enabled() and _defer_if_cap_denied():
                 return False
             if stt_cap_dispatch_enabled() and cap_recovery and deferred_outcome is not None:
                 # Explicit request-boundary signal survives later cap denial,
