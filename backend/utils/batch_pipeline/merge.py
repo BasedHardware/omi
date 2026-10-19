@@ -48,7 +48,7 @@ class OrderedMerge:
                 'committed_at': now,
                 'projection_state': 'pending',
             }
-            if job.get('recovery_state') == 'recovered':
+            if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)

@@ -978,14 +978,14 @@
     "gcp_app.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_class": "estimated-non-pr-push-day",
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Keep the 5-minute p50; estimate one path-matched main/development push run per day as a non-PR deployment.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3456,8 +3456,31 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
+      "rationale": "The app follows the frontend's main/development auto-deploy pattern for app, shared-package, and public-build configuration changes. The no-traffic candidate, browser smoke, and automatic rollback pipeline addresses the 2026-09-29 rejected-production-deploy concern; expect one path-matched main/development push run per day, outside the PR run budget.",
       "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/app/**",
+            "web/packages/note-shared/**",
+            "config/public-build-*.json",
+            ".dockerignore",
+            ".github/workflows/gcp_app.yml",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/check_public_build_contract.py",
+            ".github/scripts/smoke_public_build_browser.py",
+            ".github/scripts/public_build_acceptance_route.py",
+            "backend/scripts/wait_cloud_run_candidate_readiness.py",
+            "backend/scripts/resolve_cloud_run_tagged_url.py"
+          ]
+        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {

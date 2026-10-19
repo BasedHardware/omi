@@ -96,7 +96,9 @@ def test_unmapped_queue_fails_compose(tmp_path):
     root = _copy_tree(tmp_path)
 
     def mutate(doc):
-        del doc['cloud_run']['queue_map']['sync-jobs']
+        # Prod's SYNC_TASKS_QUEUE moved to sync-jobs-fresh (#22460); unmap both legacy names.
+        for queue in ('sync-jobs', 'sync-jobs-fresh'):
+            doc['cloud_run']['queue_map'].pop(queue, None)
 
     _edit_staging_overlay(root, mutate)
     problems = staging_check.staging_diff(root)
