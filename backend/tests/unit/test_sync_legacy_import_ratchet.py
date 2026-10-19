@@ -13,15 +13,19 @@ Scope (exact):
   section 2. Shared sync infrastructure that batch imports (assignment, ledger,
   bridge, stage, lineage, ...), enrichment (``reprocess``, custody, scan) and the
   cap-hold family are class (b) and deliberately absent.
-- Importers: every ``*.py`` under ``backend/`` except ``tests/``, the legacy
-  sync package itself (``utils/sync/``), ``routers/sync.py`` (both are deleted or
-  rehomed with the modules) and the retiring modules themselves. ``testing/``
-  (hermetic harness) and ``scripts/`` (operator tools) are in scope: a
-  dependant there blocks deletion just as a runtime caller does.
+- Importers: every ``*.py`` under ``backend/`` except ``tests/``,
+  ``routers/sync.py`` (deleted with the modules) and the retiring modules
+  themselves. Surviving modules inside ``utils/sync/`` (the cap-hold core,
+  assignment, ledger, ...) ARE scanned: they outlive the retirement, so their
+  legacy edges are exactly the ones the C10/C11 deletion PRs must cut.
+  ``testing/`` (hermetic harness) and ``scripts/`` (operator tools) are in
+  scope: a dependant there blocks deletion just as a runtime caller does.
 - Edges: ``import a.b``, ``from a import b``, ``from a.b import c`` and
   package-relative forms, at any nesting depth (function-local imports count),
-  plus ``importlib.import_module('<literal>')``. An edge is keyed by
-  (backend-relative importer path, retiring module), never by line number.
+  plus ``importlib.import_module('<literal>')`` — including calls through an
+  alias bound by ``from importlib import import_module as load``. An edge is
+  keyed by (backend-relative importer path, retiring module), never by line
+  number.
 
 The test fails when an edge appears (call the batch pipeline or shared
 infrastructure instead; an edge that must exist goes into the baseline with a
@@ -134,7 +138,17 @@ def _retiring(candidate: str | None) -> str | None:
 
 def imported_retiring_modules(source: str, importer: str) -> set[str]:
     found: set[str] = set()
-    for node in ast.walk(ast.parse(source, filename=importer)):
+    tree = ast.parse(source, filename=importer)
+    # ``from importlib import import_module as load`` rebinds the callable;
+    # calls through such an alias are dynamic imports too.
+    import_module_names = {'import_module'} | {
+        alias.asname
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == 'importlib'
+        for alias in node.names
+        if alias.name == 'import_module' and alias.asname
+    }
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             found.update(m for m in (_retiring(alias.name) for alias in node.names) if m)
         elif isinstance(node, ast.ImportFrom):
@@ -149,7 +163,7 @@ def imported_retiring_modules(source: str, importer: str) -> set[str]:
                     found.add(module)
         elif isinstance(node, ast.Call) and (
             (isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')
-            or (isinstance(node.func, ast.Name) and node.func.id == 'import_module')
+            or (isinstance(node.func, ast.Name) and node.func.id in import_module_names)
         ):
             name_arg = next(
                 (keyword.value for keyword in node.keywords if keyword.arg == 'name'),
@@ -270,6 +284,18 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ('from . import sync_empty_recovery', 'database/other.py', {'database.sync_empty_recovery'}),
         ('importlib.import_module("utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
         ('importlib.import_module(name="utils.sync.legacy_fresh")', 'utils/x.py', {'utils.sync.legacy_fresh'}),
+        (
+            'from importlib import import_module as load\nload("utils.sync.legacy_fresh")',
+            'utils/x.py',
+            {'utils.sync.legacy_fresh'},
+        ),
+        (
+            'from importlib import import_module as load\nload(name="utils.sync.legacy_fresh")',
+            'utils/x.py',
+            {'utils.sync.legacy_fresh'},
+        ),
+        ('from importlib import load  # not import_module\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
+        ('import load\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
         ('importlib.import_module(name=name_variable)', 'utils/x.py', set()),
         ('from utils.sync import reprocess, assignment', 'utils/x.py', set()),
         ('from utils.sync.pipeline_v2 import x', 'utils/x.py', set()),
@@ -285,7 +311,11 @@ def test_import_detection(source, importer, expected):
     [
         ('utils/batch_pipeline/enrichment.py', True),
         ('testing/pipeline_sim/x.py', True),
-        ('utils/sync/reprocess.py', False),
+        # Surviving utils/sync modules are scanned: their legacy edges are the
+        # ones the C10/C11 deletion PRs must cut.
+        ('utils/sync/cap_hold_recovery.py', True),
+        ('utils/sync/recording_lineage.py', True),
+        ('utils/sync/reprocess.py', True),  # class (b) survivor: scanned, zero edges today
         ('routers/sync.py', False),
         ('database/sync_redrive.py', False),
         ('tests/unit/test_x.py', False),
@@ -310,7 +340,10 @@ def test_importer_scope(relative, scoped):
         ('backend/main.py', True),
         # The ratchet's own excluded scopes stay narrow.
         ('backend/tests/unit/test_x.py', False),
-        ('backend/utils/sync/pipeline.py', False),
+        # Retiring modules and routers/sync.py never add edges, but selecting
+        # the ratchet on their edits is the safe superset (they also select
+        # test_sync_* via AREA_TESTS).
+        ('backend/utils/sync/pipeline.py', True),
         ('backend/routers/sync.py', False),
         # Not Python source: cannot add an import edge.
         ('backend/utils/apps/README.md', False),
@@ -325,7 +358,7 @@ def test_selection_scope_is_the_ratchet_scope():
     scope: every ``_in_scope`` path must select the ratchet, and the shared
     exclusion constants cannot drift apart."""
     assert SCOPE_EXCLUDED_TOP_DIRS == {'tests'}
-    assert SCOPE_EXCLUDED_PREFIXES == ('utils/sync/',)
+    assert SCOPE_EXCLUDED_PREFIXES == ()
     assert SCOPE_EXCLUDED_FILES == {'routers/sync.py'}
     for relative in _all_source_paths():
         if _in_scope(relative):

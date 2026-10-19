@@ -169,10 +169,11 @@ BACKGROUND_TASK_RATCHET_TESTS = (
 # post-merge --all run. Selection uses the shared scope predicate
 # (tests/support/sync_legacy_ratchet_scope.py) so the ratchet runs for every
 # importer path its walk can scan, mirroring the background-task ratchet.
-SYNC_LEGACY_RATCHET_TESTS = (
-    'tests/unit/test_sync_legacy_import_ratchet.py',
-    'tests/unit/test_workflow_contracts.py',
-)
+# Only the ratchet itself: test_workflow_contracts.py stays out of this
+# cross-cutting set — it covers the background-task ratchet and other
+# workflows, and is selected by its own declared contract sources
+# (testing/workflow_contracts.json) plus the backend/testing/ full-run prefix.
+SYNC_LEGACY_RATCHET_TESTS = ('tests/unit/test_sync_legacy_import_ratchet.py',)
 
 # Shared with the canonical release manifest's named trigger. Do not copy the
 # inventory's directory exclusions into a second set of workflow path globs.
