@@ -165,6 +165,11 @@ class StorageSyncImpl implements StorageSync {
     return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
   }
 
+  /// Whether [wal] is one of the device files this sync listed. Its recordings
+  /// share [WalStorage.sdcard] with the legacy SD card sync, so per-recording
+  /// actions use this to reach the right sync.
+  bool owns(Wal wal) => _wals.any((w) => identical(w, wal));
+
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
   Future<void> refreshWalsFromDevice() async {
@@ -357,40 +362,7 @@ class StorageSyncImpl implements StorageSync {
         wal.status = WalStatus.synced;
         wal.deviceDownloadFraction = null;
 
-        // Delete the file from device after successful BLE transfer (per PR #5905)
-        if (wal.fileNum >= 0) {
-          try {
-            final srcConn = _activeSyncConnection;
-            final srcDeviceId = _activeSyncDeviceId;
-            var sameSource = srcConn != null && srcDeviceId != null && _device?.id == srcDeviceId && !_isCancelled;
-            if (sameSource && _activeSyncEpoch != null) {
-              try {
-                sameSource = srcConn.connectionEpoch == _activeSyncEpoch;
-              } catch (_) {}
-            }
-            if (!sameSource) {
-              Logger.debug(
-                'StorageSync: device/connection changed during persistence — keeping fileNum ${wal.fileNum} on device',
-              );
-            } else if (srcConn != null) {
-              Logger.debug("StorageSync: Deleting file index ${wal.fileNum} after successful BLE sync");
-              bool deleted = await srcConn.deleteStorageFile(wal.fileNum);
-              Logger.debug("StorageSync: Delete file ${wal.fileNum} result: $deleted");
-
-              // After deletion, firmware shifts indices — decrement remaining WALs (per PR #5905)
-              if (deleted) {
-                for (var j = 0; j < wals.length; j++) {
-                  if (j == i) continue;
-                  if (wals[j].fileNum > wal.fileNum) {
-                    wals[j].fileNum = wals[j].fileNum - 1;
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
-          }
-        }
+        await _deleteTransferredFile(wal, wals);
 
         // The recording is on the phone now, so it leaves the device list. After
         // a delete the firmware re-indexes its files, so wal.fileNum then names
@@ -411,20 +383,81 @@ class StorageSyncImpl implements StorageSync {
     return resp;
   }
 
+  /// Delete the file from device after successful BLE transfer (per PR #5905),
+  /// only on the connection that served it, then shift [remaining] down.
+  /// Returns whether the device deleted the file.
+  Future<bool> _deleteTransferredFile(Wal wal, List<Wal> remaining) async {
+    if (wal.fileNum < 0) return false;
+    try {
+      final srcConn = _activeSyncConnection;
+      final srcDeviceId = _activeSyncDeviceId;
+      var sameSource = srcConn != null && srcDeviceId != null && _device?.id == srcDeviceId && !_isCancelled;
+      if (sameSource && _activeSyncEpoch != null) {
+        try {
+          sameSource = srcConn.connectionEpoch == _activeSyncEpoch;
+        } catch (_) {}
+      }
+      if (!sameSource) {
+        Logger.debug(
+          'StorageSync: device/connection changed during persistence — keeping fileNum ${wal.fileNum} on device',
+        );
+      } else if (srcConn != null) {
+        Logger.debug("StorageSync: Deleting file index ${wal.fileNum} after successful BLE sync");
+        bool deleted = await srcConn.deleteStorageFile(wal.fileNum);
+        Logger.debug("StorageSync: Delete file ${wal.fileNum} result: $deleted");
+
+        // After deletion, firmware shifts indices — decrement remaining WALs (per PR #5905)
+        if (deleted) {
+          for (final other in remaining) {
+            if (identical(other, wal)) continue;
+            if (other.fileNum > wal.fileNum) {
+              other.fileNum = other.fileNum - 1;
+            }
+          }
+        }
+        return deleted;
+      }
+    } catch (e) {
+      Logger.debug("StorageSync: Failed to delete file ${wal.fileNum}: $e (data is safe on phone)");
+    }
+    return false;
+  }
+
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    // Resetting the sync state here would hijack a drain that is still reading.
+    if (_isSyncing) throw Exception('Device transfer already in progress');
+
     _resetSyncState();
     _isSyncing = true;
+    wal.isSyncing = true;
+    wal.syncStartedAt = DateTime.now();
+    listener.onWalUpdated();
 
     try {
       progress?.onWalSyncedProgress(0.0);
-      await _syncSingleFile(wal);
+      final complete = await _syncSingleFile(wal, progress: progress);
+      if (!complete) {
+        // Same as an interrupted syncAll: keep the file on the device and the
+        // recording pending, but tell the caller nothing was transferred.
+        throw Exception('Device transfer incomplete; recording kept on device');
+      }
+      wal.status = WalStatus.synced;
+      if (await _deleteTransferredFile(wal, _wals)) {
+        // Its index now belongs to the next file, so it must not stay listed
+        // for deleteAllSyncedWals to delete again.
+        _wals = _wals.where((w) => !identical(w, wal)).toList();
+      }
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
-      listener.onWalUpdated();
     } catch (e) {
       Logger.debug('StorageSync: Error syncing file: $e');
+      rethrow;
     } finally {
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.deviceDownloadFraction = null;
       _isSyncing = false;
+      listener.onWalUpdated();
     }
 
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
