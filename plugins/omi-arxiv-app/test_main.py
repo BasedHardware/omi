@@ -486,7 +486,7 @@ class EndpointUnitTests(unittest.TestCase):
             res = _run(main.search_papers(req))
 
         self.assertIsNone(res.result)
-        self.assertIn("arXiv search failed: timed out", res.error)
+        self.assertEqual(res.error, "arXiv search failed.")
 
     def test_search_papers_unreadable_xml(self):
         req = models.SearchPapersRequest(query="attention")
@@ -618,7 +618,7 @@ class EndpointUnitTests(unittest.TestCase):
             res = _run(main.search_author(req))
 
         self.assertIsNone(res.result)
-        self.assertIn("arXiv author search failed: timed out", res.error)
+        self.assertEqual(res.error, "arXiv author search failed.")
 
     def test_search_author_none_and_dict_payload(self):
         res = _run(main.search_author(None))

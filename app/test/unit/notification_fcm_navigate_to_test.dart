@@ -70,6 +70,34 @@ void main() {
     });
   });
 
+  group('NotificationUtil.routeFromFcmData (chat answer, #5126)', () {
+    test('a chat_answer push opens the chat it names', () {
+      // The data map the backend sends with an Omi answer (utils/notifications.py, utils/chat.py).
+      expect(
+        NotificationUtil.routeFromFcmData(const {
+          'push_type': 'chat_answer',
+          'notification_type': 'plugin',
+          'navigate_to': '/chat/omi',
+          'id': 'msg-1',
+          'text': 'Answer body',
+          'title': 'omi says',
+        }),
+        '/chat/omi',
+      );
+    });
+
+    test('a chat_answer push without a chat route routes nowhere', () {
+      for (final data in const [
+        {'push_type': 'chat_answer', 'navigate_to': '/settings/device'},
+        {'push_type': 'chat_answer', 'navigate_to': '/conversation/abc'},
+        {'push_type': 'chat_answer', 'navigate_to': ''},
+        {'push_type': 'chat_answer'},
+      ]) {
+        expect(NotificationUtil.routeFromFcmData(data), isNull);
+      }
+    });
+  });
+
   group('NotificationUtil.handleFcmDataTap', () {
     testWidgets('a capture_recovery tap opens /settings/device in the mounted Home', (tester) async {
       final opened = <String>[];
@@ -137,6 +165,36 @@ void main() {
 
       expect(routed, isFalse);
       expect(opened, isEmpty);
+    });
+
+    testWidgets('a chat_answer tap opens its chat in the mounted Home (#5126)', (tester) async {
+      final opened = <String>[];
+      Future<bool> opener(String route, {bool Function()? canOpen}) async {
+        opened.add(route);
+        return true;
+      }
+
+      HomeNavigation.register(opener);
+      addTearDown(() => HomeNavigation.unregister(opener));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: globalNavigatorKey,
+          home: const Scaffold(body: SizedBox()),
+        ),
+      );
+
+      final routed = await NotificationUtil.handleFcmDataTap(const {
+        'push_type': 'chat_answer',
+        'notification_type': 'plugin',
+        'navigate_to': '/chat/omi',
+        'id': 'msg-1',
+        'text': 'Answer body',
+        'title': 'omi says',
+      });
+
+      expect(routed, isTrue);
+      expect(opened, ['/chat/omi']);
     });
   });
 

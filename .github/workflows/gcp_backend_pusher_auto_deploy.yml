@@ -269,8 +269,46 @@ jobs:
           umask 077
           python3 -m pip install -q websockets==12.0
           token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; }
+          port_forward_log="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-forward.XXXXXX")"
+          cleanup() {
+            if [[ -n "${port_forward_pid:-}" ]]; then
+              kill "$port_forward_pid" 2>/dev/null || true
+              wait "$port_forward_pid" 2>/dev/null || true
+            fi
+            rm -f "$token_file" "$port_forward_log"
+          }
           trap cleanup EXIT
+          # api.omiapi.com intentionally forwards Beta clients to production.
+          # Bind BOTH the WebSocket and readback to the authenticated dev cluster.
+          producer_context="$(kubectl config current-context)"
+          if [[ "${{ vars.GCP_PROJECT_ID }}" != based-hardware-dev || "${{ vars.ENV }}" != dev || "$producer_context" != gke_based-hardware-dev_* ]]; then
+            echo "Pusher semantic probe status=FAIL failure_stage=producer_environment_mismatch" >&2
+            exit 1
+          fi
+          if [[ "$(kubectl --context "$producer_context" -n dev-omi-backend auth can-i create pods --subresource=portforward)" != yes ]]; then
+            echo "Development Pusher semantic probe requires pods/portforward permission." >&2
+            exit 1
+          fi
+          kubectl --context "$producer_context" -n dev-omi-backend port-forward \
+            --address=127.0.0.1 service/dev-omi-backend-listen 18080:8080 \
+            >"$port_forward_log" 2>&1 &
+          port_forward_pid=$!
+          ready=false
+          for _ in $(seq 1 30); do
+            if ! kill -0 "$port_forward_pid" 2>/dev/null; then break; fi
+            if grep -q '^Forwarding from 127.0.0.1:18080 -> 8080' "$port_forward_log" && \
+              curl --fail --silent --max-time 2 http://127.0.0.1:18080/health >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            echo "Development listen port-forward did not become healthy." >&2
+            exit 1
+          fi
+          # Mint only after tunnel readiness; keep the five-minute token budget
+          # for paced audio and finalization rather than Kubernetes setup.
           if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
             echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
             echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
@@ -282,7 +320,8 @@ jobs:
             --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
             --token-output "$token_file"
           python3 backend/scripts/pusher_semantic_probe.py \
-            --api-url https://api.omiapi.com \
+            --api-url http://127.0.0.1:18080 \
+            --allow-local-http \
             --bearer-token-file "$token_file" \
             --deployment-receipt pusher-dev-deployment-receipt.json \
             --project "${{ vars.GCP_PROJECT_ID }}" \

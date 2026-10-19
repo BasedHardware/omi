@@ -258,7 +258,9 @@ silence until the stored `external_data.calendar_meeting_context.start_time` +
 `duration_minutes` + 120 seconds of grace. The stored calendar event id owns this
 window; screen-derived identity does not extend it, and meeting-treatment
 eligibility does not gate it. Reconnect admission, continuation-pointer lookup,
-and the active lifecycle loop use the same deadline. Source/device/lock partitions
+and the active lifecycle loop use the same deadline. The window never shortens the
+ordinary or user-configured silence deadline: speech after the scheduled end, or a
+longer silence setting, keeps that deadline. Source/device/lock partitions
 and empty-generation deletion keep their existing checks; non-meeting recordings
 keep the 120-second silence rule. The continuation transaction reads the complete
 conversation metadata, including the stored calendar context, without decoding
@@ -749,7 +751,10 @@ already longer than 30 seconds is split into contiguous equal-duration slices
 before merging — each slice is at most 30 seconds — and its text is distributed
 evenly across those slices, so timestamps stay proportional to the text they
 carry. A slice is never emitted without text: an entry with fewer words than
-slices is split into as many slices as it has words.
+slices is split into as many slices as it has words. Normalization capitalizes
+only a segment's first character and keeps the provider's casing for the rest,
+so names, acronyms and "I" survive and sync's text-based speaker naming can
+match an introduction such as "my name is Sarah".
 
 Post-processing stores the normalized result under the `prerecorded` transcript
 model and exposes that key through the transcript comparison API. The former
@@ -2321,7 +2326,12 @@ loads a stored owner embedding even when `speech_profile.wav` is absent; audio
 recovery still requires that file. Matching evidence and distance margins are
 unchanged. Text introductions matching the owner's first name (casefolded), or
 English stopwords including "because" and "googling", cannot mint a person.
+A detected name keeps its transcribed casing after the first letter ("McDonald",
+not "Mcdonald"), because live and sync find people by exact name.
 Existing people and stored conversation labels are not backfilled.
+A detected or typed name resolves an existing active person by exact name first,
+then ignoring case and repeated spaces, so "Alice" finds a person saved as "alice"
+instead of minting a second one.
 
 People's `voice_readiness` is derived from stored evidence: `ready` requires
 verified v3 samples and a finite nonzero vector; `saved_sample_awaiting_embedding`
@@ -4843,7 +4853,9 @@ v2 scalar outcomes/comparisons are separate. No private text or vectors enter me
 `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` independently gates sync/WAL cutover.
 When enabled for the same cohort, sync reuses its matching/storage WAV download
 and passes absolute provider word clocks through the same triage, diarizer and naming seam.
-Persisted sync segments use the legacy first-word origin and two-decimal clocks.
+It returns the legacy first-word origin; like legacy segments, sync intake adds the
+first word's offset back, so persisted segments use the VAD file's `started_at` origin
+(shared with its stored audio) and two-decimal clocks.
 Failure retains legacy matching; manual owner reservations remain authoritative.
 Live matching enters through an adapter preserving its clip policy unchanged.
 

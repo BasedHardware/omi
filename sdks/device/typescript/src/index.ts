@@ -68,6 +68,7 @@ export {
   createWhisperTranscriber,
   deepgramWsUrl,
   parakeetWsUrl,
+  SttStreamClosedError,
 } from './stt/index';
 export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './stt/index';
 
