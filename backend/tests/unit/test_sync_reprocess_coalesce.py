@@ -469,7 +469,7 @@ def test_mark_never_persists_invalid_worker_or_sibling_audience(state, monkeypat
 
 def test_integration_manifest_has_fresh_worker_queue_and_receiving_audience(runtime_manifest):
     env = runtime_manifest['environments']['prod']['cloud_run']['services']['backend-integration']['env']
-    assert env['SYNC_TASKS_QUEUE']['value'] == 'sync-jobs'
+    assert env['SYNC_TASKS_QUEUE']['value'] == 'sync-jobs-fresh'
     assert env['SYNC_TASKS_OIDC_AUDIENCE']['env_var'] == env['SYNC_TASKS_HANDLER_URL']['env_var']
     assert env['SYNC_TASKS_INVOKER_SA']['env_var'] == 'SYNC_TASKS_INVOKER_SA'
 

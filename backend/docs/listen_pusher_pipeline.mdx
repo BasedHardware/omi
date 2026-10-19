@@ -5850,8 +5850,8 @@ serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
 to `SYNC_TASKS_QUEUE` when unset), using `SYNC_TASKS_INVOKER_SA`. Production
 integration declares `batch-quarantine-recovery`; the existing backend deploy
-action provisions it before the integration revision, with four concurrent
-dispatches, four dispatches/second and five attempts. This keeps accepted-work
+action provisions it before the integration revision, with 16 concurrent
+dispatches, eight dispatches/second and five attempts. This keeps accepted-work
 recovery independent of legacy sync queue saturation without changing the paid
 intent or provider budget. Dev retains its existing queue. To roll back queue
 isolation, clear `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` on integration; keep
