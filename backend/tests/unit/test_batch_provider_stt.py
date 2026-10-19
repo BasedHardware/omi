@@ -35,18 +35,19 @@ JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
 
 
 @pytest.mark.parametrize(
-    'language,expected',
+    'language,byok,expected',
     [
-        ('en', ('parakeet', 'none', 'none', 'en')),
-        ('pt-BR', ('parakeet', 'none', 'none', 'pt')),
-        (None, ('parakeet', 'none', 'none', 'multi')),
-        ('', ('parakeet', 'none', 'none', 'multi')),
-        ('ja', ('provider', 'unsupported_language', 'modulate', 'ja')),
-        ('zh_Hans', ('provider', 'unsupported_language', 'modulate', 'zh')),
+        ('en', False, ('parakeet', 'none', 'none', 'en')),
+        ('pt-BR', False, ('parakeet', 'none', 'none', 'pt')),
+        (None, False, ('parakeet', 'none', 'none', 'multi')),
+        ('', True, ('parakeet', 'byok', 'none', 'multi')),
+        ('en', True, ('parakeet', 'byok', 'none', 'en')),
+        ('ja', False, ('provider', 'unsupported_language', 'modulate', 'ja')),
+        ('zh_Hans', True, ('provider', 'byok', 'modulate', 'zh')),
     ],
 )
-def test_route_is_decided_by_language_only(language, expected):
-    route = resolve_route(language)
+def test_route_is_decided_by_language_and_byok_only_records_funding(language, byok, expected):
+    route = resolve_route(language, byok=byok)
     assert (route.stt_route, route.provider_reason, route.provider_service, route.language) == expected
 
 
@@ -249,6 +250,14 @@ def test_one_paid_call_then_result_ready_and_merge_in_capture_order(world, monke
     assert vendor.calls == 1
 
 
+def test_byok_unit_is_never_re_held_by_the_keyless_funding_check(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', SttRoute('provider', 'byok', 'modulate', 'ja'))
+    artifacts, vendor = Artifacts(), Vendor()
+    assert stage(store, artifacts, vendor, allowed=lambda *_: False).run('p1').reason == 'processed'
+    assert vendor.calls == 1
+
+
 def test_unfunded_owner_is_deferred_without_download_or_spend(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
@@ -397,11 +406,12 @@ def test_provider_golden_is_pinned_by_the_simulation(name):
 
 
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
-def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language):
+@pytest.mark.parametrize('byok', [False, True])
+def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language, byok):
     from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 
     before = language not in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
-    after = resolve_route(language).stt_route == 'provider' or language in {'', 'multi'}
+    after = resolve_route(language, byok=byok).stt_route == 'provider' or language in {'', 'multi'}
     assert before == after
 
 
@@ -684,7 +694,8 @@ async def test_unsupported_language_takes_the_provider_route_and_wakes_after_com
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
     assert response.status_code == 202
     ((items, kwargs),) = dark_intake.calls
-    assert seen['route'].stt_route == 'provider' and kwargs['enqueue'] is not None
+    assert seen['route'].stt_route == 'provider' and seen['route'].provider_reason == 'byok'
+    assert kwargs['enqueue'] is not None
     assert items[0].requires_compute_admission is False
     assert dark_intake.woken == [('row-1', 'wake-1')]
 

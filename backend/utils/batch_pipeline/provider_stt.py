@@ -85,16 +85,19 @@ class SttRoute:
             raise ValueError('bounded language required')
 
 
-def resolve_route(language: str | None) -> SttRoute:
+def resolve_route(language: str | None, *, byok: bool = False) -> SttRoute:
     """Decide once at admission. Unknown language is ``multi``: Parakeet, as legacy sync.
 
     BYOK uploads are routed like every other upload (David, 10-19): sync
     pre-recorded STT has never used a BYOK key, and enrichment runs on Omi's keys.
+    ``provider_reason='byok'`` only records the admission-time funding decision,
+    made while the validated keys were present, so later keyless stages never
+    re-hold the unit (contract (c): admission decides once).
     """
     normalized = normalized_stt_language(language) or 'multi'
     if normalized in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL]:
-        return SttRoute('parakeet', 'none', 'none', normalized)
-    return SttRoute('provider', 'unsupported_language', 'modulate', normalized[:16])
+        return SttRoute('parakeet', 'byok' if byok else 'none', 'none', normalized)
+    return SttRoute('provider', 'byok' if byok else 'unsupported_language', 'modulate', normalized[:16])
 
 
 def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute) -> bool:
@@ -347,7 +350,10 @@ class ProviderSttStage:
         route = SttRoute(**job['stt_route'])
         if job['state'] == RUNNING:
             return self._reconcile(segment_id, job, item)
-        if not self.allowed(item.owner_id, item.duration_seconds, route.provider_service):
+        # A BYOK unit was funded at admission; the keyless re-check would hold it forever.
+        if route.provider_reason != 'byok' and not self.allowed(
+            item.owner_id, item.duration_seconds, route.provider_service
+        ):
             return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
         audio = self.artifacts.fetch_audio(item)
         inspected, failure = None, None

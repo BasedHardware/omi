@@ -225,7 +225,7 @@ async def accept_upload(
                 lane=lane,
             )
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        route = resolve_route(language)
+        route = resolve_route(language, byok=byok_enabled)
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
