@@ -27,6 +27,7 @@ from diarizer.batch_pipeline import (
     SAMPLE_RATE,
     crop_model_vad_spans,
     padded_retry_fits,
+    padded_retry_seconds,
     validate_words,
 )
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
@@ -89,9 +90,7 @@ class ParakeetWords:
             result.append(words)
         return result
 
-    def recover_empty(
-        self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None, left_context=None
-    ):
+    def recover_empty(self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None):
         """One full-capture, single-item retry with synthetic silence at both edges.
 
         TDT can emit all blanks for a fragment starting mid-utterance. Retain
@@ -99,26 +98,16 @@ class ParakeetWords:
         context without changing model policy. Bound the extra GPU quantum to
         120s and the existing padded budget. Larger units remain held for the
         fenced legacy recovery path; never truncate them to fit the retry.
-
-        ``left_context`` (the contiguous predecessor's speech run) replaces the
-        synthetic left silence when known, trimmed to the same bound. Its words
-        are never owned by this capture.
         """
         duration = len(samples) / SAMPLE_RATE
+        left = 2 * SAMPLE_RATE
+        right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
+        padded_seconds = padded_retry_seconds(samples)
         if not padded_retry_fits(samples, max_padded_seconds):
             # Never return an empty hypothesis for audio that exceeded the
             # padded recovery bound and was never submitted to the model.
             return None
-        left = 2 * SAMPLE_RATE
-        right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
-        prefix = np.zeros(left, dtype=np.asarray(samples).dtype)
-        if left_context is not None and len(left_context):
-            room = int(min(120, max_padded_seconds) * SAMPLE_RATE) - len(samples) - right
-            if room > 0:
-                prefix = np.asarray(left_context, dtype=prefix.dtype)[-room:]
-        padded = np.concatenate([prefix, samples, np.zeros(right, dtype=prefix.dtype)])
-        offset = len(prefix) / SAMPLE_RATE
-        padded_seconds = len(padded) / SAMPLE_RATE
+        padded = np.pad(samples, (left, right))
         if before_dispatch is not None and not before_dispatch():
             return None  # Retain raw work without spending a provider-failure attempt.
         hypotheses = self.transcribe_batch([padded])
@@ -129,9 +118,9 @@ class ParakeetWords:
         words = validate_words(hypotheses[0], padded_seconds)
         result = []
         for word in words:
-            start, end = [t - offset for t in word['timestamp']]
-            # Only the real capture owns words. Synthetic padding and context can
-            # never establish speech; intersect edge-straddling clocks with capture.
+            start, end = [t - 2 for t in word['timestamp']]
+            # Only the real capture owns words. Synthetic padding can never
+            # establish speech; intersect edge-straddling clocks with capture.
             if 0 <= (start + end) / 2 < duration:
                 result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
         return validate_words(result, duration)

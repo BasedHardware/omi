@@ -44,7 +44,8 @@ come from the same flight or a bounded process-local tail cache
 (`BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS`, default 64, 10-minute TTL). Window core
 ownership still starts at the unit's first sample, so prefix words are never
 emitted or double-counted; a seam-straddling word is clipped to the capture. The
-padded empty-ASR retry uses the same prefix instead of synthetic left silence.
+padded empty-ASR retry keeps its synthetic silence, so a unit the prefix leaves
+empty still gets the original second attempt.
 Ordering, owner, merge and paid-recovery semantics are unchanged; only the ASR
 input of the first window changes.
 

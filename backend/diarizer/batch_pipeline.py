@@ -421,7 +421,6 @@ class PipelineWorker:
         if room <= 0:
             return clips
         context = context[-room:]
-        state['left_context'] = context
         self.counts['left_context'] += 1
         prefixed = Window(
             first.segment_id,
@@ -431,11 +430,6 @@ class PipelineWorker:
             first.core_end,
         )
         return [prefixed, *clips[1:]]
-
-    @staticmethod
-    def _recovery_context(state):
-        context = state.get('left_context')
-        return {'left_context': context} if context is not None else {}
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
@@ -703,7 +697,6 @@ class PipelineWorker:
                                 self.config.max_padded_seconds,
                                 before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
                                 after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
-                                **self._recovery_context(state),
                             )
                             if recovered is None and (
                                 fits_retry
@@ -718,9 +711,7 @@ class PipelineWorker:
                                 results.append(HeldWork(item.segment_id))
                                 continue
                         else:
-                            recovered = self.recover_words(
-                                state['samples'], self.config.max_padded_seconds, **self._recovery_context(state)
-                            )
+                            recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
                         if recovered is None or not fits_retry:
                             words = []
                             state['padded_retry'] = 'skipped_oversize'

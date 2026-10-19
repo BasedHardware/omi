@@ -1,14 +1,11 @@
 """Left ASR context from a unit's contiguous same-owner predecessor."""
 
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer.batch_pipeline import PipelineWorker
 from diarizer.batch_pipeline_context import LeftContextIndex, select_context, starts_in_speech
-from diarizer.batch_pipeline_models import ParakeetWords
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 
 RATE = 16000
@@ -175,27 +172,3 @@ def test_kill_switch_and_onset_start_take_no_context():
     assert worker.counts['left_context'] == 0 and 's' not in saved
     worker, _, _, _ = run([item('p', 100, 10), item('s', 110, 10)], AUDIO, {25: [(6, 10)], 50: [(1.0, 10)]})
     assert worker.counts['left_context'] == 0
-
-
-def test_padded_retry_uses_the_predecessor_instead_of_synthetic_silence():
-    class Model:
-        def __init__(self):
-            self.arrays = []
-
-        def transcribe(self, arrays, **kwargs):
-            self.arrays.append(arrays[0])
-            entries = [{'word': 'context', 'start': 0.5, 'end': 1.0}, {'word': 'unit', 'start': 3.2, 'end': 3.6}]
-            return [SimpleNamespace(text='synthetic', timestamp={'word': entries})]
-
-    model = Model()
-    samples = np.full(5 * RATE, 0.5, dtype=np.float32)
-    context = np.full(3 * RATE, 0.25, dtype=np.float32)
-    words = ParakeetWords(model).recover_empty(samples, 272, left_context=context)
-    assert words == [{'word': 'unit', 'timestamp': pytest.approx([0.2, 0.6])}]
-    sent = model.arrays[0]
-    np.testing.assert_array_equal(sent[: 3 * RATE], context)
-    np.testing.assert_array_equal(sent[3 * RATE : 8 * RATE], samples)
-    assert not sent[8 * RATE :].any()
-    # Without context the retry is unchanged: 2s synthetic silence each side.
-    ParakeetWords(model).recover_empty(samples, 272)
-    assert len(model.arrays[1]) == 9 * RATE and not model.arrays[1][: 2 * RATE].any()
