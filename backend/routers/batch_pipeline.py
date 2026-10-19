@@ -154,7 +154,7 @@ async def fail(body: FailRequest):
 
 
 @router.post('/recover-quarantine', include_in_schema=False)
-async def recover_quarantine(body: RedriveRequest, request: Request = None):
+async def recover_quarantine(body: RedriveRequest, request: Request):
     """Keep paid STT inside an active request across ordinary revision draining.
 
     Retried/duplicate tasks can reconcile the original intent; start() never
@@ -174,7 +174,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request = None):
                 service.recovery.delivered,
                 body.segment_id,
                 outcome,
-                request.headers.get('X-CloudTasks-TaskName') if request is not None else None,
+                request.headers.get('X-CloudTasks-TaskName'),
             )
         except Exception:
             pass  # The lease still expires; the sweep repairs the wake then.

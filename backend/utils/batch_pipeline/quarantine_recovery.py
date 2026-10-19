@@ -319,7 +319,7 @@ class QuarantineRecovery:
             raise ValueError('recovery task requires the serving origin audience')
         token = job['recovery']['token']
         digest = hashlib.sha256(segment_id.encode()).hexdigest()
-        lease = recovery_wake_lease_seconds()
+        lease, seq = recovery_wake_lease_seconds(), 0
         if lease:
             # One outstanding wake per intent: a still-leased wake is already
             # queued or being delivered, so the sweep does not add another.

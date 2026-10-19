@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from unittest.mock import Mock
 
+from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import recovery_owners
@@ -752,7 +753,7 @@ async def test_504_leaves_executor_running_and_retry_adopts_token(setup, monkeyp
     middleware = TimeoutMiddleware(Mock(), paths_timeout={path: 0.05})
     request = Request({'type': 'http', 'path': path, 'method': 'POST', 'headers': []})
 
-    paid_request = asyncio.create_task(routes.recover_quarantine(body))
+    paid_request = asyncio.create_task(routes.recover_quarantine(body, SimpleNamespace(headers={})))
 
     async def call_next(request):
         return await paid_request
@@ -765,7 +766,7 @@ async def test_504_leaves_executor_running_and_retry_adopts_token(setup, monkeyp
         token = row(client)['recovery']['token']
         assert row(client)['recovery_state'] == 'running'
         assert not finished.is_set()  # Cancelling the await did not stop paid work.
-        assert await routes.recover_quarantine(body) == {'status': 'held'}
+        assert await routes.recover_quarantine(body, SimpleNamespace(headers={})) == {'status': 'held'}
         assert row(client)['recovery']['token'] == token
         stt.assert_called_once()
     finally:
