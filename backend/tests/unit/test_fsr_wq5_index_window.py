@@ -185,3 +185,33 @@ def test_real_sdk_cursor_compilation_keeps_nanoseconds_without_a_document_read()
     compiled = query._to_protobuf()
     assert compiled.start_at.values[0].timestamp_value.nanosecond == 123456789
     assert compiled.start_at.values[1].reference_value.endswith('/memories/deleted-boundary')
+
+
+def test_mixed_nanosecond_boundaries_follow_timestamp_before_id(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    mod = _load_memory_service(monkeypatch)
+    monkeypatch.setattr(mod, 'read_canonical_scan_page', lambda *args, **kw: ([], True))
+    monkeypatch.setattr(memories, 'prepare_memory_for_read', lambda raw, uid: raw)
+    older = DatetimeWithNanoseconds.from_rfc3339('2026-10-20T00:00:00.123456788Z')
+    newer = DatetimeWithNanoseconds.from_rfc3339('2026-10-20T00:00:00.123456789Z')
+    db = KeysetStore(
+        {
+            f'users/{UID}/memories/a': {
+                'id': 'a',
+                'content': 'a',
+                'category': 'interesting',
+                'updated_at': older,
+                'created_at': older,
+            },
+            f'users/{UID}/memories/z': {'id': 'z', 'content': 'z', 'category': 'interesting', 'created_at': newer},
+        }
+    )
+    service = mod.MemoryService(db_client=db)
+    monkeypatch.setattr(service, 'canonical_statuses', lambda *args, **kw: {})
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    first = service.read_page(UID, limit=1)
+    assert [memory.id for memory in first.memories] == ['z']
+    second = service.read_page(UID, limit=1, cursor=first.next_cursor)
+    assert [memory.id for memory in second.memories] == ['a']
+    assert db.physical <= 4

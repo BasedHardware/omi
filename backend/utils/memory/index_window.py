@@ -1,6 +1,7 @@
 """One page of historical index work per ordering, owned by a cursor request."""
 
 from typing import Any
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 from database import memories
 from database._client import get_firestore_client
@@ -42,3 +43,11 @@ def validate_window_cursors(state: Any, uid: str) -> None:
     for keyset, field in ((state.historical_updated_scan, 'updated_at'), (state.historical_created_scan, 'created_at')):
         if keyset is not None and keyset.index_window_cursor is not None:
             decode_cursor(keyset.index_window_cursor, query_scope({'uid': uid, 'order': field}))
+
+
+def window_sort_key(memory: Any) -> tuple[int, int, str]:
+    stamp = memory.updated_at or memory.created_at
+    if isinstance(stamp, DatetimeWithNanoseconds):
+        value = stamp.timestamp_pb()
+        return (-value.seconds, -value.nanos, memory.id)
+    return (-int(stamp.timestamp()), -stamp.microsecond * 1000, memory.id)

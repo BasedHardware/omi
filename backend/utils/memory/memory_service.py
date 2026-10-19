@@ -37,6 +37,7 @@ from utils.memory.index_window import (
     read_index_window_slots,
     position_cursor,
     validate_window_cursors,
+    window_sort_key,
 )
 from config import firestore_read_levers
 from database._client import db as default_db_client
@@ -1701,10 +1702,9 @@ class _HistoricalCursorStream:
         if updated_memory is None and created_memory is None:
             self._peek_source = None
             return None
+        sort_key = window_sort_key if self._updated._index_window else self._service.memory_cursor_sort_key
         take_updated = created_memory is None or (
-            updated_memory is not None
-            and self._service.memory_cursor_sort_key(updated_memory)
-            <= self._service.memory_cursor_sort_key(created_memory)
+            updated_memory is not None and sort_key(updated_memory) <= sort_key(created_memory)
         )
         if take_updated:
             self._peek_source = "updated"
@@ -3004,6 +3004,11 @@ class MemoryService:
         midstream via the signed cursor claims. Canonical continuation uses a
         bounded Firestore keyset scan — never a full-set reload.
         """
+        sort_key = (
+            window_sort_key
+            if firestore_read_levers.lever_enabled('memory_list_index_window', uid)
+            else self.memory_cursor_sort_key
+        )
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
         temporal_view = 'released'
         # ``as_of`` is an explicit traversal anchor.  ``now`` remains the
@@ -3153,9 +3158,7 @@ class MemoryService:
                     if canonical_memory is None and historical_memory is None:
                         break
                     take_canonical = historical_memory is None or (
-                        canonical_memory is not None
-                        and self.memory_cursor_sort_key(canonical_memory)
-                        <= self.memory_cursor_sort_key(historical_memory)
+                        canonical_memory is not None and sort_key(canonical_memory) <= sort_key(historical_memory)
                     )
                     if take_canonical:
                         assert canonical_memory is not None
