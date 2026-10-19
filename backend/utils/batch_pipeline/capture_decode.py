@@ -45,6 +45,10 @@ def _canonical(path: str) -> bytes:
     return pcm
 
 
+# Server-held WAV (the cap-hold adapter) takes the same canonicalization as uploads.
+canonical_pcm = _canonical
+
+
 def decode_units(paths: list[str], *, max_seconds: float = 3600) -> Generator[AudioUnit, None, None]:
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
     if unit_frames < 1 or max_seconds > 7200:

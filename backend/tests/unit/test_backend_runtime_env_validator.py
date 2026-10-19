@@ -405,8 +405,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     for service in ('backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
-            r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
+            r'\1\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
             r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
             r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
             payload,

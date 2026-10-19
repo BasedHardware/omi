@@ -528,7 +528,8 @@ class TestSyncEndpointCodeStructure:
         source = self._read_sync_source()
         return '\n'.join(
             [
-                self._function_body(source, 'async def sync_local_files('),
+                # v1 is a 410 stub since lane 10 slice 2b; it must not 402 either.
+                self._function_body(source, 'def sync_local_files('),
                 self._function_body(source, 'async def sync_local_files_v2('),
             ]
         )

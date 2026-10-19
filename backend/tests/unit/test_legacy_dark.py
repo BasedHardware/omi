@@ -319,11 +319,10 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
         _restore(saved)
 
 
-@pytest.mark.asyncio
-async def test_v1_sync_local_files_is_gone():
+def test_v1_sync_local_files_is_gone():
     module, saved, jobs, BytesIO = _router()
     try:
-        response = await module.sync_local_files(uid='test-uid')
+        response = module.sync_local_files(uid='test-uid')
         assert response.status_code == 410
         assert json.loads(response.body)['code'] == 'sync_v1_retired'
         assert response.headers['deprecation'] == 'true'

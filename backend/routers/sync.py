@@ -498,7 +498,7 @@ def download_audio_file_endpoint(
 # response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
 # the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True, status_code=410)
-async def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
+def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     """Retired (legacy-retire C6): zero calls in the 7-day census to 2026-10-19; v2 is the successor."""
     return JSONResponse(
         status_code=410,
