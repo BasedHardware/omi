@@ -5079,3 +5079,39 @@ doomed write on every sweep. The recovery the permanent storage class
 already had (shrink + mid-session rollover probe) now covers the
 deterministic in-process shapes, and the loop boundary owns the
 "retry cannot succeed" split for both layers.
+
+#### Batch-poison budget: the escape must not become the churn
+
+The rollover escape is rescue-shaped for a ROW poison and unbounded for a
+BATCH poison. When the retained batch's own segment data is what the strict
+decode / validation refuses, the probe adopts a fresh empty generation, the
+next drain hands it the same batch, the fresh row refuses it the same way,
+and the probe adopts another generation — one empty conversation per 60s
+probe window for the rest of the recording, with the ERROR line re-firing
+every backoff tick between probes. The same arithmetic applies to a
+size-limit batch that outlives its escape. One retained batch therefore
+absorbs at most `LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET` (3) deterministic
+attempts AFTER an escape has adopted a fresh generation
+(`_legacy_persist_escaped` arms the counter; pre-escape refusals stay
+unbounded so the stall escape's 100-reject clock is untouched); past the
+budget the batch is terminal — one truthful
+`omi_fallback_total{component="other",from_mode="live_transcript_persist",to_mode="none",reason="malformed_doc"|"document_size_limit",outcome="exhausted"}`
+event, one bounded `rejected by every generation` ERROR, buffers cleared,
+all ladders reset, and the loop keeps draining fresh speech. A committed
+write resets both the counter and the latch: whatever persists is no longer
+the same all-refused batch. Transient failures never count and never drop
+anything.
+
+The v2 unplaced-fallback lane (`_persist_v1_unplaced`, one item per tick)
+gets the same discipline: an item `_is_deterministic_persist_defect` keeps
+refusing past `MAX_V2_PERSIST_ATTEMPTS` is terminal —
+`omi_fallback_total{component="other",from_mode="v2_segment_persist",to_mode="none",reason="malformed_doc",outcome="exhausted"}`
+once, one bounded ERROR, then dropped from the lane so items behind it keep
+draining. Its RuntimeError-shaped and timeout faults keep the existing
+per-item backoff-and-rotate behavior unchanged.
+
+Failure-Class: FC-permanent-write-rejection-retried-forever — the churn
+sibling of the escape above: an escape that cannot rescue its batch must
+terminate the batch, not multiply generations. Instances in
+`backend/routers/listen/transcripts.py` (legacy live persist arm, post-escape
+attempts; v2 unplaced-fallback lane, deterministic per-item budget).

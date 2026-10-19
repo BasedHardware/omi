@@ -149,6 +149,9 @@ def _processor(monkeypatch, *, segments, update, rollover):
     processor._legacy_retry_until = 0.0
     processor._legacy_persist_failures = 0
     processor._legacy_persist_rejects = 0
+    # The batch-poison budget (added after this suite) starts disarmed.
+    processor._legacy_persist_batch_attempts = 0
+    processor._legacy_persist_escaped = False
 
     monkeypatch.setattr(transcripts_module, 'time', fake_time)
     monkeypatch.setattr(transcripts_module, 'TranscriptSegment', _Segment)

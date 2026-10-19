@@ -86,6 +86,17 @@ LEGACY_PERSIST_SHRINK_FLOOR = 4
 # dropped tail is instantly replaced by fresh speech. At the 8s backoff cap
 # this is roughly five minutes of refusals.
 LEGACY_PERSIST_STALL_REJECTS = 100
+# Deterministic attempts a single retained batch may absorb across generations
+# before it is classified as the poison itself. Tick one generation refuses a
+# batch: the rollover probe is the escape and a fresh generation normally takes
+# the speech. When the FRESH generation deterministically refuses the same
+# batch too — a strict-decode/validation defect that lives in the batch's own
+# segment data, not in the row — every later generation refuses it the same
+# way, and unbounded rollover churn (a new empty conversation per probe window
+# for the rest of the recording) becomes the failure mode instead of the cure.
+# The batch is then terminal: counted once as `exhausted`, logged once as
+# terminal, and dropped, so the loop keeps draining fresh speech.
+LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET = 3
 
 
 def _is_deterministic_persist_defect(error: BaseException) -> bool:
@@ -230,6 +241,16 @@ class TranscriptProcessor:
         # stall-escape probe: a backlog that never shrinks because live speech
         # keeps replacing every dropped tail still has to reach the rollover.
         self._legacy_persist_rejects = 0
+        # Deterministic attempts one retained batch has absorbed AFTER a
+        # rollover escape. Pre-escape refusals follow the shrink/stall cadence
+        # (that is the row-poison path, and the stall escape needs unbounded
+        # refusals to reach its 100-reject clock). The budget starts counting
+        # only once the escape has adopted a fresh generation: a batch that
+        # generation also refuses deterministically is poisoned in its own
+        # segment data, and `LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET` further
+        # refusals terminate it instead of churning another generation.
+        self._legacy_persist_batch_attempts = 0
+        self._legacy_persist_escaped = False
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
         """Retry uncommitted text, then retain it for unplaced v1 persistence."""
@@ -972,6 +993,33 @@ class TranscriptProcessor:
                 except Exception as error:
                     failures = self._v2_fallback_failures.get(key, 0) + 1
                     self._v2_fallback_failures[key] = failures
+                    # A deterministically failing item — the same strict-decode
+                    # / validation shapes the legacy arm classifies — cannot
+                    # succeed on any later tick: its poison rides the item's
+                    # own data. The per-item backoff previously re-fired it
+                    # forever (and its bounded fallback deque only waits for
+                    # maxlen to drop the item silently, losing the signal).
+                    # Give one item the same budget the retained batch has:
+                    # after the budget it is counted `exhausted`, logged once,
+                    # and dropped so the lane keeps serving items behind it.
+                    if _is_deterministic_persist_defect(error) and failures > MAX_V2_PERSIST_ATTEMPTS:
+                        self._v2_legacy_fallback.popleft()
+                        self._v2_legacy_fallback_ids.discard(key)
+                        self._v2_fallback_retry_until.pop(key, None)
+                        self._v2_fallback_failures.pop(key, None)
+                        logger.error(
+                            'Unplaced transcript persist rejected deterministically after %d attempts; '
+                            'dropping segment reason=malformed_doc',
+                            failures,
+                        )
+                        record_fallback(
+                            component='other',
+                            from_mode='v2_segment_persist',
+                            to_mode='none',
+                            reason='malformed_doc',
+                            outcome='exhausted',
+                        )
+                        break
                     self._v2_fallback_retry_until[key] = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
                     self._v2_legacy_fallback.rotate(-1)
                     logger.error('Unplaced transcript fallback persist failed type=%s', type(error).__name__)
@@ -1135,6 +1183,7 @@ class TranscriptProcessor:
                 failures = getattr(self, '_legacy_persist_failures', 0) + 1
                 self._legacy_persist_failures = failures
                 self._legacy_retry_until = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
+                escaped_pending = getattr(self, '_legacy_persist_escaped', False)
                 if oversized or deterministic_defect:
                     # Deterministic failure: the write is refused (Firestore
                     # rejection) or its in-process planning raises the same
@@ -1149,6 +1198,8 @@ class TranscriptProcessor:
                     # already uses — at a bounded cadence, with the speech
                     # kept queued for the fresh generation.
                     self._legacy_persist_rejects = getattr(self, '_legacy_persist_rejects', 0) + 1
+                    if escaped_pending:
+                        self._legacy_persist_batch_attempts = getattr(self, '_legacy_persist_batch_attempts', 0) + 1
                     below_floor = retained_count <= LEGACY_PERSIST_SHRINK_FLOOR
                     saturated = below_floor
                     buffer_cap = self.segment_buffer.maxlen
@@ -1158,6 +1209,40 @@ class TranscriptProcessor:
                         and self._legacy_persist_rejects >= LEGACY_PERSIST_STALL_REJECTS
                     )
                     requeue: Optional[List[Dict[str, Any]]] = legacy_retry_segments
+                    # A generation-poisoned batch escapes through the rollover.
+                    # A batch the FRESH generation deterministically refuses too
+                    # is poisoned in its own segment data: every later
+                    # generation refuses it the same way, and the escape would
+                    # only churn an empty generation per probe window for the
+                    # rest of the recording. The budget — counted from the
+                    # escape, never before it — terminates such a batch:
+                    # counted once as `exhausted`, logged once, then dropped,
+                    # so the loop keeps draining fresh speech. Pre-escape
+                    # refusals and transient failures never reach this arm.
+                    if self._legacy_persist_batch_attempts > LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET:
+                        self.segment_buffer.clear()
+                        self.photo_buffer.clear()
+                        self._legacy_persist_failures = 0
+                        self._legacy_retry_until = 0.0
+                        self._legacy_persist_rejects = 0
+                        self._legacy_persist_batch_attempts = 0
+                        self._legacy_persist_escaped = False
+                        logger.error(
+                            'Live transcript batch rejected by every generation '
+                            'after %d attempts; dropping %d segment(s) reason=%s',
+                            LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET,
+                            retained_count,
+                            'document_size_limit' if oversized else 'malformed_doc',
+                        )
+                        record_fallback(
+                            component='other',
+                            from_mode='live_transcript_persist',
+                            to_mode='none',
+                            reason='document_size_limit' if oversized else 'malformed_doc',
+                            outcome='exhausted',
+                            log=logger,
+                        )
+                        continue
                     if requeue and not below_floor:
                         requeue = requeue[:-1]
                     self._requeue_legacy_persist(requeue, photos)
@@ -1177,6 +1262,8 @@ class TranscriptProcessor:
                         else:
                             if self.host.state.current_conversation_id != conversation_id:
                                 escaped = True
+                                self._legacy_persist_escaped = True
+                                self._legacy_persist_batch_attempts = 0
                                 logger.warning(
                                     'Live transcript rollover escaped an over-limit conversation; '
                                     'retried %d retained segment(s) on a fresh generation',
@@ -1203,6 +1290,13 @@ class TranscriptProcessor:
             self._legacy_persist_failures = 0
             self._legacy_retry_until = 0.0
             self._legacy_persist_rejects = 0
+            # A committed write ends the batch's attempt story for this drain:
+            # whatever persists is no longer the same all-refused batch. The
+            # counter resets here (not per retained segment) because the budget
+            # governs one retained batch, and a drain that committed anything
+            # has proven the loop can still land speech on this conversation.
+            self._legacy_persist_batch_attempts = 0
+            self._legacy_persist_escaped = False
             if rolled_over:
                 record_fallback(
                     component='other',
