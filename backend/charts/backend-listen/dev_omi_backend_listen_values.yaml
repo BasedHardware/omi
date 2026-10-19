@@ -241,8 +241,6 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
-    value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
@@ -251,10 +249,6 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
-    value: "100"
   # Keep these aligned with the development GitHub environment variables used
   # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -273,19 +267,8 @@ env:
     value: "0"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://api.omiapi.com"
-  - name: FREE_TIER_LOCAL_PROCESSING
+  - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
     value: "true"
-  - name: FREE_TIER_EMERGENCY_STOP
-    value: "false"
-  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
-    valueFrom:
-      configMapKeyRef:
-        name: dev-omi-backend-config
-        key: FREE_TIER_LOCAL_PROCESSING_COHORT
-        # Absent key == unset env == the cohort module admits nobody. Without
-        # this, a pusher rollout that races the backend lane's first ConfigMap
-        # write fails to start instead of starting dark.
-        optional: true
   - name: DESKTOP_UPDATE_POINTERS_MODE
     value: "primary"
   - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
@@ -361,36 +344,10 @@ env:
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
-  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "true"
-  - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
-    value: "true"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
     value: "25"
-  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
-    value: "true"
-  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
-    value: "true"
-  - name: MEMORY_OWNER_JEV_FLIP_ENABLED
-    value: "true"
-  - name: MEMORY_OWNER_JEV_FLIP_PERCENT
-    value: "0"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "0"
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "0"
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
-    value: "60000"
-  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
-    value: "60000"
-  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
-    value: ""
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -408,10 +365,6 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
-  - name: MEMORY_BELIEF_MODEL_ENABLED
-    value: "true"
-  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
-    value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS

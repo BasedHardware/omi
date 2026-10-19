@@ -384,61 +384,9 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
-JIT_ROLLOUT_DECISION_TOTAL = Counter(
-    'jit_rollout_decision_total',
-    'JIT admission decisions by bounded labels; never labeled by UID',
-    ['effective', 'reason', 'stage', 'error_class'],
-)
-
-JIT_ROLLOUT_DECISION_LATENCY_SECONDS = Histogram(
-    'jit_rollout_decision_latency_seconds',
-    'Wall time to resolve a JIT admission decision',
-    ['stage'],
-    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
-)
-
-JIT_WRITER_MODE_TRANSITION_TOTAL = Counter(
-    'jit_writer_mode_transition_total',
-    'Canonical writer-mode transitions; never labeled by UID',
-    ['from_mode', 'to_mode'],
-)
-
-JIT_FIRST_OPEN_TOTAL = Counter(
-    'jit_first_open_total',
-    'First-open obligation claim, complete, and fail events; never labeled by UID',
-    ['event', 'effect'],
-)
-
-
-def record_jit_rollout_decision(
-    *,
-    effective: str,
-    reason: str,
-    stage: str,
-    error_class: str,
-    latency_ms: int,
-) -> None:
-    JIT_ROLLOUT_DECISION_TOTAL.labels(
-        effective=effective,
-        reason=reason,
-        stage=stage,
-        error_class=error_class,
-    ).inc()
-    JIT_ROLLOUT_DECISION_LATENCY_SECONDS.labels(stage=stage).observe(max(0, latency_ms) / 1000.0)
-
-
-def record_jit_writer_mode_transition(*, from_mode: str, to_mode: str) -> None:
-    JIT_WRITER_MODE_TRANSITION_TOTAL.labels(from_mode=from_mode, to_mode=to_mode).inc()
-
-
-def record_jit_first_open(*, event: str, effect: str) -> None:
-    JIT_FIRST_OPEN_TOTAL.labels(event=event, effect=effect).inc()
-
-
-# Lazy desktop deferral (the pre-JIT free-desktop cost path): a raw transcript is
-# stored at capture and the paid enrichment runs only when the user first opens
-# the conversation. `stored` vs `enrich_*` is the observed ever-opened fraction,
-# which the JIT first-open deferral for paid tiers is sized against. Bounded
+# Lazy desktop deferral: a raw transcript is stored at capture and enrichment
+# runs only when the user first opens the conversation. `stored` vs `enrich_*`
+# is the observed ever-opened fraction. Bounded
 # label set; anything else collapses to `other` so a new call site cannot mint
 # an unbounded series.
 #
@@ -454,7 +402,7 @@ def record_jit_first_open(*, event: str, effect: str) -> None:
 #     per-conversation one: a failed enrichment re-arms `deferred`, so the next
 #     open counts a second `enrich_started`, and a retried deferred persist can
 #     count `stored` (or `fenced`) more than once for a single conversation.
-#  3. The ratio is undefined while `FREE_TIER_LOCAL_PROCESSING` is on: the
+#  3. The ratio is undefined when funded budget admission defers capture: the
 #     deferred-store path stops emitting `stored` while the already-stored
 #     backlog keeps emitting `enrich_*`, so the ratio drifts above 100%.
 LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
@@ -477,7 +425,7 @@ LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
         'stored/fenced are emitted by every host running the finalizer, enrich_* only by the '
         'backend first-open route. enrich_complete/stored is an attempt/persist ratio, not a '
         'per-conversation one (a re-armed retry counts again). The ratio is undefined while '
-        'FREE_TIER_LOCAL_PROCESSING is on: stored stops while the enrich_* backlog drains.'
+        'funded cap deferral replaces legacy lazy stores while the enrich_* backlog drains.'
     ),
     ['event'],
 )
@@ -550,25 +498,6 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
         pass
 
 
-CONVERSATION_RELEVANCE_RESCUE_TOTAL = Counter(
-    'omi_conversation_relevance_rescue_total',
-    'R03/R08 second opinions; shadow never changes verdicts. No transcript or user labels.',
-    ['mode', 'rule', 'outcome'],
-)
-
-
-def record_conversation_relevance_rescue(*, mode: str, rule: str, outcome: str) -> None:
-    """Bounded content-free labels; telemetry never changes relevance."""
-    try:
-        CONVERSATION_RELEVANCE_RESCUE_TOTAL.labels(
-            mode=mode if mode in {'shadow', 'on'} else 'other',
-            rule=rule if rule in {'filler_only', 'no_content_words'} else 'other',
-            outcome=outcome if outcome in {'rescue', 'discard_stands', 'error_keep'} else 'other',
-        ).inc()
-    except Exception:
-        pass
-
-
 # Jev decision model (utils/llm/jev_client.py, #14835). One increment per
 # caller-visible Jev question, after its retry. `lane` names the product
 # decision, never a user; every non-success outcome means the caller kept its
@@ -577,9 +506,7 @@ JEV_DECISION_LABELS = {
     'lane': frozenset(
         {
             'conversation_relevance',
-            'memory_owner',
             'screen_task',
-            'episode_evidence',
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
@@ -603,52 +530,6 @@ JEV_DECISION_LATENCY_SECONDS = Histogram(
     ['lane', 'outcome'],
     buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
 )
-
-# EXP-004: no identifiers or arbitrary strings may become labels.
-JEV_SHADOW_OUTCOMES = frozenset(
-    {'ok', 'jev_failed', 'http_429', 'timeout', 'deduped', 'cap', 'cohort', 'dropped', 'redis_unavailable'}
-)
-JEV_SHADOW_TOTAL = Counter('omi_jev_shadow_total', 'Relevance and owner shadow outcomes.', ['lane', 'outcome'])
-JEV_SHADOW_LATENCY = Histogram(
-    'omi_jev_shadow_latency_seconds',
-    'Shadow question latency including queue time.',
-    ['lane'],
-    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 5),
-)
-RELEVANCE_JEV_SHADOW_SCORE = Histogram(
-    'omi_relevance_jev_shadow_p_discard',
-    'Shadow P(discard).',
-    buckets=(0.5, 0.7, 0.75, 0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 0.99),
-)
-RELEVANCE_JEV_SHADOW_AGREEMENT = Counter(
-    'omi_relevance_jev_shadow_agreement_total',
-    'Nano verdict versus Jev discard strictly above JEV_DISCARD_THRESHOLD (0.80); none means nano did not answer.',
-    ['nano_verdict', 'jev_would_discard'],
-)
-OWNER_JEV_SHADOW_SCORE = Histogram('omi_owner_jev_shadow_p_user', 'Shadow P(user).', buckets=(0.5, 0.7, 0.8, 0.9, 0.95))
-
-
-def record_jev_shadow_outcome(lane: str, outcome: str) -> None:
-    try:
-        JEV_SHADOW_TOTAL.labels(
-            lane=lane if lane in {'relevance', 'owner'} else 'other',
-            outcome=outcome if outcome in JEV_SHADOW_OUTCOMES else 'jev_failed',
-        ).inc()
-    except Exception:
-        pass
-
-
-# Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
-# `flipped` re-attributed a third-party candidate to the user; `kept_third_party`
-# asked and stayed below the threshold; `unavailable` got no answer.
-MEMORY_OWNER_JEV_OUTCOMES = frozenset({'flipped', 'kept_third_party', 'unavailable', 'skipped_budget'})
-
-MEMORY_OWNER_JEV_TOTAL = Counter(
-    'omi_memory_owner_jev_total',
-    'Third-party memory candidates checked by the Jev owner question, by outcome. Never labeled by uid.',
-    ['outcome'],
-)
-
 
 # Primary scorer outcomes provide the denominator and failure categories for
 # degraded relevance paths. Keep this separate from shared transition telemetry.
@@ -699,14 +580,6 @@ def record_jev_decision(*, lane: str, outcome: str, latency_seconds: float) -> N
         pass
 
 
-def record_memory_owner_jev(outcome: str) -> None:
-    """Never raises: observability must not change a capture outcome."""
-    try:
-        MEMORY_OWNER_JEV_TOTAL.labels(outcome=outcome if outcome in MEMORY_OWNER_JEV_OUTCOMES else 'other').inc()
-    except Exception:
-        pass
-
-
 from utils.metrics_smart_merge import (  # noqa: E402
     CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES as CONVERSATION_SMART_MERGE_AUDIT_OUTCOMES,
     CONVERSATION_SMART_MERGE_AUDIT_TOTAL as CONVERSATION_SMART_MERGE_AUDIT_TOTAL,
@@ -718,14 +591,11 @@ from utils.metrics_smart_merge import (  # noqa: E402
     CONVERSATION_SMART_MERGE_SCORE as CONVERSATION_SMART_MERGE_SCORE,
     CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS as CONVERSATION_SMART_MERGE_SURVIVOR_AGE_BUCKETS,
     CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL as CONVERSATION_SMART_MERGE_SURVIVOR_DELETED_TOTAL,
-    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL,
-    CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS as CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS,
     OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL as OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL,
     record_conversation_smart_merge as record_conversation_smart_merge,
     record_conversation_smart_merge_audit as record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh as record_conversation_smart_merge_refresh,
     record_conversation_smart_merge_survivor_deleted as record_conversation_smart_merge_survivor_deleted,
-    record_conversation_smart_merge_wallclock_shadow as record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten as record_smart_merge_flatten,
 )
 
@@ -825,7 +695,6 @@ OMI_QUEUE_NAMES = (
     'candidate_integration_outbox',
     'conversation_finalization_jobs',
     'daily_summary_hour_groups',
-    'daily_memory_sweep',
     'vector_repair_outbox',
     'task_recurrence_inbox',
     'frame_deletion_outbox',

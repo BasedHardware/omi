@@ -151,7 +151,7 @@ BODY_DIGEST = {
     'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
-    'database.durable_queue_age._publish_queue_ages': '6981674c08c0e133899133a08ad5c7ee8dc34f2be420e134818af4db20d0f644',
+    'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
@@ -1048,7 +1048,7 @@ _add(
     CoveredByEntry(
         'database.durable_queue_age._publish_queue_ages',
         covered_by=('database.durable_queue_age.publish_all_queue_oldest_ready_ages',),
-        reason='sample-budget cache wrapper around the same scan+publish path; reached only by the periodic publisher',
+        reason='sample-budget cache wrapper; invalidates metrics before fresh I/O, with scan query shapes unchanged',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.durable_queue_age._publish_queue_ages'],
     )
@@ -1066,20 +1066,6 @@ _add(
     )
 )
 
-for _fn in (
-    'list_entity_timeline_conversations',
-    'list_entity_timeline_meetings',
-    'list_entity_timeline_screen_activity',
-):
-    _add(
-        DriverEntry(
-            f'database.entity_timeline_sources.{_fn}',
-            base={'uid': UID},
-            domains={'start_date': [None, T0], 'end_date': [None, T1]},
-            neutrals={'limit': _LIMIT},
-        )
-    )
-
 _add(DriverEntry('database.fair_use.get_fair_use_events', base={'uid': UID}, neutrals={'limit': _LIMIT}))
 _add(
     DriverEntry(
@@ -1093,12 +1079,6 @@ _add(
     )
 )
 _add(DriverEntry('database.feedback.list_report_dates', neutrals={'limit': _LIMIT}))
-_add(
-    DriverEntry(
-        'database.first_open_obligations.commit_first_open_folder_count',
-        base={'uid': UID, 'conversation_id': 'conv-1', 'token': 'token-1', 'folder_id': 'folder-1'},
-    )
-)
 _add(
     DriverEntry(
         'database.focus_sessions.get_focus_sessions',

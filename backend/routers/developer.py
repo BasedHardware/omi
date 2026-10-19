@@ -27,6 +27,7 @@ from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
@@ -1912,7 +1913,7 @@ def _log_client_projection_rejected(reason: str, raw: Any) -> None:
 
 def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
     """Validate an untrusted projection payload. Invalid means drop, never 422."""
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         return ClientProcessing.model_validate(raw)
@@ -1957,8 +1958,8 @@ def _accepted_client_projection(
     """Bind a client projection to the stored transcript, or drop it.
 
     Schema failure and hash mismatch are not request errors: the conversation
-    still lands, with the projection discarded and the coordinator storing the
-    deterministic minimum. The warning is content-free (reason plus provenance
+    still lands, with the projection discarded and the coordinator retaining
+    ordinary funded processing or raw budget deferral. The warning is content-free (reason plus provenance
     only — never transcript or body). Provenance itself may be missing.
     The digest is over ``segments`` — the canonical rows ingest persists —
     so a client hashing the same canonicalization as ``canonical_segment``

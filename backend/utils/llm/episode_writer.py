@@ -1,18 +1,11 @@
-"""Bounded optional selection pass; writer receives only original selected evidence."""
+"""Serving episode evidence is selected deterministically before note generation."""
 
 import json
 from datetime import timezone
 from typing import Any
 
-from config.episode_writer import EpisodeWriterSettings
 from utils.conversations.episode_compaction import compact_episode_items
-from utils.conversations.episode_selection import (
-    SELECTION_PROMPT,
-    deterministic_episode_selection,
-    selected_episode_items,
-    selection_payload,
-    model_selection_allowed,
-)
+from utils.conversations.episode_selection import deterministic_episode_selection
 
 
 def bind_episode_effort(model: Any, effort: str) -> Any:
@@ -106,85 +99,9 @@ def baseline_budget_fallback(notes_fn, run, prefix, inputs):
     return notes_fn(prefix, **{name: inputs[name] for name in names}, screen_frames=inputs['original_screen_frames'])
 
 
-def prepare_episode_evidence(items, settings: EpisodeWriterSettings, *, started_at, finished_at, run, model_factory):
-    items = compact_episode_items(items)
-    if settings.selection == 'compact':
-        return items
-    conservative = deterministic_episode_selection(items, finished_at=finished_at)
-    if settings.selection == 'deterministic':
-        return conservative
-    if settings.selection == 'jev':
-        return prepare_jev_evidence(items, settings, started_at=started_at, finished_at=finished_at, run=run)
-    # Do not buy another full-context call for a large meeting.
-    if not model_selection_allowed(items):
-        if run is not None:
-            run.actual_selection = 'deterministic'
-            run.violations.add('selection_long_input')
-        return conservative
-    try:
-        model = model_factory()
-        messages = [
-            {'role': 'system', 'content': SELECTION_PROMPT},
-            {
-                'role': 'user',
-                'content': json.dumps(selection_payload(items, started_at, finished_at), ensure_ascii=False),
-            },
-        ]
-        response = run.invoke(model, messages, kind='selection') if run else model.invoke(messages)
-        content = response.content
-        if not isinstance(content, str):
-            raise ValueError('invalid_selection')
-        return selected_episode_items(items, json.loads(content), finished_at=finished_at)
-    except Exception:
-        from utils.observability.fallback import record_fallback
-
-        if run is not None:
-            run.actual_selection = 'deterministic'
-            run.violations.add('selection_unavailable')
-        record_fallback(
-            component='conversation_notes',
-            from_mode='episode_selection',
-            to_mode='deterministic',
-            reason='local_heal',
-            outcome='degraded',
-        )
-        return conservative
-
-
-def prepare_jev_evidence(items, settings, *, started_at, finished_at, run):
-    from utils.conversations.episode_jev import LANE, evidence_question_batches, scored_episode_items
-    from utils.llm.jev_client import ask_jev
-    from utils.observability.fallback import record_fallback
-
-    try:
-        batches = evidence_question_batches(items, started_at=started_at, finished_at=finished_at)
-        scores = {}
-        for batch in batches:
-            if run is not None:
-                run.jev_calls += 1
-            answers = ask_jev(batch.state, batch.questions, lane=LANE, max_attempts=1)
-            if answers is None:
-                if run is not None:
-                    run.add_jev_usage({})
-                raise ValueError('jev_unavailable')
-            if run is not None:
-                run.add_jev_usage(answers.usage)
-            scores.update({q: answers.noul(q) for q in batch.questions})
-        if run is not None:
-            run.actual_selection = 'jev'
-        return scored_episode_items(items, batches, scores, threshold=settings.jev_threshold, finished_at=finished_at)
-    except Exception:
-        if run is not None:
-            run.actual_selection = 'deterministic'
-            run.violations.add('jev_unavailable')
-        record_fallback(
-            component='conversation_notes',
-            from_mode='jev_selection',
-            to_mode='deterministic',
-            reason='local_heal',
-            outcome='degraded',
-        )
-        return deterministic_episode_selection(items, finished_at=finished_at)
+def prepare_episode_evidence(items, *, finished_at):
+    """Keep the deterministic evidence subset for every serving episode."""
+    return deterministic_episode_selection(compact_episode_items(items), finished_at=finished_at)
 
 
 def episode_runtime_settings(items, settings, run):

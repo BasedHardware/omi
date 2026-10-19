@@ -56,8 +56,10 @@ struct Person: Codable, Identifiable {
 
 extension APIClient {
 
-  func getUserSubscription() async throws -> UserSubscriptionResponse {
-    return try await get("v1/users/me/subscription")
+  func getUserSubscription(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil) async throws
+    -> UserSubscriptionResponse
+  {
+    return try await get("v1/users/me/subscription", authorizationSnapshot: authorizationSnapshot)
   }
 
   func getTrialMetadata() async throws -> TrialMetadataResponse {

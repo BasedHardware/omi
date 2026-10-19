@@ -219,30 +219,15 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
-        "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
-        "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
-        "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
-        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
-        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
-        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
-        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
         "DREAM_AGENT_UID_ALLOWLIST": "",
         "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
-        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
         "OMI_SHAPED_AGENT_MODE": "on",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
-        "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
-        "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
-        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
-        "DESKTOP_PENDANT_CALL_LINK_MODE": "shadow",
-        "DESKTOP_PENDANT_CALL_LINK_PERCENT": "100",
-        "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
-        "FREE_TIER_LOCAL_PROCESSING": "true",
-        "FREE_TIER_EMERGENCY_STOP": "false",
+        "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
         "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
         "FSR_QUEUE_AGE_PUBLISHER": "0",
         "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
@@ -268,11 +253,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SONIOX_ORDERED_FINALIZE": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
-        "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
-        "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
-        "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
-        "MEMORY_OWNER_JEV_FLIP_ENABLED": "true",
         "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
         "OMI_ENV_STAGE": "dev",
         "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
@@ -334,12 +315,22 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
     assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "0"
-    assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
-    assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
+    for retired in (
+        "CONVERSATION_RELEVANCE_JEV_ENABLED",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP",
+        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST",
+        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT",
+        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE",
+        "MEMORY_OWNER_JEV_FLIP_ENABLED",
+        "MEMORY_OWNER_JEV_FLIP_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP",
+        "DESKTOP_PENDANT_CALL_LINK_MODE",
+        "DESKTOP_PENDANT_CALL_LINK_PERCENT",
+    ):
+        assert retired not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "false"
     assert "DEEPGRAM_SELF_HOSTED_URL" not in literals
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"

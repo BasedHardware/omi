@@ -463,6 +463,9 @@ class UserSubscriptionResponse {
   final int insightsGainedLimit;
   final List<SubscriptionPlan> availablePlans;
   final bool showSubscriptionUi;
+
+  /// Backend-confirmed: this reader can still get an introductory free trial on checkout.
+  final bool trialEligible;
   // Chat quota fields — populated from subscription endpoint
   final double chatQuotaUsed;
   final String? chatQuotaUnit;
@@ -484,6 +487,7 @@ class UserSubscriptionResponse {
     required this.insightsGainedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.trialEligible = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,
@@ -511,6 +515,7 @@ class UserSubscriptionResponse {
       insightsGainedLimit: generated.insightsGainedLimit,
       availablePlans: generated.availablePlans.map(SubscriptionPlan.fromGenerated).toList(),
       showSubscriptionUi: generated.showSubscriptionUi,
+      trialEligible: generated.trialEligible,
       chatQuotaUsed: generated.chatQuotaUsed,
       chatQuotaUnit: generated.chatQuotaUnit,
       chatQuotaPercent: generated.chatQuotaPercent,

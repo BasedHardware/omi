@@ -147,7 +147,6 @@ def test_screen_volume_gate(monkeypatch, caplog, words, screens, flag, escalated
     assert fields['words'] == str(words)
     assert fields['screen_count'] == str(screens)
     assert fields['arm'] == 'baseline'
-    assert fields['selection'] == 'none'
     assert fields['claims_enabled'] == 'False'
     if escalated:
         assert model.bound_kwargs == {'reasoning_effort': 'xhigh'}

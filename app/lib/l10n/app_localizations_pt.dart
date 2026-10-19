@@ -1972,12 +1972,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryHistory => 'Histórico';
 
   @override
-  String get memoryAllowUse => 'Permitir uso';
-
-  @override
-  String get memoryDontUse => 'Não usar';
-
-  @override
   String get undo => 'Desfazer';
 
   @override
@@ -13192,6 +13186,19 @@ class AppLocalizationsPt extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Conecte seu Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Emparelhe seu Omi e ele capturará suas conversas, sem usar as mãos, o dia todo.';
+
+  @override
+  String get firstCaptureConnect => 'Conectar meu Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Ainda não tenho um Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13298,6 +13305,112 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Nunca mais perca uma palavra.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Veja como funciona seu teste gratuito.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Resumos Unlimited, guardados para sempre';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Cada conversa vira um resumo claro com os próximos passos, para que nada escape.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transcrições de alta qualidade';
+
+  @override
+  String get paywallTrialChipDetails => 'Captura mais detalhes';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Distingue os oradores';
+
+  @override
+  String get paywallTrialChipNoise => 'Funciona em ambientes barulhentos';
+
+  @override
+  String get paywallTrialChipAccents => 'Lida com sotaques';
+
+  @override
+  String get paywallTrialChipJargon => 'Conhece seu jargão e nomes';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Nomes dos oradores, detectados automaticamente';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Perguntas Unlimited, em todas as conversas';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Rascunhe um e-mail de acompanhamento desta reunião.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Algum conflito com o que John disse na terça-feira?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Encontre qualquer coisa que possa nos atrasar.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funciona com seus aplicativos favoritos';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hoje';
+
+  @override
+  String get paywallTrialTodayBody => 'Tudo no Pro está desbloqueado.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dias grátis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dias de Omi Pro, por nossa conta.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Em $days dias';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'O teste termina. Você será cobrado, a menos que cancele.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Os modelos de IA mais recentes';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Cobrado mensalmente';
+
+  @override
+  String get paywallTrialBilledYearly => 'Cobrado anualmente';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Economize $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Começar por $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Continuar com o plano gratuito';
+
+  @override
+  String get paywallTrialCancelNote => 'Cancele a qualquer momento. Sem taxas, sem multas.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Seu teste gratuito de $days dias do Omi Pro começou.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Cancele quando quiser.';

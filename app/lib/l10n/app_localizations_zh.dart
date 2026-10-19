@@ -1952,12 +1952,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
-  String get memoryAllowUse => '允许使用';
-
-  @override
-  String get memoryDontUse => '不使用';
-
-  @override
   String get undo => '撤销';
 
   @override
@@ -12964,6 +12958,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => '连接你的 Omi';
+
+  @override
+  String get firstCaptureConnectDescription => '配对你的 Omi，全天候免提记录对话。';
+
+  @override
+  String get firstCaptureConnect => '连接我的 Omi';
+
+  @override
+  String get firstCaptureNoDevice => '我还没有 Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13070,6 +13076,111 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => '再也不错过任何一句话。';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => '您的免费试用这样运作。';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => '无限摘要，永久保存';
+
+  @override
+  String get paywallTrialSlideSummariesBody => '每次对话都将生成清晰的摘要和后续步骤，确保万无一失。';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => '顶尖转录技术';
+
+  @override
+  String get paywallTrialChipDetails => '捕捉更多细节';
+
+  @override
+  String get paywallTrialChipSpeakers => '区分不同发言人';
+
+  @override
+  String get paywallTrialChipNoise => '嘈杂环境中也能使用';
+
+  @override
+  String get paywallTrialChipAccents => '处理各种口音';
+
+  @override
+  String get paywallTrialChipJargon => '了解您的术语和名称';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => '自动识别发言人姓名';
+
+  @override
+  String get paywallTrialSlideAskTitle => '无限提问，贯穿每次对话';
+
+  @override
+  String get paywallTrialBubbleFollowUp => '根据本次会议起草一封后续邮件。';
+
+  @override
+  String get paywallTrialBubbleConflicts => '与约翰周二所说有冲突吗？';
+
+  @override
+  String get paywallTrialBubbleBlockers => '找出任何可能阻碍我们的因素。';
+
+  @override
+  String get paywallTrialSlideAppsTitle => '与您喜爱的应用协同工作';
+
+  @override
+  String get paywallTrialTodayTitle => '今天';
+
+  @override
+  String get paywallTrialTodayBody => 'Pro 中的所有功能均已解锁。';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days 天免费';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '我们为您提供 $days 天 Omi Pro 免费试用。';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days 天后';
+  }
+
+  @override
+  String get paywallTrialEndsBody => '试用期结束。除非您取消，否则将开始收费。';
+
+  @override
+  String get paywallTrialFeatureModels => '最新 AI 模型';
+
+  @override
+  String get paywallTrialFeatureAsk => '无限 Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => '按月计费';
+
+  @override
+  String get paywallTrialBilledYearly => '按年计费';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '节省 $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '以 $price 开始';
+  }
+
+  @override
+  String get paywallTrialSecondary => '继续使用免费计划';
+
+  @override
+  String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return '您的 Omi Pro $days 天免费试用已开始。';
+  }
 
   @override
   String get paywallCancelAnytime => '随时取消。';
