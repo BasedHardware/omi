@@ -172,26 +172,6 @@
         }
       },
       {
-        "refId": "E",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 1800,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "E"
-        }
-      },
-      {
         "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
@@ -251,6 +231,26 @@
           "reducer": "last",
           "refId": "D",
           "type": "reduce"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
         }
       }
     ],
@@ -2105,26 +2105,6 @@
         }
       },
       {
-        "refId": "E",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 1800,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "E"
-        }
-      },
-      {
         "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
@@ -2184,6 +2164,26 @@
           "reducer": "last",
           "refId": "D",
           "type": "reduce"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
         }
       }
     ],
