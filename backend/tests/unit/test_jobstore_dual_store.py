@@ -68,6 +68,11 @@ class FakeShadow:
             raise self.write_error
         self.rows[(table, key)] = value
 
+    def delete_doc(self, conn, table: str, key: str) -> None:
+        if self.write_error is not None:
+            raise self.write_error
+        self.rows.pop((table, key), None)
+
 
 @pytest.fixture
 def stores(monkeypatch):
@@ -286,3 +291,62 @@ class TestSelection:
         first = dual_store.shadow_from_env(self.primary())
         assert dual_store.shadow_from_env(self.primary()) is first
         assert dual_store.shadow_from_env(self.primary('batch_pipeline_test_other')) is not first
+
+
+class TestRefresh:
+    """Writers outside Store.run (projection apply, purge) re-copy their documents after commit."""
+
+    def test_refresh_copies_a_bypass_write_and_deletes_a_bypass_delete(self, stores):
+        primary, shadow, store = stores
+        put(store, 'queues', 'gone', {'a': 1})
+        primary.rows[('jobs', 'j')] = {'client_status': 'completed'}  # written outside Store.run
+        primary.rows.pop(('queues', 'gone'))  # deleted outside Store.run
+        before = count('jobs', 'refresh', 'mirrored')
+        store.refresh([('jobs', 'j'), ('queues', 'gone'), ('content', 'u/c')])
+        assert store.drain(5)
+        assert shadow.rows == {('jobs', 'j'): {'client_status': 'completed'}}
+        assert count('jobs', 'refresh', 'mirrored') == before + 1
+
+    def test_refresh_failures_are_counted_never_raised(self, stores):
+        primary, shadow, store = stores
+        shadow.write_error = RuntimeError('down')
+        primary.rows[('owners', 'o')] = {'a': 1}
+        before = count('owners', 'refresh', 'error')
+        store.refresh([('owners', 'o')])
+        assert store.drain(5)
+        assert count('owners', 'refresh', 'error') == before + 1 and not shadow.rows
+
+    def test_refresh_respects_the_kill_switch(self, stores, monkeypatch):
+        primary, shadow, store = stores
+        monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
+        primary.rows[('owners', 'o')] = {'a': 1}
+        before = count('owners', 'refresh', 'skipped')
+        store.refresh([('owners', 'o')])
+        assert store.drain(5) and not shadow.rows
+        assert count('owners', 'refresh', 'skipped') == before + 1
+
+
+class TestMirrorRefreshHook:
+    def test_firestore_mode_is_a_strict_no_op(self, monkeypatch):
+        import database.batch_pipeline_store as batch_store
+
+        monkeypatch.delenv('BATCH_JOBSTORE_MODE', raising=False)
+        monkeypatch.setattr(batch_store, 'FirestoreStore', lambda *a, **k: pytest.fail('constructed a store'))
+        monkeypatch.setattr(dual_store, 'shadow_from_env', lambda *a: pytest.fail('consulted the shadow'))
+        dual_store.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
+
+    def test_shadow_mode_refreshes_through_the_process_shadow(self, monkeypatch):
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow)
+        monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: store)
+        primary.rows[('jobs', 'j')] = {'a': 1}
+        dual_store.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
+        assert store.drain(5)
+        assert shadow.rows == {('jobs', 'j'): {'a': 1}}
+
+    def test_hook_never_raises(self, monkeypatch):
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: (_ for _ in ()).throw(RuntimeError('x')))
+        dual_store.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])

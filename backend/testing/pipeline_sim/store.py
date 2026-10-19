@@ -350,6 +350,7 @@ class SimStore:
 
         key = hash_owner(owner_id)
         removed = 0
+        touched: list[tuple[str, str]] = []  # production purge re-copies these to the A2 shadow after commit
         for (table, segment_id), job in sorted(self.rows.items()):
             if table != 'jobs' or job.get('owner_key') != key:
                 continue
@@ -370,6 +371,8 @@ class SimStore:
                 continue
             queue_key = f"{job['priority']}_{key}"
             queue = self.rows.get(('queues', queue_key))
+            touched += [('jobs', segment_id), ('results', segment_id), ('queues', queue_key)]
+            touched.append(('control', scheduler_control_key(key)))
             predecessors = [
                 other_id
                 for (other_table, other_id), other in sorted(self.rows.items())
@@ -393,6 +396,7 @@ class SimStore:
                     self.apply(('queues', queue_key), queue)
             for predecessor in predecessors:
                 self.mutate('jobs', predecessor, lambda row, nxt=job.get('next', ''): row.update(next=nxt))
+                touched.append(('jobs', predecessor))
             self.delete('jobs', segment_id)
             if ('results', segment_id) in self.rows:
                 if conversation_id is not None:
@@ -400,6 +404,9 @@ class SimStore:
                 else:
                     self.delete('results', segment_id)
             removed += 1
+        from database.jobstore.dual_store import mirror_refresh
+
+        mirror_refresh(self.namespace, touched)
         return removed
 
     def mutate(self, table: str, key: str, update: Callable[[dict[str, Any]], None]) -> None:

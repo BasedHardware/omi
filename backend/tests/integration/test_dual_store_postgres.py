@@ -23,16 +23,13 @@ pytestmark = pytest.mark.integration
 
 GOLDEN_DIR = Path(__file__).parent.parent / 'unit' / 'fixtures' / 'pipeline_sim_goldens'
 
-# Reads that diverge because a writer bypassed ``Store.run``, so the write-capture shadow never saw it. Known
-# gaps to close before cutover (A6/A7); anything else is a mirror bug.
-# - purge (production ``database/batch_pipeline_purge.purge_batch_owner``) deletes owner queues and jobs
-#   directly: Postgres keeps a copy Firestore no longer has ('extra');
+# Reads that diverge because a writer bypassed ``Store.run`` and does not yet re-copy its documents through
+# ``mirror_refresh``. Known gaps to close before cutover; anything else is a mirror bug. Purge (and its
+# simulator model) calls the hook, so its deletes no longer leave Postgres copies behind.
 # - the projection apply transaction (``database/batch_pipeline_projection.py``: ``client_status`` /
 #   ``client_result`` and E1's ``policy_parts`` pins on jobs) writes jobs in its own Firestore transaction
-#   ('mismatch').
+#   ('mismatch'); its hook call waits for lane 9's ack.
 KNOWN_BYPASS = {
-    'deleted_merged_targets': {('queues', 'read', 'extra')},
-    'privacy_fence_midflight': {('jobs', 'read', 'extra')},
     'duplicate_delivery': {('jobs', 'read', 'mismatch')},
 }
 
@@ -66,6 +63,7 @@ def _outcomes() -> dict[tuple[str, str, str], float]:
 
 @pytest.mark.parametrize('name', sorted(GOLDEN_CONFIGS))
 def test_golden_through_dual_store(name, pg_pool, monkeypatch):
+    from database.jobstore import dual_store
     from database.jobstore.dual_store import DualStore
     from database.jobstore.postgres_store import PostgresStore
     from testing.store_fixtures import _new_ids  # type: ignore[attr-defined]
@@ -88,18 +86,20 @@ def test_golden_through_dual_store(name, pg_pool, monkeypatch):
             super().__init__(customer, namespace=namespace)
             shadow = PostgresStore(namespace, pool=pg_pool, customer_client=None)
             shadows.append(shadow)
-            self.dual = DualStore(_Primary(self), shadow, budget_s=5.0)
+            self.dual = DualStore(_Primary(self), shadow, budget_s=5.0, inline=True)
             duals.append(self.dual)
+            shadowed[namespace] = self.dual  # the purge model's mirror_refresh hook finds it here
 
         def run(self, body):
             return self.dual.run(body)
 
+    shadowed: dict = {}
+    monkeypatch.setattr(dual_store, '_SHADOWED', shadowed)
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')  # arms mirror_refresh; no PG env, so no seam shadows
     monkeypatch.setattr(sim_module, 'SimStore', ShadowedSimStore)
     before = _outcomes()
     try:
         actual = dumps(golden_trace(name))
-        for dual in duals:
-            assert dual.drain(120), 'the mirror did not drain'
     finally:
         for shadow in shadows:
             shadow.purge_namespace()
