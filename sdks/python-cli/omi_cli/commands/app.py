@@ -344,6 +344,17 @@ def _read_payload_file(payload_file: str) -> bytes:
         raise UsageError(f"Could not read {payload_file}", detail=str(exc)) from exc
 
 
+def _parse_content_length(header_value: Optional[str]) -> int:
+    """Parse an HTTP Content-Length header safely, clamping invalid or negative values to 0."""
+    if not header_value:
+        return 0
+    try:
+        parsed = int(header_value.strip())
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
 class _WebhookHandler(BaseHTTPRequestHandler):
     """Receiver that prints what arrived and answers however the user asked."""
 
@@ -355,7 +366,7 @@ class _WebhookHandler(BaseHTTPRequestHandler):
     on_request: Optional[Any] = None
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's contract
-        length = int(self.headers.get("Content-Length") or 0)
+        length = _parse_content_length(self.headers.get("Content-Length"))
         body = self.rfile.read(length) if length else b""
         parts = urlsplit(self.path)
         record = {
@@ -417,7 +428,12 @@ def serve(
         {"reply_status": status, "reply_body": reply.encode("utf-8"), "on_request": staticmethod(record)},
     )
 
-    with HTTPServer((host, port), handler) as server:
+    try:
+        server = HTTPServer((host, port), handler)
+    except OSError as exc:
+        raise UsageError(f"Could not bind http://{host}:{port}", detail=str(exc)) from exc
+
+    with server:
         bound_port = server.server_address[1]
         ctx.renderer.info(f"Listening on http://{host}:{bound_port}, point your webhook at it, or:")
         ctx.renderer.info(f"  omi app send realtime_transcript --to http://{host}:{bound_port}/webhook")
