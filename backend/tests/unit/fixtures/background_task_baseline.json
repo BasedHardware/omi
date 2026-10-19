@@ -16,6 +16,13 @@
     },
     {
       "path": "routers/sync.py",
+      "function": "sync_local_files",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
+    },
+    {
+      "path": "routers/sync.py",
       "function": "sync_local_files_v2",
       "kind": "start_background_task",
       "count": 1,

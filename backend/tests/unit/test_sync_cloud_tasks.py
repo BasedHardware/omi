@@ -3734,6 +3734,32 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
 
 
 @pytest.mark.asyncio
+async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413():
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.BACKFILL))
+    module.validate_backfill_uploads = MagicMock()
+    module.resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(device_hash='h', platform='p', app_version='v', client_device_id=None)
+    )
+    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        request = MagicMock()
+        request.headers = {}
+        response = await module.sync_local_files(
+            request=request, response=MagicMock(headers={}), files=uploads, uid='u'
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'backfill_capacity'
+        module.validate_backfill_uploads.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('pressure', [False, True])
 async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claims(pressure):
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
