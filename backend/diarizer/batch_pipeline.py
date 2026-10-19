@@ -40,6 +40,7 @@ from utils.batch_pipeline.diarization_gate import (
 )
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.stage_timings import StageTimings
 from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
@@ -307,6 +308,7 @@ class PipelineWorker:
         recover_words: Callable | None = None,
         gpu_lock=None,
         io_concurrency: int | None = None,
+        timings: StageTimings | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -318,6 +320,7 @@ class PipelineWorker:
         self.recover_words = recover_words
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
+        self.timings = timings or StageTimings()
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
         # Artifact IO only (fetch/decrypt/decode, encrypt/upload). Model calls,
         # CUDA work and the chain lock stay on the calling thread.
@@ -495,7 +498,13 @@ class PipelineWorker:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(
+                self._io,
+                lambda item: self.timings.call('fetch_decode', self.decode, item),
+                items,
+                self.io_concurrency,
+                PREFETCH_AHEAD_SECONDS,
+            )
             if self._io is not None
             else None
         )
@@ -517,7 +526,11 @@ class PipelineWorker:
                 self.counts['items'] += 1
                 stage = 'fetch_decode'
                 try:
-                    samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                    samples = (
+                        prefetch.take(index)
+                        if prefetch is not None
+                        else self.timings.call('fetch_decode', self.decode, item)
+                    )
                     shapes[item.segment_id]['samples'] = len(samples)
                     duration = len(samples) / SAMPLE_RATE
                     if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
@@ -525,7 +538,7 @@ class PipelineWorker:
                     stage = 'vad_windows'
                     silence = None
                     try:
-                        spans = list(self.vad(samples))
+                        spans = self.timings.call('vad', lambda: list(self.vad(samples)))
                     except BatchValidationError as error:
                         if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
                             raise
@@ -540,7 +553,9 @@ class PipelineWorker:
                             raise
                         spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    clips = list(speech_windows(item, samples, spans, self.config))
+                    clips = self.timings.call(
+                        'windows', lambda: list(speech_windows(item, samples, spans, self.config))
+                    )
                     shapes[item.segment_id]['windows'] = len(clips)
                     speech_spans = vad_speech_spans(spans, len(samples))
                     state = {
@@ -591,7 +606,7 @@ class PipelineWorker:
                 if not batch:
                     continue
                 try:
-                    hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                    hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
                     if cap_dispatch_enabled():
                         for window in batch:
                             accepted(window.segment_id, window.duration)
@@ -635,7 +650,9 @@ class PipelineWorker:
                         stage = 'asr_recovery'
                         fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
                         if cap_dispatch_enabled():
-                            recovered = self.recover_words(
+                            recovered = self.timings.call(
+                                'asr_recovery',
+                                self.recover_words,
                                 state['samples'],
                                 self.config.max_padded_seconds,
                                 before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
@@ -654,7 +671,9 @@ class PipelineWorker:
                                 results.append(HeldWork(item.segment_id))
                                 continue
                         else:
-                            recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                            recovered = self.timings.call(
+                                'asr_recovery', self.recover_words, state['samples'], self.config.max_padded_seconds
+                            )
                         if recovered is None or not fits_retry:
                             words = []
                             state['padded_retry'] = 'skipped_oversize'
@@ -729,7 +748,9 @@ class PipelineWorker:
                             record_decision('skipped_short', unit_seconds=duration)
                     else:
                         stage = 'diarize'
-                        diarization = self._diarize_unit(state['samples'], evidence, words)
+                        diarization = self.timings.call(
+                            'diarize', self._diarize_unit, state['samples'], evidence, words
+                        )
                     payload = {
                         'words': words,
                         'diarization': diarization,
@@ -755,13 +776,13 @@ class PipelineWorker:
                             (
                                 len(results) - 1,
                                 item,
-                                self._io.submit(self.persist, item, payload),
+                                self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
                                 state['silence'],
                                 silence is not None,
                             )
                         )
                         continue
-                    uri = self.persist(item, payload)
+                    uri = self.timings.call('persist', self.persist, item, payload)
                     results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
                     if silence is not None:
                         silence_records.append(item.segment_id)

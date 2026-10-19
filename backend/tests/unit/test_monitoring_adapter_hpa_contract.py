@@ -10,6 +10,7 @@ import yaml
 
 from scripts.diff_prod_adapter import (
     API_SERVICES,
+    BATCH_PIPELINE_READY_AGE_RULE,
     NLLB_RULE,
     DIARIZER_BATCH_RULE,
     PARAKEET_QUEUE_RULES,
@@ -120,7 +121,11 @@ def _comparison_inputs():
     config = {'externalRules': values['external'], 'rules': values['custom']}
     live = copy.deepcopy(config)
     live['externalRules'].remove(NLLB_RULE)
-    listen = live['externalRules'][0]
+    # Captured pre-upgrade live config: the batch worker ready-age rule is new.
+    live['externalRules'].remove(BATCH_PIPELINE_READY_AGE_RULE)
+    listen = next(
+        rule for rule in live['externalRules'] if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
     # Captured pre-upgrade queries, independent of the candidate values above.
@@ -294,4 +299,42 @@ def test_diff_rejects_unreviewed_live_batch_queue_rule(change):
     else:
         live['rules'].append(copy.deepcopy(rule))
     with pytest.raises(ValueError, match='Unexpected live batch queue rule'):
+        expected_config(live)
+
+
+def test_prod_adapter_declares_exact_batch_pipeline_ready_age_rule():
+    external = yaml.safe_load(ADAPTER.read_text())['rules']['external']
+    matching = [r for r in external if r['name']['as'] == BATCH_PIPELINE_READY_AGE_RULE['name']['as']]
+    assert matching == [BATCH_PIPELINE_READY_AGE_RULE]
+
+
+def test_diff_accepts_live_that_already_has_batch_pipeline_ready_age_rule():
+    rendered, cm, deployment, apis = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    live['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_READY_AGE_RULE))
+    cm['data']['config.yaml'] = yaml.safe_dump(live)
+    assert compare(rendered, cm, deployment, apis)[1] == []
+
+
+def test_diff_rejects_modified_batch_pipeline_ready_age_addition():
+    rendered, live, deployment, apiservices = _comparison_inputs()
+    config = yaml.safe_load(rendered[0]['data']['config.yaml'])
+    next(r for r in config['externalRules'] if r['name']['as'] == BATCH_PIPELINE_READY_AGE_RULE['name']['as'])[
+        'metricsQuery'
+    ] = 'max(omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>}) or vector(0)'
+    rendered[0]['data']['config.yaml'] = yaml.safe_dump(config)
+    assert compare(rendered, live, deployment, apiservices)[1]
+
+
+@pytest.mark.parametrize('change', ['query', 'duplicate'])
+def test_diff_rejects_unreviewed_live_batch_pipeline_ready_age_rule(change):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    rule = copy.deepcopy(BATCH_PIPELINE_READY_AGE_RULE)
+    if change == 'query':
+        rule['metricsQuery'] = 'max(omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>})'
+        live['externalRules'].append(rule)
+    else:
+        live['externalRules'].extend([rule, copy.deepcopy(rule)])
+    with pytest.raises(ValueError, match='Unexpected live batch pipeline ready-age rule'):
         expected_config(live)
