@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a failed screen-history search through the local agent API and omi CLI being returned as a successful result"
-}
