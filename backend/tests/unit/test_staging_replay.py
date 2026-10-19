@@ -273,3 +273,41 @@ def test_mirror_to_replay_round_trip_preserves_upload_bytes():
             if not f.silent_only:  # silent fillers fall back to pcm16 without libopus
                 assert name.startswith('audio_omi_opus_fs320_16000_1_fs320_')
                 assert body == originals[f.ref.removeprefix('mirror:')]
+
+
+def test_secret_reader_only_reads_staging_secrets():
+    class Session:
+        def get(self, url, timeout):
+            class R:
+                status_code = 200
+
+                def json(self):
+                    import base64
+
+                    return {'payload': {'data': base64.b64encode(b'k' * 32).decode()}}
+
+            assert url.startswith(
+                'https://secretmanager.googleapis.com/v1/projects/based-hardware-dev/secrets/staging-'
+            )
+            return R()
+
+    ok = 'projects/based-hardware-dev/secrets/staging-admin-key/versions/latest'
+    assert rp.read_staging_secret(ok, Session()) == 'k' * 32
+    for bad in (
+        'projects/based-hardware/secrets/ENCRYPTION_SECRET/versions/latest',
+        'projects/based-hardware-dev/secrets/ADMIN_KEY/versions/latest',
+    ):
+        with pytest.raises(rp.ReplayRefused):
+            rp.read_staging_secret(bad, Session())
+
+
+def test_id_token_goes_in_x_serverless_authorization_and_is_cached():
+    calls = []
+    token = rp.CachedIdToken('https://backend-sync-staging-x.a.run.app', fetch=lambda aud: calls.append(aud) or 'tok')
+    config = rp.ReplayConfig(target='http://127.0.0.1:1', admin_key='A' * 20, id_token=token)
+    replay = rp.Replay(config, [])
+    headers = replay._auth('lg-r-o0001')
+    assert headers == {'Authorization': 'Bearer ' + 'A' * 20 + 'lg-r-o0001', 'X-Serverless-Authorization': 'Bearer tok'}
+    replay._auth('lg-r-o0002')
+    assert calls == ['https://backend-sync-staging-x.a.run.app']
+    assert 'X-Serverless-Authorization' not in rp.Replay(rp.ReplayConfig(target='t', admin_key='A' * 20), [])._auth('o')
