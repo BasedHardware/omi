@@ -1,10 +1,26 @@
-"""Environment-owned funded dispatch rollout; all decisions are pure and read live."""
+"""Environment-owned funded dispatch rollout; scope is evaluated at each call."""
 
+import logging
 import os
+from threading import Lock
 
 from config.rollout_cohorts import cohort_admits
 
 LANES = frozenset({'live', 'sync', 'batch'})
+# Lane8 must write provider_reason=byok into binding.policy at batch admission
+# before this code-owned fence can open. Environment configuration cannot open it.
+_BATCH_LANE_READY = False
+_logger = logging.getLogger(__name__)
+_batch_warning_lock = Lock()
+_batch_warning_emitted = False
+
+
+def _warn_batch_not_ready() -> None:
+    global _batch_warning_emitted
+    with _batch_warning_lock:
+        if not _batch_warning_emitted:
+            _batch_warning_emitted = True
+            _logger.warning('STT cap batch lane remains disabled pending batch admission readiness')
 
 
 def enabled() -> bool:
@@ -19,13 +35,20 @@ def execution_admission_configured() -> bool:
 
 def selected(uid: str, lane: str) -> bool:
     raw = os.getenv('STT_CAP_DISPATCH_LANES')
-    lanes = LANES if raw is None else frozenset(part.strip().lower() for part in raw.split(','))
-    # An unknown/blank configured lane invalidates the whole selection. Never
+    lanes = (
+        frozenset({'live'})
+        if raw is None or not raw.strip()
+        else frozenset(part.strip().lower() for part in raw.split(','))
+    )
+    # An unknown/empty list token invalidates the whole selection. Never
     # map unknown call-site provenance to a permitted execution lane.
+    if not lanes <= LANES:
+        return False
+    if 'batch' in lanes and not _BATCH_LANE_READY:
+        _warn_batch_not_ready()
     return (
         lane in LANES
-        and bool(lanes)
-        and lanes <= LANES
+        and (lane != 'batch' or _BATCH_LANE_READY)
         and lane in lanes
         and cohort_admits(uid, os.getenv('STT_CAP_DISPATCH_COHORT', ''))
     )

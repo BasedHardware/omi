@@ -2,6 +2,8 @@
 
 import ast
 import hashlib
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -24,7 +26,9 @@ def environment(monkeypatch):
 @pytest.mark.parametrize('dispatch,ladder', [(False, False), (True, False), (False, True), (True, True)])
 @pytest.mark.parametrize('uid', ['chosen', 'other'])
 @pytest.mark.parametrize('lane', ['live', 'sync', 'batch'])
-@pytest.mark.parametrize('lanes', [None, 'live', 'sync', 'batch', 'live,sync', '', 'live,typo'])
+@pytest.mark.parametrize(
+    'lanes', [None, '', ' \t ', 'live', 'sync', 'batch', 'live,sync', 'live,batch', 'live,sync,batch', 'live,typo']
+)
 @pytest.mark.parametrize('cohort', [None, '', 'uid:chosen', 'uid:chosen,pct:0', 'all', 'pct:100', 'uid:chosen,typo'])
 def test_execution_scope_matrix(monkeypatch, dispatch, ladder, uid, lane, lanes, cohort):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
@@ -34,11 +38,67 @@ def test_execution_scope_matrix(monkeypatch, dispatch, ladder, uid, lane, lanes,
     if cohort is not None:
         monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
     owner_selected = cohort in {'all', 'pct:100'} or uid == 'chosen' and cohort in {'uid:chosen', 'uid:chosen,pct:0'}
-    lane_selected = lanes is None or lanes in {'live', 'sync', 'batch', 'live,sync'} and lane in lanes.split(',')
+    configured = {'live'} if lanes is None or not lanes.strip() else set(lanes.split(','))
+    lane_selected = configured <= {'live', 'sync', 'batch'} and lane in configured and lane != 'batch'
+    assert policy.selected(uid, lane) is bool(owner_selected and lane_selected)
     assert policy.execution_admission_enabled(uid, lane) is bool(
         (dispatch or ladder) and owner_selected and lane_selected
     )
     assert policy.enabled_for(uid, lane) is bool(dispatch and owner_selected and lane_selected)
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        (None, {'live'}),
+        ('', {'live'}),
+        (' \t\n ', {'live'}),
+        ('live', {'live'}),
+        ('live,batch', {'live'}),
+        ('batch', set()),
+        ('live,sync', {'live', 'sync'}),
+        (' SYNC , Live , batch ', {'live', 'sync'}),
+        ('live,typo', set()),
+        ('live,', set()),
+        (',live', set()),
+        ('live,,sync', set()),
+        (',', set()),
+    ],
+)
+def test_lane_defaults_and_batch_readiness_fence(monkeypatch, raw, expected):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    if raw is not None:
+        monkeypatch.setenv('STT_CAP_DISPATCH_LANES', raw)
+    assert policy._BATCH_LANE_READY is False
+    assert {lane for lane in policy.LANES if policy.selected('synthetic', lane)} == expected
+
+
+def test_batch_configuration_warns_once_across_subjects_lanes_and_threads(monkeypatch, caplog):
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setattr(policy, '_batch_warning_emitted', False)
+    caplog.set_level(logging.WARNING, logger=policy.__name__)
+    subjects = [(f'synthetic-{i}', lane) for i in range(20) for lane in policy.LANES]
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(lambda subject: policy.selected(*subject), subjects))
+    assert results == [lane != 'batch' for _, lane in subjects]
+    warnings = [record for record in caplog.records if record.name == policy.__name__]
+    assert len(warnings) == 1
+    assert warnings[0].getMessage() == ('STT cap batch lane remains disabled pending batch admission readiness')
+    assert not warnings[0].args
+
+
+@pytest.mark.parametrize('raw', [None, '', ' \t ', 'live', 'live,sync', 'live,batch,unknown', 'batch,'])
+def test_no_batch_warning_without_valid_batch_configuration(monkeypatch, caplog, raw):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    if raw is not None:
+        monkeypatch.setenv('STT_CAP_DISPATCH_LANES', raw)
+    monkeypatch.setattr(policy, '_batch_warning_emitted', False)
+    caplog.set_level(logging.WARNING, logger=policy.__name__)
+    for uid in ('synthetic-a', 'synthetic-b'):
+        for lane in policy.LANES:
+            policy.selected(uid, lane)
+    assert not [record for record in caplog.records if record.name == policy.__name__]
 
 
 @pytest.mark.parametrize(

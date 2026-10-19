@@ -18,9 +18,19 @@ comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
 parser, now shared in pure `config/rollout_cohorts.py`; no PostHog or Firestore
 membership call is added. Malformed tokens invalidate the whole cohort.
 
-`STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset retains
-the old all-lane meaning; an empty list or unknown token disables the whole
-selection. Unknown call-site lanes are never mapped to a permitted lane.
+`STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset, empty
+or whitespace-only values select **live only**. Unknown tokens or empty tokens
+inside a list (for example `live,` or `live,,sync`) disable the whole selection.
+Unknown call-site lanes are never mapped to a permitted lane.
+
+Batch is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
+for both admission switches and every cohort, even with explicit `batch` and
+`all`. Before that constant can change, lane8 must write `provider_reason=byok`
+into `binding.policy` at batch admission. This is a source readiness condition,
+not an environment flag. A valid lane list containing batch emits one static
+warning per process; it does not prevent explicit live/sync selection. Thus
+`live,batch` selects only live and `batch` selects nothing while the fence is
+closed. No UID or configuration data is included in the warning.
 Live receiver and provider constructors pass the authenticated UID and `live`;
 v1 intake, v2 coordinator and ordinary segment retries pass `sync`; queued GPU
 jobs, quarantine/speech retries and generated/text processing pass `batch`.
@@ -108,7 +118,9 @@ recovering across instance replacement. Dazheng owns each expansion and the
 three-hour soak is a blocker to report, never authority to skip a stage. Keep
 `STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
 batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
-approved widening. This change does not relocate that authorization.
+approved widening. Batch also requires the lane8 binding-policy readiness change
+above before its code-owned fence can open; configuration alone cannot enable
+it. This change does not relocate that authorization.
 
 Rollback: set **both** admission switches false (or clear the cohort to stop only
 this execution rollout), preserving audio, processing choice and receipts. Keep
