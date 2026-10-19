@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-19 -->
+<!-- feature-flag-registry as-of: 2026-10-20 -->
 
 # Feature-flag authority registry
 
@@ -78,7 +78,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-19.
+None as of 2026-10-20.
 
 ## Flags
 
@@ -219,7 +219,9 @@ and an explicit empty literal renders as `''`.
 | `SPEAKER_GROUPING_MODE` | incumbent\|provider_strict\|provider_cannot_link; owner_link is shadow-only and rejected; default incumbent everywhere; David gates promotion | backend | env | open | — | — | incumbent (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
 | `SPEAKER_MATCH_SCORES_ENABLED` | Persist bounded internal voice-match evidence on existing conversation writes; dev/local/offline default on; production hosts explicitly on | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-04 | dazheng |
 | `STOREFRONT_LADDER_V1_ENABLED` | Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged | backend | env | closed | — | — | — | — | pending | 2026-11-13 | dazheng |
-| `STT_CAP_DISPATCH_ENFORCEMENT` | Default-off funded STT dispatch admission for live, sync and queued batch; preserves audio before cloud STT at cap; no deployment activation | backend | env | closed | — | — | — | — | pending | 2026-11-15 | dazheng |
+| `STT_CAP_DISPATCH_COHORT` | Environment cohort tokens uid:<uid>,pct:<0-100> or explicit all; empty/unset/malformed admits nobody for either dispatch or ladder execution | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | 2026-10-19 | dazheng |
+| `STT_CAP_DISPATCH_ENFORCEMENT` | Default-off funded STT dispatch admission; requires explicit cohort membership and original lane selection | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | 2026-10-19 | dazheng |
+| `STT_CAP_DISPATCH_LANES` | Comma-separated live,sync,batch; unset/blank defaults live only; unknown/empty list tokens deny all; batch code-fenced until lane8 writes provider_reason=byok into binding.policy at batch admission; recovery retains original encrypted custody origin | backend | env | closed | {value: 'live', category: rollout} | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | 2026-10-19 | dazheng |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable live-STT failover recovery on prod listen | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-03 | backend |
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_LIVE_DEMAND_ENABLED` | Default off; qualified English hidden capture uses window STT; visible or active consumers require vendors | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-13 | dazheng |
@@ -282,7 +284,6 @@ and an explicit empty literal renders as `''`.
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |
-| `screen_task_jev_gate` | Screen OCR text dedupe gate using Jev; privacy approved by David 2026-10-18 for all users (OCR text to Jev) | macos | posthog | closed | — | — | — | absent (enable) | keep | 2026-11-01 | dazheng |
 | `summary-generation-v2` | Mobile conversation-detail summary redesign: Not summarized yet card, Summarize with template sheet, summary source chips and inline failure cards; client-evaluated, default off; reliability fixes and the single in-tab progress state ship without it | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-16 | dazheng |
 | `web-contextual-upsells` | Web 80% budget nudge and exhausted-budget entry to the plans sheet (trigger=usage_budget); default off; requires web-plan-storefront | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
 | `web-plan-storefront` | Web backend-driven ladder-v1 plans sheet in Settings > Plan; default off; existing checkout and upgrade rails unchanged | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
@@ -371,6 +372,7 @@ and an explicit empty literal renders as `''`.
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | — | dazheng |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
+| `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | — | dazheng |
 
 ### config_switch
 
@@ -379,7 +381,7 @@ and an explicit empty literal renders as `''`.
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | unowned |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `BATCH_PIPELINE_API_URL` | Explicit HTTPS backend serving URL for fenced pre-compute spend admission; empty pauses required jobs without GPU inference | backend | env | closed | declared | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | https://backend-sync-hhibjajaja-uc.a.run.app (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | dazheng |
-| `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` | Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and conversation) | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` | Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and capture stream: source, device and lock from the staged intake context, or the record conversation) | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_CONTEXT_SECONDS` | GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_DIARIZER` | GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_FLIGHT_BATCH_SECONDS` | Audio seconds packed per pyannote flight group; default 1800, range (0, 7200]; longer units take the serial path | backend | env | closed | — | — | — | — | keep | — | dazheng |
@@ -483,7 +485,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
 - `BATCH_JOBSTORE_MODE` — Default firestore; shadow mirrors committed batch job-store writes to the staging Postgres and counts read parity (Firestore stays the only authority) (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — Default 0 (off); seconds of the same capture stream's contiguous predecessor speech run prefixed to a unit whose speech starts at sample 0, so Parakeet TDT does not start mid-utterance (fail: closed)
-- `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` — Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and conversation) (fail: closed)
+- `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` — Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and capture stream: source, device and lock from the staged intake context, or the record conversation) (fail: closed)
 - `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
 - `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
 - `BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` — Default on unless false; batch GPU worker diarizes only padded VAD and word evidence and maps turns back to capture clocks (fail: open)
@@ -588,7 +590,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch (fail: open)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
-- `STT_CAP_DISPATCH_ENFORCEMENT` — Default-off funded STT dispatch admission for live, sync and queued batch; preserves audio before cloud STT at cap; no deployment activation (fail: closed)
 - `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)

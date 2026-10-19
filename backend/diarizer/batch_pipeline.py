@@ -18,7 +18,7 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
-from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
+from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
@@ -309,6 +309,7 @@ class PipelineWorker:
         gpu_lock=None,
         io_concurrency: int | None = None,
         flight_models=None,
+        stream_of: Callable | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -325,6 +326,9 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
+        # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
+        # Without it only conversation units have a stream.
+        self.stream_of = stream_of or capture_stream
         self.left_context = LeftContextIndex(
             max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
         )
@@ -452,7 +456,7 @@ class PipelineWorker:
             or not starts_in_speech(state.get('vad_raw') or [])
         ):
             return clips
-        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE, state.get('stream'))
         if context is None:
             return clips
         room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
@@ -654,6 +658,10 @@ class PipelineWorker:
                         'flight_features': features,
                     }
                     states[item.segment_id] = state
+                    try:
+                        state['stream'] = self.stream_of(item)
+                    except Exception:
+                        state['stream'] = None  # No stream identity: no left context.
                     if not clips:
                         self.counts['silence'] += 1
                         continue
@@ -683,7 +691,9 @@ class PipelineWorker:
             # earlier flights' tails persist in the bounded index.
             for state in states.values():
                 if state['item'].segment_id not in failed:
-                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+                    self.left_context.remember(
+                        state['item'], state['samples'], state.get('vad_raw') or [], state.get('stream')
+                    )
             attached = self.counts['left_context']
             for state in states.values():
                 clips = state.pop('asr_clips', None)
@@ -699,19 +709,21 @@ class PipelineWorker:
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
-                if cap_dispatch_enabled():
+                required = {
+                    w.segment_id for w in batch if cap_dispatch_enabled(states[w.segment_id]['item'].owner_id, 'batch')
+                }
+                if required:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    required = {w.segment_id for w in batch}
                     held.update(required - allowed(required))
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
                 try:
                     hypotheses = self.words.transcribe_batch([w.samples for w in batch])
-                    if cap_dispatch_enabled():
-                        for window in batch:
+                    for window in batch:
+                        if cap_dispatch_enabled(states[window.segment_id]['item'].owner_id, 'batch'):
                             accepted(window.segment_id, window.duration)
                     if len(hypotheses) != len(batch):
                         raise ValueError('provider result cardinality mismatch')
@@ -755,7 +767,7 @@ class PipelineWorker:
                         reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                         stage = 'asr_recovery'
                         fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
-                        if cap_dispatch_enabled():
+                        if cap_dispatch_enabled(item.owner_id, 'batch'):
                             recovered = self.recover_words(
                                 state['samples'],
                                 self.config.max_padded_seconds,
@@ -885,7 +897,7 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
-                    if cap_dispatch_enabled():
+                    if cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
                             'admission': 'authorized_compute',

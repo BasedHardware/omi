@@ -25,6 +25,7 @@ from utils.batch_pipeline import cap_hold_admission as adapter
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.sync import cap_hold, cap_hold_recovery
 from utils.sync import cap_hold_reservations as reservations
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 
 UID = 'synthetic-owner'
 PERIOD = '2026-10'
@@ -62,7 +63,7 @@ def harness(monkeypatch, reservation_db):
     }
     processed = []
     statuses = {}
-    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: PERIOD)
     monkeypatch.setattr(worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True))
     # Projection has not run: the budget read never moves during the page.
@@ -71,6 +72,11 @@ def harness(monkeypatch, reservation_db):
     monkeypatch.setattr(worker.cap_hold, 'remaining_seconds', lambda row: row.get('seconds', 0))
     monkeypatch.setattr(worker, 'recording_units_per_hour', lambda kind: RATE)
     monkeypatch.setattr(worker.store, 'read', lambda uid: deepcopy(job))
+
+    async def in_scope(uid, item):
+        return True  # main #22494 owner/lane scope is covered by its own tests; every hold here is selected
+
+    monkeypatch.setattr(worker, '_selected', in_scope)
 
     def claim(uid, token, period):
         if job['lease_until'] > time.time():
@@ -224,7 +230,12 @@ async def test_batch_hand_off_reserves_the_candidates_units_before_it_is_durable
     monkeypatch.setattr(cap_hold, 'release', lambda uid, ref, token: events.append('release'))
     monkeypatch.setattr(cap_hold_recovery, 'recording_units_per_hour', lambda kind: RATE)
     monkeypatch.setattr(cap_hold_recovery.funded_processing, 'period_id', lambda: PERIOD)
-    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid: True)
+    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid, lane: True)
+
+    async def selected_lane(uid, current):
+        return 'sync'  # main #22494: recovery follows the hold's original lane (missing legacy origin = sync)
+
+    monkeypatch.setattr(cap_hold_recovery, '_selected_lane', selected_lane)
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda *a: events.append('erase'))
     monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
 
