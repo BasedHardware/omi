@@ -169,6 +169,30 @@ jobs:
     def test_accepts_centralized_public_build_deployment(self) -> None:
         self.assertEqual(self.errors(), [])
 
+    def test_candidate_timeout_fields_must_be_positive_ordered_and_bounded(self) -> None:
+        cases = (
+            ({"timeout_seconds": 0}, "timeout_seconds must be a positive integer"),
+            ({"timeout_seconds": -1}, "timeout_seconds must be a positive integer"),
+            ({"retry_timeout_seconds": 0}, "retry_timeout_seconds must be a positive integer"),
+            ({"retry_timeout_seconds": -1}, "retry_timeout_seconds must be a positive integer"),
+            ({"timeout_seconds": 45, "retry_timeout_seconds": 45}, "must be less than timeout_seconds"),
+            ({"timeout_seconds": 200, "retry_timeout_seconds": 100}, "worst-case smoke"),
+        )
+        for fields, expected in cases:
+            with self.subTest(fields=fields):
+                contract = fixture_contract()
+                contract["targets"]["fake"]["candidate_acceptance"].update(fields)
+                self.write_json("config/public-build-contract.json", contract)
+                with self.assertRaisesRegex(ValueError, expected):
+                    self.target()
+
+    def test_shipped_targets_use_requested_app_timeout_and_default_frontend_timeout(self) -> None:
+        contract = STATIC.load_contract(STATIC.DEFAULT_CONTRACT)
+        app = contract.targets["app"].candidate_acceptance
+        frontend = contract.targets["frontend"].candidate_acceptance
+        self.assertEqual((app.timeout_seconds, app.retry_timeout_seconds), (120, 60))
+        self.assertEqual((frontend.timeout_seconds, frontend.retry_timeout_seconds), (45, 19))
+
     def test_manual_development_dispatch_on_an_exact_pr_head_uses_development(self) -> None:
         self.assertEqual(
             STATIC.resolved_deploy_environment(
@@ -1148,6 +1172,47 @@ jobs:
                     self.assertEqual([args.args[0][0] for args in run.call_args_list], ["fake-browser"] * run.call_count)
                     self.assertEqual(sleep.call_args_list, [call(5)] * failed_attempts)
 
+    def test_browser_smoke_uses_target_timeouts_and_keeps_defaults(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"].update(
+            {"timeout_seconds": 120, "retry_timeout_seconds": 60}
+        )
+        self.write_json("config/public-build-contract.json", contract)
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        with (
+            patch.object(
+                SMOKE.subprocess,
+                "run",
+                side_effect=[subprocess.TimeoutExpired("fake-browser", 120), ready],
+            ) as run,
+            patch.object(SMOKE.time, "sleep") as sleep,
+        ):
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [120, 60])
+        self.assertEqual(sleep.call_args_list, [call(5)])
+
+        defaults = self.target().candidate_acceptance
+        self.assertEqual((defaults.timeout_seconds, defaults.retry_timeout_seconds), (45, 19))
+
+    def test_browser_smoke_logs_duration_for_each_attempt(self) -> None:
+        stderr = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=subprocess.TimeoutExpired("fake-browser", 45)),
+            patch.object(SMOKE.time, "monotonic", side_effect=[0.0, 45.0, 50.0, 69.0, 70.0, 89.0]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(stderr),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        self.assertIn("attempt=1 browser=fake-browser duration=45.0s", stderr.getvalue())
+        self.assertIn("attempt=2 browser=fake-browser duration=19.0s", stderr.getvalue())
+        self.assertIn("attempt=3 browser=fake-browser duration=19.0s", stderr.getvalue())
+
     def test_browser_smoke_does_not_retry_acceptance_failures(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
@@ -1222,8 +1287,10 @@ jobs:
                 self.assertEqual(sleep.call_args_list, [call(5)] * (2 * len(browsers)))
                 timeouts = [args.kwargs["timeout"] for args in run.call_args_list]
                 self.assertEqual(timeouts[::3], [45] * len(browsers))
+                self.assertEqual(timeouts[1::3], [19] * len(browsers))
+                self.assertEqual(timeouts[2::3], [19] * len(browsers))
                 extra_runtime = sum(timeouts) + sum(args.args[0] for args in sleep.call_args_list) - 45 * len(browsers)
-                self.assertLessEqual(extra_runtime, 240)
+                self.assertLessEqual(extra_runtime, len(browsers) * 48)
 
     def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
         original = SMOKE.smoke
