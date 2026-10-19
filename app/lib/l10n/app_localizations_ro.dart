@@ -9365,9 +9365,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ încă $count';
-  }
+  String get quoteShowSources => 'Afișează sursele';
 
   @override
   String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
@@ -11117,7 +11115,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
+  String get captureRecoveryBannerTitle => 'Omi nu trimite audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11136,17 +11134,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureBannerRetrySync => 'Reîncearcă sincronizarea';
 
   @override
-  String get captureBannerWhatsWrong => 'Ce se întâmplă?';
-
-  @override
-  String get captureBannerDismiss => 'Ascunde';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Legătura Bluetooth cu Omi-ul tău s-a blocat, deci audioul nu mai ajunge în aplicație. Omi continuă să înregistreze pe dispozitiv și se va sincroniza când legătura revine. Reîncercarea reconectează legătura; dacă continuă să eșueze, verifică dispozitivul în Setări > Dispozitiv.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Legătura audio s-a oprit — transcrierea continuă la revenirea ei';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio nu ajunge la aplicație — reconectați-vă Omi';
@@ -13739,7 +13728,30 @@ class AppLocalizationsRo extends AppLocalizations {
   String get activityRetryAll => 'Reîncearcă tot';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Stocarea nu poate fi verificată';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Înregistrările sunt pauzate';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Încărcarea s-a oprit';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări așteaptă',
+      one: '1 înregistrare așteaptă',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
+
+  @override
+  String get activityAttentionSemantics => 'Activitate, necesită atenție';
 
   @override
   String get connectAgentHeadline => 'Folosește memoria Omi în ChatGPT și în agenții tăi AI';
@@ -14428,4 +14440,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved din $total audio salvat';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi încă înregistrează';
 }

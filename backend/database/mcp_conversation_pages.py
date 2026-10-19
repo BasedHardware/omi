@@ -25,8 +25,9 @@ from .conversations import (
 from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS
 from .helpers import prepare_for_read
 
-# Upper bound on raw documents a single keyset page may scan while skipping
-# soft-deleted tombstones between visible rows.
+# Upper bound on raw documents a single page may scan while skipping
+# soft-deleted tombstones between visible rows (an offset page counts the rows
+# past its first window).
 MCP_CARD_PAGE_SCAN_BUDGET = 500
 
 
@@ -55,7 +56,14 @@ def get_mcp_conversation_cards(
     extra_field_paths: Optional[Sequence[str]] = None,
     budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
-    """Return the transcript-free Firestore projection used by hosted MCP lists."""
+    """Return the transcript-free Firestore projection used by hosted MCP lists.
+
+    ``offset`` skips stored rows. Tombstones still match the indexed filters
+    and are dropped in Python, so a full window that loses rows to them keeps
+    reading after its last row in keyset order until ``limit`` visible rows,
+    stream exhaustion, or the scan budget. Callers read a short result as the
+    end of the list.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
@@ -70,28 +78,49 @@ def get_mcp_conversation_cards(
         },
         field_filter_factory=FieldFilter,
     )
-    query = (
-        query.order_by('created_at', direction=firestore.Query.DESCENDING)
-        .select(_card_field_paths(extra_field_paths))
-        .limit(limit)
-        .offset(offset)
+    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(
+        _card_field_paths(extra_field_paths)
     )
+    window = query.limit(limit).offset(offset)
     conversations: List[Dict[str, Any]] = []
+    scanned = 0
     try:
         if budget is not None and offset > 0:
             # Refuse a too-expensive offset before issuing its billed skip.
             budget.charge(offset)
-        for doc in budgeted_stream_iter(query, budget):
-            conversation = document_data_with_revision(doc)
-            if conversation is None:
-                continue
-            if not is_visible_conversation(conversation):
-                continue
-            conversation.setdefault('id', doc.id)
-            conversations.append(conversation)
+        while True:
+            fetched = 0
+            last_doc = None
+            for doc in budgeted_stream_iter(window, budget):
+                fetched += 1
+                last_doc = doc
+                conversation = document_data_with_revision(doc)
+                if conversation is None:
+                    continue
+                if not is_visible_conversation(conversation):
+                    continue
+                conversation.setdefault('id', doc.id)
+                conversations.append(conversation)
+            scanned += fetched
+            if (
+                len(conversations) >= limit
+                or fetched < limit
+                or last_doc is None
+                or scanned >= limit + MCP_CARD_PAGE_SCAN_BUDGET
+            ):
+                break
+            last_created_at = (last_doc.to_dict() or {}).get('created_at')
+            if last_created_at is None:
+                # Same stop as the keyset page: no resumable position past this row.
+                break
+            window = (
+                query.order_by('__name__', direction=firestore.Query.DESCENDING)
+                .limit(limit)
+                .start_after({'created_at': last_created_at, '__name__': collection.document(last_doc.id)})
+            )
     except ListReadBudgetExhausted:
         pass
-    return conversations
+    return conversations[:limit]
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)

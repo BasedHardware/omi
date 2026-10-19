@@ -9314,9 +9314,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ veel $count';
-  }
+  String get quoteShowSources => 'Näita allikaid';
 
   @override
   String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
@@ -11057,7 +11055,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
+  String get captureRecoveryBannerTitle => 'Omi ei saada heli';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11076,17 +11074,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureBannerRetrySync => 'Proovi sünkroonimist uuesti';
 
   @override
-  String get captureBannerWhatsWrong => 'Mis toimub?';
-
-  @override
-  String get captureBannerDismiss => 'Peida';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Heliühendus seiskus — transkriptsioon jätkub pärast taastamist';
 
   @override
   String get captureIngressNeedsReconnect => 'Heli ei jõua rakendusse — ühenda Omi uuesti';
@@ -13677,7 +13666,30 @@ class AppLocalizationsEt extends AppLocalizations {
   String get activityRetryAll => 'Proovi kõiki uuesti';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Salvestusruumi ei õnnestunud kontrollida';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Salvestised peatatud';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Üleslaadimine on seiskunud';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ootab $count salvestist',
+      one: 'Ootab 1 salvestis',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
+
+  @override
+  String get activityAttentionSemantics => 'Tegevus, vajab tähelepanu';
 
   @override
   String get connectAgentHeadline => 'Kasuta oma Omi mälu ChatGPT-s ja oma tehisintellekti agentides';
@@ -14359,4 +14371,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Salvestatud $saved / $total helist';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi salvestab edasi';
 }

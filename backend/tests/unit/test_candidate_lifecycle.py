@@ -4,9 +4,11 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+import fakeredis
 import pytest
 from pydantic import ValidationError
 
+import database.action_items_cache as action_items_cache
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
@@ -269,6 +271,48 @@ def test_task_mutation_preserves_origin_and_merges_provenance(fake_db):
     assert task['description'] == 'Updated task'
     assert task['source'] == 'manual'
     assert task['provenance'] == [original, added]
+
+
+def test_accepting_task_candidates_invalidates_cached_task_list_pages(fake_db, monkeypatch):
+    # GET /v1/action-items serves a cached page until the per-uid list version moves. Accepting
+    # writes the task outside database.action_items, so it must move that version itself.
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_items_cache, '_redis', lambda: redis)
+    params = {'limit': 100, 'offset': 0, 'completed': False}
+
+    def cached_page_key():
+        version = action_items_cache.get_action_items_list_version('user-1')
+        return action_items_cache.list_cache_key('user-1', version, params)
+
+    def cache_task_list_page():
+        action_items_cache.write_cached_list(cached_page_key(), body={'action_items': []}, etag='W/"old"', ttl=30)
+
+    task_path = ('users', 'user-1', 'action_items', 'task-1')
+    fake_db.rows[task_path] = {
+        'id': 'task-1',
+        'description': 'Send the slides',
+        'status': 'active',
+        'completed': False,
+        'goal_id': 'goal-1',
+    }
+    create = create_record(fake_db)
+    complete = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(proposed_action='complete', task_id='task-1', task_change={'status': 'completed'}),
+        idempotency_key='feedback:complete-task-1',
+        account_generation=3,
+    )
+
+    cache_task_list_page()
+    assert action_items_cache.read_cached_list(cached_page_key()) is not None
+    created = candidates_db.resolve_task_candidate('user-1', create.candidate_id, account_generation=3)
+    assert ('users', 'user-1', 'action_items', created.task_id) in fake_db.rows
+    assert action_items_cache.read_cached_list(cached_page_key()) is None
+
+    cache_task_list_page()
+    candidates_db.resolve_task_candidate('user-1', complete.candidate_id, account_generation=3)
+    assert fake_db.rows[task_path]['completed'] is True
+    assert action_items_cache.read_cached_list(cached_page_key()) is None
 
 
 def test_candidate_idempotency_key_rejects_a_different_proposal(fake_db):

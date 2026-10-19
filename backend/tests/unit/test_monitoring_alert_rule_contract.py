@@ -646,7 +646,7 @@ def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
 PAGE_CLASS_JOURNEY_RULES = {
     "omi-journey-capture-success-critical": ("speech-processing", "NoData", "$A >= 20 && $B < 0.90"),
     "omi-journey-pusher-success-critical": ("live-transcription", "NoData", "$A >= 20 && $B < 0.90"),
-    "omi-journey-chat-success-critical": ("ai-chat", "NoData", "$A >= 20 && $B < 0.90"),
+    "omi-journey-chat-success-critical": ("ai-chat", "NoData", "$A >= 20 && $B < 0.90 && $E >= 5"),
     "omi-journey-capture-settle-gap": ("speech-processing", "NoData", "$A >= 100 && $B > 50"),
     "omi-capture-oldest-nonterminal": ("speech-processing", "Alerting", None),
     "omi-capture-dead-letter-surge": ("speech-processing", "Alerting", None),
@@ -1265,13 +1265,9 @@ EXTERNAL_ALERT_METRICS = {
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
 
-# omi_reason_total is owned by legacy-retirement PR #22422 and is not declared yet.
-# Remove the pending allowance once that producer lands; until then it permits the
-# alert to arrive before the M3 rollout. omi_reason_unknown_total is already declared
-# by the lane-1 stub (utils/observability/reasons.py, #22420).
-PENDING_BACKEND_ALERT_METRICS = {
-    "omi_reason_total": "legacy-retirement PR #22422",
-}
+# Backend counters whose alert may arrive before the producer lands. Both reason
+# counters are now declared by utils/observability/reasons.py (#22422), so none pend.
+PENDING_BACKEND_ALERT_METRICS = {}
 
 _METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
 _PROMQL_KEYWORDS = frozenset(
@@ -1846,3 +1842,39 @@ def test_llm_gateway_lane_failure_ratio_excludes_proactive_admission_refusals():
             'lane_id="omi:auto:proactive-notification",error_class="invalid_request",provider="none"' in expr
         ), export_name
         assert expr.count('outcome!="success"') == 3, export_name
+
+
+def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_volume_guarded():
+    # 2026-10-19: Modulate legs connected cleanly while sessions exhausted on
+    # capacity_full (mostly replay_ring_cap); connect-error alerts saw nothing.
+    for export_name, rules in _all_rule_exports().items():
+        capacity = rules["omi-stt-capacity-full-exhausted"]
+        terminal = rules["omi-stt-provider-terminal-failure-ratio"]
+        for rule in (capacity, terminal):
+            assert rule["labels"]["severity"] == "warning", export_name
+            assert rule["for"] == "30m", export_name
+            assert rule["noDataState"] == "OK", export_name
+        cap = {node["refId"]: node["model"] for node in capacity["data"]}
+        assert "sum by (to_mode)" in cap["B"]["expr"], export_name
+        assert 'reason="capacity_full",outcome="exhausted"' in cap["B"]["expr"], export_name
+        assert cap["C"]["expression"] == "$A >= 100 && $B > 0.15", export_name
+        assert "subtype=" in capacity["annotations"]["safe_next_action"], export_name
+        term = {node["refId"]: node["model"] for node in terminal["data"]}
+        assert "sum by (provider)" in term["A"]["expr"], export_name
+        assert 'outcome="success"' in term["A"]["expr"], export_name
+        assert "omi_live_stt_terminal_failures_total" in term["B"]["expr"], export_name
+        assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name
+
+
+def test_chat_journey_rules_require_a_failure_floor_before_firing():
+    # 2026-10-19: ~22 chat terminals in a quiet half hour with 4 provider
+    # rejects drove success to 0.81; the floor keeps that from paging.
+    failures = 'sum(increase(omi_journey_terminal_total{journey="chat_response",outcome="failure"}[30m]))'
+    for export_name, rules in _all_rule_exports().items():
+        for uid, gate in (
+            ("omi-journey-chat-success-critical", "$A >= 20 && $B < 0.90 && $E >= 5"),
+            ("omi-journey-chat-fail", "$A >= 20 && $B > 0.10 && $E >= 5"),
+        ):
+            nodes = {node["refId"]: node["model"] for node in rules[uid]["data"]}
+            assert nodes["E"]["expr"] == failures, f"{export_name}:{uid}"
+            assert nodes["C"]["expression"] == gate, f"{export_name}:{uid}"

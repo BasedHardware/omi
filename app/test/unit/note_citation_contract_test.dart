@@ -16,4 +16,15 @@ void main() {
       expect(repairNoteCitations(result.text, ids).text, item['output']);
     });
   }
+
+  test('a transcript segment without an id never rewrites the note', () {
+    // An id-less segment arrives as '' (TranscriptSegment.fromGenerated). As a known id it would
+    // match at every position between two non-word characters and the cleanup would then eat the
+    // whitespace around each match: nested-list indents, hard breaks, the space after a heading
+    // marker and after inline code or links.
+    const input = '## Decisions\n\n- Fact. [s01234]\n  - Nested detail.\nHard break.  \nNext line.';
+    final result = repairNoteCitations(input, ['', 's01234']);
+    expect(result.text, '## Decisions\n\n- Fact.\n  - Nested detail.\nHard break.  \nNext line.');
+    expect(result.sourceIDs, ['s01234']);
+  });
 }

@@ -2475,6 +2475,7 @@ def process_conversation(
     smart_merge_refresh: tuple[int, str] | None = None,
     recovery_transcript_decoded: bool = True,
     prior_relevance_decision: Mapping[str, Any] | None = None,
+    created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, bypass, and relevance policy together.
@@ -2973,7 +2974,12 @@ def process_conversation(
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))
 
-            submit_with_context(postprocess_executor, _run_webhook)
+            if created_webhook_observer is None:
+                submit_with_context(postprocess_executor, _run_webhook)
+            else:
+                # The caller can still roll this record back (a merge target);
+                # it sends the webhook only once the record is permanent.
+                created_webhook_observer(lambda: submit_with_context(postprocess_executor, _run_webhook))
 
     if defer_derived_effects:
         if derived_effects_observer is not None:

@@ -9356,9 +9356,7 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ още $count';
-  }
+  String get quoteShowSources => 'Покажи източниците';
 
   @override
   String get jumpToLatestMessage => 'Отиди до последното съобщение';
@@ -11106,7 +11104,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get openCall => 'Отвори обаждането';
 
   @override
-  String get captureRecoveryBanner => 'Omi не изпраща аудио — докоснете, за да се свържете отново';
+  String get captureRecoveryBannerTitle => 'Omi не изпраща аудио';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11125,18 +11123,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get captureBannerRetrySync => 'Повтори синхронизацията';
 
   @override
-  String get captureBannerWhatsWrong => 'Какво става?';
-
-  @override
-  String get captureBannerDismiss => 'Скрий';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Връзката по Bluetooth с вашия Omi прекъсна, така че звукът не стига до приложението. Omi продължава да записва на устройството и ще се синхронизира, щом връзката се възстанови. Повторният опит възстановява връзката; ако продължава да се проваля, проверете устройството си в Настройки > Устройство.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'Аудиовръзката прекъсна — транскрипцията ще продължи след възстановяване';
 
   @override
   String get captureIngressNeedsReconnect => 'Аудиото не достига до приложението — свържете отново Omi';
@@ -13733,7 +13721,30 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityRetryAll => 'Опитай всички отново';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Хранилището не може да се провери';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Записите са спрени';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Качването е спряно';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Чакат $count записа',
+      one: 'Чака 1 запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
+
+  @override
+  String get activityAttentionSemantics => 'Активност, изисква внимание';
 
   @override
   String get connectAgentHeadline => 'Използвайте паметта на Omi в ChatGPT и вашите AI агенти';
@@ -14419,4 +14430,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Запазени $saved от $total аудио';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi продължава да записва';
 }

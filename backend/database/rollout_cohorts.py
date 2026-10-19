@@ -51,6 +51,10 @@ RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
 RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
+# Serving reads stay within the runtime's cold-start budget. Operator tools (ramp_set, ramp_controller) build a
+# fresh client per process, and a cold channel plus token fetch from an operator host takes over 1s.
+SERVING_READ_TIMEOUT_SECONDS = 1.0
+OPERATOR_READ_TIMEOUT_SECONDS = 10.0
 # rollout_environment() values plus the staging deployment identity (OMI_DEPLOYMENT).
 RAMP_ENVS = ('prod', 'staging', 'dev', 'local', 'offline')
 _CHANGE_KEYS = frozenset({'percents', 'legacy_sync', 'locked_by'})
@@ -180,10 +184,12 @@ def _ramp_ref(client: Any) -> Any:
     return client.collection(COLLECTION).document(RAMP_DOC_ID)
 
 
-def read_ramp(*, firestore_client: Any | None = None) -> dict[str, Any] | None:
-    """Point read of the control document (1s, SDK retries off). None when absent; raises on malformed."""
+def read_ramp(
+    *, firestore_client: Any | None = None, timeout: float = SERVING_READ_TIMEOUT_SECONDS
+) -> dict[str, Any] | None:
+    """Point read of the control document (SDK retries off). None when absent; raises on malformed."""
     client = firestore_client or get_data_plane_firestore_client()
-    doc = _ramp_ref(client).get(timeout=1.0, retry=None)
+    doc = _ramp_ref(client).get(timeout=timeout, retry=None)
     if not doc.exists:
         return None
     return normalize_ramp_document(doc.to_dict())
