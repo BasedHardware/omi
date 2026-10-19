@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import atexit
 import glob
+import importlib.util
 import os
 import shutil
 import socket
@@ -95,7 +96,7 @@ class StoreHarness:
     customer: Any
     namespace: str
     uid_suffix: str
-    _cleanup: list[Callable[[], None]] = field(default_factory=list)
+    cleanup_steps: list[Callable[[], None]] = field(default_factory=list)
 
     def uid(self, label: str) -> str:
         """A uid unique to this harness, so a shared emulator or database never mixes runs."""
@@ -107,7 +108,7 @@ class StoreHarness:
         return uid
 
     def close(self) -> None:
-        for step in reversed(self._cleanup):
+        for step in reversed(self.cleanup_steps):
             step()
 
 
@@ -207,10 +208,8 @@ def postgres_dsn() -> str:
     """DSN of a migrated test database, started once per process."""
     if 'dsn' in _postgres_state:
         return _postgres_state['dsn']
-    try:
-        import psycopg  # noqa: F401
-    except ImportError as exc:
-        raise BackendUnavailable('psycopg 3 is not installed') from exc
+    if importlib.util.find_spec('psycopg') is None:
+        raise BackendUnavailable('psycopg 3 is not installed')
     dsn = os.getenv('OMI_TEST_POSTGRES_DSN')
     if dsn:
         local = 'host=/' in dsn or 'localhost' in dsn or '127.0.0.1' in dsn
@@ -282,7 +281,7 @@ def make_emulator() -> StoreHarness:
                 doc.reference.delete()
         client.close()
 
-    harness._cleanup.append(cleanup)
+    harness.cleanup_steps.append(cleanup)
     return harness
 
 
@@ -297,7 +296,12 @@ def make_postgres() -> StoreHarness:
     pool = Pool(dsn)
     store = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
     harness = StoreHarness('postgres', store, customer, namespace, token)
-    harness._cleanup.append(lambda: (store.purge_namespace(), pool.close()))
+
+    def cleanup() -> None:
+        store.purge_namespace()
+        pool.close()
+
+    harness.cleanup_steps.append(cleanup)
     return harness
 
 
@@ -316,6 +320,7 @@ def build_backend(name: str) -> StoreHarness:
         if name in required_backends():
             pytest.fail(f'required store backend {name!r} unavailable: {exc}')
         pytest.skip(f'{name} backend unavailable: {exc}')
+        raise AssertionError('unreachable')
 
 
 @pytest.fixture(params=BACKENDS)

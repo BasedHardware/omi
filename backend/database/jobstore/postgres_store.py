@@ -63,21 +63,21 @@ class PostgresTransaction:
     # -- Transaction protocol -------------------------------------------------------------
     def get(self, table: str, key: str) -> dict:
         address = (table, key)
-        self.store._require_table(table)
+        self.store.require_table(table)
         if address not in self.cache:
-            self.cache[address] = self.store._read(self.conn, table, key)
+            self.cache[address] = self.store.read_doc(self.conn, table, key)
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
 
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'conversations':
             raise ValueError('conversation admission requires a field patch, never a document set')
-        self.store._require_table(table)
+        self.store.require_table(table)
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
         if table != 'conversations' or set(fields) != {'record_lane_owner'}:
             raise ValueError('only the conversation route owner may be patched by admission')
-        self.store._require_table(table)
+        self.store.require_table(table)
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def first_pending(self, owner_key: str) -> dict | None:
@@ -98,10 +98,10 @@ class PostgresTransaction:
         return rows[0][0] if len(rows) == 1 else None
 
     def service_frontier(self, priority: int) -> float:
-        return self.store._service_frontier(self.conn, priority)
+        return self.store.service_frontier_in(self.conn, priority)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
-        return self.store._check_privacy(uid, conversation_ids, expected_generation)
+        return self.store.check_privacy_for(uid, conversation_ids, expected_generation)
 
     # -- commit -----------------------------------------------------------------------------
     def flush(self) -> None:
@@ -124,13 +124,13 @@ class PostgresTransaction:
             if table == 'jobs' and value.get('privacy_generation') is None:
                 value['privacy_generation'] = generation
         for (table, key), value in self.writes.items():
-            self.store._write(self.conn, table, key, value)
+            self.store.write_doc(self.conn, table, key, value)
         for (table, key), fields in self.patches.items():
-            current = self.store._read(self.conn, table, key)
+            current = self.store.read_doc(self.conn, table, key)
             if not current and (table, key) not in self.writes:
                 # Firestore `update` on a missing document fails; keep that contract.
                 raise LookupError(f'cannot patch missing document {table}/{key}')
-            self.store._write(self.conn, table, key, {**self.writes.get((table, key), current), **fields})
+            self.store.write_doc(self.conn, table, key, {**self.writes.get((table, key), current), **fields})
 
 
 class PostgresStore:
@@ -224,7 +224,7 @@ class PostgresStore:
                 )
             except BatchPrivacyBlocked:
                 # A shallow field update, not a put: flush must not re-run the (failing) fence.
-                tx.store._write(
+                tx.store.write_doc(
                     tx.conn,
                     'jobs',
                     segment_id,
@@ -260,11 +260,11 @@ class PostgresStore:
         with self.pool.connection() as conn:
             yield conn
 
-    def _require_table(self, table: str) -> None:
+    def require_table(self, table: str) -> None:
         if table in _CUSTOMER_TABLES and not self.harness_customer_tables:
             raise RuntimeError(f'{table} documents live in Firestore; Postgres holds them only in harness mode (A4)')
 
-    def _read(self, conn: Any, table: str, key: str) -> dict:
+    def read_doc(self, conn: Any, table: str, key: str) -> dict:
         if table in _TYPED:
             row = conn.execute(f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
         else:
@@ -274,7 +274,7 @@ class PostgresStore:
         found = row.fetchone()
         return found[0] if found else {}
 
-    def _write(self, conn: Any, table: str, key: str, value: dict) -> None:
+    def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
             conn.execute(
                 f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
@@ -288,7 +288,7 @@ class PostgresStore:
                 (self.namespace, table, key, _jsonb(value)),
             )
 
-    def _service_frontier(self, conn: Any, priority: int) -> float:
+    def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
         row = conn.execute(
@@ -296,7 +296,7 @@ class PostgresStore:
         ).fetchone()
         return row[0] if row[0] is not None else 0.0
 
-    def _check_privacy(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
+    def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
         # Each check is its own read-only customer-data transaction (the privacy authority is
         # still Firestore until A5), as in the pipeline simulator.
         return assert_batch_write_allowed(
