@@ -56,13 +56,45 @@ Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced
 - `omi_legacy_sync_mode_read_total{source}`: reads that fell back to `on` (`absent`, `error`, `malformed`). Non-zero during `draining`/`dark` means some processes are serving legacy.
 - `omi_legacy_sync_admissions_total{reason}`, `omi_legacy_dark_ack_total{reason}` as above.
 
-## 12h soak
+## 12h soak and the auto-proceed criteria
 
-`soak_check.py` (lane 5) runs every 30 minutes; the checks are listed in contract (h). Lost-recording accounting starts at `draining`, not `dark`.
+Lane 5's `soak_check.py` runs every 30 minutes for 12 hours from the `dark` write, so there are 24 reads. Lost-recording accounting starts at `draining`, not `dark`.
+
+**Deletion is pre-authorized (David, 2026-10-19 08:15Z).** If **every** read below is green for the whole 12h window, the deletion PRs (including the named C10 `.github/actions/sync-backfill-lifecycle` edit) merge and deploy with no separate `go`.
+
+**Any red or unavailable read means hold and escalate** to the lead, and the lead to David. A hold does not restart the soak by itself: the lead decides between reverting `legacy_sync` to `on` and re-running the 12h window. Prometheus queries run against prod Managed Prometheus (`ro-prod`); `<T_dark>` is the `dark` write time from the `_ramp` history.
+
+| # | Gate | Concrete check (every 30-minute read) | Green when |
+|---|---|---|---|
+| 1 | **Zero legacy traffic** | `sum(increase(omi_legacy_sync_admissions_total[30m]))` | `0` |
+| 1b | | `drain_census --env prod` (it gates on pending, sequencer owners, redrive, cap holds and the four queue depths) | verdict `ZERO` |
+| 1c | | `sum(omi_legacy_sync_mode{mode="dark"}) == count(omi_legacy_sync_mode{mode="dark"})` and `sum(increase(omi_legacy_sync_mode_read_total{source=~"error\|malformed"}[30m]))` | every process serves `dark`; `0` fallbacks |
+| 1d | | `sum(increase(omi_legacy_dark_ack_total{reason=~"legacy_active_in_dark\|admission_refused"}[30m]))` | `0` |
+| 2 | **Outcome SLOs held** | `fleet_gate.sh <T_dark> 20 30 100` (the workspace gate at 100%) | exit 0 (`GATE_PASS`) |
+| 2b | | first-summary dispatch: outbox `first_pending_at` → dispatch, the gate's `first_summary_*` tokens | 0 dispatches over 121s |
+| 2c | | task targets: `sum(increase(omi_task_unexpected_total[30m]))` plus Cloud Run 5xx/429/503 on `/v2/enrichment/run`, `/v2/batch-pipeline/*` and `/v2/audio-merge-jobs/run` | `0` |
+| 2d | | upload 2xx rate per `app_build` on `/v2/sync-local-files` (Cloud Run request logs, `ro-prod` aggregates) against the 24h before `draining` | every build with ≥ 50 uploads within 1 pp |
+| 2e | | `max(omi:reason_unknown_ratio:rate30m)` | < 0.02 |
+| 3 | **No stuck cohort over 1h** | fleet gate `stuck_job_over_30m` and `obligation_over_15m` | `0` (stricter than 1h) |
+| 3b | | oldest unfinished batch unit and oldest `provider_stt` unit (gate aggregate JSON, `oldest_*_age`) | < 3600s |
+| 3c | | per-cohort upload 2xx rate (2d) failing for 2 consecutive reads | never (a cohort red for ≥ 1h is red) |
+| 4 | **Parity clean** | `soak_check.py` check 5: every `content_id` accepted since `draining` has a projection receipt or a terminal disposition; no `content_id` has both a legacy job and a batch unit | `0` lost, `0` doubled |
+| 4b | | BYOK and non-Parakeet uploads: `provider_stt` completions versus admissions (or a census of zero traffic) | all completed or in flight under 1h |
+| 4c | | cap-hold redrives served by batch (or S12: cap enforcement still at its pre-dark cohort with `stt_cap_holds` = 0 new) | true |
+| 4d | | the last `parity_gate.py --surface prod-shadow` (rows 3–6) from the 100% hold | PASS |
+| 5 | **Cost on track** | `backend-sync-backfill` and `backend-sync` legacy-worker billable instance time (`run.googleapis.com/container/billable_instance_time`), last 6h against the 6h before `draining` | ≤ 10% of the pre-draining 6h |
+| 5b | | batch GPU nodes (`kubectl` node count on the batch pool, copied KUBECONFIG and explicit context) | ≤ 4 (the 10-19 approval) |
+| 5c | | vendor STT spend from vendor usage (Soniox, Deepgram, Modulate), lane 13's receipt, last 12h against the pre-dark 12h | ≤ 1.10× |
+
+**Preconditions for auto-proceed** (all are checked before the first merge; any failure is a hold):
+
+- C4 is merged and serving: `enrichment-maintenance` runs `/v2/enrichment/sweep`, so C10 can delete the old sweep route.
+- C3 is complete: no new `sr-` row binds `/v2/sync-jobs/run`.
+- The deletion PRs are green against current main, and the C1 ratchet rows for C10 and C11 are at zero (the C11 neutral cap-hold module excepted).
 
 ## After the soak: deletion
 
-1. David's `go` on the board.
+1. All 24 soak reads are green and the preconditions hold. Record the gate table with each read's values in the run dir STATE.md.
 2. **Lead action on `prod-operator`:** capture the live queue configs. This needs `cloudtasks.queues.get`, which `ro-prod` lacks. Commit the spec to the run dir before anything is deleted:
 
    ```bash
@@ -70,8 +102,9 @@ Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced
    cd backend && .venv/bin/python -m scripts.legacy_dark.legacy_queues capture --env prod --spec <run-dir>/legacy-queues.prod.json
    ```
 
-3. Merge the deletion PRs (C6, C9, C10, C11), train, verify the release identity.
+3. Merge the deletion PRs in order C6, C9, C10, C11. Run the train, approve the index run, and verify the release identity (`OMI_BACKEND_RELEASE_SHA` and the absence of the deleted routes).
 4. Delete the queues, the `sync-backfill-uid-sequencer` job and the `backend-sync-backfill` service (lead, scripted).
+5. Lane 13 books the saving from billing once billed instance-hours fall.
 
 **Rollback after deletion:** redeploy the previous image, then
 

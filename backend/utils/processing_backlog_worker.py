@@ -7,7 +7,6 @@ import logging
 import time
 from typing import Any
 
-from anyio import from_thread
 from google.cloud import firestore
 from database import processing_backlog as store, conversations as conversations_db
 from models.conversation import Conversation
@@ -15,8 +14,8 @@ from utils import funded_processing
 from utils.processing_backlog import choose, is_active
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
-from utils.sync import cap_hold, cap_hold_recovery
+from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.sync import cap_hold, cap_hold_recovery, cap_work_budget
 from config.rate_card import recording_units_per_hour
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,9 @@ class AttemptOutcome(Enum):
 def _page(uid, kind, cursor):
     if kind == 'audio':
         collection = cap_hold.holds(uid)
-        query = collection.where('state', 'in', ['held']).order_by('listed_at', direction=firestore.Query.DESCENDING)
+        query = collection.where('state', 'in', ['held', 'staging', 'sealing']).order_by(
+            'listed_at', direction=firestore.Query.DESCENDING
+        )
         field = 'listed_at'
     else:
         collection = store.items(uid)
@@ -66,6 +67,7 @@ def _candidate(kind, snap) -> dict[str, Any]:
         'id': snap.id,
         'at': at,
         'units': max(0, units),
+        'state': row.get('state'),
         'queued_at': row.get('created_at' if kind == 'audio' else 'queued_at', 0),
     }
 
@@ -101,9 +103,10 @@ async def _process(uid, item) -> AttemptOutcome:
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
-async def run(uid: str, *, continuation: bool = False):
+async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None):
     if not funded_processing.enabled():
         return
+    max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
         return
     job = await run_blocking(db_executor, store.read, uid)
@@ -149,7 +152,9 @@ async def run(uid: str, *, continuation: bool = False):
                 fence_lost.set()
                 return
 
-    async def work() -> bool:
+    async def work(limit: int) -> bool:
+        if cap_work_budget.exhausted():
+            return False
         reserved = job.get('reserved') or {}
         # A reserved application attempt keeps its identity over crashes and
         # cooldowns. Never debit the user's chosen estimate twice.
@@ -164,9 +169,14 @@ async def run(uid: str, *, continuation: bool = False):
             (_candidate(kind, snap) for kind, snap in pages),
             key=lambda row: (_timestamp(row['at']), row['id']),
             reverse=True,
-        )[:PAGE]
+        )[:limit]
         for item in candidates:
-            if fence_lost.is_set() or not funded_processing.enabled() or job['period'] != funded_processing.period_id():
+            if (
+                cap_work_budget.exhausted()
+                or fence_lost.is_set()
+                or not funded_processing.enabled()
+                or job['period'] != funded_processing.period_id()
+            ):
                 return False
             current = await run_blocking(db_executor, funded_processing.allowance, uid)
             if not current.managed:
@@ -183,6 +193,10 @@ async def run(uid: str, *, continuation: bool = False):
                 if not await save(updates):
                     return False
                 continue
+            # An authorized pre-cutoff source must seal before we advance past
+            # it or finish this choice. Its created_at/listed_at survive sealing.
+            if item.get('state') in {'staging', 'sealing'}:
+                return False
             actual_remaining, _ = funded_processing.capacity(current)
             if actual_remaining is not None and item['units'] > actual_remaining:
                 if not await save(updates):
@@ -193,14 +207,18 @@ async def run(uid: str, *, continuation: bool = False):
                 return False
             if not await attempt(item):
                 return False
-        if len(candidates) == PAGE:
+        if len(candidates) == limit:
             return True
         return await finish()
 
     continuation = False
-    heartbeat = start_background_task(renew(), name='processing_backlog_lease')
+    heartbeat = asyncio.create_task(renew(), name='processing_backlog_lease')
     try:
-        continuation = await work()
+        with cap_work_budget.visit(time_budget):
+            for offset in range(0, max_items, PAGE):
+                continuation = await work(min(PAGE, max_items - offset))
+                if not continuation or cap_work_budget.exhausted():
+                    break
     except Exception as exc:
         logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
         continuation = await finish()
@@ -211,37 +229,17 @@ async def run(uid: str, *, continuation: bool = False):
             await save({'lease_until': 0})
         except Exception as exc:
             logger.warning('event=processing_backlog outcome=release_deferred exception_type=%s', type(exc).__name__)
-    if continuation:
-        start_background_task(run(uid, continuation=True), name='processing_backlog_continuation')
-
-
-async def _schedule(uid):
-    start_background_task(run(uid), name='processing_backlog')
-
-
-def kick(uid: str):
-    if not funded_processing.enabled():
-        return
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        from_thread.run(_schedule, uid)
-    else:
-        start_background_task(run(uid), name='processing_backlog')
+    # A productive page remains state=processing. The periodic durable sweep
+    # owns continuation, including an authorized pending upgrade consumed above.
 
 
 def upgrade(uid: str, request_key: str, *, intent_at):
     """Only payment intent calls this; monthly renewal/reset never creates intent."""
-    if choose(uid, request_key=request_key, automatic=True, intent_at=intent_at) is not None:
-        kick(uid)
+    choose(uid, request_key=request_key, automatic=True, intent_at=intent_at)
 
 
 async def upgrade_async(uid: str, request_key: str, *, intent_at):
-    if (
-        await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
-        is not None
-    ):
-        kick(uid)
+    await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
 
 
 cap_hold_recovery.register_backlog_runner(run)

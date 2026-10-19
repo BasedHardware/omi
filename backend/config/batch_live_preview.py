@@ -4,15 +4,22 @@ import math
 import os
 
 from config.batch_pipeline import in_percent_cohort, record_capture_eligible
+from config.rollout_cohorts import runtime_percent
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
-def rollout_percent() -> float:
+def _env_rollout_percent() -> float:
     try:
         value = float(os.getenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0'))
         return value if math.isfinite(value) and 0 <= value <= 100 else 0
     except ValueError:
         return 0
+
+
+def rollout_percent() -> float:
+    # Runtime source (`rollout_cohorts/_ramp`, clamped there to <= batch-pipeline); env is the fail-safe default.
+    value = runtime_percent('batch-live-stt-retire', env_default=_env_rollout_percent())
+    return value if math.isfinite(value) and 0 <= value <= 100 else 0
 
 
 def selected(uid: str) -> bool:
