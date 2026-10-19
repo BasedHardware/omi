@@ -98,6 +98,42 @@ class _FakeStorageDevice implements DeviceConnection {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Delivers [script] through the subscription it returns, as the BLE transports
+/// do: once that subscription is cancelled, no later packet reaches the sync.
+class _SubscribedStorageDevice extends _FakeStorageDevice {
+  _SubscribedStorageDevice({required super.script});
+
+  final firstPacketHandled = Completer<void>();
+  int stops = 0;
+
+  @override
+  Future<StreamSubscription?> getBleStorageBytesListener({
+    required void Function(List<int>) onStorageBytesReceived,
+  }) async {
+    return controller.stream.listen((value) {
+      onStorageBytesReceived(value);
+      if (!firstPacketHandled.isCompleted) firstPacketHandled.complete();
+    });
+  }
+
+  @override
+  Future<bool> writeToStorage(int numFile, int command, int offset) async {
+    writes.add([numFile, command, offset]);
+    if (command == 0x11) {
+      for (final p in script) {
+        controller.add(p);
+      }
+    }
+    return true;
+  }
+
+  @override
+  Future<bool> stopStorageSync() async {
+    stops++;
+    return true;
+  }
+}
+
 class _FakeLimitless implements LimitlessDeviceConnection {
   _FakeLimitless({required this.pages});
 
@@ -252,6 +288,32 @@ void main() {
 
     expect(local.added, hasLength(1), reason: 'A-side audio persists independently of the device switch');
     expect(card.deletes, isEmpty, reason: 'the source connection must not delete after a device switch');
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('StorageSync: cancelling mid-file ends the sync without waiting for the transfer timeout', () async {
+    // Only the first of four packets arrives before the user cancels.
+    final card = _SubscribedStorageDevice(
+      script: [
+        _dataPacket([40]),
+      ],
+    );
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 4 * 440);
+    final sync = storageSyncWith(local, card, wal);
+
+    final syncing = sync.syncAll();
+    await card.firstPacketHandled.future;
+    sync.cancelSync();
+    // The transfer timeout is 10 minutes; a cancel must not wait for it.
+    await syncing.timeout(const Duration(seconds: 5));
+
+    expect(sync.isSyncing, isFalse);
+    expect(card.stops, greaterThan(0), reason: 'the device is told to stop sending');
+    expect(local.added, hasLength(1), reason: 'audio already downloaded is kept on the phone');
+    expect(card.deletes, isEmpty, reason: 'a cancelled file stays on the device');
+    expect(wal.status, WalStatus.miss);
     await card.controller.close();
     await sync.stop();
   });
