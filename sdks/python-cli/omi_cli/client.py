@@ -512,10 +512,18 @@ def path_segment(value: str) -> str:
     request paths. Unencoded, ``/`` and ``..`` let an ID escape its resource
     collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
     would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
+
+    Surrounding whitespace is stripped first: shell copy-paste padding is never
+    part of an ID, and ``"  ..  "`` must be rejected as a dot segment rather than
+    percent-encoded into an unexpected ``%20..%20`` lookup.
     """
-    if value in {"", ".", ".."}:
-        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
-    return urllib.parse.quote(value, safe="")
+    cleaned = value.strip()
+    if cleaned in {"", ".", ".."}:
+        raise UsageError(
+            message=f"Invalid ID: {value!r}",
+            detail="IDs cannot be empty, whitespace-only, '.' or '..'.",
+        )
+    return urllib.parse.quote(cleaned, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:
