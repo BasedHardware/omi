@@ -15,7 +15,7 @@ from app_roles import AppRole
 BACKEND = Path(__file__).resolve().parents[2]
 MAIN = BACKEND / 'main.py'
 # Shrink-only: remove an entry when main.py mounts the router.
-STUB_ROUTERS_PENDING_MOUNT = frozenset({'enrichment', 'batch_provider_stt'})
+STUB_ROUTERS_PENDING_MOUNT: frozenset[str] = frozenset()
 
 
 def _main_include_order() -> list[str]:
