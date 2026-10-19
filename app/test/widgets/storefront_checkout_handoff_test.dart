@@ -16,6 +16,7 @@ import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'storefront_plans_content_test.dart' as renders;
 
 StorefrontTier _plan(PlanStorefront data, String planId) => data.tiers.firstWhere((tier) => tier.planId == planId);
 
@@ -33,7 +34,11 @@ class _Usage extends UsageProvider {
   @override
   Future<void> loadAvailablePlans() async {}
   @override
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     sessionPrice = priceId;
     checkedOutPrice = priceId;
     return null; // No browser or real payment in hermetic tests.
@@ -58,19 +63,21 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => OmiSheetScaffold(
-          child: PlansSheet(
-        waveController: animation,
-        notesController: animation,
-        arrowController: animation,
-        arrowAnimation: animation,
-        initialStorefront: widget.data,
-        readStorefrontGate: widget.gate ?? () async => true,
-        analyticsSource: 'budget_80',
-        storefrontApi: PlanStorefrontApi(
-            baseUrl: 'http://127.0.0.1:1/',
-            send: (_) async => http.Response(
-                File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200)),
-      ));
+    child: PlansSheet(
+      waveController: animation,
+      notesController: animation,
+      arrowController: animation,
+      arrowAnimation: animation,
+      initialStorefront: widget.data,
+      readStorefrontGate: widget.gate ?? () async => true,
+      analyticsSource: 'budget_80',
+      storefrontApi: PlanStorefrontApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (_) async =>
+            http.Response(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200),
+      ),
+    ),
+  );
 }
 
 void main() {
@@ -87,25 +94,31 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-          as Map<String, dynamic>;
+      final json =
+          jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+              as Map<String, dynamic>;
       json['current']['plan_id'] = current == 'legacy' ? 'unlimited_v2' : current;
       json['current']['legacy'] = current == 'legacy';
-      json['current']['legacy_note'] =
-          current == 'legacy' ? "We don't sell this plan anymore, but yours stays exactly as it is." : null;
+      json['current']['legacy_note'] = current == 'legacy'
+          ? "We don't sell this plan anymore, but yours stays exactly as it is."
+          : null;
       json['current']['price_id'] = 'fixture_existing';
       final data = PlanStorefront.fromJson(json);
-      usage.debugSetSubscription(UserSubscriptionResponse(
-        subscription: Subscription(
-            plan: PlanType.fromWire(current == 'legacy' ? 'unlimited_v2' : current), status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-        availablePlans: [],
-      ));
+      usage.debugSetSubscription(
+        UserSubscriptionResponse(
+          subscription: Subscription(
+            plan: PlanType.fromWire(current == 'legacy' ? 'unlimited_v2' : current),
+            status: SubscriptionStatus.active,
+          ),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          availablePlans: [],
+        ),
+      );
       final price = _plan(data, 'plus').priceFor('year')!;
       usage.debugSetAvailablePlans({
         'plans': [
@@ -116,16 +129,20 @@ void main() {
             'unit_amount': price.amountMinor,
             'title': 'Plus',
             'price_string': price.headline,
-            'is_active': false
-          }
-        ]
+            'is_active': false,
+          },
+        ],
       });
-      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UsageProvider>.value(
           value: usage,
           child: MaterialApp(
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(body: _Host(data)))));
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
       // Invoke the actual sheet handoff to model a tap queued before subscription refresh.
@@ -146,28 +163,36 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-        as Map<String, dynamic>;
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+            as Map<String, dynamic>;
     json['current']['plan_id'] = 'architect';
     json['current']['legacy'] = false;
     json['current']['price_id'] = 'fixture_architect_month';
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'operator').priceFor('month')!;
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription: Subscription(
-          plan: PlanType.architect, status: SubscriptionStatus.active, currentPriceId: 'fixture_architect_month'),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
-        ])
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.architect,
+          status: SubscriptionStatus.active,
+          currentPriceId: 'fixture_architect_month',
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'operator',
+            title: 'Pro',
+            prices: [PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -177,16 +202,20 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Pro',
           'price_string': price.headline,
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
     await tester
@@ -205,10 +234,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_annual_current.json').readAsStringSync())
-        as Map<String, dynamic>;
-    final plusTier =
-        (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus');
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/plus_annual_current.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final plusTier = (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere(
+      (tier) => tier['plan_id'] == 'plus',
+    );
     plusTier['action'] = 'checkout';
     plusTier['cta_label'] = 'Get Plus';
     (plusTier['prices'] as List).insert(0, {
@@ -222,21 +253,28 @@ void main() {
     });
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'plus').priceFor('month')!;
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription:
-          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: data.current!.priceId),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
-        ])
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.plus,
+          status: SubscriptionStatus.active,
+          currentPriceId: data.current!.priceId,
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'plus',
+            title: 'Plus',
+            prices: [PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -246,16 +284,20 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Plus',
           'price_string': price.headline,
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
     await tester
@@ -268,32 +310,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('tapping Switch to yearly reaches upgrade with the yearly price', (tester) async {
-    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
+      jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()),
+    );
+    await renders.pumpSheet(tester, data: data);
     final price = _plan(data, 'plus').priceFor('year')!;
     expect(price.ctaLabel, r'Switch to yearly · save $39.98');
     expect(price.id, 'price_plus_year');
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription:
-          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: data.current!.priceId),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id!, title: 'Yearly', priceString: price.headline),
-        ])
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.plus,
+          status: SubscriptionStatus.active,
+          currentPriceId: data.current!.priceId,
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'plus',
+            title: 'Plus',
+            prices: [PricingOption(id: price.id!, title: 'Yearly', priceString: price.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -303,28 +354,42 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Plus',
           'price_string': price.headline,
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
-        value: usage,
-        child: MaterialApp(
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: renders.boundaryKey,
+        child: ChangeNotifierProvider<UsageProvider>.value(
+          value: usage,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: buildOmiTheme(brightness: Brightness.dark),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+            home: Scaffold(body: _Host(data)),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     final button = find.text(r'Switch to yearly · save $39.98');
     await tester.ensureVisible(button);
     await tester.tap(button.hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Confirm Upgrade').hitTestable());
+    for (final line in price.confirmLines) {
+      expect(find.text(line), findsOneWidget);
+    }
+    expect(usage.upgradedPrice, isNull);
+    await renders.capture(tester, '019-mobile-yearly-confirmation.png');
+    await tester.tap(
+      find.descendant(of: find.byType(OmiAlertDialog), matching: find.text(price.ctaLabel!)).last.hitTestable(),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Change Plan').hitTestable());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Change Plan'), findsNothing);
     expect(usage.upgradedPrice, price.id);
     expect(usage.sessionPrice, isNull);
     expect(tester.takeException(), isNull);
@@ -337,27 +402,38 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()));
+      jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()),
+    );
     final price = _plan(data, 'plus').priceFor('month')!;
     final pro = _plan(data, 'operator').priceFor('month')!;
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription: Subscription(
-          plan: PlanType.plus, status: SubscriptionStatus.active, cancelAtPeriodEnd: true, currentPriceId: price.id),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
-        ]),
-        SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: pro.id!, title: 'Monthly', priceString: pro.headline),
-        ]),
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.plus,
+          status: SubscriptionStatus.active,
+          cancelAtPeriodEnd: true,
+          currentPriceId: price.id,
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'plus',
+            title: 'Plus',
+            prices: [PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline)],
+          ),
+          SubscriptionPlan(
+            id: 'operator',
+            title: 'Pro',
+            prices: [PricingOption(id: pro.id!, title: 'Monthly', priceString: pro.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -367,7 +443,7 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Plus',
           'price_string': price.headline,
-          'is_active': true
+          'is_active': true,
         },
         {
           'id': pro.id,
@@ -376,7 +452,7 @@ void main() {
           'unit_amount': pro.amountMinor,
           'title': 'Pro',
           'price_string': pro.headline,
-          'is_active': false
+          'is_active': false,
         },
         {
           'id': 'fixture_plus_year',
@@ -385,16 +461,20 @@ void main() {
           'unit_amount': 19990,
           'title': 'Plus',
           'price_string': r'$16.66/month',
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Upgrade to Pro'), findsNothing);
     expect(find.textContaining('Switch to yearly'), findsNothing);
@@ -431,24 +511,33 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()));
+      jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled_plus.json').readAsStringSync()),
+    );
     final price = _plan(data, 'plus').priceFor('month')!;
     expect(data.current!.cancelAtPeriodEnd, isTrue);
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription: Subscription(
-          plan: PlanType.plus, status: SubscriptionStatus.active, cancelAtPeriodEnd: false, currentPriceId: price.id),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
-        ]),
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.plus,
+          status: SubscriptionStatus.active,
+          cancelAtPeriodEnd: false,
+          currentPriceId: price.id,
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'plus',
+            title: 'Plus',
+            prices: [PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -458,16 +547,20 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Plus',
           'price_string': price.headline,
-          'is_active': true
+          'is_active': true,
         },
-      ]
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Resubscribe'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('storefront_buy_plus')));
@@ -488,26 +581,34 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-        as Map<String, dynamic>;
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+            as Map<String, dynamic>;
     json['usage']['kind'] = 'transcription';
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'operator').priceFor('month')!;
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription:
-          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: 'fixture_plus_month'),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
-        ])
-      ],
-    ));
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.plus,
+          status: SubscriptionStatus.active,
+          currentPriceId: 'fixture_plus_month',
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'operator',
+            title: 'Pro',
+            prices: [PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline)],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -517,16 +618,20 @@ void main() {
           'unit_amount': price.amountMinor,
           'title': 'Pro',
           'price_string': price.headline,
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data)),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
     await tester
@@ -540,14 +645,18 @@ void main() {
   });
   testWidgets('flag off keeps Plans & Billing and the storefront flag uses Plans', (tester) async {
     late BuildContext sheetContext;
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(builder: (context) {
-        sheetContext = context;
-        return const SizedBox.shrink();
-      }),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) {
+            sheetContext = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
     expect(await plansSheetTitle(sheetContext, sheetEnabled: () async => false), 'Plans & Billing');
     expect(await plansSheetTitle(sheetContext, sheetEnabled: () async => true), 'Plans');
   });
@@ -560,22 +669,30 @@ void main() {
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
-    usage.debugSetSubscription(UserSubscriptionResponse(
-      subscription: Subscription(
-          plan: PlanType.unlimitedV2, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
-      transcriptionSecondsUsed: 0,
-      transcriptionSecondsLimit: 0,
-      wordsTranscribedUsed: 0,
-      wordsTranscribedLimit: 0,
-      insightsGainedUsed: 0,
-      insightsGainedLimit: 0,
-      availablePlans: [
-        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: 'fixture_plus_year', title: 'Yearly', priceString: r'$199.90'),
-        ])
-      ],
-    ));
+      jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()),
+    );
+    usage.debugSetSubscription(
+      UserSubscriptionResponse(
+        subscription: Subscription(
+          plan: PlanType.unlimitedV2,
+          status: SubscriptionStatus.active,
+          stripeSubscriptionId: 'sub_fixture',
+        ),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [
+          SubscriptionPlan(
+            id: 'plus',
+            title: 'Plus',
+            prices: [PricingOption(id: 'fixture_plus_year', title: 'Yearly', priceString: r'$199.90')],
+          ),
+        ],
+      ),
+    );
     usage.debugSetAvailablePlans({
       'plans': [
         {
@@ -585,7 +702,7 @@ void main() {
           'unit_amount': 1999,
           'title': 'Unlimited',
           'price_string': r'$19.99',
-          'is_active': true
+          'is_active': true,
         },
         {
           'id': 'fixture_plus_year',
@@ -594,16 +711,20 @@ void main() {
           'unit_amount': 19990,
           'title': 'Plus',
           'price_string': r'$199.90',
-          'is_active': false
-        }
-      ]
+          'is_active': false,
+        },
+      ],
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data, gate: () => pending.future)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data, gate: () => pending.future)),
+        ),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(StorefrontPlansContent), findsNothing);
@@ -623,13 +744,18 @@ void main() {
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
     final data = PlanStorefront.fromJson(
-        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()),
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data, gate: () => pending.future)))));
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: _Host(data, gate: () => pending.future)),
+        ),
+      ),
+    );
     await tester.pump();
     expect(find.byType(StorefrontPlansContent), findsNothing);
     expect(find.byType(OmiLoadingState), findsNothing);
@@ -645,11 +771,13 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-          as Map<String, dynamic>;
+      final json =
+          jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+              as Map<String, dynamic>;
       json['current'] = null;
-      final plusTier =
-          (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus');
+      final plusTier = (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere(
+        (tier) => tier['plan_id'] == 'plus',
+      );
       plusTier['is_current'] = false;
       plusTier['action'] = 'checkout';
       plusTier['cta_label'] = 'Get Plus';
@@ -665,20 +793,24 @@ void main() {
       final data = PlanStorefront.fromJson(json);
       final price = _plan(data, 'plus').priceFor('month')!;
       final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id!;
-      usage.debugSetSubscription(UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-        availablePlans: [
-          SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-            PricingOption(id: catalogId, title: 'Monthly', priceString: price.headline),
-          ])
-        ],
-      ));
+      usage.debugSetSubscription(
+        UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          availablePlans: [
+            SubscriptionPlan(
+              id: 'plus',
+              title: 'Plus',
+              prices: [PricingOption(id: catalogId, title: 'Monthly', priceString: price.headline)],
+            ),
+          ],
+        ),
+      );
       usage.debugSetAvailablePlans({
         'plans': [
           {
@@ -688,16 +820,20 @@ void main() {
             'interval': mismatch == 'interval' ? 'year' : 'month',
             'unit_amount': mismatch == 'amount' ? price.amountMinor + 1 : price.amountMinor,
             'price_string': price.headline,
-            'is_active': false
+            'is_active': false,
           },
-        ]
+        ],
       });
-      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UsageProvider>.value(
           value: usage,
           child: MaterialApp(
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(body: _Host(data)))));
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
       await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());

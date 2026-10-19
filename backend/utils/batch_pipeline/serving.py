@@ -7,7 +7,7 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import live_record_admission_enabled
+from config.batch_pipeline import live_record_admission_enabled, async_projection_enabled
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
@@ -62,6 +62,11 @@ class Serving:
         for _ in range(100):
             if self.merge.commit_next(owner_id, time.time()) is None:
                 break
+
+    async def reconcile_async(self, *, recover_quarantine=False):
+        await run_blocking(sync_executor, self.reconcile, recover_quarantine=recover_quarantine)
+        if async_projection_enabled() and self.projector:
+            await self.projector.start_followups()
 
     def reconcile(self, *, recover_quarantine=False):
         if self.cleanup:
@@ -125,7 +130,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await run_blocking(sync_executor, service.reconcile, recover_quarantine=True)
+                await service.reconcile_async(recover_quarantine=True)
                 if live_record_admission_enabled():
                     await drain_recordings(service.store)
             except Exception as error:

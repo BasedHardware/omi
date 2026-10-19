@@ -59,12 +59,11 @@ class OnboardingWrapper extends StatefulWidget {
     required int currentIndex,
     required bool setupPageEnabled,
     required bool knowledgeGraphStepEnabled,
-  }) =>
-      _OnboardingWrapperState.previousStepForTesting(
-        currentIndex: currentIndex,
-        setupPageEnabled: setupPageEnabled,
-        knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
-      );
+  }) => _OnboardingWrapperState.previousStepForTesting(
+    currentIndex: currentIndex,
+    setupPageEnabled: setupPageEnabled,
+    knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
+  );
 
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
@@ -123,6 +122,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  bool _signupPaywallShown = false;
   late final _stepTelemetry = MobileOnboardingStepTelemetry(
     emit: const TypedEvents().emit,
     platform: () => switch (Theme.of(context).platform) {
@@ -151,8 +151,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       );
     }
     final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
-    final initialIndex =
-        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    final initialIndex = signedIn
+        ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep())
+        : kAuthPage;
     _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
     _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
@@ -274,10 +275,26 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
-  /// control, and never when subscription UI is hidden (the router checks that).
+  /// control, and never when subscription UI is hidden (the router checks that). The `trial` arm
+  /// has its placement right after sign-up instead ([_maybeShowSignupPaywall]).
   Future<void> _maybeShowOnboardingPaywall() async {
     final config = await PaywallExperiment.resolve();
     if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (config.variant == PaywallVariant.trial) return;
+    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+  }
+
+  /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
+  /// Dismissing it ("Continue with the free plan") just continues onboarding.
+  Future<void> _maybeShowSignupPaywall() async {
+    if (_signupPaywallShown) return;
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
+    _signupPaywallShown = true;
+    // The router needs the subscription (trial eligibility) that sign-in only started fetching.
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) await usage.fetchSubscription();
+    if (!mounted) return;
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
@@ -285,12 +302,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
   /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
+    await _maybeShowSignupPaywall();
+    if (!mounted) return;
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
-    PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
-      'variant': arm.variant.wireName,
-      '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
-    });
+    PlatformManager.instance.analytics.track(
+      'Onboarding Variant Shown',
+      properties: {
+        'variant': arm.variant.wireName,
+        '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
+      },
+    );
     switch (arm.variant) {
       case OnboardingVariant.yinka:
         await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
@@ -651,10 +673,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _controller!.animateTo(kCompletePage);
         },
       ),
-      OnboardingCompleteScreen(
-        onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: _finishOnboarding,
-      ),
+      OnboardingCompleteScreen(onSkipped: () => _stepTelemetry.skipped = true, onComplete: _finishOnboarding),
     ];
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,

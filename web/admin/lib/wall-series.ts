@@ -705,9 +705,14 @@ export function healthFrames(
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
     legs.billing?.summary.coverage,
-    legs.planCost?.sttMeasured
+    legs.planCost?.sttMeasured,
+    legs.planCost?.saasMeasured
   );
-  const estimates = estimateStatus(now);
+  const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
+  const estimates = estimateStatus(now, {
+    STT: latestCostDay?.sttMeasured,
+    SaaS: latestCostDay?.saasMeasured,
+  });
   // 1 when a manual estimate is older than ESTIMATE_STALE_DAYS.
   const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
@@ -725,11 +730,19 @@ export function healthFrames(
       anthropic: d.anthropic,
       stt: d.stt,
       sttSource: d.sttMeasured ? "measured" : "estimate",
+      sttEstimateUsd: d.sttMeasured ? null : d.stt,
+      sttMeasuredUsd: d.sttMeasured ? d.stt : null,
       saas: d.saas,
+      saasSource: d.saasMeasured ? "measured" : "estimate",
+      saasEstimateUsd: d.saasMeasured ? null : d.saas,
+      saasMeasuredUsd: d.saasMeasured ? d.saas : null,
       estimateStale,
       oneTimeExcluded: d.oneTime || null,
-      // The snapshot prices STT from the constant; a measured day is our own.
-      total: d.sttMeasured ? d.total : snapshotTotals.get(d.date) ?? d.total,
+      // The snapshot uses estimates; measured vendor lines own the all-in total.
+      total:
+        d.sttMeasured || d.saasMeasured
+          ? d.total
+          : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
     };
   });
@@ -769,7 +782,7 @@ export function healthFrames(
     cost,
     costPerMau,
     marginByPlan,
-    marginStatus: [{ text: marginStatus(marginByPlan, days, estimates) }],
+    marginStatus: [{ text: marginStatus(marginByPlan, days, now) }],
     estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
   };
 }
@@ -851,22 +864,26 @@ const shortDay = (day: string) =>
 
 /** The margin chart's freshness line: its own data-through day (it lags the
  * rest of the wall) and how its STT and SaaS lines were priced. */
-function marginStatus(
-  rows: Row[],
-  days: CostDay[],
-  estimates: ReturnType<typeof estimateStatus>
-) {
+function marginStatus(rows: Row[], days: CostDay[], now: Date) {
   const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
-  const measured =
-    through != null && days.find((d) => d.date === through)?.sttMeasured;
-  const shown = estimates.filter((e) => !(measured && e.line === "STT"));
+  const day = through ? days.find((d) => d.date === through) : undefined;
+  const estimates = estimateStatus(now, {
+    STT: day?.sttMeasured,
+    SaaS: day?.saasMeasured,
+  });
+  const shown = estimates.filter(
+    (e) => !day?.[e.line === "STT" ? "sttMeasured" : "saasMeasured"]
+  );
   const asOf = shown.map((e) => e.asOf).sort()[0];
   const stale = shown.some((e) => e.stale);
+  const labels = [
+    day?.sttMeasured ? "STT measured" : "STT estimate",
+    day?.saasMeasured ? "measured SaaS (Mercury)" : "SaaS estimate",
+  ];
+  const dated = asOf ? ` as of ${shortDay(asOf)}` : "";
   return [
     `Margin through ${through ? shortDay(through) : "—"}`,
-    `${measured ? "STT measured · SaaS" : "STT & SaaS"} est. as of ${shortDay(
-      asOf
-    )}${stale ? " (stale)" : ""}`,
+    `${labels.join(" · ")}${dated}${stale ? " (stale)" : ""}`,
   ].join(" · ");
 }
 

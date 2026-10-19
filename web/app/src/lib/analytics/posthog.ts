@@ -46,6 +46,35 @@ export const PostHogManager = {
       // A throwing capture must not block checkout.
     }
   },
+  /**
+   * Resolve a boolean flag once PostHog has delivered flags. Fails closed:
+   * no SDK, a throw, or no answer within `timeoutMs` reads as off.
+   */
+  isFeatureEnabled(flag: string, timeoutMs = 2000): Promise<boolean> {
+    try {
+      if (typeof window === 'undefined') return Promise.resolve(false);
+      this.init();
+      if (!isInitialized) return Promise.resolve(false);
+      return new Promise<boolean>((resolve) => {
+        let unsubscribe: (() => void) | undefined;
+        const finish = (enabled: boolean) => {
+          clearTimeout(timer);
+          unsubscribe?.();
+          resolve(enabled);
+        };
+        const timer = setTimeout(() => finish(false), timeoutMs);
+        try {
+          unsubscribe = posthog.onFeatureFlags(() => {
+            finish(posthog.isFeatureEnabled(flag) === true);
+          });
+        } catch {
+          finish(false);
+        }
+      });
+    } catch {
+      return Promise.resolve(false);
+    }
+  },
   pageView(pageName: string) {
     this.track(`${pageName} Page Viewed`);
   },

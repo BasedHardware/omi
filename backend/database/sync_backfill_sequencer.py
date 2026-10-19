@@ -21,6 +21,7 @@ from database._client import get_firestore_client
 from database import sync_redrive
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
+from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
 
@@ -308,6 +309,43 @@ def pending_head(uid: str, *, firestore_client: Any = None) -> Optional[dict[str
     if owner.get('active_job_id') or _repair_waiting(owner, _now()):
         return None
     return _first_pending(client, uid)
+
+
+def preparation_candidates(uid: str, job_id: str, epoch: int, *, firestore_client: Any = None) -> list[dict[str, Any]]:
+    """Snapshot a bounded ordered prefix without reserving or dispatching it.
+
+    Epoch validation prevents obsolete heads initiating more speculative I/O.
+    Preparation grants no execution authority; claim_next must still select
+    its head transactionally after the active job finishes.
+    """
+    _require_production()
+    width = preparation_width()
+    if width <= 1:
+        return []
+    client = firestore_client or get_firestore_client()
+
+    @firestore.transactional
+    def read(transaction: Any) -> list[dict[str, Any]]:
+        owner = _data(_root(client, uid).get(transaction=transaction))
+        if (
+            owner.get('active_job_id') != job_id
+            or owner.get('active_epoch') != epoch
+            or owner.get('active_state') != 'running'
+        ):
+            return []
+        query = _pending_for_uid(client, uid)
+        query = (
+            query.order_by('sort_at', direction=firestore.Query.DESCENDING)
+            if newest_first(uid)
+            else query.order_by('sort_at')
+        )
+        threshold = backlog_threshold()
+        docs = list(query.limit(threshold).stream(transaction=transaction))
+        if len(docs) < threshold:
+            return []
+        return [_data(doc) for doc in docs[: width - 1]]
+
+    return read(client.transaction(read_only=True))
 
 
 def retire_expired(

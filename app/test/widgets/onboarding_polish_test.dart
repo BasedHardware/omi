@@ -42,30 +42,36 @@ Widget host(Widget child, {double scale = 1, TargetPlatform platform = TargetPla
   return MaterialApp(
     debugShowCheckedModeBanner: false,
     theme: theme.copyWith(
-        platform: platform,
-        textTheme: theme.textTheme.apply(fontFamily: font),
-        appBarTheme: theme.appBarTheme.copyWith(titleTextStyle: OmiType.headline.copyWith(fontFamily: font))),
+      platform: platform,
+      textTheme: theme.textTheme.apply(fontFamily: font),
+      appBarTheme: theme.appBarTheme.copyWith(titleTextStyle: OmiType.headline.copyWith(fontFamily: font)),
+    ),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: const [Locale('en')],
     home: Builder(
-        builder: (context) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.linear(scale),
-                  padding: const EdgeInsets.only(top: 59, bottom: 34),
-                  viewPadding: const EdgeInsets.only(top: 59, bottom: 34)),
-              child: Scaffold(body: child),
-            )),
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(scale),
+          padding: const EdgeInsets.only(top: 59, bottom: 34),
+          viewPadding: const EdgeInsets.only(top: 59, bottom: 34),
+        ),
+        child: Scaffold(body: child),
+      ),
+    ),
   );
 }
 
-Widget survey() => Stack(children: [
-      Positioned.fill(child: Image.asset(Assets.images.onboardingBg1.path, fit: BoxFit.cover)),
-      OnboardingStepLayout(
-          reserveHeader: false,
-          onBack: () {},
-          progress: const OnboardingProgressDots(current: 2, total: 5),
-          child: FoundOmiWidget(goNext: () {}, saveSource: (_) async => true)),
-    ]);
+Widget survey() => Stack(
+  children: [
+    Positioned.fill(child: Image.asset(Assets.images.onboardingBg1.path, fit: BoxFit.cover)),
+    OnboardingStepLayout(
+      reserveHeader: false,
+      onBack: () {},
+      progress: const OnboardingProgressDots(current: 2, total: 5),
+      child: FoundOmiWidget(goNext: () {}, saveSource: (_) async => true),
+    ),
+  ],
+);
 
 class PairingProvider extends BaseProvider with MessageNotifierMixin implements OnboardingProvider {
   @override
@@ -106,11 +112,14 @@ class PairingHomeProvider extends HomeProvider {
   Future<void> setupHasSpeakerProfile() async {}
 }
 
-Widget connect(OnboardingProvider pairing) => MultiProvider(providers: [
-      ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
-      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
-      ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
-    ], child: const ConnectDevicePage());
+Widget connect(OnboardingProvider pairing) => MultiProvider(
+  providers: [
+    ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
+    ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+    ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
+  ],
+  child: const ConnectDevicePage(),
+);
 
 Future<void> loadFonts() async {
   final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
@@ -159,26 +168,38 @@ void main() {
     expect(connectFailureReason(StateError('Device initialization did not complete')), Reason.notFoundOrDropped);
     expect(connectFailureReason(TimeoutException('timeout')), Reason.notFoundOrDropped);
     expect(
-        connectFailureReason(StateError('Device initialization did not complete'), staleBond: true), Reason.staleBond);
-    expect(connectFailureReason(const BluetoothAdapterUnavailableException(BluetoothAdapterState.off)),
-        Reason.bluetoothOff);
-    expect(connectFailureReason(const BluetoothAdapterUnavailableException(BluetoothAdapterState.unauthorized)),
-        Reason.bluetoothPermissionDenied);
+      connectFailureReason(StateError('Device initialization did not complete'), staleBond: true),
+      Reason.staleBond,
+    );
+    expect(
+      connectFailureReason(const BluetoothAdapterUnavailableException(BluetoothAdapterState.off)),
+      Reason.bluetoothOff,
+    );
+    expect(
+      connectFailureReason(const BluetoothAdapterUnavailableException(BluetoothAdapterState.unauthorized)),
+      Reason.bluetoothPermissionDenied,
+    );
     for (final state in [BluetoothAdapterState.off, BluetoothAdapterState.unauthorized]) {
-      expect(connectFailureReason(BluetoothAdapterUnavailableException(state), staleBond: true),
-          state == BluetoothAdapterState.off ? Reason.bluetoothOff : Reason.bluetoothPermissionDenied);
+      expect(
+        connectFailureReason(BluetoothAdapterUnavailableException(state), staleBond: true),
+        state == BluetoothAdapterState.off ? Reason.bluetoothOff : Reason.bluetoothPermissionDenied,
+      );
     }
     expect(connectFailureReason(Exception('unknown')), Reason.unknown);
     expect(connectFailureReason(StateError('unrelated')), Reason.unknown);
     expect(blockedFailureReason(DevicePairingBlockedReason.nearbyDevicesDenied), Reason.nearbyDevicesDenied);
     expect(
-        blockedFailureReason(DevicePairingBlockedReason.locationPermissionMissing), Reason.locationPermissionMissing);
-    expect(blockedFailureReason(DevicePairingBlockedReason.bluetoothOff, adapterState: BluetoothAdapterState.off),
-        Reason.bluetoothOff);
+      blockedFailureReason(DevicePairingBlockedReason.locationPermissionMissing),
+      Reason.locationPermissionMissing,
+    );
+    expect(
+      blockedFailureReason(DevicePairingBlockedReason.bluetoothOff, adapterState: BluetoothAdapterState.off),
+      Reason.bluetoothOff,
+    );
     for (final state in [
       BluetoothAdapterState.unknown,
       BluetoothAdapterState.unsupported,
-      BluetoothAdapterState.resetting
+      BluetoothAdapterState.resetting,
     ]) {
       expect(blockedFailureReason(DevicePairingBlockedReason.bluetoothOff, adapterState: state), Reason.unknown);
     }
@@ -205,12 +226,14 @@ void main() {
       for (final reason in Reason.values) {
         var dismissed = 0, guides = 0;
         Widget page() => Center(
-            child: PairingFailureCard(
-                key: ValueKey(reason),
-                reason: reason,
-                onDismiss: () => dismissed++,
-                onGuide: () => guides++,
-                emit: events.add));
+          child: PairingFailureCard(
+            key: ValueKey(reason),
+            reason: reason,
+            onDismiss: () => dismissed++,
+            onGuide: () => guides++,
+            emit: events.add,
+          ),
+        );
         await tester.pumpWidget(host(page(), platform: platform));
         expect(pairingFailureCopy(l10n, reason), copies[reason]);
         expect(find.text(copies[reason]!), findsOneWidget);
@@ -219,8 +242,10 @@ void main() {
         await tester.pump();
         expect(events.length, count);
         expect(events.last.wireName, 'Device Connect Failure Shown');
-        expect(events.last.properties,
-            {'failure_reason': reason.wireName, 'platform': platform == TargetPlatform.iOS ? 'ios' : 'android'});
+        expect(events.last.properties, {
+          'failure_reason': reason.wireName,
+          'platform': platform == TargetPlatform.iOS ? 'ios' : 'android',
+        });
         await tester.tap(find.byKey(const Key('pairing_failure_guide')));
         await tester.pump();
         expect(guides, 1);
@@ -232,27 +257,27 @@ void main() {
     }
   });
 
-  testWidgets('Watch action stays at the sibling bottom inset and state guidance is retained', (tester) async {
+  testWidgets('device-first step: Connect is the primary at the bottom inset, store and skip sit under it', (
+    tester,
+  ) async {
     viewport(tester);
     final l10n = AppLocalizationsEn();
-    for (final state in [(true, true), (false, true), (true, false)]) {
-      await tester
-          .pumpWidget(host(FirstCaptureWatchInstructions(paired: state.$1, installed: state.$2, onComplete: () {})));
-      expect(tester.getRect(find.byKey(const Key('watch_capture_continue'))).bottom, closeTo(802, 1));
-      if (!state.$1) {
-        expect(find.text(l10n.firstCaptureWatchPair), findsOneWidget);
-      } else if (!state.$2) {
-        expect(find.text(l10n.firstCaptureWatchInstall), findsOneWidget);
-      } else {
-        final text = tester.widget<Text>(find.text(l10n.watchCaptureRecord));
-        expect(text.style!.fontWeight, OmiType.body.fontWeight);
-        expect(find.text(l10n.watchCaptureSync), findsOneWidget);
-      }
-      expect(tester.takeException(), isNull);
-    }
-    await tester
-        .pumpWidget(host(FirstCaptureWatchInstructions(paired: true, installed: true, onComplete: () {}), scale: 2));
-    expect(find.byKey(const Key('watch_capture_continue')).hitTestable(), findsOneWidget);
+    await tester.pumpWidget(host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {})));
+    expect(find.text(l10n.firstCaptureConnectTitle), findsOneWidget);
+    expect(find.text(l10n.firstCaptureConnect), findsOneWidget);
+    expect(find.text(l10n.firstCaptureNoDevice), findsOneWidget);
+    expect(find.text(l10n.firstCaptureSkip), findsOneWidget);
+    final connect = tester.getRect(find.byKey(const Key('first_capture_omi')));
+    final shop = tester.getRect(find.byKey(const Key('first_capture_shop')));
+    final skip = tester.getRect(find.byKey(const Key('onboarding_complete_start')));
+    expect(connect.bottom, lessThan(shop.top));
+    expect(shop.bottom, lessThan(skip.top));
+    expect(skip.bottom, closeTo(802, 1));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(
+      host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {}), scale: 2),
+    );
+    expect(find.byKey(const Key('onboarding_complete_start')).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -272,7 +297,7 @@ void main() {
       l10n.event,
       l10n.appStore,
       l10n.googleSearch,
-      l10n.otherSource
+      l10n.otherSource,
     ];
     await tester.pumpWidget(host(survey()));
     final footerTop = tester.getRect(find.byKey(const Key('found_omi_continue'))).top;
@@ -321,7 +346,12 @@ void main() {
       final tag = platform == TargetPlatform.iOS ? 'ios' : 'android';
       Future<void> render(String name, Widget child, {double scale = 1, bool scrollToEnd = false}) async {
         await tester.pumpWidget(const SizedBox());
-        await tester.pumpWidget(RepaintBoundary(key: boundary, child: host(child, platform: platform, scale: scale)));
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: boundary,
+            child: host(child, platform: platform, scale: scale),
+          ),
+        );
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
         await tester.pump(const Duration(milliseconds: 400));
         if (scrollToEnd) {
@@ -332,13 +362,13 @@ void main() {
         await tester.runAsync(() async {
           final image = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
           final png = await (await image.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
-          final ordinal = name == 'watch'
+          final ordinal = name == 'device-first'
               ? 1
               : name.startsWith('connect-')
-                  ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
-                      (platform == TargetPlatform.iOS ? 2 : 12)
-                  : ['find-us', 'find-us-large', 'find-us-large-end'].indexOf(name) +
-                      (platform == TargetPlatform.iOS ? 9 : 19);
+              ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
+                    (platform == TargetPlatform.iOS ? 2 : 12)
+              : ['find-us', 'find-us-large', 'find-us-large-end'].indexOf(name) +
+                    (platform == TargetPlatform.iOS ? 9 : 19);
           final filename = '${ordinal.toString().padLeft(3, '0')}-mobile-$tag-${name.replaceAll('_', '-')}.png';
           final file = File('../.agent-artifacts/ui-evidence/onb-polish/$filename');
           file.parent.createSync(recursive: true);
@@ -347,7 +377,10 @@ void main() {
       }
 
       if (platform == TargetPlatform.iOS) {
-        await render('watch', FirstCaptureWatchInstructions(paired: true, installed: true, onComplete: () {}));
+        await render(
+          'device-first',
+          OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {}),
+        );
       }
       for (final reason in Reason.values) {
         final pairing = PairingProvider()..pairingFailureReason = reason;

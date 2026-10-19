@@ -29,6 +29,8 @@ class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
   static FlutterSecureStorage? _secureStorage;
+  final _deviceChanges = StreamController<void>.broadcast(sync: true);
+  Stream<void> get deviceChanges => _deviceChanges.stream;
 
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
@@ -126,7 +128,8 @@ class SharedPreferencesUtil {
 
     final lastVersion = prefs.get('lastKnownAppVersion');
     final bootSchema = prefs.get(BootRecovery.schemaKey);
-    final existingInstall = prefs.get('onboardingCompleted') == true ||
+    final existingInstall =
+        prefs.get('onboardingCompleted') == true ||
         (lastVersion is String && lastVersion.trim().isNotEmpty) ||
         (bootSchema is int && bootSchema > 0);
     final savedDefault = prefs.get(appearanceDefaultMigrationKey);
@@ -1158,10 +1161,12 @@ class SharedPreferencesUtil {
   Future<void> cacheConversations(List<ServerConversation> value) async {
     final generation = ++_cachedConversationsGeneration;
     final snapshot = List<ServerConversation>.of(value);
-    final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
-        size: snapshot.length,
-        threshold: cachedConversationsBackgroundEncodeThreshold,
-        debugName: 'conversation_cache_encode');
+    final encoded = await offUiIsolate(
+      () => [for (final c in snapshot) jsonEncode(c.toJson())],
+      size: snapshot.length,
+      threshold: cachedConversationsBackgroundEncodeThreshold,
+      debugName: 'conversation_cache_encode',
+    );
     if (generation != _cachedConversationsGeneration) return;
     await saveStringList('cachedConversations', encoded);
   }
@@ -1515,7 +1520,12 @@ class SharedPreferencesUtil {
       ? _preferences?.getStringList(key) ?? defaultValue
       : _readOrDefault(key, defaultValue);
 
-  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async {
+    final changed = key == 'btDevice' && _preferences?.getString(key) != value;
+    final write = _preferences?.setString(key, value);
+    if (changed) _deviceChanges.add(null);
+    return await write ?? false;
+  }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 

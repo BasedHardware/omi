@@ -159,7 +159,6 @@ def memory_stack(memory_module, monkeypatch):
     monkeypatch.setattr(pc, 'conversation_transcript_and_speaker_map', lambda *_: ('Ship Friday', {}))
     monkeypatch.setattr(pc, 'may_attribute_to_owner', lambda *_: True)
     monkeypatch.setattr(pc, '_rejected_memory_examples_for_l1', lambda *_, **__: ())
-    monkeypatch.setattr(pc, 'select_owner_shadow_indices', lambda *_: ([], 0))
     yield pc, conversation, service
 
 
@@ -227,22 +226,6 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     assert generate.call_count == 2
 
 
-def test_owner_adjudication_summary_is_part_of_l1_effective_input(enabled, memory_stack, monkeypatch):
-    pc, conversation, _ = memory_stack
-    row = {}
-    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: True)
-    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
-    monkeypatch.setattr(
-        dedupe, 'l1_succeeded', lambda uid, conv, digest, **kwargs: row.update({dedupe.L1_HASH: digest})
-    )
-    extract = Mock(return_value=[])
-    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    conversation.structured.overview = 'Changed notes context for owner attribution'
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    assert extract.call_count == 2
-
-
 @pytest.mark.parametrize('enabled_flag', [False, True])
 def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, monkeypatch, enabled_flag):
     from database import _client
@@ -301,6 +284,7 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summar
 
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     empty = Structured(title='Server transcript title', overview='')
     rich = Structured(title='Generated title', overview='A supported synthetic summary')

@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
@@ -134,6 +135,15 @@ Future<FirebaseApp> _ensureFirebaseApp() {
     validateProject: (projectId) => Env.validateFirebaseProject(projectId: projectId),
   );
 }
+
+/// WorkManager's retained entry point uses exactly the UI Firebase profile.
+@pragma('vm:entry-point')
+Future<void> onDeviceOverflowBackground() => runOnDeviceBackground(
+  initialize: () async {
+    await _ensureFirebaseApp();
+    initOpus(await opus_flutter.load());
+  },
+);
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -305,6 +315,9 @@ Future _init() async {
   // persisted override. This also makes release builds pin their flavor URL
   // before the first connectivity probe.
   if (!_serviceManagerInitialized) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      await const MethodChannel('com.omi/on_device').invokeMethod<void>('awaitBackgroundIdle');
+    }
     await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
     _serviceManagerInitialized = true;
   }
@@ -343,8 +356,9 @@ Future _init() async {
     OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
-      authMethod:
-          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      authMethod: firebaseUser == null || firebaseUser.providerData.isEmpty
+          ? null
+          : firebaseUser.providerData.first.providerId,
       userCreatedAt: firebaseUser?.metadata.creationTime,
     );
     // Restore onboarding state from server if not already set locally
@@ -663,8 +677,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

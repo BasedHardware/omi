@@ -293,41 +293,6 @@ def test_get_memories_forwards_include_archive():
     assert service.read_page.call_args.kwargs["include_archive"] is True
 
 
-def test_get_memories_offset_temporal_view_passes_view_into_service_read():
-    """Offset fallback must not post-filter one already-paged released window:
-    the temporal selector and anchor belong inside the service read so
-    history rows are admitted before offset/limit slicing."""
-    mem_mod = _load_memories_router()
-    service = MagicMock()
-    service.read.return_value = []
-    scope_request = types.SimpleNamespace(device_scope="all", client_device_id=None)
-    anchor = datetime(2026, 9, 13, tzinfo=timezone.utc)
-    with (
-        patch.object(mem_mod, "MemoryService", return_value=service),
-        patch.object(mem_mod, "belief_model_enabled", return_value=True),
-        patch.object(mem_mod, "normalize_temporal_read_view", side_effect=lambda value: value),
-        patch.object(mem_mod, "_resolve_get_memories_device_scope", return_value=scope_request),
-        patch.object(mem_mod, "_validate_device_scope_request"),
-        patch.object(mem_mod, "list_read_budget_for_request", return_value=MagicMock(truncated=False)),
-    ):
-        mem_mod.get_memories(
-            response=MagicMock(),
-            request=MagicMock(),
-            limit=50,
-            offset=50,
-            include_archive=False,
-            view="history",
-            as_of=anchor,
-            uid="uid-1",
-            device_scope="all",
-            client_device_id=None,
-            x_app_platform=None,
-            x_device_id_hash=None,
-        )
-    assert service.read.call_args.kwargs["view"] == "history"
-    assert service.read.call_args.kwargs["as_of"] == anchor
-
-
 def test_ledger_history_route_is_explicit_owner_scoped_and_bounded():
     mem_mod = _load_memories_router()
     service = MagicMock()
@@ -470,55 +435,6 @@ def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
     assert projected.model_dump(mode="json")["canonical_memory_id"] == "canonical-row"
 
 
-def test_memory_item_to_memorydb_attaches_belief_view_only_when_flag_on(monkeypatch):
-    # Anchor to the wall clock: exactly one half-life old keeps currency at 0.5
-    # (the fading band floor) regardless of when CI runs. A fixed calendar date
-    # rots into the history band once 60 days elapse.
-    captured_at = datetime.now(timezone.utc) - timedelta(days=30)
-    item = _item("mem-state", tier=MemoryLayer.short_term, content="in a meeting", updated_at=captured_at).model_copy(
-        update={"half_life_days": 30, "captured_at": captured_at}
-    )
-    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
-    off = memory_item_to_memorydb(item)
-    assert off.currency is None
-    assert off.currency_band is None
-    assert off.as_of is None
-
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    on = memory_item_to_memorydb(item)
-    assert on.currency_band == "fading"
-    assert on.as_of == item.captured_at
-    assert on.half_life_days == 30
-
-
-def test_ledger_history_route_answers_empty_without_scan_outside_rollout():
-    """Fleet-cost guard: the memories tab calls this on every load for every
-    user; outside the JIT rollout (including unknown/error states) the route
-    must answer empty without paying the bounded provider scan."""
-
-    mem_mod = _load_memories_router()
-    service = MagicMock()
-    with (
-        patch.object(mem_mod, "MemoryService", return_value=service),
-        patch.object(
-            mem_mod,
-            "resolve_jit_rollout_sync",
-            return_value=types.SimpleNamespace(permits_work=False),
-        ),
-        patch.object(mem_mod, "memory_list_response", side_effect=lambda values, _exposure, headers=None: values),
-    ):
-        result = mem_mod.get_ledger_history(
-            response=MagicMock(),
-            request=None,
-            limit=50,
-            offset=0,
-            uid="uid-1",
-        )
-
-    assert result == []
-    service.read_ledger_history_page.assert_not_called()
-
-
 @pytest.mark.parametrize('asynchronous', [False, True])
 def test_memories_router_503_structured_fields_and_no_sensitive_details(asynchronous, caplog):
     import hashlib
@@ -575,7 +491,6 @@ def test_get_memories_http_503_logs_cursor_offset_and_first_page_failure(params,
     with (
         patch.object(mem_mod, 'MemoryService', return_value=service),
         patch.object(mem_mod, 'MemoryBackingStoreUnavailable', BackingStoreUnavailable),
-        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
         patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
         patch.object(mem_mod, '_validate_device_scope_request'),
         patch.object(mem_mod, 'list_read_budget_for_request', return_value=MagicMock(truncated=False)),
@@ -637,7 +552,6 @@ def test_memory_router_cursor_offset_fallback_uses_at_most_two_whole_operation_a
     with (
         patch.object(mem_mod, 'MemoryService', Service),
         patch.object(mem_mod, 'MemoryBackingStoreUnavailable', Unavailable),
-        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
         patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
         patch.object(mem_mod, '_validate_device_scope_request'),
         patch.object(mem_mod, 'list_read_budget_for_request', return_value=budget),
@@ -720,7 +634,6 @@ def _exercise_router_admission(monkeypatch, *, concurrent_requests):
         patch.object(
             mem_mod, 'MemoryBackingStoreUnavailable', (Unavailable, read_resilience.MemoryReadAdmissionDenied)
         ),
-        patch.object(mem_mod, 'belief_model_enabled', return_value=False),
         patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
         patch.object(mem_mod, '_validate_device_scope_request'),
         patch.object(

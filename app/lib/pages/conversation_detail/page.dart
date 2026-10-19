@@ -55,6 +55,7 @@ import 'widgets/ask_agent_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 import 'widgets/summarized_apps_sheet.dart';
 import 'widgets/transcript_tab.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 
 /// Offset of the floating bottom bar from the bottom of the screen.
 ///
@@ -79,6 +80,7 @@ double detailToastClearance(double bottomSystemInset) =>
 /// transcript so retained fragment data is immediately visible.
 ConversationTab conversationDetailInitialTab(ServerConversation conversation, {ConversationTab? requested}) {
   if (requested != null) return requested;
+  if (conversation.processingDeferred) return ConversationTab.transcript;
   if (conversation.status != ConversationStatus.completed) return ConversationTab.summary;
 
   final hasTranscript = conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty);
@@ -231,9 +233,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       index == _transcriptTabIndex ? ConversationTab.transcript : ConversationTab.summary;
 
   static int _indexForTab(ConversationTab tab) => switch (tab) {
-        ConversationTab.transcript => _transcriptTabIndex,
-        ConversationTab.summary => _summaryTabIndex,
-      };
+    ConversationTab.transcript => _transcriptTabIndex,
+    ConversationTab.summary => _summaryTabIndex,
+  };
 
   void _openTranscriptTab() {
     _hasExplicitTabSelection = true;
@@ -851,8 +853,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     final conversation = provider.conversation;
     final hasRecordings = CaptureGroupPresentation.recordings(conversation).isNotEmpty;
     final summarySelection = provider.getSummarySelection();
-    final summaryApp =
-        summarySelection.isApp ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull : null;
+    final summaryApp = summarySelection.isApp
+        ? provider.appsList.where((app) => app.id == summarySelection.appId).firstOrNull
+        : null;
     // Grouped, with large dividers between groups: how the summary is written, then organising
     // the conversation, then finding and copying its words; developer tools (when on) sit last
     // before Delete. Star and Share live in the top bar.
@@ -873,8 +876,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         PullDownMenuItem(
           title: l10n.reprocessConversation,
           iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
-          onTap:
-              provider.loadingReprocessConversation ? null : () => _handleMenuSelection(context, 'reprocess', provider),
+          onTap: provider.loadingReprocessConversation
+              ? null
+              : () => _handleMenuSelection(context, 'reprocess', provider),
         ),
       ],
     ];
@@ -1106,7 +1110,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
 
     // The bottom bar (and its backdrop) shows once there is something to play or ask about.
-    final hasBar = conversation.transcriptSegments.isNotEmpty ||
+    final hasBar =
+        conversation.transcriptSegments.isNotEmpty ||
         conversation.photos.isNotEmpty ||
         conversation.externalIntegration != null;
 
@@ -1174,6 +1179,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                   children: [
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                    if (conversation.processingDeferred)
+                      const Padding(padding: EdgeInsets.all(OmiSpacing.xs), child: ProcessingDeferredMarker()),
                     ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
                     ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(
@@ -1193,7 +1200,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                               _playbackController.updateSegments(segments);
                               _playbackController.seek(segment.start, strict: true);
                             },
-                            reviewEnabled: !widget.isFromOnboarding &&
+                            reviewEnabled:
+                                !widget.isFromOnboarding &&
                                 widget.initialSeekStart == null &&
                                 selectedTab == ConversationTab.summary &&
                                 !_controller!.indexIsChanging &&

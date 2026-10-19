@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
+from config.rollout_cohorts import warm_rollout_cohorts
 from typing import Any, Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, WebSocketException
@@ -59,6 +61,7 @@ async def _watch_account_deletion(request: ListenRequest) -> None:
 
 
 async def _run_listen_session_with_deletion_fence(request: ListenRequest) -> None:
+    await warm_rollout_cohorts(request.uid)
     session = asyncio.create_task(run_listen_session(request), name=f'listen:{request.uid}:session')
     deletion_watcher = asyncio.create_task(
         _watch_account_deletion(request),

@@ -9,7 +9,6 @@ from typing import Any, List, Optional
 from database._client import db as firestore_db
 from utils.model_text import format_date, format_instant, truncation_note
 from utils.user_clock import clock_for_uid
-from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
@@ -30,12 +29,8 @@ def _memory_truncation_suffix(shown: int) -> str:
     )
 
 
-def _memory_read_date(memory: object, *, temporal: bool) -> Optional[datetime]:
-    """Use the captured/evidence clock for beta date filters and citations."""
-    if temporal:
-        evidence_date = getattr(memory, 'as_of', None)
-        if isinstance(evidence_date, datetime):
-            return evidence_date
+def _memory_read_date(memory: object) -> Optional[datetime]:
+    """Use the creation clock for memory citations and date filters."""
     created_at = getattr(memory, 'created_at', None)
     return created_at if isinstance(created_at, datetime) else None
 
@@ -46,12 +41,15 @@ def get_memories_text(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    view: Optional[str] = None,
+    as_of: Optional[datetime] = None,
     now: Optional[datetime] = None,
     source_sink: Optional[List[dict[str, Any]]] = None,
-    view: str = 'useful_now',
-    as_of: Optional[datetime] = None,
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
+    # Older clients still send the removed temporal selector. Accept and ignore
+    # it so their requests continue to receive the released current-memory view.
+    _ = view, as_of
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
     clock = clock_for_uid(uid)
 
@@ -64,21 +62,13 @@ def get_memories_text(
     if start_date:
         try:
             start_dt = parse_iso_date(start_date, 'start_date')
-        except ValueError as e:
-            return f"Error: Invalid start_date format: {e}"
+        except ValueError:
+            return "Error: Invalid start_date format."
     if end_date:
         try:
             end_dt = parse_iso_date(end_date, 'end_date')
-        except ValueError as e:
-            return f"Error: Invalid end_date format: {e}"
-
-    try:
-        requested_view = normalize_temporal_read_view(view)
-        effective_view = requested_view if belief_model_enabled() else 'released'
-        if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
-            return "Error: Invalid as_of: timezone-aware datetime required"
-    except ValueError as exc:
-        return f"Error: Invalid view: {exc}"
+        except ValueError:
+            return "Error: Invalid end_date format."
 
     try:
         service = MemoryService(db_client=firestore_db)
@@ -86,74 +76,29 @@ def get_memories_text(
         scan_offset = 0
         visible = []
         max_scan = 5000
-        page_size = 500
-        max_pages = max(1, (max_scan + page_size - 1) // page_size)
-        pages_scanned = 0
         scan_truncated = False
-        if effective_view != 'released':
-            # Temporal reads use the bounded keyset/cursor path so filtering a
-            # page to zero rows does not falsely terminate history traversal.
-            cursor = None
-            while len(visible) < target_end and pages_scanned < max_pages:
-                pages_scanned += 1
-                page = service.read_page(
-                    uid,
-                    limit=page_size,
-                    cursor=cursor,
-                    now=now,
-                    view=effective_view,
-                    as_of=as_of,
-                )
-                batch = page.memories
-                scan_truncated = scan_truncated or getattr(page, 'truncated', False)
-                cursor = page.next_cursor
-                if not batch:
-                    if not cursor:
-                        break
-                scan_offset += len(batch)
-                for memory in batch:
-                    if (
-                        memory.is_locked
-                        or getattr(memory, 'user_review', None) is False
-                        or (belief_model_enabled() and memory_use_suppressed(memory))
-                    ):
-                        continue
-                    created = _memory_read_date(memory, temporal=True)
-                    if start_dt and created and created < start_dt:
-                        continue
-                    if end_dt and created and created > end_dt:
-                        continue
-                    visible.append(memory)
-                if not cursor:
-                    break
-            scan_truncated = scan_truncated or bool(cursor and pages_scanned >= max_pages and len(visible) < target_end)
-        else:
-            while scan_offset < max_scan and len(visible) < target_end:
-                batch_limit = min(500, max_scan - scan_offset)
-                fetch_limit = target_end if scan_offset == 0 else batch_limit
-                batch = service.read(uid, limit=fetch_limit, offset=scan_offset, now=now)
-                if not batch:
-                    break
-                scan_offset += len(batch)
-                for memory in batch:
-                    if (
-                        memory.is_locked
-                        or getattr(memory, 'user_review', None) is False
-                        or (belief_model_enabled() and memory_use_suppressed(memory))
-                    ):
-                        continue
-                    created = memory.created_at
-                    if start_dt and created and created < start_dt:
-                        continue
-                    if end_dt and created and created > end_dt:
-                        continue
-                    visible.append(memory)
-                if len(batch) < fetch_limit:
-                    break
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset, now=now)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked or getattr(memory, 'user_review', None) is False:
+                    continue
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
         memories = visible[offset:target_end]
     except Exception as e:
-        logger.error(f"get_memories_text error: {e}")
-        return f"Error retrieving memories: {e}"
+        logger.error("get_memories_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
+        return "Error retrieving memories. Please try again."
     if not memories:
         date_info = ""
         if start_dt and end_dt:
@@ -166,14 +111,12 @@ def get_memories_text(
         return f"No memories found{date_info}.{suffix}"
 
     title = "User Memories"
-    if effective_view != 'released':
-        title += f" ({effective_view} view; dates are evidence time)"
     if scan_truncated:
         title += " (bounded scan; more may exist)"
     records = []
     for memory in memories:
         # Preserve the existing list formatter's preference for the evidence clock.
-        stamp = _memory_read_date(memory, temporal=True)
+        stamp = _memory_read_date(memory)
         if stamp and stamp.tzinfo is not None:
             stamp = stamp.astimezone(timezone.utc)
         date_str = format_instant(stamp, clock) if stamp else 'Unknown'
@@ -205,9 +148,7 @@ def get_memories_text(
                     'source_id': memory.memory_id or memory.id,
                     'title': 'Memory',
                     'preview': str(memory.content or '')[:600],
-                    'created_at': safe_isoformat(
-                        _memory_read_date(memory, temporal=effective_view != 'released') or memory.created_at
-                    ),
+                    'created_at': safe_isoformat(_memory_read_date(memory) or memory.created_at),
                 }
             )
 
@@ -220,11 +161,13 @@ def search_memories_text(
     uid: str,
     query: str,
     limit: int = 5,
-    source_sink: Optional[List[dict[str, Any]]] = None,
-    view: str = 'useful_now',
+    view: Optional[str] = None,
     as_of: Optional[datetime] = None,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Semantic vector search for memories, formatted as LLM-ready text."""
+    # Preserve request compatibility while all searches use the current view.
+    _ = view, as_of
     logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
 
     limit = max(1, min(limit, 20))
@@ -234,42 +177,16 @@ def search_memories_text(
     clock = clock_for_uid(uid)
 
     try:
-        requested_view = normalize_temporal_read_view(view)
-        effective_view = requested_view if belief_model_enabled() else 'released'
-        if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
-            return "Error: Invalid as_of: timezone-aware datetime required"
-    except ValueError as exc:
-        return f"Error: Invalid view: {exc}"
-
-    try:
-        search_kwargs: dict[str, Any] = {'limit': limit}
-        if effective_view != 'released':
-            search_kwargs.update(view=effective_view, as_of=as_of)
-        matches = MemoryService(db_client=firestore_db).search(uid, query, **search_kwargs)
-        matches = [
-            match
-            for match in matches
-            if not match.memory.is_locked and not (belief_model_enabled() and memory_use_suppressed(match.memory))
-        ]
+        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = [match for match in matches if not match.memory.is_locked]
         if not matches:
             return f"No memories found matching '{query}'."
         records = []
         for match in matches:
             memory = match.memory
-            display_date = _memory_read_date(memory, temporal=effective_view != 'released')
+            display_date = _memory_read_date(memory)
             date_str = format_date(display_date, clock) if display_date else 'Unknown'
             suffix = f"relevance: {match.score:.2f}, category: {memory.category.value}, date: {date_str}"
-            if effective_view != 'released':
-                band = getattr(memory, 'currency_band', None)
-                evidence_date = getattr(memory, 'as_of', None)
-                evidence_date_str = (
-                    format_date(evidence_date, clock) if isinstance(evidence_date, datetime) else date_str
-                )
-                if band:
-                    suffix += f", band: {band}"
-                suffix += f", as_of: {evidence_date_str}"
-                if effective_view == 'history':
-                    suffix += ", historical: true"
             records.append(
                 format_memory_evidence(
                     memory.content,
@@ -296,9 +213,7 @@ def search_memories_text(
                         'source_id': memory.memory_id or memory.id,
                         'title': 'Memory',
                         'preview': str(memory.content or '')[:600],
-                        'created_at': safe_isoformat(
-                            _memory_read_date(memory, temporal=effective_view != 'released') or memory.created_at
-                        ),
+                        'created_at': safe_isoformat(_memory_read_date(memory) or memory.created_at),
                     }
                 )
 
@@ -307,5 +222,5 @@ def search_memories_text(
         return result
 
     except Exception as e:
-        logger.error(f"search_memories_text error: {e}")
-        return f"Error searching memories: {e}"
+        logger.error("search_memories_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
+        return "Error searching memories. Please try again."

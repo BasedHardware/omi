@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -27,8 +28,25 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// which rows each page draws. Depth = taps from the open sheet to see the row.
 
 class _Device extends ChangeNotifier implements DeviceProvider {
+  _Device({this.connected = true, this.paired, this.persistedPairing = false});
+
+  final bool connected;
+
+  /// What the provider remembers across a drop; null means nothing remembered.
+  final BtDevice? paired;
+
+  /// The persisted pairing in SharedPreferences, present on a cold start before the provider
+  /// hydrates [paired] on the connect path.
+  final bool persistedPairing;
+
   @override
-  bool get isConnected => true;
+  bool get isConnected => connected;
+
+  @override
+  bool get hasRememberedDevice => paired?.id.isNotEmpty ?? persistedPairing;
+
+  @override
+  BtDevice? get pairedDevice => paired;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -83,9 +101,9 @@ const _pagesOfRows = {
 };
 
 String? _keyOf(Widget widget) => switch (widget.key) {
-      ValueKey<String>(:final value) => value,
-      _ => null,
-    };
+  ValueKey<String>(:final value) => value,
+  _ => null,
+};
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();
@@ -117,14 +135,14 @@ void main() {
     await PlatformManager.initializeServices();
   });
 
-  Future<void> pumpSheet(WidgetTester tester) async {
+  Future<void> pumpSheet(WidgetTester tester, {DeviceProvider? device}) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
+          ChangeNotifierProvider<DeviceProvider>(create: (_) => device ?? _Device()),
           ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
           ChangeNotifierProvider<CaptureProvider>(create: (_) => _Capture()),
           ChangeNotifierProvider<AppearanceProvider>(create: (_) => AppearanceProvider()),
@@ -141,52 +159,51 @@ void main() {
   }
 
   testWidgets(
-      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
-      (
-    tester,
-  ) async {
-    await pumpSheet(tester);
-    final rows = _rowsOnScreen(tester);
-    expect(rows.map(_keyOf).toList(), [
-      'settings_account',
-      'settings_row_planAndUsage',
-      'settings_row_referral',
-      'settings_group_device',
-      'settings_group_recording',
-      'settings_group_voice',
-      'settings_group_notifications',
-      'settings_group_integrations',
-      'settings_row_connect_agent',
-      'settings_group_privacy',
-      'settings_row_memories',
-      'settings_row_goals',
-      'settings_group_help',
-      'settings_row_feedback', // where Intercom is supported (the host test is)
-      'settings_group_developer',
-    ]);
-    // Account shows who is signed in.
-    expect(rows.first.title, 'Ada');
-    expect(rows.first.subtitle, 'ada@example.com');
-    expect(rows.skip(1).map((r) => r.title).toList(), [
-      en.planAndUsage,
-      en.referralProgram,
-      en.device,
-      en.recordingAndTranscription,
-      en.assistantVoiceSettingsTitle,
-      en.notificationsAndDisplay,
-      en.integrations,
-      en.connectAnAgent,
-      en.dataAndPrivacy,
-      en.memories,
-      en.goals,
-      en.helpAndAbout,
-      en.feedbackBug,
-      en.developerSettings,
-    ]);
-    // The search field and close button stay in the header.
-    expect(find.byType(OmiCloseButton), findsOneWidget);
-    expect(find.bySemanticsLabel(en.search), findsOneWidget);
-  });
+    'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+    (tester) async {
+      await pumpSheet(tester);
+      final rows = _rowsOnScreen(tester);
+      expect(rows.map(_keyOf).toList(), [
+        'settings_account',
+        'settings_row_planAndUsage',
+        'settings_row_referral',
+        'settings_group_device',
+        'settings_group_recording',
+        'settings_group_voice',
+        'settings_group_notifications',
+        'settings_group_integrations',
+        'settings_row_connect_agent',
+        'settings_group_privacy',
+        'settings_row_memories',
+        'settings_row_goals',
+        'settings_group_help',
+        'settings_row_feedback', // where Intercom is supported (the host test is)
+        'settings_group_developer',
+      ]);
+      // Account shows who is signed in.
+      expect(rows.first.title, 'Ada');
+      expect(rows.first.subtitle, 'ada@example.com');
+      expect(rows.skip(1).map((r) => r.title).toList(), [
+        en.planAndUsage,
+        en.referralProgram,
+        en.device,
+        en.recordingAndTranscription,
+        en.assistantVoiceSettingsTitle,
+        en.notificationsAndDisplay,
+        en.integrations,
+        en.connectAnAgent,
+        en.dataAndPrivacy,
+        en.memories,
+        en.goals,
+        en.helpAndAbout,
+        en.feedbackBug,
+        en.developerSettings,
+      ]);
+      // The search field and close button stay in the header.
+      expect(find.byType(OmiCloseButton), findsOneWidget);
+      expect(find.bySemanticsLabel(en.search), findsOneWidget);
+    },
+  );
 
   testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (
     tester,
@@ -342,5 +359,50 @@ void main() {
     await tester.tap(find.widgetWithText(OmiSettingsRow, en.voiceResponseMode));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings_page_voice')), findsOneWidget);
+  });
+
+  testWidgets('Device Settings stays reachable from the Device group after the pendant drops', (tester) async {
+    // The flagged scenario: nothing is connected, but the app remembers the pendant, so the
+    // Diagnostics row inside Device Settings must stay reachable through Settings → Device.
+    await pumpSheet(
+      tester,
+      device: _Device(
+        connected: false,
+        paired: BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -60),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_page_device')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_row_device')), findsOneWidget);
+    expect(find.text(en.deviceSettings), findsOneWidget);
+  });
+
+  testWidgets('with no remembered device, the Device group hides Device Settings', (tester) async {
+    await pumpSheet(tester, device: _Device(connected: false));
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_row_device')), findsNothing);
+  });
+
+  testWidgets('a cold start with only the persisted pairing still shows the Device Settings row', (tester) async {
+    // pairedDevice is null until the connect path hydrates it; the persisted pairing in
+    // SharedPreferences must keep the row reachable meanwhile.
+    await pumpSheet(tester, device: _Device(connected: false, persistedPairing: true));
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_row_device')), findsOneWidget);
+
+    // Search follows the same rule: the page is findable, its live-link rows are not.
+    await tester.tap(find.byType(OmiBackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(en.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), en.deviceSettings);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(OmiSettingsRow, en.deviceSettings), findsWidgets);
   });
 }

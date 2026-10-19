@@ -185,7 +185,7 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
         query = query.order_by('__name__')
         if after_id is not None:
             query = query.start_after({'__name__': collection.document(after_id)})
-    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 10))).stream()]
+    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
 def cancel_fenced_recovery(store, segment_id):

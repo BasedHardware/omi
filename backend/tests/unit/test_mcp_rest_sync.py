@@ -502,7 +502,7 @@ class TestRestListCursorContract:
         # in-window continuation must surface as X-Next-Cursor, not a body field.
         memories = [_memory(f"m{i}") for i in range(5)]
         service = MagicMock()
-        service.read.side_effect = lambda uid, limit=None, offset=0: memories
+        service.read.side_effect = lambda uid, limit=None, offset=0, budget=None: memories
         monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda db_client=None: service)
         resp = client.get("/v1/mcp/memories", params={"limit": 2})
         assert resp.status_code == 200
@@ -864,6 +864,8 @@ class TestRestMemoryListScanContract:
             }
 
         monkeypatch.setattr(rest.mcp_memory_handlers, "collect_filtered_memories", fake_collect)
+        service = SimpleNamespace(read=lambda *args, **kwargs: [])
+        monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda **kwargs: service)
         resp = client.get("/v1/mcp/memories", params={"sort": "created_desc"})
         assert resp.status_code == 200
         assert resp.json()[0]["id"] == "m1"

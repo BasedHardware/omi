@@ -323,7 +323,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
+    final contentChanged =
+        widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
@@ -982,7 +983,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final bool isUser = data.isUser;
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn = previous == null ||
+    final startsTurn =
+        previous == null ||
         previous.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
@@ -1026,7 +1028,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isUser) ...[
+                  if (!isUser && data.sttProvider?.startsWith('on_device:') != true) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
                       child: Row(
@@ -1097,8 +1099,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18,
+                                    ? 6
+                                    : 18,
                               ),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: const Radius.circular(18),
@@ -1220,7 +1222,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
     // The badge marks the start of a speaker's turn, not every line of it.
-    final startsTurn = previous == null ||
+    final startsTurn =
+        previous == null ||
         previous.isUser != data.isUser ||
         previous.speakerId != data.speakerId ||
         previous.personId != data.personId ||
@@ -1230,7 +1233,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final selecting = selected != null && toggle != null;
     final confirm = widget.onConfirmSpeakerLabel;
     final reject = widget.onRejectSpeakerLabel;
-    final asksToConfirm = !selecting &&
+    final asksToConfirm =
+        !selecting &&
         person != null &&
         confirm != null &&
         reject != null &&
@@ -1250,13 +1254,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final time = !widget.canDisplaySeconds
         ? null
         : startedAt == null
-            ? OmiDuration.offset(data.start)
-            : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
+        ? OmiDuration.offset(data.start)
+        : OmiDateFormat.of(context).time(startedAt.add(Duration(milliseconds: (data.start * 1000).round())));
 
     final who = !startsTurn
         ? isTagging
-            ? const Row(children: [OmiSpinner(size: OmiSpinnerSize.small)])
-            : const SizedBox.shrink()
+              ? const Row(children: [OmiSpinner(size: OmiSpinnerSize.small)])
+              : const SizedBox.shrink()
         : Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,

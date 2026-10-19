@@ -21,6 +21,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -63,6 +64,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Whether the app remembers any device, including before [getDeviceInfo] hydrates
+  /// [pairedDevice] on the connect path. A cold start with a pendant that never reconnects
+  /// still has the persisted pairing in `SharedPreferencesUtil().btDevice`.
+  bool get hasRememberedDevice => pairedDevice?.id.isNotEmpty ?? SharedPreferencesUtil().btDevice.id.isNotEmpty;
 
   /// Capability-normalized identity for capture/home restarts.
   ///
@@ -169,10 +175,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Duration? fullyChargedMinimumDwell,
     FullyChargedNotification? fullyChargedNotification,
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
-  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
-        _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
-        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+  }) : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+       _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+       _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
+       _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _fullyChargedAlert = FullyChargedAlertGate(
       now: clock ?? DateTime.now,
       monotonicNow: monotonicNow,
@@ -216,6 +222,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// is hardware and is not torn down; WAL attach, coordinator wake, and other
   /// account publication from the retired generation must not land.
   void clearUserData() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
     _admittedLink = null;
     _readoptExpectedPair = null;
@@ -310,7 +317,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
-    final endedDeviceWasLiveCapture = endedDevice != null &&
+    final endedDeviceWasLiveCapture =
+        endedDevice != null &&
         endedDevice.id == liveCaptureDevice?.id &&
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
@@ -492,13 +500,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
-    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        Logger.debug('DeviceProvider: Timed out finding the active device connection');
-        return null;
-      },
-    );
+    final connection = await ServiceManager.instance().device
+        .ensureConnection(device.id)
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            Logger.debug('DeviceProvider: Timed out finding the active device connection');
+            return null;
+          },
+        );
     return await connection?.playFindDevicePattern() ?? false;
   }
 
@@ -558,10 +568,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = globalNavigatorKey.currentContext;
-          unawaited(NotificationService.instance.createNotification(
-            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
-            body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
-          ));
+          unawaited(
+            NotificationService.instance.createNotification(
+              title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+              body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
+            ),
+          );
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;
         }
@@ -709,8 +721,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -742,6 +755,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
       Logger.debug('initiateConnection ($caller): blocked until stale bond recovery');
+      return;
+    }
+
+    // Arm recovery even if native restoration connected before the home frame.
+    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+      await ServiceManager.instance().device.reconnectSavedDevice('launch');
       return;
     }
 
@@ -857,6 +876,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _isDisposed = true;
     _sessionGeneration++;
     nativeLink.dispose();
@@ -1242,10 +1262,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _handleDeviceConnected(String deviceId, int generation, {bool requirePersistedPair = false}) async {
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     _admittedConnectGeneration = generation;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     if (connection == null) {
       return;
     }
@@ -1584,12 +1604,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
     _isFirmwareUpdateInProgress = false;
+    ServiceManager.instance().device.reconnectPaused = false;
+    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {
       _firmwareUpdatePromptCoordinator.invalidatePresentation();
     }

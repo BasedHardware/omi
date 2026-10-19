@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 import database.screen_frames as screen_frames_db
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from database.screen_frames import LEGACY_SCREEN_FRAMES_BUCKET, frame_storage_bucket
 
 PROD = 'based-hardware-prod-screen-frames'
@@ -129,7 +130,7 @@ def test_dev_keeps_writing_its_legacy_fields(monkeypatch):
 def test_a_deadline_bounds_the_marker_read_to_one_attempt(monkeypatch):
     ref = _ref(monkeypatch)
     screen_frames_db.get_conversation_screen_frames_adjudicated_at('u', 'c', bucket=PROD, rpc_timeout=3.5)
-    assert ref.rpc_bounds == {'timeout': 3.5, 'retry': None}
+    assert ref.rpc_bounds == {'timeout': 3.5, 'retry': FIRESTORE_NO_RETRY}
     screen_frames_db.get_conversation_screen_frames_adjudicated_at('u', 'c', bucket=PROD)
     assert ref.rpc_bounds == {}
 
@@ -142,7 +143,7 @@ def test_the_marker_read_returns_stamp_and_fingerprint_for_this_bucket(monkeypat
 
     prod = screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=PROD, rpc_timeout=2.0)
     assert prod[1] == 'prod-fp' and prod[0] is not None
-    assert ref.rpc_bounds == {'timeout': 2.0, 'retry': None}
+    assert ref.rpc_bounds == {'timeout': 2.0, 'retry': FIRESTORE_NO_RETRY}
     assert screen_frames_db.get_conversation_screen_frames_marker('u', 'c', bucket=LEGACY_SCREEN_FRAMES_BUCKET) == (
         'dev-stamp',
         'dev-fp',

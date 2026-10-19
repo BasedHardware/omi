@@ -111,7 +111,7 @@ the protected `prod` Environment or `development`; production uses its existing
 `MONITOR_GRAFANA_TOKEN`, while development may inherit the repository's dev token.
 PR #21686 restored legacy dashboard provisioning through monitoring-specific
 Environments; the broader alert writer requires protected production authority
-and a permission probe. Rotate only failed credentials. Never use TV `GRAFANA_TOKEN`.
+and a permission probe. Rotate only failed credentials. Never use a credential belonging to the retired TV Grafana instance.
 
 The production path upserts `alert-rules.json` by stable UID, backs up live rules
 before writes, preserves UI/API provenance and notification timing, retains
@@ -667,15 +667,15 @@ Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`
 2. **Export the dashboard JSON:**
 ```bash
 # Get a Grafana API token (Settings → API Keys → Add, role=Viewer)
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omiapi.com"  # dev first
 
 # List dashboards to find the UID
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/search?type=dash-db" | jq '.[] | {title, uid}'
 
 # Export a specific dashboard (strips runtime fields)
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<UID>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<name>.json
 ```
@@ -689,11 +689,11 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
 4. **Import to Grafana** (if creating on a new/different instance):
 ```bash
 # First, get or create the target folder (returns folderUid)
-FOLDER_UID=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+FOLDER_UID=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/folders" | jq -r '.[] | select(.title=="GKE") | .uid')
 
 # Import with folder placement
-curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "$GRAFANA_HOST/api/dashboards/db"
@@ -713,12 +713,12 @@ When a dashboard is edited via the Grafana UI (emergency fixes, quick iterations
 
 ```bash
 # 1. Set up
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"  # or monitor.omiapi.com
 
 # 2. Export the updated dashboard
 DASHBOARD_UID="07e4c65f-ae79-414d-bf05-99468267d199"  # example: Parakeet ASR
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/$DASHBOARD_UID" | \
   jq '.dashboard | del(.id, .version)' > dashboards/parakeet-asr-monitoring.json
 
@@ -732,7 +732,7 @@ git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 
 **Bulk sync (all 17 custom dashboards):**
 ```bash
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
 
 # UID → folder mapping (mirrors repo directory structure)
@@ -763,10 +763,10 @@ declare -A DASHBOARDS=(
 for uid in "${!DASHBOARDS[@]}"; do
   folder="${DASHBOARDS[$uid]}"
   mkdir -p "dashboards/$folder"
-  slug=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  slug=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq -r '.meta.slug // .dashboard.title' | tr ' /' '-' | tr '[:upper:]' '[:lower:]')
-  curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq '.dashboard | del(.id, .version)' > "dashboards/$folder/${slug}.json"
   echo "Exported: $folder/$slug ($uid)"
@@ -777,13 +777,13 @@ done
 ```bash
 # Export from dev
 export GRAFANA_HOST="https://monitor.omiapi.com"
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<uid>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<folder>/<name>.json
 
 # Import to prod with correct folder
 FOLDER_UID="aev9igt5fwgsgc"  # example: GKE folder
-curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "https://monitor.omi.me/api/dashboards/db"
@@ -822,8 +822,8 @@ Pusher release workflows additionally call `verify_pusher_live_alert_route.py`
 before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
 secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
 for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
-health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
-secret belongs to the TV Cloud Run Grafana. The default invocation is the
+health and queries, and contact points. Do not reuse the retired TV-instance
+credential here. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
@@ -1044,6 +1044,21 @@ one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
 must shrink as initialization is added. Exporter/GPU/other service registries and
 full selector coverage are outside this family-level contract; stream-close
 selector coverage has its own unit test.
+
+The backend-listen fleet-health write counters use closed labels:
+`omi_stt_fleet_health_write_attempted_total{write_path,kind}` counts each logical
+write passed to the scheduler, including writes dropped by its bounds;
+`omi_stt_fleet_health_write_written_total` counts only after Redis acknowledges
+a commit, and
+`omi_stt_fleet_health_write_dropped_total{write_path,kind,reason}` records bounded
+drop reasons. `write_path` is `transcript_result`, `cost_routing_result`, or
+`cost_bench`; `kind` is `result` or `bench`; `reason` is `redis_backoff`,
+`identity_changed`, `identity_changed_after_commit`, `redis_error`,
+`loop_unavailable`, `in_flight_limit`, `background_schedule_error`, or
+`cross_thread_schedule_error`. The finalization
+`listen_finalization_summary_last_success_timestamp_seconds` gauge is registered
+only after a successful Firestore summary, so absence means this process has not
+yet confirmed the summary.
 
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
@@ -1365,6 +1380,9 @@ boolean threshold units, reduction/math support and pending periods on rate,
 ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
 a rule hash; any rule edit invalidates the exception. It is debt, never deployment
 approval. The snapshot is historical presence, not proof of current ingestion.
+`declared_metrics` records source-backed metric names that are not yet in that
+historical snapshot; offline lint accepts them, while a live replay still checks
+the actual Prometheus series and fails if they have not been deployed or scraped.
 Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains

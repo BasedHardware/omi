@@ -31,6 +31,7 @@ from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
+from utils.rollout_cohorts import configure_rollout_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,9 @@ def main() -> None:
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
     store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
+    # on admitted work items; bind the cached cohort resolver before pumping.
+    configure_rollout_runtime()
     artifacts = create_artifact_store(
         store,
         create_storage_client(),

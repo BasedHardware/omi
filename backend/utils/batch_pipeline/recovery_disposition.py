@@ -57,7 +57,7 @@ def inspect_audio(item, audio, *, vad=None):
 
     pcm, duration = at_stage('audio_validation', 'invalid_audio', decode)
     if vad is None:
-        from utils.stt.vad import offline_pcm_speech_segments
+        from utils.stt.local_vad import offline_pcm_speech_segments
 
         vad = offline_pcm_speech_segments
     raw = at_stage('strict_vad', 'vad_failed', lambda: vad(pcm))
@@ -132,6 +132,10 @@ class MultilingualEmpty(RecoveryFailure):
 
 def padded_empty(job):
     return job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+
+
+def padded_skipped(job):
+    return job.get('worker_empty_evidence') == {'padded_retry': 'skipped_oversize', 'version': 1}
 
 
 def terminal_empty_payload(duration, spans):

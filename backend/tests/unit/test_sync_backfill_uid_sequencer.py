@@ -310,6 +310,53 @@ def test_contention_only_one_active_and_other_uid_can_dispatch(db):
     assert registry.claim_next('light', firestore_client=db, now=NOW)['job_id'] == 'l0'
 
 
+@pytest.mark.parametrize('order', ['oldest', 'newest'])
+def test_preparation_is_read_only_ordered_and_cannot_bypass_execution_head(db, monkeypatch, order):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', order)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    for index in range(10):
+        _register('a', f'job-{index}', index, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    assert registry.preparation_candidates('a', claim['job_id'], claim['epoch']) == []
+    assert registry.begin_job('a', claim['job_id'], claim['epoch'], now=NOW)
+    before = copy.deepcopy(db.docs)
+    candidates = registry.preparation_candidates('a', claim['job_id'], claim['epoch'])
+    expected = ['job-1', 'job-2', 'job-3'] if order == 'oldest' else ['job-8', 'job-7', 'job-6']
+    assert [job['job_id'] for job in candidates] == expected
+    assert db.docs == before
+    # Even a fully warmed future job cannot begin, finish, or steal the head.
+    assert not registry.begin_job('a', candidates[0]['job_id'], claim['epoch'], now=NOW)
+    assert not registry.finish_job('a', candidates[0]['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert registry.claim_next('a', now=NOW) is None
+    assert registry.finish_job('a', claim['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert registry.claim_next('a', now=NOW)['job_id'] == expected[0]
+
+
+def test_preparation_stale_epoch_and_small_backlog_are_inert(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    for index in range(10):
+        _register('a', f'job-{index}', index, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    assert registry.begin_job('a', claim['job_id'], claim['epoch'], now=NOW)
+    replacement = registry.redrive_job('a', claim['job_id'], claim['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.begin_job('a', replacement['job_id'], replacement['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.preparation_candidates('a', claim['job_id'], claim['epoch']) == []
+    assert len(registry.preparation_candidates('a', replacement['job_id'], replacement['epoch'])) == 3
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'off')
+    assert registry.preparation_candidates('a', replacement['job_id'], replacement['epoch']) == []
+    # Restoring serial preparation does not release/fence a running job.
+    assert registry.renew_job('a', replacement['job_id'], replacement['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.claim_next('a', now=NOW) is None
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    _register('b', 'b-head', 0, db=db)
+    _register('b', 'b-next', 1, db=db)
+    other = registry.claim_next('b', now=NOW)
+    assert registry.begin_job('b', other['job_id'], other['epoch'], now=NOW)
+    assert registry.preparation_candidates('b', other['job_id'], other['epoch']) == []
+
+
 def test_expired_lease_redrive_is_fenced_and_duplicate_delivery_is_inert(db):
     _register('a', 'job', 0, db=db)
     first = registry.claim_next('a', firestore_client=db, now=NOW)

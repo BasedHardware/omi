@@ -359,17 +359,17 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             child: content.isEmpty
                 ? _buildNoSummaryForApp(context)
                 : _isEditing
-                    ? _buildEditor(context)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                            ? null
-                            : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                        ? null
+                        : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
           if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
         ],
@@ -624,6 +624,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
     if (selection.sections.isNotEmpty && widget.searchQuery.isEmpty) {
       return NoteSectionsSliver(
         sections: selection.sections,
+        transcriptSegments: widget.conversation.transcriptSegments,
         onOpenSource: widget.onOpenSource,
         onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
             ? null
@@ -666,7 +667,10 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
         : CachedNetworkImage(
             imageUrl: app.getImageUrl(),
             imageBuilder: (context, imageProvider) => CircleAvatar(
-                backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
+              backgroundColor: OmiColors.textPrimary,
+              radius: avatarRadius,
+              backgroundImage: imageProvider,
+            ),
             errorWidget: (context, url, error) => CircleAvatar(
               backgroundColor: OmiColors.textPrimary,
               radius: avatarRadius,

@@ -22,7 +22,8 @@ from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
-from utils.sync.assignment import auto_mergeable, capture_mismatch, compatible_capture
+from utils.sync.assignment import auto_mergeable, capture_mismatch
+from utils.sync.live_overlap import compatible_capture
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from utils.sync.pipeline import _firestore_error_class
 

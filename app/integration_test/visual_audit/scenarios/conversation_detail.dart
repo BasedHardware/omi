@@ -27,18 +27,18 @@ const _summaryTab = ConversationTab.summary;
 const _transcriptTab = ConversationTab.transcript;
 
 List<SingleChildWidget> _detailProviders(ServerConversation conversation, {ConversationProvider? provider}) => [
-      ChangeNotifierProvider<ConversationProvider>.value(
-        value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation]),
-      ),
-      ChangeNotifierProvider(
-        create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt),
-      ),
-    ];
+  ChangeNotifierProvider<ConversationProvider>.value(
+    value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation]),
+  ),
+  ChangeNotifierProvider(
+    create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt),
+  ),
+];
 
 Future<void> _pumpDetail(AuditRun a, ServerConversation conversation, {ConversationTab tab = _summaryTab}) => a.pump(
-      ConversationDetailPage(conversation: conversation, initialTab: tab),
-      providers: _detailProviders(conversation),
-    );
+  ConversationDetailPage(conversation: conversation, initialTab: tab),
+  providers: _detailProviders(conversation),
+);
 
 TranscriptSegment _segment(String id, String text, String speaker, {bool isUser = false, String? personId}) {
   final start = double.parse(id) * 3;
@@ -66,15 +66,15 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
   final now = DateTime.now();
   final startedAt = DateTime(now.year, now.month, now.day, 12, 40);
   TranscriptSegment line(String id, int minute, double until, String text, {bool mine = false}) => TranscriptSegment(
-        id: id,
-        text: text,
-        speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
-        isUser: mine,
-        personId: null,
-        start: minute * 60.0,
-        end: until * 60,
-        translations: [],
-      );
+    id: id,
+    text: text,
+    speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
+    isUser: mine,
+    personId: null,
+    start: minute * 60.0,
+    end: until * 60,
+    translations: [],
+  );
   final conversation = ServerConversation(
     id: 'audit-design',
     createdAt: startedAt,
@@ -147,7 +147,8 @@ final conversationDetailScenarios = <AuditScenario>[
     id: 'conversation-detail-design',
     title: 'The Omi v8 conversation: title, chips, Summary | Transcript, one bottom bar',
     page: _page,
-    state: 'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
+    state:
+        'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
         'a 14 min recording)',
     run: (a) async {
       await _pumpDesignConversation(a);
@@ -156,6 +157,63 @@ final conversationDetailScenarios = <AuditScenario>[
       await a.shot('Tap Transcript: the waveform player and the round Ask button', step: 'transcript');
       await a.tap(find.byKey(const Key('conversation_more')));
       await a.shot('Open the ⋯ menu: Summary Template first', step: 'overflow');
+    },
+  ),
+  AuditScenario(
+    id: 'conversation-detail-partial-audio',
+    title: 'Transcript player when only a few seconds of a long call were saved',
+    page: 'lib/widgets/conversation_bottom_bar.dart (ConversationBottomBar)',
+    state: 'A 5:49 phone call with a complete transcript and one 3 s stored recording (#19243)',
+    run: (a) async {
+      final startedAt = DateTime(2026, 10, 2, 14);
+      TranscriptSegment line(String id, double start, double end, String text, {bool mine = false}) =>
+          TranscriptSegment(
+            id: id,
+            text: text,
+            speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
+            isUser: mine,
+            personId: null,
+            start: start,
+            end: end,
+            translations: [],
+          );
+      final conversation = ServerConversation(
+        id: 'audit-partial-audio',
+        createdAt: startedAt,
+        startedAt: startedAt,
+        finishedAt: startedAt.add(const Duration(minutes: 5, seconds: 49)),
+        status: ConversationStatus.completed,
+        structured: Structured(
+          'Call about the venue deposit',
+          'Confirmed the deposit and the Friday walkthrough.',
+          emoji: '\u{1F4DE}',
+          category: 'personal',
+        ),
+        transcriptSegments: [
+          line('0', 0, 12, 'Hi, calling about the deposit for the twelfth.'),
+          line('1', 12, 40, 'Yes, it is confirmed. Do you still want the walkthrough on Friday?', mine: true),
+          line('2', 40, 95, 'Friday works. Can we do it before noon?'),
+          line('3', 95, 180, 'Eleven is fine. I will send the parking details tonight.', mine: true),
+          line('4', 180, 300, 'Perfect. One more thing about the catering list.'),
+          line('5', 300, 349, 'Send it over and I will look tomorrow.', mine: true),
+        ],
+        audioFiles: [
+          AudioFile(
+            id: 'audio-partial',
+            uid: 'audit',
+            conversationId: 'audit-partial-audio',
+            chunkTimestamps: [],
+            duration: 3,
+            startedAt: startedAt,
+          ),
+        ],
+      );
+      await _pumpDetail(a, conversation, tab: _transcriptTab);
+      expect(find.byKey(const ValueKey('detail_audio_player')), findsOneWidget);
+      await a.shot(
+        'Open the transcript: the player explains the short recording instead of showing -0:03',
+        step: 'transcript',
+      );
     },
   ),
   AuditScenario(

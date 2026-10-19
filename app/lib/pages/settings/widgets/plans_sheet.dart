@@ -117,8 +117,11 @@ class _PlansSheetState extends State<PlansSheet> {
       _storefrontFailed = false;
       _storefront = null;
     });
-    final result = await (widget.storefrontApi ?? PlanStorefrontApi())
-        .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
+    final result = await (widget.storefrontApi ?? PlanStorefrontApi()).load(
+      source: widget.analyticsSource,
+      trigger: widget.storefrontTrigger,
+      locale: context.l10n.localeName,
+    );
     if (!mounted) return;
     setState(() {
       _storefrontLoading = false;
@@ -395,34 +398,51 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => OmiAlertDialog(
-          title: l10n.upgradeToAnnualPlan,
+          title: storefrontPrice?.confirmLines.isNotEmpty == true
+              ? (storefrontPrice!.ctaLabel ?? l10n.upgradeToAnnualPlan)
+              : l10n.upgradeToAnnualPlan,
           content: Material(
             type: MaterialType.transparency,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l10n.importantBillingInfo,
-                  textAlign: TextAlign.start,
-                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: OmiSpacing.xxs),
-                PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
-                PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
-                PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
-                const SizedBox(height: OmiSpacing.xs),
-                PlanDialogLine(
-                  icon: FontAwesomeIcons.circleInfo,
-                  text: l10n.thirteenMonthsCoverage,
-                  color: OmiColors.success,
-                ),
+                if (storefrontPrice?.confirmLines.isNotEmpty == true)
+                  ...storefrontPrice!.confirmLines.map(
+                    (line) => Padding(
+                      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+                      child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary)),
+                    ),
+                  )
+                else ...[
+                  Text(
+                    l10n.importantBillingInfo,
+                    textAlign: TextAlign.start,
+                    style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: OmiSpacing.xxs),
+                  PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
+                  PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
+                  PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
+                  const SizedBox(height: OmiSpacing.xs),
+                  PlanDialogLine(
+                    icon: FontAwesomeIcons.circleInfo,
+                    text: l10n.thirteenMonthsCoverage,
+                    color: OmiColors.success,
+                  ),
+                ],
               ],
             ),
           ),
           actions: [
             OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
-            OmiDialogAction(label: l10n.confirmUpgrade, isDefault: true, onPressed: () => Navigator.of(ctx).pop(true)),
+            OmiDialogAction(
+              label: storefrontPrice?.confirmLines.isNotEmpty == true
+                  ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
+                  : l10n.confirmUpgrade,
+              isDefault: true,
+              onPressed: () => Navigator.of(ctx).pop(true),
+            ),
           ],
         ),
       );
@@ -444,6 +464,7 @@ class _PlansSheetState extends State<PlansSheet> {
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
       storefrontDecision: storefrontDecision,
+      confirmedByStorefront: isUpgradingFromMonthlyToAnnual && storefrontPrice?.confirmLines.isNotEmpty == true,
     );
   }
 
@@ -453,6 +474,7 @@ class _PlansSheetState extends State<PlansSheet> {
     required String billingInterval,
     bool releaseUpgradingLock = true,
     StorefrontCheckoutDecision? storefrontDecision,
+    bool confirmedByStorefront = false,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -471,7 +493,8 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final currentSub = provider.subscription!.subscription;
-    final resubscribing = cancelPendingPurchase(
+    final resubscribing =
+        cancelPendingPurchase(
           cancelAtPeriodEnd: currentSub.cancelAtPeriodEnd,
           currentPriceId: currentSub.currentPriceId,
           priceId: priceId,
@@ -483,7 +506,7 @@ class _PlansSheetState extends State<PlansSheet> {
       return;
     }
 
-    if (currentSub.plan.isPaid && !resubscribing) {
+    if (currentSub.plan.isPaid && !resubscribing && !confirmedByStorefront) {
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.confirmPlanChange,
@@ -553,10 +576,12 @@ class _PlansSheetState extends State<PlansSheet> {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
             final planName = currentPlanDisplayName(context, provider.subscription);
-            final date = billingDateLabel(context, sessionData['next_billing_date']) ??
+            final date =
+                billingDateLabel(context, sessionData['next_billing_date']) ??
                 billingDateLabel(context, currentSub.currentPeriodEnd);
-            final message =
-                date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
+            final message = date == null
+                ? l10n.subscriptionReactivatedDefault
+                : l10n.yourPlanWillRenewOn(planName, date);
             if (mounted) {
               setState(() {
                 _renewalConfirmation = message;
@@ -630,11 +655,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
     selectedTierId = sub.plan.wireName;
     selectedPlan = interval == 'year' ? 'yearly' : 'monthly';
-    await _handleUpgrade(
-      priceId,
-      targetPlan: sub.plan.wireName,
-      billingInterval: interval,
-    );
+    await _handleUpgrade(priceId, targetPlan: sub.plan.wireName, billingInterval: interval);
   }
 
   void _keepCurrentPriceSelected(List<Map<String, dynamic>> plans) {
@@ -654,11 +675,11 @@ class _PlansSheetState extends State<PlansSheet> {
     if (raw is! List) return false;
     final interval = selectedPlan == 'yearly' ? 'year' : 'month';
     return raw.whereType<Map>().any(
-          (plan) =>
-              plan['id'] == currentId &&
-              plan['interval'] == interval &&
-              (selectedTierId == null || plan['plan_id'] == selectedTierId),
-        );
+      (plan) =>
+          plan['id'] == currentId &&
+          plan['interval'] == interval &&
+          (selectedTierId == null || plan['plan_id'] == selectedTierId),
+    );
   }
 
   Future<void> _openPaymentPortal() async {
@@ -763,8 +784,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
-        final DateTime? periodEndAt =
-            periodEnd != null && periodEnd > 0 ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000) : null;
+        final DateTime? periodEndAt = periodEnd != null && periodEnd > 0
+            ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000)
+            : null;
         if (periodEndAt != null) {
           renewalDate = OmiDateFormat.of(context).date(periodEndAt);
         }
@@ -818,9 +840,11 @@ class _PlansSheetState extends State<PlansSheet> {
                               (periodEnded
                                   ? l10n.planEndedOn(renewalDate)
                                   : knownFutureEnd
-                                      ? l10n.yourPlanEndsOn(
-                                          currentPlanDisplayName(context, provider.subscription), renewalDate)
-                                      : l10n.subscriptionSetToCancel),
+                                  ? l10n.yourPlanEndsOn(
+                                      currentPlanDisplayName(context, provider.subscription),
+                                      renewalDate,
+                                    )
+                                  : l10n.subscriptionSetToCancel),
                           key: const ValueKey('plans_sheet_cancel_status'),
                           textAlign: TextAlign.center,
                           style: OmiType.subhead.copyWith(
@@ -1029,9 +1053,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Widget _buildPromoCodeField() {
     OutlineInputBorder border(Color color) => OutlineInputBorder(
-          borderRadius: OmiRadius.mdAll,
-          borderSide: BorderSide(color: color),
-        );
+      borderRadius: OmiRadius.mdAll,
+      borderSide: BorderSide(color: color),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

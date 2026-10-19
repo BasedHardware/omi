@@ -8,6 +8,7 @@ import WebKit
 extension SettingsContentView {
   var notificationsSection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      storefrontFeatureEntry(.proactiveAgent)
       // Notifications
       settingsCard(settingId: "notifications.settings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

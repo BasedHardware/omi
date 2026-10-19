@@ -22,7 +22,11 @@ class _Usage extends UsageProvider {
   Future<void> fetchSubscription() async {}
 
   @override
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     sessions.add(priceId);
     if (sessionError != null) throw sessionError!;
     return sessionResult;
@@ -164,10 +168,7 @@ void main() {
     expect(usage.sessions, isEmpty);
 
     final periodEnd = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
-    usage.sessionResult = {
-      'status': 'reactivated',
-      'next_billing_date': periodEnd,
-    };
+    usage.sessionResult = {'status': 'reactivated', 'next_billing_date': periodEnd};
     messages.clear();
     final renewed = await PaywallCheckout.start(
       pageContext,

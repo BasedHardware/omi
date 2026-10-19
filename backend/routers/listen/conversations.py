@@ -56,7 +56,7 @@ RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
     """The onboarding-provenance marker consumed by the daily memory sweep
-    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    (the conversation processor) must reflect the runtime's own
     onboarding-admission decision (``host.onboarding_session_id``), not
     ``OnboardingHandler.session_id``: the handler mints its own fallback id
     whenever none is supplied (utils/onboarding.py), so a Settings speech-
@@ -490,7 +490,9 @@ class LiveConversationController:
                             existing.get(key) for key in ('transcript_segments', 'photos', 'has_content', 'is_locked')
                         )
                     ):
-                        await self.process_conversation(conversation_id)
+                        await self._finalize_isolated(
+                            self.process_conversation, conversation_id, stage='reconnect_rollover'
+                        )
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
@@ -690,7 +692,7 @@ class LiveConversationController:
             # This runs before STT initialization: an outage cannot indefinitely
             # defer empty-generation cleanup. The transaction still lets content win.
             if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
-                await self.process_conversation(existing['id'])
+                await self._finalize_isolated(self.process_conversation, existing['id'], stage='prepare_rollover')
             await self.create_new_in_progress_conversation()
             return existing['id']
         binding = await self.host.persistence.call(

@@ -48,11 +48,11 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 
   @override
   SyncState get syncState => switch ((syncing, fetching, fetchingWithUploadPhase)) {
-        (true, _, _) => const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
-        (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
-        (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
-        _ => const SyncState(),
-      };
+    (true, _, _) => const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice),
+    (_, true, _) => const SyncState(status: SyncStatus.fetchingConversations),
+    (_, _, true) => const SyncState(status: SyncStatus.fetchingConversations, phase: SyncPhase.uploadingToCloud),
+    _ => const SyncState(),
+  };
   @override
   bool get isSyncing => syncing;
   @override
@@ -130,30 +130,30 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 }
 
 Wal _wal(String id, int minutes, WalStatus status) => Wal(
-      timerStart: 1000 + id.length,
-      codec: BleAudioCodec.opus,
-      seconds: minutes * 60,
-      status: status,
-      storage: WalStorage.disk,
-      device: 'pendant',
-    );
+  timerStart: 1000 + id.length,
+  codec: BleAudioCodec.opus,
+  seconds: minutes * 60,
+  status: status,
+  storage: WalStorage.disk,
+  device: 'pendant',
+);
 
 Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = const []}) => MultiProvider(
-      providers: [
-        ...extras,
-        ChangeNotifierProvider<SyncProvider>.value(value: sync),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: child,
-      ),
-    );
+  providers: [
+    ...extras,
+    ChangeNotifierProvider<SyncProvider>.value(value: sync),
+  ],
+  child: MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: child,
+  ),
+);
 
 Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
   await tester.pumpWidget(
@@ -167,7 +167,15 @@ Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildW
 }
 
 Future<void> _pumpPage(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(_app(sync, const OnTheWayPage(multiFileSync: true), extras: extras));
+  // The fixtures start a few minutes into 1970: pin Today there so their day opens by default.
+  OnTheWayPage.resetFolds();
+  await tester.pumpWidget(
+    _app(
+      sync,
+      OnTheWayPage(multiFileSync: true, clock: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000)),
+      extras: extras,
+    ),
+  );
   await tester.pump();
 }
 
@@ -288,23 +296,23 @@ void main() {
       await tester.tap(find.byKey(_row));
       await tester.pumpAndSettle();
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsOneWidget);
+      expect(find.text('1 recording · 4m on the way'), findsOneWidget);
     });
 
     // Home mounts the row inside a CustomScrollView's slivers, where a plain
     // box widget (SizedBox.shrink included) asserts against the viewport.
     testWidgets('mounts inside a sliver list, hidden and visible', (tester) async {
       Widget host(SyncProvider sync) => _app(
-            sync,
-            const Scaffold(
-              body: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-                  SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
-                ],
-              ),
-            ),
-          );
+        sync,
+        const Scaffold(
+          body: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: CaptureRecoveryBanner()),
+              SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
+            ],
+          ),
+        ),
+      );
 
       await tester.pumpWidget(host(_FakeSync(wals: [_wal('done', 15, WalStatus.synced)])));
       await tester.pump();
@@ -321,13 +329,11 @@ void main() {
   });
 
   group('OnTheWayPage', () {
-    testWidgets('groups recordings by how close they are to done', (tester) async {
+    testWidgets('shows how close each recording is to done', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));
 
-      expect(find.text('ALMOST READY'), findsOneWidget);
       expect(find.text('Transcribing…'), findsOneWidget);
-      expect(find.text('SYNCING'), findsOneWidget);
       expect(find.text('On your device'), findsOneWidget);
     });
 
@@ -337,7 +343,7 @@ void main() {
       await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
 
       expect(find.text('On your device'), findsNothing);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Transcribing…'), findsOneWidget);
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
@@ -369,14 +375,14 @@ void main() {
         device: 'pendant',
       );
       Wal piece(int start) => Wal(
-            timerStart: start,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk,
-            originalStorage: WalStorage.sdcard,
-            device: 'pendant',
-          );
+        timerStart: start,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        device: 'pendant',
+      );
       final phoneOnly = Wal(
         timerStart: 5000,
         codec: BleAudioCodec.opus,
@@ -403,17 +409,16 @@ void main() {
         device: 'pendant',
       );
       Wal piece(int start) => Wal(
-            timerStart: start,
-            codec: BleAudioCodec.opus,
-            seconds: 150,
-            status: WalStatus.miss,
-            storage: WalStorage.disk,
-            originalStorage: WalStorage.flashPage,
-            device: 'pendant',
-          );
+        timerStart: start,
+        codec: BleAudioCodec.opus,
+        seconds: 150,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.flashPage,
+        device: 'pendant',
+      );
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
-      expect(find.textContaining('· 10m'), findsOneWidget);
-      expect(find.textContaining('·'), findsOneWidget);
+      expect(find.text('1 recording · 10m on the way'), findsOneWidget);
     });
 
     test('the catching-up check is answered once per WAL list, not per progress tick', () {
@@ -500,19 +505,21 @@ void main() {
     });
 
     testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
-      final now = DateTime.now();
-      final conversations = ConversationProvider(
-        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-        isSignedIn: () => true,
-      )..processingConversations = [
-          ServerConversation(
-            id: 'conv-1',
-            createdAt: now,
-            startedAt: now,
-            structured: Structured('', ''),
-            status: ConversationStatus.processing,
-          ),
-        ];
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
+      final conversations =
+          ConversationProvider(
+              conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+              isSignedIn: () => true,
+            )
+            ..processingConversations = [
+              ServerConversation(
+                id: 'conv-1',
+                createdAt: now,
+                startedAt: now,
+                structured: Structured('', ''),
+                status: ConversationStatus.processing,
+              ),
+            ];
       final uploaded = _wal('live', 4, WalStatus.uploaded)..conversationId = 'conv-1';
       await _pumpPage(
         tester,
@@ -524,19 +531,21 @@ void main() {
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
-      final now = DateTime.now();
-      final conversations = ConversationProvider(
-        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-        isSignedIn: () => true,
-      )..processingConversations = [
-          ServerConversation(
-            id: 'conv-2',
-            createdAt: now,
-            startedAt: now,
-            structured: Structured('', ''),
-            status: ConversationStatus.processing,
-          ),
-        ];
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
+      final conversations =
+          ConversationProvider(
+              conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+              isSignedIn: () => true,
+            )
+            ..processingConversations = [
+              ServerConversation(
+                id: 'conv-2',
+                createdAt: now,
+                startedAt: now,
+                structured: Structured('', ''),
+                status: ConversationStatus.processing,
+              ),
+            ];
       final safety = _wal('safety', 4, WalStatus.miss)..conversationId = 'conv-2';
       await _pumpPage(
         tester,
@@ -544,7 +553,7 @@ void main() {
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
       expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Waiting to sync'), findsNothing);
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
@@ -563,14 +572,12 @@ void main() {
         device: 'pendant',
       );
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
-      expect(find.text('ALMOST READY'), findsNothing);
+      expect(find.text('Transcribing…'), findsNothing);
       expect(find.text('Waiting to sync'), findsOneWidget);
     });
 
-    testWidgets('a transfer with no recording listed yet sits under Syncing', (tester) async {
+    testWidgets('a transfer with no recording listed yet still reads as in progress', (tester) async {
       await _pumpPage(tester, _FakeSync(syncing: true));
-      expect(find.text('SYNCING'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsNothing);
       expect(find.text('Downloading from your device'), findsOneWidget);
     });
 
@@ -586,27 +593,27 @@ void main() {
     final now = DateTime.now();
     DateTime at(int daysAgo, int hour) => DateTime(now.year, now.month, now.day - daysAgo, hour);
     ServerConversation convo(String id, DateTime when) => ServerConversation(
-          id: id,
-          createdAt: when,
-          startedAt: when,
-          finishedAt: when.add(const Duration(minutes: 5)),
-          structured: Structured('Conversation $id', 'Overview', emoji: '🙂', category: 'work'),
-          status: ConversationStatus.completed,
-        );
+      id: id,
+      createdAt: when,
+      startedAt: when,
+      finishedAt: when.add(const Duration(minutes: 5)),
+      structured: Structured('Conversation $id', 'Overview', emoji: '🙂', category: 'work'),
+      status: ConversationStatus.completed,
+    );
     // Dated three days back so its card never reads "Today" or "Yesterday".
     Future<({List<DailySummary> items, bool ok})> recaps() async => (
-          items: [
-            DailySummary(
-              id: 'r1',
-              date: at(3, 0).toIso8601String().substring(0, 10),
-              createdAt: at(2, 4),
-              headline: 'Dashboards and paperwork',
-              overview: 'A day of dashboards and forms.',
-              stats: DayStats(totalConversations: 6, actionItemsCount: 2),
-            ),
-          ],
-          ok: true,
-        );
+      items: [
+        DailySummary(
+          id: 'r1',
+          date: at(3, 0).toIso8601String().substring(0, 10),
+          createdAt: at(2, 4),
+          headline: 'Dashboards and paperwork',
+          overview: 'A day of dashboards and forms.',
+          stats: DayStats(totalConversations: 6, actionItemsCount: 2),
+        ),
+      ],
+      ok: true,
+    );
     SyncProvider pending() => _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]);
 
     Future<ConversationProvider> pumpHome(

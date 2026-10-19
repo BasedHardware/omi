@@ -71,6 +71,7 @@ class SttSegment {
   final int speakerId;
   final bool isUser;
   final String? personId;
+  final String? sttProvider;
   final List<dynamic>? translations;
 
   SttSegment({
@@ -81,6 +82,7 @@ class SttSegment {
     this.speakerId = 0,
     this.isUser = false,
     this.personId,
+    this.sttProvider,
     this.translations,
   }) : speaker = speaker ?? 'SPEAKER_$speakerId';
 
@@ -93,6 +95,7 @@ class SttSegment {
       'start': start,
       'end': end,
       'person_id': personId,
+      if (sttProvider != null) 'stt_provider': sttProvider,
       if (translations != null) 'translations': translations,
     };
   }
@@ -151,8 +154,9 @@ class SttTranscriptionResult {
 
           final speakerValue = _schemaValue(seg, schema.segmentsSpeakerField, 'speaker');
           final speakerIdValue = _schemaValue(seg, schema.segmentsSpeakerIdField, 'speaker_id');
-          final speakerId =
-              speakerIdValue != null ? _extractSpeakerId(speakerIdValue) : _extractSpeakerId(speakerValue);
+          final speakerId = speakerIdValue != null
+              ? _extractSpeakerId(speakerIdValue)
+              : _extractSpeakerId(speakerValue);
           final speaker = _extractSpeakerLabel(speakerValue, speakerId);
           final isUser = _extractBool(_schemaValue(seg, schema.segmentsIsUserField, 'is_user'));
           final personId = _extractNullableString(_schemaValue(seg, schema.segmentsPersonIdField, 'person_id'));
@@ -209,6 +213,7 @@ List<Map<String, dynamic>> mergeTranscriptSegmentsBySpeaker(Iterable<SttSegment>
         segments.last['speaker_id'] != segmentJson['speaker_id'] ||
         segments.last['is_user'] != segmentJson['is_user'] ||
         segments.last['person_id'] != segmentJson['person_id'] ||
+        segments.last['stt_provider'] != segmentJson['stt_provider'] ||
         lastHasTranslations ||
         hasTranslations) {
       segments.add(segmentJson);

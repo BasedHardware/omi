@@ -32,6 +32,8 @@ abstract class MessageEvent {
         return OnboardingCompleteEvent.fromJson(json);
       case 'freemium_threshold_reached':
         return FreemiumThresholdReachedEvent.fromJson(json);
+      case 'stt_cap_live_held':
+        return SttCapLiveHeldEvent.fromJson(json);
       case 'segments_deleted':
         return SegmentsDeletedEvent.fromJson(json);
       default:
@@ -137,7 +139,7 @@ class PhotoDescribedEvent extends MessageEvent {
   final bool discarded;
 
   PhotoDescribedEvent({required this.photoId, required this.description, this.discarded = false})
-      : super(eventType: 'photo_described');
+    : super(eventType: 'photo_described');
 
   factory PhotoDescribedEvent.fromJson(Map<String, dynamic> json) {
     return PhotoDescribedEvent(
@@ -202,7 +204,7 @@ class OnboardingQuestionEvent extends MessageEvent {
   final int totalQuestions;
 
   OnboardingQuestionEvent({required this.question, required this.questionIndex, required this.totalQuestions})
-      : super(eventType: 'onboarding_question');
+    : super(eventType: 'onboarding_question');
 
   factory OnboardingQuestionEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionEvent(
@@ -218,7 +220,7 @@ class OnboardingQuestionAnsweredEvent extends MessageEvent {
   final bool answered;
 
   OnboardingQuestionAnsweredEvent({required this.questionIndex, required this.answered})
-      : super(eventType: 'question_answered');
+    : super(eventType: 'question_answered');
 
   factory OnboardingQuestionAnsweredEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingQuestionAnsweredEvent(
@@ -234,7 +236,7 @@ class OnboardingCompleteEvent extends MessageEvent {
   final String? error;
 
   OnboardingCompleteEvent({this.conversationId, this.memoriesCreated = 0, this.error})
-      : super(eventType: 'onboarding_complete');
+    : super(eventType: 'onboarding_complete');
 
   factory OnboardingCompleteEvent.fromJson(Map<String, dynamic> json) {
     return OnboardingCompleteEvent(
@@ -270,7 +272,7 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
   final FreemiumAction action;
 
   FreemiumThresholdReachedEvent({required this.remainingSeconds, required this.action})
-      : super(eventType: 'freemium_threshold_reached');
+    : super(eventType: 'freemium_threshold_reached');
 
   /// Whether user action is required
   bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;
@@ -279,6 +281,26 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
     return FreemiumThresholdReachedEvent(
       remainingSeconds: json['remaining_seconds'] ?? 0,
       action: FreemiumAction.fromString(json['action']),
+    );
+  }
+}
+
+/// UI acknowledgement of audio durably saved by this listen connection.
+class SttCapLiveHeldEvent extends MessageEvent {
+  final String sessionId;
+  final int heldSeconds;
+  final int resetAt;
+  final bool paused;
+
+  SttCapLiveHeldEvent({required this.sessionId, required this.heldSeconds, required this.paused, this.resetAt = 0})
+    : super(eventType: 'stt_cap_live_held');
+
+  factory SttCapLiveHeldEvent.fromJson(Map<String, dynamic> json) {
+    return SttCapLiveHeldEvent(
+      sessionId: json['session_id'] as String,
+      heldSeconds: json['held_seconds'] as int,
+      resetAt: json['reset_at'] as int? ?? 0,
+      paused: json['paused'] as bool,
     );
   }
 }

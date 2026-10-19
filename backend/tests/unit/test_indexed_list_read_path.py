@@ -10,6 +10,7 @@ import pytest
 from google.api_core.exceptions import DeadlineExceeded
 from google.cloud.firestore_v1 import And, Or
 
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_list
 from utils.memory import memory_service as service
 
@@ -66,7 +67,7 @@ class Query:
 
     def stream(self, **kwargs):
         if kwargs:
-            assert kwargs['retry'] is None
+            assert kwargs['retry'] is FIRESTORE_NO_RETRY
         rows = [row for row in self.db.rows if all(_matches(row, f) for f in self.filters)]
         rows.sort(key=lambda row: (-row['updated_at'].timestamp(), row['memory_id']))
         if self.after:
@@ -112,7 +113,6 @@ def _scan(db, monkeypatch, *, enabled, pending=True, archive=False, page_size=10
     from utils.memory import canonical_memory_adapter as adapter
 
     monkeypatch.setattr(adapter, 'indexed_list_reads_enabled', lambda: enabled)
-    monkeypatch.setattr(adapter, 'belief_model_enabled', lambda: False)
     cursor = None
     output = []
     while True:
@@ -192,7 +192,7 @@ def test_budgeted_stream_keeps_downloaded_prefix_and_disables_sdk_retries():
     class SlowQuery:
         def stream(self, *, timeout, retry):
             assert timeout == 5
-            assert retry is None
+            assert retry is FIRESTORE_NO_RETRY
             try:
                 yield 'first'
                 yield 'second'

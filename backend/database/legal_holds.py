@@ -43,6 +43,7 @@ GATE_STALE_AFTER_SECONDS = 6 * 60 * 60
 # a lingering "running" row of this kind is always an abandoned artifact.
 _OBSOLETE_WRITER_GATE_KIND = "external_data_write"
 _ACTIVE_GATE: ContextVar[tuple[str, str, str] | None] = ContextVar("active_legal_hold_deletion_gate", default=None)
+_EXTERNAL_TRANSACTION: ContextVar[tuple[str, Any, Any] | None] = ContextVar("external_write_transaction", default=None)
 
 
 class LegalHoldAuthorityUnavailable(RuntimeError):
@@ -460,10 +461,14 @@ def destructive_operation_gate(
 
 
 @contextmanager
-def external_write_fence(uid: str, *, firestore_client: Any | None = None) -> Iterator[None]:
+def external_write_fence(
+    uid: str, *, firestore_client: Any | None = None, transaction: Any | None = None
+) -> Iterator[None]:
     """Fence one owner-scoped provider write against destructive operations.
 
-    Unlike ``destructive_operation_gate`` this takes no lock and writes
+    A supplied transaction reads and locks both authorities through its commit;
+    nested writes reuse only that exact uid/client/transaction scope.
+    Without a transaction this takes no lock and writes
     nothing: it performs two plain reads and raises when the account is being
     deleted or a live destructive operation owns the gate. Concurrent provider
     writes for one account therefore never contend with each other — the
@@ -475,9 +480,20 @@ def external_write_fence(uid: str, *, firestore_client: Any | None = None) -> It
 
     if not uid:
         raise LegalHoldAuthorityUnavailable("external write fence requires a uid")
+    active = _EXTERNAL_TRANSACTION.get()
+    if active is not None:
+        if (
+            active[0] != uid
+            or (transaction is not None and active[1] is not transaction)
+            or (firestore_client is not None and active[2] is not firestore_client)
+        ):
+            raise DestructiveOperationInProgress("nested external write changed transaction identity")
+        yield None
+        return
     client = account_deletion_firestore_client(firestore_client=firestore_client)
+    kwargs = {'transaction': transaction} if transaction is not None else {}
     account_payload = _snapshot_payload(
-        _document(client, f"account_deletions/{uid}").get(), label="account deletion authority"
+        _document(client, f"account_deletions/{uid}").get(**kwargs), label="account deletion authority"
     )
     account_status = normalize_account_deletion_status(
         marker_exists=account_payload is not None,
@@ -485,10 +501,18 @@ def external_write_fence(uid: str, *, firestore_client: Any | None = None) -> It
     )
     if account_deletion_blocks_access(account_status):
         raise DestructiveOperationInProgress("external data write blocked by account deletion")
-    gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+    gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get(**kwargs))
     if _gate_blocks(gate, datetime.now(timezone.utc)):
         raise DestructiveOperationInProgress("external data write blocked by destructive operation")
-    yield None
+    # Transactional reads hold the authorities through provider upload and
+    # manifest commit. Nested storage gates reuse this exact synchronous scope;
+    # ordinary nontransactional fences retain their fresh-read behavior.
+    reset = _EXTERNAL_TRANSACTION.set((uid, transaction, client)) if transaction is not None else None
+    try:
+        yield None
+    finally:
+        if reset is not None:
+            _EXTERNAL_TRANSACTION.reset(reset)
 
 
 def current_destructive_operation_token(uid: str, *, kind: str) -> str:

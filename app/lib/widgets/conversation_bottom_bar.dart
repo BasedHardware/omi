@@ -13,10 +13,12 @@ import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
+import 'package:omi/utils/audio/partial_audio_coverage.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
@@ -689,8 +691,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final controller = widget.playbackController;
     if (controller == null) return;
     final mapper = _timelineMapper;
-    final wall =
-        mapper != null ? mapper.artifactToWall(combined.inMilliseconds / 1000) : combined.inMilliseconds / 1000;
+    final wall = mapper != null
+        ? mapper.artifactToWall(combined.inMilliseconds / 1000)
+        : combined.inMilliseconds / 1000;
     controller.reportPlayback(
       wallSeconds: wall,
       playing: playing ?? _effectivePlaying,
@@ -791,8 +794,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       }
       // At the end of the track the paused point is the tail: restart takes a
       // fresh reader intent if one exists, otherwise the beginning.
-      final resumeWall =
-          completed ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null) : controller?.resumeWall;
+      final resumeWall = completed
+          ? (controller?.hasPending == true ? controller?.pendingWallSeconds : null)
+          : controller?.resumeWall;
       if (resumeWall != null) {
         final generation = ++_seekGeneration;
         final intent = controller!.intentGeneration;
@@ -834,6 +838,19 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       );
     }
     if (mounted) setState(() {});
+  }
+
+  /// "0:03 of 5:49 audio saved" when the stored audio covers much less than
+  /// the conversation: a short player is a short file, not a broken one
+  /// (#19243). Shown until playback moves; the remaining time takes the slot
+  /// after that and whenever the audio covers the conversation.
+  String? _partialAudioLabel(AppLocalizations l10n) {
+    final conversation = widget.conversation;
+    if (conversation == null) return null;
+    final saved = _totalDuration.inMilliseconds / 1000;
+    final spoken = conversation.getDurationInSeconds().toDouble();
+    if (!savedAudioIsPartial(savedSeconds: saved, conversationSeconds: spoken)) return null;
+    return l10n.playbackPartialAudioSaved(OmiDuration.offset(saved), OmiDuration.offset(spoken));
   }
 
   String _formatDurationRemaining(Duration position) {
@@ -920,10 +937,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   static BoxDecoration get _barDecoration => BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.pillAll,
-        border: Border.all(color: OmiColors.border, width: 1),
-      );
+    color: OmiColors.surface1,
+    borderRadius: OmiRadius.pillAll,
+    border: Border.all(color: OmiColors.border, width: 1),
+  );
 
   void _askOmi() {
     HapticFeedback.mediumImpact();
@@ -1004,7 +1021,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         ListenableBuilder(
           listenable: controller ?? _artifactPosition,
           builder: (context, _) {
-            final showBackToCurrent = controller != null &&
+            final showBackToCurrent =
+                controller != null &&
                 !controller.isFollowing &&
                 controller.followTargetSegmentId != null &&
                 _isAudioInitialized;
@@ -1043,13 +1061,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// Play/pause: a 40 pt circle in the primary ink, labelled for screen readers.
   Widget _buildPlayPauseButton() {
     Widget button(bool isPlaying) => OmiIconButton.filled(
-          icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
-          label: isPlaying ? context.l10n.pause : context.l10n.play,
-          diameter: 40,
-          fillColor: OmiColors.accent,
-          color: OmiColors.onAccent,
-          onPressed: _togglePlayPause,
-        );
+      icon: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 22),
+      label: isPlaying ? context.l10n.pause : context.l10n.play,
+      diameter: 40,
+      fillColor: OmiColors.accent,
+      color: OmiColors.onAccent,
+      onPressed: _togglePlayPause,
+    );
     const loading = SizedBox.square(
       dimension: kOmiMinTapTarget,
       child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
@@ -1086,14 +1104,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final levels = speechLevels(segments, _waveformBars, start: 0, end: wallEnd > 0 ? wallEnd : null);
     final controller = widget.playbackController;
     final l10n = context.l10n;
+    final partialAudioLabel = _partialAudioLabel(l10n);
 
     final String? statusLabel = switch ((_failure, _showPreparingLabel)) {
       (_AudioFailure.transport, _) => l10n.playbackAudioNetworkFailed,
       (_AudioFailure.unavailable, _) || (_AudioFailure.unmappable, _) => l10n.playbackAudioUnavailable,
       (_AudioFailure.loadFailed, _) => l10n.playbackAudioLoadFailed,
-      (null, true) => _readyParts < _totalParts
-          ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
-          : l10n.playbackPreparingAudio,
+      (null, true) =>
+        _readyParts < _totalParts
+            ? '${l10n.playbackPreparingAudio} $_readyParts/$_totalParts'
+            : l10n.playbackPreparingAudio,
       // Audio with no timestamps cannot be placed on the wall at all: say so
       // where the reader can see it rather than only flagging it for tests.
       _ when _hasUnplaceableMissing => l10n.playbackAudioUnavailable,
@@ -1127,6 +1147,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             final unmapped = _isAudioInitialized && _timelineMapper == null;
             final progress = !unmapped && wallEnd > 0 ? (wallSeconds / wallEnd).clamp(0.0, 1.0) : 0.0;
             final position = Duration(milliseconds: (artifactSeconds * 1000).toInt());
+            // Before anything is heard the slot explains a short recording;
+            // once playback moves it goes back to the remaining time.
+            final label = statusLabel ?? (position == Duration.zero ? partialAudioLabel : null);
             return Row(
               children: [
                 Expanded(
@@ -1158,12 +1181,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                if (statusLabel != null)
+                if (label != null)
                   Flexible(
                     child: Semantics(
                       liveRegion: true,
                       child: Text(
-                        statusLabel,
+                        label,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -32,14 +33,15 @@ class SummaryTab extends StatefulWidget {
   /// Switches the page to the Transcript tab.
   final VoidCallback? onOpenTranscript;
 
-  const SummaryTab(
-      {super.key,
-      this.reviewEnabled = false,
-      this.onOpenSource,
-      this.searchQuery = '',
-      this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty,
-      this.onOpenTranscript});
+  const SummaryTab({
+    super.key,
+    this.reviewEnabled = false,
+    this.onOpenSource,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.onTapWhenSearchEmpty,
+    this.onOpenTranscript,
+  });
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -77,7 +79,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           // sections population until that wire is available.
           final hasSummaryFeedback =
               !discarded && !summarySelection.isApp && summarySelection.content.trim().isNotEmpty;
-          final hasRecordingFeedback = !discarded &&
+          final hasRecordingFeedback =
+              !discarded &&
               conversation != null &&
               conversation.status == ConversationStatus.completed &&
               conversation.audioFiles.isNotEmpty;
@@ -91,7 +94,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           return AppReviewPrompt(
             contentId: conversation?.id ?? '',
             moment: AppReviewMoment.conversationRead,
-            enabled: widget.reviewEnabled &&
+            enabled:
+                widget.reviewEnabled &&
                 !_isEditing &&
                 !provider.isLoading &&
                 !provider.loadingReprocessConversation &&
@@ -107,42 +111,50 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(slivers: [
-                        // Title and facts live in the page header, shared by every tab.
-                        SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
-                        discarded
-                            ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                            : GetAppsWidgets(
-                                onOpenSource: widget.onOpenSource,
-                                searchQuery: widget.searchQuery,
-                                currentResultIndex: widget.currentResultIndex,
-                                onOpenTranscript: widget.onOpenTranscript,
-                                canStartEditing: () {
-                                  final connectivityProvider =
-                                      Provider.of<ConnectivityProvider>(context, listen: false);
-                                  if (!connectivityProvider.isConnected) {
-                                    ConnectivityProvider.showNoInternetDialog(context);
-                                    return false;
-                                  }
-                                  return true;
-                                },
-                                onEditStarted: (_) {
-                                  setState(() => _isEditing = true);
-                                  PlatformManager.instance.analytics.editSummaryStarted();
-                                },
-                                onEditCancelled: (_) {
-                                  setState(() => _isEditing = false);
-                                  PlatformManager.instance.analytics.editSummaryCancelled();
-                                },
-                                onSaveSummarySelection: (selection, newContent) {
-                                  PlatformManager.instance.analytics.editSummarySaved();
-                                  context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                        selection,
-                                        newContent,
-                                      );
-                                },
-                              ),
-                      ]),
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          // Title and facts live in the page header, shared by every tab.
+                          SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                          // Where the transcript and summary were made, when the phone made them.
+                          // Redo with Omi Cloud waits on a re-transcription endpoint.
+                          if (conversation != null && !discarded)
+                            SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
+                          discarded
+                              ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                              : GetAppsWidgets(
+                                  onOpenSource: widget.onOpenSource,
+                                  searchQuery: widget.searchQuery,
+                                  currentResultIndex: widget.currentResultIndex,
+                                  onOpenTranscript: widget.onOpenTranscript,
+                                  canStartEditing: () {
+                                    final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                      context,
+                                      listen: false,
+                                    );
+                                    if (!connectivityProvider.isConnected) {
+                                      ConnectivityProvider.showNoInternetDialog(context);
+                                      return false;
+                                    }
+                                    return true;
+                                  },
+                                  onEditStarted: (_) {
+                                    setState(() => _isEditing = true);
+                                    PlatformManager.instance.analytics.editSummaryStarted();
+                                  },
+                                  onEditCancelled: (_) {
+                                    setState(() => _isEditing = false);
+                                    PlatformManager.instance.analytics.editSummaryCancelled();
+                                  },
+                                  onSaveSummarySelection: (selection, newContent) {
+                                    PlatformManager.instance.analytics.editSummarySaved();
+                                    context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                      selection,
+                                      newContent,
+                                    );
+                                  },
+                                ),
+                        ],
+                      ),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
                     // conversation can have adjudicated screenshots.
@@ -153,20 +165,22 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       ),
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(slivers: [
-                        if (feedbackKind == FeedbackPromptKind.summary)
-                          SummaryFeedbackPrompt(
-                            key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
-                            conversationId: conversation?.id,
-                          ),
-                        if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
-                          RecordingQualityFeedbackPrompt(
-                            key: ValueKey('recording-feedback-${conversation.id}'),
-                            recordingId: conversation.id,
-                          ),
-                        const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                        const SliverToBoxAdapter(child: SizedBox(height: 150)),
-                      ]),
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          if (feedbackKind == FeedbackPromptKind.summary)
+                            SummaryFeedbackPrompt(
+                              key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                              conversationId: conversation?.id,
+                            ),
+                          if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                            RecordingQualityFeedbackPrompt(
+                              key: ValueKey('recording-feedback-${conversation.id}'),
+                              recordingId: conversation.id,
+                            ),
+                          const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                          const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                        ],
+                      ),
                     ),
                   ],
                 ),

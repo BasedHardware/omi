@@ -10,6 +10,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
@@ -87,8 +89,7 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -100,18 +101,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      startDate?.toIso8601String() ?? '',
-      endDate?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -530,7 +530,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
@@ -549,20 +550,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // drawing their own cards: slow work never reads as a problem on Home.
         final pendingVisible = syncPendingVisible || hasProcessingConversations || _pendingWork.pending.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
-        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final bool showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
             apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
-        final mergedDates = <DateTime>{
-          ...convoProvider.groupedConversations.keys,
-          ...recordingsByDate.keys,
-        }.toList()
+        final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
           ..sort((a, b) => b.compareTo(a));
         final listRows = _buildConversationListRows(
           dates: mergedDates,
@@ -573,7 +573,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
         // A conversation just captured stays visible under a folder or starred filter too: the
         // capture must never seem to vanish while it processes.
-        final showPending = pendingVisible &&
+        final showPending =
+            pendingVisible &&
             (showRecordings || hasProcessingConversations) &&
             convoProvider.selectedSpeakerId == null &&
             dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
@@ -617,6 +618,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               ),
               // Today is always below the recaps. With no list to sit in, the pending row brings its own
               // Today header, spaced like the list's first day so nothing moves when the list arrives.
+              // Recordings waiting on this phone sit with that row; nothing while the on-device flag is off.
+              const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
+              const SliverToBoxAdapter(child: HeldAudioHomeSection()),
               if (pendingOpensToday)
                 SliverToBoxAdapter(
                   child: Padding(

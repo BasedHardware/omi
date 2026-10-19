@@ -167,18 +167,6 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     XCTAssertNil(capture["lineage_id"])
   }
 
-  func testMemoryUseSendsActionAndStableFeedbackID() async throws {
-    let client = await makeClient()
-
-    try await client.recordMemoryUse(id: "memory-3", action: .suppress, feedbackId: "feedback-1")
-
-    let request = try XCTUnwrap(MemoryMutationURLCapture.request)
-    XCTAssertEqual(request.httpMethod, "POST")
-    XCTAssertEqual(request.url?.path, "/v3/memories/memory-3/use")
-    XCTAssertEqual(try requestJSON()["action"] as? String, "suppress")
-    XCTAssertEqual(try requestJSON()["feedback_id"] as? String, "feedback-1")
-  }
-
   func testEditMemorySendsValueInJSONBody() async throws {
     let client = await makeClient()
 

@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -87,11 +88,13 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   ConversationProvider? _conversationProvider;
 
-  LocalRecordingsProvider(
-      {SyncJobPoller? jobPoller, SyncUploadGate? uploadGate, Timer Function(Duration, void Function(Timer))? periodic})
-      : _jobPoller = jobPoller ?? SyncJobPoller.instance,
-        _uploadGate = uploadGate,
-        _periodic = periodic ?? Timer.periodic {
+  LocalRecordingsProvider({
+    SyncJobPoller? jobPoller,
+    SyncUploadGate? uploadGate,
+    Timer Function(Duration, void Function(Timer))? periodic,
+  }) : _jobPoller = jobPoller ?? SyncJobPoller.instance,
+       _uploadGate = uploadGate,
+       _periodic = periodic ?? Timer.periodic {
     _audio.addListener(_onAudioChanged);
     // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
     // rotated recording surfaces without waiting for a BLE disconnect.
@@ -182,6 +185,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
           ownersChanged = true;
         }
         if (owners[name] != uid) continue;
+        if (OnDeviceTranscriptionController.instance.completedRecordingNames.contains(name)) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -277,6 +281,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
 
   Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
+    if (rec.fileName.startsWith('audio_omibatchoverflow_')) {
+      await OnDeviceTranscriptionController.instance.transcribeNow();
+      return LocalUploadOutcome.busy;
+    }
     if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
     _isUploading = true;
     _uploadingName = rec.fileName;
@@ -541,16 +549,16 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// playback). Never stored anywhere. `filePath` is the relative name, which
   /// `Wal.getFilePath` resolves against the app documents dir (== batchAudioDir).
   Wal _walFor(LocalRecording r) => Wal(
-        timerStart: r.timerStart,
-        codec: r.codec,
-        seconds: r.seconds,
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        filePath: r.fileName,
-        device: batchRecordingDevice,
-      );
+    timerStart: r.timerStart,
+    codec: r.codec,
+    seconds: r.seconds,
+    sampleRate: 16000,
+    channel: 1,
+    status: WalStatus.miss,
+    storage: WalStorage.disk,
+    filePath: r.fileName,
+    device: batchRecordingDevice,
+  );
 
   String? get currentPlayingId => _audio.currentPlayingId;
   bool get isProcessingAudio => _audio.isProcessingAudio;

@@ -72,12 +72,7 @@ void main() {
     provider.legacyMessagesLoader = ({appId, dropdownSelected = false}) => pending.future;
     provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
       yield ServerMessageChunk('reply', 'answer', MessageChunkType.data);
-      yield ServerMessageChunk(
-        'reply',
-        '',
-        MessageChunkType.done,
-        message: _message('ai-1', sender: MessageSender.ai),
-      );
+      yield ServerMessageChunk('reply', '', MessageChunkType.done, message: _message('ai-1', sender: MessageSender.ai));
     };
     addTearDown(provider.dispose);
 
@@ -127,8 +122,12 @@ void main() {
     test('a timeout error frame marks the reply as a timeout', () async {
       final provider = MessageProvider(sessionsApi: _FakeSessions())
         ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
-          yield ServerMessageChunk('reply', 'The response took too long. Please try again.', MessageChunkType.error,
-              errorCode: 'timeout');
+          yield ServerMessageChunk(
+            'reply',
+            'The response took too long. Please try again.',
+            MessageChunkType.error,
+            errorCode: 'timeout',
+          );
         };
       addTearDown(provider.dispose);
 
@@ -162,7 +161,10 @@ void main() {
       final provider = MessageProvider(sessionsApi: _FakeSessions())
         ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
           yield ServerMessageChunk(
-              'reply', 'Unable to complete the response. Please try again.', MessageChunkType.error);
+            'reply',
+            'Unable to complete the response. Please try again.',
+            MessageChunkType.error,
+          );
           yield ServerMessageChunk(
             'reply',
             '',
@@ -195,14 +197,46 @@ void main() {
       expect(provider.sendingMessage, isFalse);
     });
 
+    test('shared-budget 402 keeps backend composer state and stops subsequent sends', () async {
+      var sends = 0;
+      final provider = MessageProvider(sessionsApi: _FakeSessions())
+        ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+          sends++;
+          yield ServerMessageChunk(
+            'reply',
+            jsonEncode({
+              'detail': {
+                'error': 'usage_budget_exhausted',
+                'chat_at_cap': {
+                  'state': 'paused',
+                  'trigger': 'usage_budget',
+                  'title': 'Chat is paused',
+                  'body': 'Capture continues.',
+                  'reset_line': 'Chat is back on Nov 1.',
+                  'reset_at': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+                  'upgrade_label': 'Upgrade to Architect',
+                },
+              },
+            }),
+            MessageChunkType.error,
+            errorCode: 'quota_exceeded',
+          );
+        };
+      await provider.sendMessageStreamToServer('question');
+      expect(provider.chatAtCap?.title, 'Chat is paused');
+      expect(provider.chatAtCap?.resetLine, 'Chat is back on Nov 1.');
+      expect(provider.messages.last.text, 'Chat is paused');
+      await provider.sendMessageStreamToServer('another question');
+      expect(sends, 1);
+      provider.clearUserData();
+      expect(provider.chatAtCap, isNull);
+      provider.dispose();
+    });
+
     test('quota keeps the localized reply instead of a failure marker', () async {
       final provider = MessageProvider(sessionsApi: _FakeSessions())
         ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
-          yield ServerMessageChunk(
-            'reply',
-            jsonEncode({'error': 'quota_exceeded'}),
-            MessageChunkType.error,
-          );
+          yield ServerMessageChunk('reply', jsonEncode({'error': 'quota_exceeded'}), MessageChunkType.error);
         };
       addTearDown(provider.dispose);
 
@@ -308,13 +342,16 @@ void main() {
           message: _message('ai-retry', sender: MessageSender.ai),
         );
       };
-    provider.uploadedFiles
-        .add(MessageFile('openai-id', null, 'doc.pdf', 'application/pdf', 'file-1', DateTime.utc(2026), null));
+    provider.uploadedFiles.add(
+      MessageFile('openai-id', null, 'doc.pdf', 'application/pdf', 'file-1', DateTime.utc(2026), null),
+    );
     addTearDown(provider.dispose);
 
     provider.addMessageLocally('question');
-    await provider.sendMessageStreamToServer('question',
-        context: const ChatPageContext(type: 'conversation', id: 'c1'));
+    await provider.sendMessageStreamToServer(
+      'question',
+      context: const ChatPageContext(type: 'conversation', id: 'c1'),
+    );
 
     final failed = provider.messages.last;
     expect(provider.canRetryReply(failed), isTrue);
@@ -331,21 +368,21 @@ void main() {
 
   test('worksWithChat accepts chat and persona apps', () {
     App build(Set<String> capabilities) => App(
-          id: 'a',
-          name: 'n',
-          author: '',
-          description: '',
-          image: '',
-          capabilities: capabilities,
-          status: 'approved',
-          category: 'other',
-          approved: true,
-          ratingCount: 0,
-          enabled: true,
-          deleted: false,
-          isPaid: false,
-          isUserPaid: false,
-        );
+      id: 'a',
+      name: 'n',
+      author: '',
+      description: '',
+      image: '',
+      capabilities: capabilities,
+      status: 'approved',
+      category: 'other',
+      approved: true,
+      ratingCount: 0,
+      enabled: true,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    );
 
     expect(build({'chat'}).worksWithChat(), isTrue);
     expect(build({'persona'}).worksWithChat(), isTrue);
@@ -356,17 +393,17 @@ void main() {
     test('a failed fetch retains the prior list and exposes the problem', () async {
       final provider = MessageProvider(sessionsApi: _FakeSessions());
       provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async => ApiSuccess(
-            _appsPage(const [
-              wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true)
-            ]),
-          );
+        _appsPage(const [
+          wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true),
+        ]),
+      );
       addTearDown(provider.dispose);
       await provider.fetchChatApps();
       expect(provider.chatApps, hasLength(1));
       expect(provider.chatAppsProblem, isNull);
 
-      provider.chatAppsLoaderOverride =
-          ({offset = 0, limit = 50}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async =>
+          const ApiFailure(ApiProblem(ApiProblemKind.transport));
       await provider.fetchChatApps();
 
       expect(provider.chatApps, hasLength(1));
@@ -379,13 +416,17 @@ void main() {
       provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async {
         pages.remove(offset);
         return offset == 0
-            ? ApiSuccess(_appsPage(const [
-                wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true),
-                wire.GeneratedAppCatalogItem(id: 'memories-app', capabilities: ['memories'], enabled: true),
-              ], hasNext: true))
-            : ApiSuccess(_appsPage(const [
-                wire.GeneratedAppCatalogItem(id: 'persona-app', capabilities: ['persona'], enabled: true),
-              ]));
+            ? ApiSuccess(
+                _appsPage(const [
+                  wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true),
+                  wire.GeneratedAppCatalogItem(id: 'memories-app', capabilities: ['memories'], enabled: true),
+                ], hasNext: true),
+              )
+            : ApiSuccess(
+                _appsPage(const [
+                  wire.GeneratedAppCatalogItem(id: 'persona-app', capabilities: ['persona'], enabled: true),
+                ]),
+              );
       };
       addTearDown(provider.dispose);
 
@@ -400,18 +441,20 @@ void main() {
     test('a failure on a later page retains the previously loaded list', () async {
       final provider = MessageProvider(sessionsApi: _FakeSessions());
       provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async => ApiSuccess(
-            _appsPage(const [
-              wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true)
-            ]),
-          );
+        _appsPage(const [
+          wire.GeneratedAppCatalogItem(id: 'chat-app', capabilities: ['chat'], enabled: true),
+        ]),
+      );
       addTearDown(provider.dispose);
       await provider.fetchChatApps();
       expect(provider.chatApps, hasLength(1));
 
       provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async => offset == 0
-          ? ApiSuccess(_appsPage(const [
-              wire.GeneratedAppCatalogItem(id: 'new-app', capabilities: ['chat'], enabled: true)
-            ], hasNext: true))
+          ? ApiSuccess(
+              _appsPage(const [
+                wire.GeneratedAppCatalogItem(id: 'new-app', capabilities: ['chat'], enabled: true),
+              ], hasNext: true),
+            )
           : const ApiFailure(ApiProblem(ApiProblemKind.server));
       await provider.fetchChatApps();
 
@@ -421,8 +464,8 @@ void main() {
 
     test('a genuine empty result clears a stale problem', () async {
       final provider = MessageProvider(sessionsApi: _FakeSessions());
-      provider.chatAppsLoaderOverride =
-          ({offset = 0, limit = 50}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      provider.chatAppsLoaderOverride = ({offset = 0, limit = 50}) async =>
+          const ApiFailure(ApiProblem(ApiProblemKind.transport));
       addTearDown(provider.dispose);
       await provider.fetchChatApps();
       expect(provider.chatAppsProblem, isNotNull);
@@ -459,8 +502,8 @@ void main() {
                 'id': 'a1',
                 'name': 'Notes',
                 'capabilities': ['chat'],
-                'enabled': true
-              }
+                'enabled': true,
+              },
             ],
             'pagination': {'count': 1, 'hasNext': false, 'hasPrevious': false, 'limit': 100, 'offset': 0, 'total': 1},
             'filters': {'sort': 'popular'},

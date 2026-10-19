@@ -292,11 +292,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 speakerId: match.speakerId,
               )
             : await rejectConversationSpeaker(
-                match.conversationId,
-                match.speakerId,
-                SpeakerRejection.notPerson,
-                personId: outcome.personId,
-              ) is ApiSuccess<ServerConversation>;
+                    match.conversationId,
+                    match.speakerId,
+                    SpeakerRejection.notPerson,
+                    personId: outcome.personId,
+                  )
+                  is ApiSuccess<ServerConversation>;
         if (saved) _outcome.removeMatch(match);
         return saved;
       },
@@ -477,7 +478,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
           onSegmentTap: widget.onSegmentTap,
           onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
-          editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+          editSegment: segments.any((s) => s.sttProvider?.startsWith('on_device:') == true)
+              ? null
+              : (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
           onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
           onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
           startedAt: conversation.startedAt ?? conversation.createdAt,
@@ -485,12 +488,18 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             if (segments.isNotEmpty)
               _TranscriptHeading(
                 conversation: conversation,
-                onSelect: provider.speakerLabelingSessionActive || _selection != null
+                onSelect:
+                    segments.any((s) => s.sttProvider?.startsWith('on_device:') == true) ||
+                        provider.speakerLabelingSessionActive ||
+                        _selection != null
                     ? null
                     : () => _beginSelection(provider),
               ),
             if (segments.isNotEmpty && reviewQuestion != null)
-              ReviewQuestionCard(item: reviewQuestion, margin: const EdgeInsets.only(bottom: OmiSpacing.md)),
+              ReviewQuestionCard(
+                item: reviewQuestion,
+                margin: const EdgeInsets.only(bottom: OmiSpacing.md),
+              ),
           ],
           leadingItemIds: [
             if (segments.isNotEmpty) 'transcript-heading',
@@ -528,6 +537,7 @@ class _TranscriptHeading extends StatelessWidget {
   /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
   /// "others" rule.
   static int? _speakerCount(ServerConversation conversation) {
+    if (conversation.transcriptSegments.any((s) => s.sttProvider?.startsWith('on_device:') == true)) return null;
     final resolution = conversation.speakerResolution;
     if (resolution == null || !resolution.countable) return null;
     final segments = conversation.transcriptSegments;
@@ -684,7 +694,8 @@ class _PlaybackFollowScopeState extends State<_PlaybackFollowScope> {
     if (!mounted) return;
     final controller = widget.controller;
     final followActive = controller.isFollowing && (controller.isPlaying || controller.followRequest > 0);
-    final transportChanged = controller.isPlaying != _playing ||
+    final transportChanged =
+        controller.isPlaying != _playing ||
         controller.isFollowing != _following ||
         controller.followRequest != _followRequest;
     final targetChanged = followActive && controller.followTargetSegmentId != _followTarget;
