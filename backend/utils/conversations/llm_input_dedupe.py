@@ -67,7 +67,6 @@ def implementation_digest(feature: str) -> str:
     root = Path(__file__).resolve().parents[1]
     paths = [
         'conversations/process_conversation.py',
-        'conversations/owner_jev.py',
         'llm/jev_client.py',
         'llm/model_config.py',
         'llm/model_constants.py',
@@ -83,7 +82,6 @@ def implementation_digest(feature: str) -> str:
         'llm/meeting_notes_rich_prompts.py',
         'llm/meeting_notes_presentation.py',
         'llm/meeting_notes_validation.py',
-        'memory/belief_model.py',
         'memory/rejected_memory_feedback.py',
         'prompts.py',
         '../models/structured.py',

@@ -70,7 +70,6 @@ jobs:
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/runtime_env_compat.py "$controls/backend/scripts/"
-          cp .workflow-source/backend/config/free_tier_rollout.py "$controls/backend/config/"
           cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
@@ -325,10 +324,16 @@ jobs:
       # restating it here, so the guard cannot drift from its source.
       - name: Render desktop backend expected env state
         id: desktop-expected-env
-        # No cohort variable is passed here, on purpose. GitHub's `vars` context
-        # falls back from environment to repository scope, so the only way to make
-        # a development cohort structurally unable to reach production is for the
-        # production workflow never to read one. Prod renders literal empties.
+        # Desktop customer-realm references resolve in the selected environment.
+        # Omitted inputs preserve existing bindings; commercial cutover is separate.
+        env:
+          SCREEN_VECTOR_STRIPE_READ_SECRET: ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
@@ -379,20 +384,18 @@ jobs:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
-            MEMORY_BELIEF_MODEL_ENABLED=false
-            FREE_TIER_LOCAL_PROCESSING=false
-            FREE_TIER_EMERGENCY_STOP=false
-            FREE_TIER_LOCAL_PROCESSING_COHORT=
-            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=false
-            MEMORY_BELIEF_AUTOMATION_PAUSED=false
+            CLIENT_SUMMARIES_AT_CAP_ENABLED=true
+            CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED=true
             PROMETHEUS_SIDECAR_PORT=9090
             MENTOR_PIPELINE=cohort
             POSTHOG_HOST=https://us.posthog.com
             OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
+            ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

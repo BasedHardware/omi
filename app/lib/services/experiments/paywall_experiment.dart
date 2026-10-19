@@ -14,7 +14,11 @@ enum PaywallVariant {
   outline('outline'),
 
   /// A web page rendered in a webview; the page itself is the variant (`url` in the payload).
-  web('web');
+  web('web'),
+
+  /// Native free-trial paywall (timeline + feature carousel), shown once right after sign-up
+  /// and consent when the payload asks for the onboarding placement.
+  trial('trial');
 
   const PaywallVariant(this.wireName);
 
@@ -76,7 +80,7 @@ abstract final class PaywallExperiment {
   /// PostHog flag key. Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'paywall-variant';
 
-  /// Debug-build override: `--dart-define=OMI_PAYWALL_VARIANT=outline|web` (and optionally
+  /// Debug-build override: `--dart-define=OMI_PAYWALL_VARIANT=outline|web|trial` (and optionally
   /// `OMI_PAYWALL_WEB_URL=https://…`). `kDebugMode` excludes every store build.
   static const _debugVariant = String.fromEnvironment('OMI_PAYWALL_VARIANT');
   static const _debugWebUrl = String.fromEnvironment('OMI_PAYWALL_WEB_URL');
@@ -107,6 +111,7 @@ abstract final class PaywallExperiment {
 
     switch (arm) {
       case PaywallVariant.outline:
+      case PaywallVariant.trial:
         return PaywallExperimentConfig(variant: arm, onboardingPaywall: onboardingPaywall);
       case PaywallVariant.web:
         final raw = map['url'];

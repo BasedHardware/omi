@@ -1999,12 +1999,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryHistory => 'Cronologia';
 
   @override
-  String get memoryAllowUse => 'Consenti l\'uso';
-
-  @override
-  String get memoryDontUse => 'Non usare';
-
-  @override
   String get undo => 'Annulla';
 
   @override
@@ -13239,6 +13233,19 @@ class AppLocalizationsIt extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Collega il tuo Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Associa il tuo Omi e catturerà le tue conversazioni a mani libere, per tutto il giorno.';
+
+  @override
+  String get firstCaptureConnect => 'Collega il mio Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Non ho ancora un Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13345,6 +13352,112 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Non perdere mai più una parola.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Ecco come funziona la tua prova gratuita.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Riepiloghi Unlimited, conservati per sempre';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Ogni conversazione diventa un riepilogo chiaro con i prossimi passi, così nulla sfugge.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Trascrizione migliore della categoria';
+
+  @override
+  String get paywallTrialChipDetails => 'Cattura più dettagli';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Distingue gli oratori';
+
+  @override
+  String get paywallTrialChipNoise => 'Funziona in ambienti rumorosi';
+
+  @override
+  String get paywallTrialChipAccents => 'Gestisce gli accenti';
+
+  @override
+  String get paywallTrialChipJargon => 'Conosce il tuo gergo e i nomi';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Nomi degli oratori, rilevati automaticamente';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Domande Unlimited, per ogni conversazione';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Prepara un\'email di follow-up da questa riunione.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Ci sono conflitti con quanto detto da John martedì?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Trova tutto ciò che potrebbe rallentarci.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funziona con le tue app preferite';
+
+  @override
+  String get paywallTrialTodayTitle => 'Oggi';
+
+  @override
+  String get paywallTrialTodayBody => 'Tutto in Pro è sbloccato.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days giorni gratuiti';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days giorni di Omi Pro, offerti da noi.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Tra $days giorni';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'La prova termina. Ti verrà addebitato l\'importo a meno che tu non annulli.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Gli ultimi modelli di IA';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Ask Omi Unlimited';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Fatturato mensilmente';
+
+  @override
+  String get paywallTrialBilledYearly => 'Fatturato annualmente';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Risparmia $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Inizia per $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Continua con il piano gratuito';
+
+  @override
+  String get paywallTrialCancelNote => 'Annulla in qualsiasi momento. Nessun costo, nessuna penale.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Il tuo periodo di prova gratuito di $days giorni di Omi Pro è iniziato.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Disdici quando vuoi.';

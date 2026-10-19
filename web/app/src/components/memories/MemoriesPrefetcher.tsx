@@ -53,7 +53,7 @@ export function MemoriesPrefetcher() {
         if (scopeKeyRef.current !== scopeKey) return;
 
         // Cache them in IndexedDB
-        await cacheMemories(memories, 'useful_now', scope);
+        await cacheMemories(memories, scope);
 
         console.log(`[MemoriesPrefetcher] Prefetched ${memories.length} memories`);
       } catch (error) {

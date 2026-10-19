@@ -53,7 +53,6 @@ def store(monkeypatch):
     monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '100')
     monkeypatch.setenv('CAPTURE_GROUP_CONTAINMENT_MODE', 'off')
-    monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'off')
     for key in (
         'CROSS_DEVICE_GROUP_MIN_WORDS',
         'CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS',
@@ -157,9 +156,8 @@ def test_on_preserves_existing_folds_and_other_accounts(store, monkeypatch):
     assert not store.rows[path('other', 'different-owner')].get('capture_group')
 
 
-def test_on_does_not_allow_complementary_call_policy_to_bypass_speech(store, monkeypatch):
+def test_on_requires_shared_speech_to_create_a_capture_group(store, monkeypatch):
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
-    monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'on')
     first, second = row('a'), row('b', 'desktop', 'mac')
     second['external_data']['conversation_role'] = 'meeting'
     second['transcript_segments'] = []

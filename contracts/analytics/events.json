@@ -4244,7 +4244,8 @@
           "values": [
             "control",
             "outline",
-            "web"
+            "web",
+            "trial"
           ]
         },
         "source": {

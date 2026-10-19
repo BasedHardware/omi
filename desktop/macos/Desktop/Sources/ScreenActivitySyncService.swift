@@ -119,12 +119,12 @@ actor ScreenActivitySyncService {
   }
 
   /// Stop the sync loop.
-  func stop() {
+  func stop(logStopped: Bool = true) {
     guard isRunning else { return }
     isRunning = false
     syncTask?.cancel()
     syncTask = nil
-    log("ScreenActivitySync: stopped")
+    if logStopped { log("ScreenActivitySync: stopped") }
   }
 
   // MARK: - Sync loop
@@ -182,7 +182,7 @@ actor ScreenActivitySyncService {
       }
       consecutiveFailures = 0
     } catch {
-      recordPushFailure(path: lossless ? "lossless" : "legacy")
+      if isRunning { recordPushFailure(path: lossless ? "lossless" : "legacy") }
     }
   }
 
@@ -625,6 +625,14 @@ actor ScreenActivitySyncService {
   /// owner-bound meeting flush leaves delivery to it.
   static func deliversFrameRequests(ownerBoundPush: Bool) -> Bool { !ownerBoundPush }
 
+  static func terminalStopReason(statusCode: Int, responseBody: String) -> String? {
+    if statusCode == 401 { return "unauthorized_after_refresh" }
+    if statusCode == 403 && responseBody.contains("account_deletion_in_progress") {
+      return "account_deletion_in_progress"
+    }
+    return nil
+  }
+
   /// With `authorizationSnapshot` the push is owner-bound: headers are minted for that owner only,
   /// and the request is abandoned if the session changed while they were built.
   private func pushRows(
@@ -675,9 +683,32 @@ actor ScreenActivitySyncService {
           return false
         }
       }
-      let (data, response) = try await URLSession.shared.data(for: request)
+      var (data, response) = try await URLSession.shared.data(for: request)
       if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
-      guard let httpResponse = response as? HTTPURLResponse else { return false }
+      guard var httpResponse = response as? HTTPURLResponse else { return false }
+
+      if httpResponse.statusCode == 401 {
+        let refreshedHeaders = try await APIClient.shared.buildHeaders(
+          forceRefreshAuth: true, expectedAuthOwnerId: authorizationSnapshot?.ownerID)
+        if let authorizationSnapshot {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            log("ScreenActivitySync: signed-in account changed during auth refresh; not retried")
+            return false
+          }
+          if rows.contains(where: { $0["embedding"] != nil }),
+            !ScreenCloudEntitlementService.shared.allowsCloud(authorizationSnapshot)
+          {
+            return false
+          }
+        }
+        request.allHTTPHeaderFields = refreshedHeaders
+        (data, response) = try await URLSession.shared.data(for: request)
+        if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+          return false
+        }
+        guard let refreshedResponse = response as? HTTPURLResponse else { return false }
+        httpResponse = refreshedResponse
+      }
 
       if httpResponse.statusCode == 200 {
         let syncResponse = try JSONDecoder().decode(OmiAPI.ScreenActivitySyncResponse.self, from: data)
@@ -724,7 +755,12 @@ actor ScreenActivitySyncService {
         )
       } else {
         let body = String(data: data, encoding: .utf8) ?? ""
-        log("ScreenActivitySync: HTTP \(httpResponse.statusCode): \(body)")
+        if let reason = Self.terminalStopReason(statusCode: httpResponse.statusCode, responseBody: body) {
+          log("ScreenActivitySync: stopping after terminal response (\(reason))")
+          stop(logStopped: false)
+          return false
+        }
+        log("ScreenActivitySync: HTTP \(httpResponse.statusCode)")
         return false
       }
     } catch {

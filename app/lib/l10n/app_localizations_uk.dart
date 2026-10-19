@@ -1994,12 +1994,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
-  String get memoryAllowUse => 'Дозволити використання';
-
-  @override
-  String get memoryDontUse => 'Не використовувати';
-
-  @override
   String get undo => 'Скасувати';
 
   @override
@@ -13199,6 +13193,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Підключіть свій Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Підключіть свій Omi, і він записуватиме ваші розмови без рук, цілий день.';
+
+  @override
+  String get firstCaptureConnect => 'Підключити мій Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'У мене ще немає Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13305,6 +13312,113 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Більше не пропускайте жодного слова.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Ось як працює ваша безкоштовна пробна версія.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Необмежені підсумки, збережені назавжди';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Кожна розмова перетворюється на чіткий підсумок з наступними кроками, щоб нічого не пропустити.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Найкраща транскрипція у своєму класі';
+
+  @override
+  String get paywallTrialChipDetails => 'Вловлює більше деталей';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Розрізняє мовців';
+
+  @override
+  String get paywallTrialChipNoise => 'Працює в галасливих приміщеннях';
+
+  @override
+  String get paywallTrialChipAccents => 'Розпізнає акценти';
+
+  @override
+  String get paywallTrialChipJargon => 'Знає ваш жаргон та імена';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Імена мовців, виявляються автоматично';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Необмежені запитання в кожній розмові';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Складіть лист-нагадування за результатами цієї зустрічі.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Чи є якісь розбіжності з тим, що Джон сказав у вівторок?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Знайдіть усе, що може нас уповільнити.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Працює з вашими улюбленими програмами';
+
+  @override
+  String get paywallTrialTodayTitle => 'Сьогодні';
+
+  @override
+  String get paywallTrialTodayBody => 'Усе в Pro розблоковано.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days днів безкоштовно';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days днів Omi Pro за наш рахунок.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Через $days днів';
+  }
+
+  @override
+  String get paywallTrialEndsBody =>
+      'Пробний період закінчується. З вас буде стягнуто плату, якщо ви не скасуєте підписку.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Найновіші моделі ШІ';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Оплата щомісяця';
+
+  @override
+  String get paywallTrialBilledYearly => 'Оплата щорічно';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Заощадьте $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Почати за $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Продовжити з безкоштовним планом';
+
+  @override
+  String get paywallTrialCancelNote => 'Скасувати будь-коли. Без комісій, без штрафів.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Ваша $days-денна безкоштовна пробна версія Omi Pro розпочалася.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Скасовуйте будь-коли.';

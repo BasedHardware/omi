@@ -74,7 +74,7 @@ def _error_result(exc: Exception, expires_at: float) -> _FlagResult:
 @lru_cache(maxsize=1)
 def flag_client() -> Any:
     # The shared backend key is intentionally disabled. Only this public token
-    # grants v2 cohort lookup; never enable JIT flags or capture as a side effect.
+    # grants v2 cohort lookup; never enable unrelated feature flags or capture as a side effect.
     key = os.getenv('PROACTIVITY_V2_POSTHOG_TOKEN', '').strip()
     if not key.startswith('phc_'):
         raise ProactivityDenied('flag_unavailable')

@@ -94,39 +94,6 @@ def test_later_factory_in_nested_scope_rechecks_open_ledgers_without_rescanning_
         assert month_read.call_count == 1
 
 
-@pytest.mark.parametrize('flag', ['STT_CAP_DISPATCH_ENFORCEMENT', 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', None])
-@pytest.mark.parametrize('available', [False, True])
-def test_first_open_checks_company_funding_before_claim_even_with_validated_byok(monkeypatch, flag, available):
-    for switch in ('STT_CAP_DISPATCH_ENFORCEMENT', 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'):
-        monkeypatch.setenv(switch, 'true' if switch == flag else 'false')
-    monkeypatch.setattr(byok, 'has_validated_byok_keys', lambda: True)
-    monkeypatch.setattr(byok, 'get_byok_uid', lambda: 'u')
-    monkeypatch.setattr(byok, 'get_byok_key', lambda provider: 'synthetic-customer-key')
-    budget = Mock(return_value=available)
-    monkeypatch.setattr(funded, 'processing_allowed', budget)
-    claim = Mock(return_value='lease')
-    submit = Mock()
-    dispatch = _entrypoint(
-        'routers/conversations.py',
-        '_dispatch_first_open_work',
-        {
-            'generated_compute_allowed': generated.generated_compute_allowed,
-            'conversations_db': SimpleNamespace(claim_authorized_first_open_work=claim),
-            'submit_with_context': submit,
-            'postprocess_executor': object(),
-            'logger': Mock(),
-        },
-    )
-    dispatch('u', {'id': 'conversation', 'source': 'desktop', 'jit_first_open': {'state': 'pending'}})
-    if flag is not None and not available:
-        claim.assert_not_called()
-        submit.assert_not_called()
-    else:
-        claim.assert_called_once_with('u', 'conversation', 'desktop')
-        submit.assert_called_once()
-    assert budget.call_count == (flag is not None)
-
-
 def test_default_off_scope_never_reads_allowance(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')

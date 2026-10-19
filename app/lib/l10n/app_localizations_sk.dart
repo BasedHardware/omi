@@ -1996,12 +1996,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
-  String get memoryAllowUse => 'Povoliť použitie';
-
-  @override
-  String get memoryDontUse => 'Nepoužívať';
-
-  @override
   String get undo => 'Vrátiť späť';
 
   @override
@@ -13165,6 +13159,19 @@ class AppLocalizationsSk extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Pripojte svoj Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Spárujte svoj Omi a bude nahrávať vaše konverzácie bez použitia rúk, celý deň.';
+
+  @override
+  String get firstCaptureConnect => 'Pripojiť môj Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Ešte nemám Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13271,6 +13278,112 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Už vám neunikne ani slovo.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Takto funguje vaša bezplatná skúšobná verzia.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Neobmedzené súhrny, uchované navždy';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Každá konverzácia sa premení na prehľadný súhrn s ďalšími krokmi, takže nič neunikne.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Najlepšia transkripcia vo svojej triede';
+
+  @override
+  String get paywallTrialChipDetails => 'Zachytí viac detailov';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Rozlišuje rečníkov';
+
+  @override
+  String get paywallTrialChipNoise => 'Funguje v hlučných miestnostiach';
+
+  @override
+  String get paywallTrialChipAccents => 'Zvláda prízvuky';
+
+  @override
+  String get paywallTrialChipJargon => 'Pozná váš žargón a mená';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Mená rečníkov, detekované automaticky';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Neobmedzené otázky, naprieč každou konverzáciou';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Navrhnite následný e-mail z tohto stretnutia.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Nejaké rozpory s tým, čo povedal John v utorok?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Nájdite čokoľvek, čo by nás mohlo spomaliť.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funguje s vašimi obľúbenými aplikáciami';
+
+  @override
+  String get paywallTrialTodayTitle => 'Dnes';
+
+  @override
+  String get paywallTrialTodayBody => 'Všetko v Pro je odomknuté.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dní zadarmo';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dní Omi Pro, na nás.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Za $days dní';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Skúšobná verzia končí. Budete spoplatnení, pokiaľ nezrušíte.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Najnovšie modely AI';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Neobmedzené Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Účtované mesačne';
+
+  @override
+  String get paywallTrialBilledYearly => 'Účtované ročne';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Ušetrite $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Začnite za $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Pokračovať s bezplatným plánom';
+
+  @override
+  String get paywallTrialCancelNote => 'Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Vaša $days-dňová bezplatná skúška Omi Pro sa začala.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Zrušte kedykoľvek.';

@@ -1996,12 +1996,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
-  String get memoryAllowUse => 'Atļaut lietošanu';
-
-  @override
-  String get memoryDontUse => 'Nelietot';
-
-  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -13198,6 +13192,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Savienot savu Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Savienojiet savu Omi, un tas visu dienu brīvroku režīmā tvers jūsu sarunas.';
+
+  @override
+  String get firstCaptureConnect => 'Savienot manu Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Man vēl nav Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13304,6 +13311,113 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Nekad vairs nepalaidiet garām nevienu vārdu.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Lūk, kā darbojas jūsu bezmaksas izmēģinājums.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited kopsavilkumi, saglabāti uz visiem laikiem';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Katra saruna kļūst par skaidru kopsavilkumu ar nākamajiem soļiem, lai nekas nepazustu.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Labākā transkripcija savā klasē';
+
+  @override
+  String get paywallTrialChipDetails => 'Uztver vairāk detaļu';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Atšķir runātājus';
+
+  @override
+  String get paywallTrialChipNoise => 'Darbojas trokšņainās telpās';
+
+  @override
+  String get paywallTrialChipAccents => 'Apstrādā akcentus';
+
+  @override
+  String get paywallTrialChipJargon => 'Pazīst jūsu žargonu un vārdus';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Runātāju vārdi, noteikti automātiski';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited jautājumi, katrā sarunā';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Uzrakstiet pēcpārrunu e-pastu no šīs sanāksmes.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Vai ir kādas pretrunas ar to, ko Džons teica otrdien?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Atrodiet visu, kas mūs varētu palēnināt.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Darbojas ar jūsu iecienītākajām lietotnēm';
+
+  @override
+  String get paywallTrialTodayTitle => 'Šodien';
+
+  @override
+  String get paywallTrialTodayBody => 'Viss Pro ir atbloķēts.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dienas bez maksas';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dienas Omi Pro, no mums.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Pēc $days dienām';
+  }
+
+  @override
+  String get paywallTrialEndsBody =>
+      'Izmēģinājuma periods beidzas. Jums tiks iekasēta maksa, ja neatcelsiet abonementu.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Jaunākie AI modeļi';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Rēķins katru mēnesi';
+
+  @override
+  String get paywallTrialBilledYearly => 'Rēķins katru gadu';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Ietaupiet $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Sākt par $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Turpināt ar bezmaksas plānu';
+
+  @override
+  String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Jūsu $days dienu bezmaksas Omi Pro izmēģinājuma periods ir sācies.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Atcelt jebkurā laikā.';

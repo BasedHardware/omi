@@ -27,7 +27,6 @@ from utils.mcp_memories import (
 )
 from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +60,6 @@ async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
     await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
 
 
-def _enforce_jit_qa_http_access(uid: str) -> None:
-    """Apply the isolated QA UID fence after every verified owner lookup."""
-    try:
-        enforce_jit_qa_uid(uid)
-    except JITQAAdmissionError as error:
-        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
-
-
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     request: Request = None,  # pyright: ignore[reportArgumentType]
@@ -88,7 +79,6 @@ async def get_current_user_id(
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     uid = decoded_token["uid"]
-    _enforce_jit_qa_http_access(uid)
     await _enforce_account_deletion_access(uid)
     await _enforce_cutover_access(uid, request)
     return uid
@@ -121,7 +111,6 @@ async def get_uid_from_mcp_api_key(
     if not user_data:
         raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
     user_id = user_data["user_id"]
-    _enforce_jit_qa_http_access(user_id)
     await _enforce_account_deletion_access(user_id)
     await _enforce_cutover_access(user_id, request)
     await _enforce_ladder_api(user_id, response)
@@ -165,7 +154,6 @@ async def get_mcp_api_key_auth(
     if not user_data:
         raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
 
-    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
     await _enforce_ladder_api(user_data["user_id"], response)
@@ -298,7 +286,6 @@ async def get_api_key_auth(
     if not user_data:
         raise HTTPException(status_code=401, detail=unknown_api_key_detail(DEV_FAMILY))
 
-    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
     await _enforce_ladder_api(user_data["user_id"], response)
