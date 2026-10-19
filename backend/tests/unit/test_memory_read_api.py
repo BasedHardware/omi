@@ -4,6 +4,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memory_contracts import L1MemoryArchiveItem, WorkingMemoryObservation
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.memory_read_api import (
+    _matches,
     query_archive_product_memory_items,
     query_default_product_memory_items,
     query_durable_memory,
@@ -181,6 +182,45 @@ def test_query_default_product_memory_items_applies_product_filter_before_matchi
     assert {result["tier"] for result in results} == {"long_term"}
     assert results[0]["memory_layer"] == "product_memory"
     assert results[0]["agent_use"] == "default_access_memory"
+
+
+def test_matches_short_word_query_filters_instead_of_matching_everything():
+    assert _matches("AI", "User works on AI agents.") is True
+    assert _matches("AI", "User reviews UX copy every Friday.") is False
+    assert _matches("中文", "正在学习中文") is True
+    assert _matches("中文", "Unrelated note.") is False
+
+
+def test_matches_blank_query_still_matches_everything():
+    assert _matches("", "Any content at all.") is True
+    assert _matches(".", "Any content at all.") is True
+
+
+def test_query_default_product_memory_items_filters_on_short_word_query():
+    matching = _product_item(
+        "matches-ai",
+        "User works on AI agents.",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit1",
+        ledger_sequence=1,
+    )
+    unrelated = _product_item(
+        "no-match",
+        "User reviews UX copy every Friday.",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit2",
+        ledger_sequence=1,
+    )
+
+    results = query_default_product_memory_items(
+        "AI", [matching, unrelated], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW
+    )
+
+    assert [result["memory_id"] for result in results] == ["matches-ai"]
 
 
 def test_query_default_product_memory_items_excludes_pending_raw_text():

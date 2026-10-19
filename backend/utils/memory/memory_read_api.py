@@ -28,7 +28,11 @@ MemoryResult = Dict[str, Any]
 
 
 def _tokens(query: str) -> set[str]:
-    return {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2}
+    words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+    long_tokens = {token for token in words if len(token) > 2}
+    # Words of two characters or fewer ("AI", "UX", "中文") still filter the results;
+    # they only lose priority to longer tokens when both are present in the query.
+    return long_tokens or words
 
 
 def _matches(query: str, content: str) -> bool:
