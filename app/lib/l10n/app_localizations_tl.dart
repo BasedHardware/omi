@@ -9404,9 +9404,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count pa';
-  }
+  String get quoteShowSources => 'Ipakita ang mga pinagmulan';
 
   @override
   String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';
@@ -11159,7 +11157,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
+  String get captureRecoveryBannerTitle => 'Hindi nagpapadala ng audio ang Omi';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11178,18 +11176,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get captureBannerRetrySync => 'Subukang i-sync muli';
 
   @override
-  String get captureBannerWhatsWrong => 'Anong nangyayari?';
-
-  @override
-  String get captureBannerDismiss => 'Isara';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'Nahinto ang audio link — magpapatuloy ang transcript kapag nakabawi na';
 
   @override
   String get captureIngressNeedsReconnect => 'Hindi naabot ng audio ang app — i-reconnect ang iyong Omi';
@@ -13790,7 +13778,30 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityRetryAll => 'Subukan muli lahat';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Hindi masuri ang storage';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Naka-pause ang mga recording';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Naka-stall ang upload';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording ang naghihintay',
+      one: '1 recording ang naghihintay',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
+
+  @override
+  String get activityAttentionSemantics => 'Aktibidad, kailangan ng pansin';
 
   @override
   String get connectAgentHeadline => 'Gamitin ang iyong Omi memory sa ChatGPT at sa iyong mga AI agent';
@@ -14481,4 +14492,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved sa $total ng audio ang na-save';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Patuloy na nagre-record ang Omi';
 }

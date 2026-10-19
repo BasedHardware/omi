@@ -9323,9 +9323,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+আরও $count';
-  }
+  String get quoteShowSources => 'উৎস দেখান';
 
   @override
   String get jumpToLatestMessage => 'সর্বশেষ বার্তায় যান';
@@ -11064,7 +11062,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openCall => 'কল খুলুন';
 
   @override
-  String get captureRecoveryBanner => 'Omi অডিও পাঠাচ্ছে না — আবার সংযোগ করতে ট্যাপ করুন';
+  String get captureRecoveryBannerTitle => 'Omi অডিও পাঠাচ্ছে না';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11083,17 +11081,8 @@ class AppLocalizationsBn extends AppLocalizations {
   String get captureBannerRetrySync => 'সিঙ্ক আবার চেষ্টা করুন';
 
   @override
-  String get captureBannerWhatsWrong => 'কী হচ্ছে?';
-
-  @override
-  String get captureBannerDismiss => 'সরিয়ে দিন';
-
-  @override
   String get captureWedgeBleExplanation =>
       'আপনার Omi-এর সঙ্গে Bluetooth সংযোগ বিচ্ছিন্ন হয়ে গেছে, তাই অডিও অ্যাপে পৌঁছাচ্ছে না। Omi ডিভাইসে রেকর্ড করা চালিয়ে যাচ্ছে এবং সংযোগ ফিরলে সিঙ্ক হবে। আবার চেষ্টা করলে সংযোগ পুনরায় স্থাপিত হয়; বারবার ব্যর্থ হলে সেটিংস > ডিভাইস থেকে আপনার ডিভাইস পরীক্ষা করুন।';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'অডিও সংযোগ বিচ্ছিন্ন হয়েছে — সংযোগ ফিরলে লেখা হবে';
 
   @override
   String get captureIngressNeedsReconnect => 'অডিও অ্যাপে পৌঁছাচ্ছে না — Omi পুনরায় সংযুক্ত করুন';
@@ -13681,7 +13670,30 @@ class AppLocalizationsBn extends AppLocalizations {
   String get activityRetryAll => 'সবগুলো আবার চেষ্টা করুন';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'স্টোরেজ যাচাই করা যাচ্ছে না';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'রেকর্ডিং বিরত';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'আপলোড থেমে আছে';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেকর্ডিং অপেক্ষায়',
+      one: '1টি রেকর্ডিং অপেক্ষায়',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'এই কথোপকথনের সারাংশ তৈরি করা যায়নি';
+
+  @override
+  String get activityAttentionSemantics => 'অ্যাক্টিভিটি, মনোযোগ দরকার';
 
   @override
   String get connectAgentHeadline => 'ChatGPT ও আপনার AI এজেন্টগুলিতে আপনার Omi স্মৃতি ব্যবহার করুন';
@@ -14362,4 +14374,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved অডিও সংরক্ষিত, মোট $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi-তে এখনও রেকর্ড হচ্ছে';
 }

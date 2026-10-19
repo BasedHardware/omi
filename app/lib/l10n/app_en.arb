@@ -11106,14 +11106,9 @@
             }
         }
     },
-    "quoteMoreTimestamps": "+{count} more",
-    "@quoteMoreTimestamps": {
-        "description": "Expand the remaining supporting transcript timestamps in this summary section",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
+    "quoteShowSources": "Show sources",
+    "@quoteShowSources": {
+        "description": "Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it"
     },
     "jumpToLatestMessage": "Jump to latest message",
     "@jumpToLatestMessage": {
@@ -13174,9 +13169,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
-    "@captureRecoveryBanner": {
-        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
+    "captureRecoveryBannerTitle": "Omi isn't sending audio",
+    "@captureRecoveryBannerTitle": {
+        "description": "Capture banner title: the pendant's audio stopped reaching the app; the Reconnect button sits below"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13195,21 +13190,9 @@
     "@captureBannerRetrySync": {
         "description": "Banner button that retries the pending transfer (phone-storage episodes)"
     },
-    "captureBannerWhatsWrong": "What's going on?",
-    "@captureBannerWhatsWrong": {
-        "description": "Text button on the capture recovery banner that opens the details sheet explaining the outage."
-    },
-    "captureBannerDismiss": "Dismiss",
-    "@captureBannerDismiss": {
-        "description": "Semantic label for the capture recovery banner's close button."
-    },
     "captureWedgeBleExplanation": "The Bluetooth link to your Omi stalled, so audio isn't reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.",
     "@captureWedgeBleExplanation": {
         "description": "Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does."
-    },
-    "captureLinkStalledTranscribesLater": "Audio link stalled — transcribes when it recovers",
-    "@captureLinkStalledTranscribesLater": {
-        "description": "Capture recovery banner, second line for a BLE-health wedge: the link stalled and transcripts resume once it recovers. Does not promise the audio was saved."
     },
     "captureIngressNeedsReconnect": "Audio isn't reaching the app — reconnect your Omi",
     "@captureIngressNeedsReconnect": {
@@ -16532,9 +16515,34 @@
     "@activityRetryAll": {
         "description": "Button in Activity's Needs attention section that retries every failed item once"
     },
+    "activityAttentionStorageUnknownTitle": "Can't check storage",
+    "@activityAttentionStorageUnknownTitle": {
+        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+    },
+    "activityAttentionStorageSubtitle": "Recordings paused",
+    "@activityAttentionStorageSubtitle": {
+        "description": "Needs attention row subtitle under the storage title: new recordings cannot be saved"
+    },
+    "activityAttentionUploadStalledTitle": "Upload stalled",
+    "@activityAttentionUploadStalledTitle": {
+        "description": "Needs attention row title: uploads made no progress long enough to need attention"
+    },
+    "activityAttentionUploadRecordings": "{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
+    "@activityAttentionUploadRecordings": {
+        "description": "Needs attention row subtitle: how many recordings are waiting to upload",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"
+    },
+    "activityAttentionSemantics": "Activity, needs attention",
+    "@activityAttentionSemantics": {
+        "description": "Bell accessibility label when its warning dot is lit for attention items"
     },
     "connectAgentHeadline": "Use your Omi memory in ChatGPT and your AI agents",
     "@connectAgentHeadline": {
@@ -17496,5 +17504,9 @@
                 "type": "String"
             }
         }
+    },
+    "activityAttentionLinkStalledSubtitle": "Still recording on your Omi",
+    "@activityAttentionLinkStalledSubtitle": {
+        "description": "Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage"
     }
 }
