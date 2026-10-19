@@ -641,18 +641,22 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // [groupRecordingBlocks]. Local-only WALs (on-device STT) never join a
     // cloud drain — counting them would light a stall that no upload can
     // clear — and only forward-moving (upload-eligible) work proves a stall.
-    final uploadEligible = _allWals.where(_isUploadStallCandidate).toList()
-      ..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    // Ordered by [displaySortedWals] — the memoized newest-first inventory —
+    // so a refresh shares one sort with every other consumer instead of
+    // re-sorting the index on the UI isolate (the same keyed order the
+    // pending-work row reads).
+    final uploadEligible = displaySortedWals.where(_isUploadStallCandidate).toList(growable: false);
     DateTime? oldestPendingAt;
     if (uploadEligible.isNotEmpty) {
       final oldestSeconds = uploadEligible.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);
       oldestPendingAt = DateTime.fromMillisecondsSinceEpoch(oldestSeconds * 1000);
     }
-    // Fragment durations still sum: the row reports kept audio, and a fragment
-    // that already uploaded contributes none of its length to what waits.
-    final pendingSeconds = _allWals
-        .where((wal) => wal.storage == WalStorage.disk && wal.status == WalStatus.miss && !wal.onDeviceOnly)
-        .fold<int>(0, (sum, wal) => sum + (wal.seconds > 0 ? wal.seconds : 0));
+    // Fragment durations still sum across the same upload-eligible set: the
+    // row reports the kept audio this stall holds, and a fragment that
+    // already uploaded contributes none of its length to what waits.
+    // Retry-exhausted WALs are Offline Sync's terminal attention — hours of
+    // them must not read as audio waiting on this upload.
+    final pendingSeconds = uploadEligible.fold<int>(0, (sum, wal) => sum + (wal.seconds > 0 ? wal.seconds : 0));
     _captureWedgeMonitor.observeWalBacklog(
       pendingCount: groupRecordingBlocks(uploadEligible).length,
       oldestPendingAt: oldestPendingAt,

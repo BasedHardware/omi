@@ -58,7 +58,8 @@ Wal _wal(int startSeconds,
         {WalStatus status = WalStatus.miss,
         WalStorage storage = WalStorage.disk,
         bool onDeviceOnly = false,
-        int seconds = 60}) =>
+        int seconds = 60,
+        int retryCount = 0}) =>
     Wal(
       timerStart: startSeconds,
       codec: BleAudioCodec.opus,
@@ -66,6 +67,7 @@ Wal _wal(int startSeconds,
       status: status,
       storage: storage,
       onDeviceOnly: onDeviceOnly,
+      retryCount: retryCount,
       device: 'phone',
     );
 
@@ -127,6 +129,31 @@ void main() {
 
     await provider.refreshWals();
     expect(monitor.uploadStall, isNull, reason: 'nothing in the inventory can still upload');
+  });
+
+  test('the kept-audio duration sums the upload-eligible set only', () async {
+    final now = DateTime.now();
+    final base = now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch ~/ 1000;
+    final syncs = _FakeSyncs([
+      // One retryable waiting fragment still moving toward an upload.
+      _wal(base, seconds: 60),
+      // Retry-exhausted failures keep status=miss but are Offline Sync's
+      // terminal attention: their hours must not read as audio this upload
+      // stall is holding.
+      _wal(base + 60, retryCount: 3, seconds: 60 * 60),
+      _wal(base + 120, retryCount: 5, seconds: 60 * 60),
+      // Local-only (on-device STT) audio never joins a cloud drain.
+      _wal(base + 180, onDeviceOnly: true, seconds: 60 * 60),
+    ]);
+    final monitor = _monitor();
+    final provider = await _provider(syncs, monitor);
+    addTearDown(provider.dispose);
+    addTearDown(monitor.dispose);
+
+    await provider.refreshWals();
+    expect(monitor.uploadStall, isNotNull, reason: 'the one eligible waiting WAL still declares the stall');
+    expect(monitor.uploadStall!.pendingCount, 1, reason: 'only the retryable fragment groups');
+    expect(monitor.uploadStall!.pendingSeconds, 60, reason: 'terminal failures and local-only audio do not sum in');
   });
 
   test('the storage row follows its own retention observation, not upload progress', () async {
