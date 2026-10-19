@@ -47,9 +47,9 @@ class PreferencesSyncJobMissingStore implements SyncJobMissingStore {
 
 class SyncJobPoller {
   SyncJobPoller({DateTime Function()? clock, SyncRateLimiter? limiter, SyncJobMissingStore? missingStore})
-    : _clock = clock ?? DateTime.now,
-      _limiter = limiter ?? SyncRateLimiter.instance,
-      _missingStore = missingStore;
+      : _clock = clock ?? DateTime.now,
+        _limiter = limiter ?? SyncRateLimiter.instance,
+        _missingStore = missingStore;
 
   static final instance = SyncJobPoller();
   static const maxRequestsPerMinute = 18;
@@ -239,8 +239,8 @@ class SyncJobPoller {
 
 extension SyncRateLimitCooldown on SyncRateLimitKind {
   RateLimitReason get cooldownReason => switch (this) {
-    SyncRateLimitKind.fairUse => RateLimitReason.fairUse,
-    SyncRateLimitKind.backendCapacity => RateLimitReason.backendBusy,
-    SyncRateLimitKind.edgeThrottle => RateLimitReason.edgeThrottle,
-  };
+        SyncRateLimitKind.fairUse => RateLimitReason.fairUse,
+        SyncRateLimitKind.backendCapacity => RateLimitReason.backendBusy,
+        SyncRateLimitKind.edgeThrottle => RateLimitReason.edgeThrottle,
+      };
 }

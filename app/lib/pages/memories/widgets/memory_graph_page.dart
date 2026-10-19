@@ -46,9 +46,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  }) : position = initialPosition,
-       velocity = v.Vector3.zero(),
-       force = v.Vector3.zero();
+  })  : position = initialPosition,
+        velocity = v.Vector3.zero(),
+        force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -416,8 +416,7 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
           : await widget.loadGraph();
       if (!mounted || generation != _loadGeneration) return;
       final merged = loadMore ? mergeKnowledgeGraphPages(_graphData, data) : data;
-      final unchanged =
-          jsonEncode(_graphData['nodes']) == jsonEncode(merged['nodes']) &&
+      final unchanged = jsonEncode(_graphData['nodes']) == jsonEncode(merged['nodes']) &&
           jsonEncode(_graphData['edges']) == jsonEncode(merged['edges']);
       setState(() => _graphData = merged);
       if (!unchanged) {
@@ -437,12 +436,8 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
         _clearGraph();
         await _loadGraph();
       } else if (_hasContent) {
-        OmiFeedback.error(
-          context,
-          context.l10n.couldNotLoadKnowledgeGraph,
-          actionLabel: context.l10n.tryAgain,
-          onAction: () => _loadGraph(loadMore: loadMore),
-        );
+        OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
+            actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
       } else {
         setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       }
@@ -745,24 +740,18 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
                 ),
                 if (widget.showShareButton && simulation.nodes.length > 1)
                   OmiIconButton(
-                    key: _shareButtonKey,
-                    icon: const FaIcon(FontAwesomeIcons.share, size: 20),
-                    label: context.l10n.share,
-                    onPressed: _shareGraph,
-                  ),
+                      key: _shareButtonKey,
+                      icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                      label: context.l10n.share,
+                      onPressed: _shareGraph),
               ],
             )
           : null,
-      body: Column(
-        children: [
-          Expanded(child: _buildBody()),
-          if (_loadMoreButton != null && simulation.nodes.length > 1)
-            SafeArea(
-              top: false,
-              child: Padding(padding: const EdgeInsets.all(OmiSpacing.sm), child: _loadMoreButton!),
-            ),
-        ],
-      ),
+      body: Column(children: [
+        Expanded(child: _buildBody()),
+        if (_loadMoreButton != null && simulation.nodes.length > 1)
+          SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(OmiSpacing.sm), child: _loadMoreButton!)),
+      ]),
     );
   }
 
@@ -794,7 +783,7 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
         action: widget.preview
             ? null
             : (_loadMoreButton ??
-                  OmiButton.secondary(label: context.l10n.refresh, onPressed: _loadGraph, size: OmiButtonSize.compact)),
+                OmiButton.secondary(label: context.l10n.refresh, onPressed: _loadGraph, size: OmiButtonSize.compact)),
       );
       if (!widget.embedded) {
         return SafeArea(child: emptyState);
@@ -1145,7 +1134,8 @@ class GraphPainter3D extends CustomPainter {
             OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
             node.baseColor,
             0.5,
-          )!.withValues(alpha: p.alpha),
+          )!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -1195,7 +1185,12 @@ class GraphPainter3D extends CustomPainter {
           labelOffset = available;
         }
         if (OmiColors.active == OmiPalette.light) {
-          final labelRect = Rect.fromLTWH(labelOffset.dx - 4, labelOffset.dy - 3, tp.width + 8, tp.height + 6);
+          final labelRect = Rect.fromLTWH(
+            labelOffset.dx - 4,
+            labelOffset.dy - 3,
+            tp.width + 8,
+            tp.height + 6,
+          );
           canvas.drawRRect(
             RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),

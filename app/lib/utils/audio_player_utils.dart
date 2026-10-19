@@ -236,13 +236,11 @@ class AudioPlayerUtils extends ChangeNotifier {
     final tempDir = await getTemporaryDirectory();
     final file = await writeRecordingWav(wals, outputPath: '${tempDir.path}/omi_recording_$start.wav');
     if (file == null) throw Exception('No audio on this phone for this recording');
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path, mimeType: 'audio/wav')],
-        text: 'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(start * 1000).toString().split('.')[0]}',
-        sharePositionOrigin: shareSheetOrigin(),
-      ),
-    );
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path, mimeType: 'audio/wav')],
+      text: 'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(start * 1000).toString().split('.')[0]}',
+      sharePositionOrigin: shareSheetOrigin(),
+    ));
   }
 
   Future<String?> _getOrCreateAudioFile(Wal wal, {bool forSharing = false}) async {

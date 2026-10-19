@@ -46,8 +46,8 @@ class CaptureRecoveryBanner extends StatelessWidget {
         final title = isTransferRecovery
             ? '${l10n.phoneStorage}: ${l10n.recordingsNotSynced}'
             : isIngressFailure
-            ? l10n.captureIngressNeedsReconnect
-            : l10n.captureRecoveryBanner;
+                ? l10n.captureIngressNeedsReconnect
+                : l10n.captureRecoveryBanner;
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Semantics(
@@ -117,7 +117,10 @@ class CaptureRecoveryBanner extends StatelessWidget {
                             size: OmiButtonSize.compact,
                             // Amber has no on-warning token; near-black clears 8:1 on both
                             // palettes' amber, white does not in light mode.
-                            colors: OmiButtonColors(background: OmiColors.warning, foreground: Colors.black87),
+                            colors: OmiButtonColors(
+                              background: OmiColors.warning,
+                              foreground: Colors.black87,
+                            ),
                           ),
                         OmiButton.tertiary(
                           key: const Key('capture_recovery_banner_info'),
@@ -131,8 +134,8 @@ class CaptureRecoveryBanner extends StatelessWidget {
                               explanation: isTransferRecovery
                                   ? l10n.recordingsNotSynced
                                   : isIngressFailure
-                                  ? l10n.captureIngressNeedsReconnectExplanation
-                                  : l10n.captureWedgeBleExplanation,
+                                      ? l10n.captureIngressNeedsReconnectExplanation
+                                      : l10n.captureWedgeBleExplanation,
                             );
                           },
                           size: OmiButtonSize.compact,
