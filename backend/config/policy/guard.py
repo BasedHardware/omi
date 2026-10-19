@@ -21,6 +21,7 @@ def protected_env_keys():
         ast.literal_eval(node.value.args[0])
         for node in snapshot.body
         if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Call)
         and any(isinstance(target, ast.Name) and target.id == 'SNAPSHOT_ENV_KEYS' for target in node.targets)
     )
     live = next(
