@@ -276,7 +276,8 @@ def test_shutdown_racing_worker_start_stops_and_joins_worker(monkeypatch):
     assert not starter.is_alive()
 
 
-def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
+@pytest.fixture
+def app_shutdown_handler():
     # Execute the real handler with unrelated service cleanups replaced, avoiding
     # main's credential/client initialization and router imports in this unit test.
     main_path = Path(__file__).resolve().parents[2] / 'main.py'
@@ -285,6 +286,10 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
         node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'shutdown_event'
     )
     handler.decorator_list = []
+    return handler
+
+
+def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch, app_shutdown_handler):
     namespace = {
         'app': SimpleNamespace(state=SimpleNamespace()),
         'batch_pressure': SimpleNamespace(stop=AsyncMock()),
@@ -295,7 +300,7 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
         'close_posthog_control_plane': Mock(),
         'stop_metrics_sidecar_server': Mock(),
     }
-    exec(compile(ast.Module(body=[handler], type_ignores=[]), str(main_path), 'exec'), namespace)
+    exec(compile(ast.Module(body=[app_shutdown_handler], type_ignores=[]), '<shutdown-handler>', 'exec'), namespace)
     flush = metrics._BackgroundFlush()
     monkeypatch.setattr(metrics, '_flush', flush)
     try:

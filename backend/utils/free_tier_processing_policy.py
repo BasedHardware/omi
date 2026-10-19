@@ -1,7 +1,6 @@
 """Client summaries are display projections; funded admission owns processing policy.
 
 At cap a summary never completes the deferred work or creates backlog consent.
-The emergency stop remains owned by the surviving memory-suppression cohort.
 """
 
 import os

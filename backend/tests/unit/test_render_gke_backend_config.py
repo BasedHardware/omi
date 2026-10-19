@@ -130,7 +130,10 @@ def test_api_hosts_render_same_optional_price_authority(monkeypatch, checked_in_
         resolve_subscription_entitlements,
     )
     from scripts.render_backend_runtime_env import _render_env_entries, _render_desktop_backend_state
+    from scripts import render_gke_backend_config as renderer
 
+    # Reuse the real manifest parsed in setup; rendering/entitlement assertions need no repeated YAML parse.
+    monkeypatch.setattr(renderer, '_load_yaml', lambda path: checked_in_manifest)
     config = checked_in_manifest['environments'][environment]
     monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-subscription-reader')
     keys = {row['env_var'] for row in LADDER_V1_PRICE_BINDINGS.values()}
