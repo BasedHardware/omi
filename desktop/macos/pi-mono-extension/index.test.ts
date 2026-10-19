@@ -45,6 +45,7 @@ import {
   omiReasoningEffortFromRelayContext,
   omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
+  withOmiProviderHeadersFetch,
   OMI_CHAT_CONTRACT_VERSION,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
@@ -2882,4 +2883,90 @@ test("request authority is captured before lookup and never leaves the machine",
   assert.equal(reports[0].requestId, "request-original");
   await modelFetch("http://127.0.0.1:9998/third-party", { headers });
   assert.equal(reports.length, 1);
+});
+
+test("withOmiProviderHeadersFetch attaches per-turn requestId across multi-round completions without before_provider_headers", async () => {
+  let relayContext = JSON.stringify({
+    capabilityRef: "cap_turn_1",
+    requestId: "req_turn_1",
+    reasoningEffort: "adaptive",
+  });
+  const seenCapabilities: Array<string | undefined> = [];
+  const upstreamRequests: Array<{ url: string; requestId: string | null; effort: string | null; contract: string | null; capability: string | null }> = [];
+  const reports: ProviderStatus[] = [];
+
+  const innerFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async (_force, capability) => {
+      seenCapabilities.push(capability);
+      return { headers: { Authorization: "Bearer inert-test-only" } };
+    },
+    fetch: async (request, init) => {
+      const req = new Request(request, init);
+      upstreamRequests.push({
+        url: req.url,
+        requestId: req.headers.get("x-omi-request-id"),
+        effort: req.headers.get("x-omi-reasoning-effort"),
+        contract: req.headers.get("x-omi-chat-contract-version"),
+        capability: req.headers.get("x-omi-local-capability"),
+      });
+      return new Response("data: [DONE]\n\n", { status: 200, headers: { "content-type": "text/event-stream" } });
+    },
+    report: status => reports.push(status),
+  });
+
+  const wrappedFetch = withOmiProviderHeadersFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    fetch: innerFetch,
+    relayContextRaw: async () => relayContext,
+  });
+
+  // Two completion rounds within the same user turn (e.g., initial prompt + tool result continuation)
+  // share the same x-omi-request-id so backend quota accounting deduplicates the turn to 1 question.
+  await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: '{"round":1}' });
+  await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: '{"round":2}' });
+
+  // Next user turn rotates OMI_CONTEXT_FILE to a new requestId/capabilityRef.
+  relayContext = JSON.stringify({
+    capabilityRef: "cap_turn_2",
+    requestId: "req_turn_2",
+    reasoningEffort: "fast",
+  });
+  await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: '{"round":1}' });
+
+  // Third-party requests never receive Omi relay headers.
+  await wrappedFetch("http://127.0.0.1:9998/v2/chat/completions", { method: "POST", body: "{}" });
+
+  assert.deepEqual(seenCapabilities, ["cap_turn_1", "cap_turn_1", "cap_turn_2"]);
+  assert.deepEqual(upstreamRequests, [
+    {
+      url: "http://127.0.0.1:9999/v2/chat/completions",
+      requestId: "req_turn_1",
+      effort: "adaptive",
+      contract: "1",
+      capability: null,
+    },
+    {
+      url: "http://127.0.0.1:9999/v2/chat/completions",
+      requestId: "req_turn_1",
+      effort: "adaptive",
+      contract: "1",
+      capability: null,
+    },
+    {
+      url: "http://127.0.0.1:9999/v2/chat/completions",
+      requestId: "req_turn_2",
+      effort: "fast",
+      contract: "1",
+      capability: null,
+    },
+    {
+      url: "http://127.0.0.1:9998/v2/chat/completions",
+      requestId: null,
+      effort: null,
+      contract: null,
+      capability: null,
+    },
+  ]);
+  assert.deepEqual(reports.map(r => r.requestId), ["req_turn_1", "req_turn_1", "req_turn_2"]);
 });
