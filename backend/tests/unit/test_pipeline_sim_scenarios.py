@@ -49,12 +49,17 @@ def test_mixed_fleet_steady_passes_every_gate(samples):
     assert sample['sim']['max_paid_calls_per_segment'] <= 1
 
 
-def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine_tail(samples):
+def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_within_the_5_minute_p95(samples):
     sample = samples['exhaustion']
     sim = sample['sim']
     assert sample['quarantine_projection_cohort_count'] >= 20  # above the gate's low-sample floor
-    assert sample['quarantine_projection_p95_seconds'] > 300
-    assert sample['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'
+    # Bounded recovery dispatch (#22321) drains the quarantine cohort inside the gate's 300 s p95.
+    # The single-candidate sweep it replaced measured ~1500 s here.
+    assert sample['quarantine_projection_p95_seconds'] < 300
+    # The one terminal paid failure stays visible to the gate instead of hiding behind the p95 tail.
+    assert sim['recovery_states'].get('failed_held', 0) >= 1
+    assert sample['unrecovered_quarantines'] == sim['recovery_states']['failed_held']
+    assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
     # Every quarantine spent exactly one paid call (the durable intent is never reissued).
     assert sim['paid_fallback_calls'] == sample['quarantine_projection_cohort_count']
     assert sim['max_paid_calls_per_segment'] == 1
