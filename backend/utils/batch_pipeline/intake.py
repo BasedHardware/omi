@@ -239,6 +239,15 @@ async def accept_upload(
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback.
         provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
+        # Contract (c): admission records the route it actually takes. A unit that
+        # stays on Parakeet keeps only the BYOK funding decision (lane 6's dispatch
+        # re-check reads job['policy']['provider_reason']).
+        policy = replace(
+            policy,
+            stt_route='provider' if provider else 'parakeet',
+            provider_reason=route.provider_reason if provider else ('byok' if byok_enabled else 'none'),
+            provider_service=route.provider_service if provider else 'none',
+        )
         # legacy_sync 'on' keeps today's fallback exactly, including unknown and
         # 'multi' languages.
         if (
