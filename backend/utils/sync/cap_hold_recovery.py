@@ -385,6 +385,18 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
     if row is None:
         return False
     try:
+        from utils.batch_pipeline import cap_hold_admission
+
+        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
+            # Legacy draining/dark: re-enter through batch admission (lane 8). Batch owns the
+            # conversation and usage; the hold is handed off and erased, never settled as legacy.
+            admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
+            if admitted.outcome not in ('admitted', 'already_admitted'):
+                return False
+            if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
+                return False
+            await run_blocking(storage_executor, _erase, uid, snapshot, row)
+            return True
         if not await _recover_row(uid, snapshot, row):
             return False
         if not await _save(uid, snapshot, row, {'state': 'completed'}):
