@@ -23,7 +23,6 @@ decision into their response. Nothing in this module logs a uid.
 
 from __future__ import annotations
 
-import importlib
 import logging
 import math
 from dataclasses import dataclass
@@ -33,6 +32,8 @@ from typing import Any, Mapping, Optional
 
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge
+
+from utils.rollout import runtime_percent
 
 logger = logging.getLogger(__name__)
 
@@ -150,13 +151,10 @@ def _fallback(source: str) -> LegacySyncMode:
 def current_mode() -> LegacySyncMode:
     """The served mode. Never raises; every failure serves ``on``."""
     try:
-        # Resolved at call time: until lane 6's (f) module reaches this tree the
-        # switch does not exist and every process serves ``on``.
-        reader = importlib.import_module('utils.rollout.runtime_percent').legacy_sync_mode
-    except (ImportError, AttributeError):
+        raw: object = runtime_percent.legacy_sync_mode()
+    except NotImplementedError:
+        # The (f) stub before lane 6's implementation: the switch does not exist yet.
         return _fallback('absent')
-    try:
-        raw: object = reader()
     except Exception as error:
         logger.error('event=legacy_dark action=mode_read outcome=error exception_type=%s', type(error).__name__)
         return _fallback('error')
