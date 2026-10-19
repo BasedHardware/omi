@@ -14,6 +14,16 @@ secret and `BUCKET_BATCH_PIPELINE` durable artifact bucket. This bucket must not
 inherit the legacy syncing bucket's one-day lifecycle for pending objects.
 D's completion/deletion outboxes own removal; pending audio must survive backlog.
 
+With several serving instances, the periodic ticks (the supervisor and metrics
+scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
+quarantine discovery, lease recovery and the result-ready drain) on one instance
+per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
+gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+post-recovery drain always run. Every guarded step is already idempotent and
+transaction-fenced, so the lease saves reads and enqueues only. A lease-store
+error fails open to every instance running, and
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` restores that unconditionally.
+
 The GPU worker also needs explicit `BATCH_PIPELINE_API_URL` (HTTPS backend service base)
 and `BATCH_PIPELINE_WORKER_AUDIENCE`. A's Pump composes the Google service-OIDC
 client automatically for production-marked items; missing/unavailable policy
