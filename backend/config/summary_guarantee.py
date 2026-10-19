@@ -61,6 +61,14 @@ def preserves_admitted(row: Mapping[str, Any]) -> bool:
 
 
 def first_summary_pending(row: Mapping[str, Any]) -> bool:
+    if row.get('batch_policy'):
+        from config.policy import BatchUnitPolicy
+
+        return bool(
+            not row.get('effects_only')
+            and not row.get('summary_seen')
+            and BatchUnitPolicy.from_dict(row['batch_policy']).first_summary_enabled
+        )
     return (
         not row.get('effects_only')
         and not row.get('summary_seen')

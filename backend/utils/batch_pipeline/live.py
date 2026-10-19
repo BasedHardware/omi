@@ -14,6 +14,8 @@ import logging
 import os
 import time
 
+from config.policy import resolve_batch_policy
+from database.batch_pipeline_policy import load_job_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
@@ -64,6 +66,7 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
     store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
+    policy = resolve_batch_policy(uid)
     snapshot = {
         key: conversation.get(key)
         for key in (
@@ -98,6 +101,8 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
                 'enqueued_at': now,
                 'record_content_id': content,
                 'record_snapshot': snapshot,
+                'policy': policy.to_dict(),
+                'policy_source': 'admission',
                 'merge_pending': False,
             },
         )
@@ -259,6 +264,7 @@ async def admit_recording(store, pending, *, now=None):
         data_protection_level=protection.level,
         record_origin=True,
         native_record=True,
+        policy=load_job_policy(store, pending['segment_id'])[1],
     )
     staged = []
     for item, (_, _, refs) in zip(items, units):

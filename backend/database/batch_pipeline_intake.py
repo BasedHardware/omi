@@ -1,9 +1,9 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
-from config.batch_pipeline import enabled_for
+from config.policy import resolve_batch_policy
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -34,6 +34,8 @@ def admit(
         item.owner_id != binding.owner_id or item.privacy_generation != binding.privacy_generation for item in items
     ):
         raise ValueError('work identity must match projection binding')
+    policy = binding.policy or resolve_batch_policy(binding.owner_id)
+    binding = replace(binding, policy=policy)
     content_key = f'{binding.owner_id}/{binding.content_id}'
 
     def commit(tx):
@@ -53,8 +55,10 @@ def admit(
             and pending.get('conversation_id') == binding.target_conversation_id
             and pending.get('record_content_id') == binding.content_id
         )
-        if not reserved_recording and not enabled_for(binding.owner_id):
-            raise AdmissionDisabled('cohort no longer enabled')
+        if reserved_recording and pending.get('policy') and pending['policy'] != policy.to_dict():
+            raise ValueError('reserved recording policy is immutable')
+        if not reserved_recording and not policy.batch_enabled:
+            raise AdmissionDisabled('recorded admission policy does not enable batch')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
             row = tx.get('conversations', key)
@@ -79,7 +83,7 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = Scheduler.enqueue_in_transaction(tx, item, now)
+            created = Scheduler.enqueue_in_transaction(tx, item, now, policy=policy)
             job = tx.get('jobs', item.segment_id)
             if not created and job.get('projection_binding') != asdict(binding):
                 raise ValueError('existing segment cannot change its immutable intake binding')
@@ -114,6 +118,9 @@ def admit(
     outcome = store.run(commit)
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:
+        from config.policy.telemetry import record_policy_source
+
+        record_policy_source('admission', policy.policy_id)
         record_correctness('admitted', seconds=float(seconds))
     return outcome
 

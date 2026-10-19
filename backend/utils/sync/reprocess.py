@@ -33,6 +33,7 @@ from config.summary_guarantee import (
     first_summary_pending,
     preserves_admitted,
 )
+from config.policy import BatchUnitPolicy
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
@@ -232,6 +233,7 @@ def mark(
     now: float | None = None,
     mutate: Callable | None = None,
     effects_only: bool = False,
+    policy: BatchUnitPolicy | None = None,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -259,6 +261,8 @@ def mark(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        if policy is not None and (not old or old.get('dormant')):
+            row['batch_policy'] = policy.to_dict()
         row['dormant'] = False
         row['summary_repair'] = False
         row['effects_only'] = effects_only
@@ -266,7 +270,12 @@ def mark(
         if first_summary_pending(row):
             row['summary_deadline_at'] = min(
                 row.get('summary_deadline_at', float('inf')),
-                row['first_pending_at'] + deadline_seconds(),
+                row['first_pending_at']
+                + (
+                    row['batch_policy']['first_summary_deadline_seconds']
+                    if row.get('batch_policy')
+                    else deadline_seconds()
+                ),
             )
             row['due_at'] = min(row['due_at'], row['summary_deadline_at'])
         from config.demand_processing import enabled
@@ -378,7 +387,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
-    summary_policy = summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+    summary_policy = (
+        row['batch_policy']['first_summary_enabled']
+        if row.get('batch_policy')
+        else summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+    )
     summary_seen = False
     superseded = False
     retry_revision = None

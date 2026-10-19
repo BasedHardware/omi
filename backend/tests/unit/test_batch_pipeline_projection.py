@@ -1,6 +1,7 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 import logging
 from unittest.mock import Mock
 
@@ -15,7 +16,7 @@ from utils.sync import bridge
 
 @pytest.fixture
 def binding():
-    return ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',))
+    return ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',), policy=BatchUnitPolicy())
 
 
 @pytest.mark.parametrize(
@@ -50,7 +51,7 @@ def test_read_contention_retry_uses_fresh_transactions_when_enabled(monkeypatch)
     client.transaction.side_effect = [object(), object()]
     operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
     store = ProjectionStore(Mock(client=client))
-    assert store.run(operation) == 'persisted'
+    assert store.run(operation, policy=resolve_batch_policy('synthetic-owner')) == 'persisted'
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
@@ -137,7 +138,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
     session.receipt.return_value = {'state': 'persisted'}
     session.write_receipt.side_effect = lambda transaction, receipt: transaction.set(receipt_ref, receipt)
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
-    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs' if bound else '')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
@@ -187,7 +188,7 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
     session.job = {'priority': 1}
     session.receipt.return_value = {'state': 'persisted'}
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
-    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'sync-backfill')
@@ -222,7 +223,10 @@ def test_batch_contention_control_retries_projection_transactions(monkeypatch, f
     client = Mock()
     client.transaction.side_effect = [object(), object()]
     operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
-    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert (
+        ProjectionStore(Mock(client=client)).run(operation, policy=resolve_batch_policy('synthetic-owner'))
+        == 'persisted'
+    )
     assert operation.call_count == 2
 
 
@@ -282,7 +286,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     monkeypatch.setattr(projection, 'projection_claim', claim)
     projector = projection.Projector(Mock(), Mock())
     projector.store = Mock()
-    job, entry, binding = {}, {}, SimpleNamespace(owner_id='synthetic-owner')
+    job, entry, binding = {}, {}, SimpleNamespace(owner_id='synthetic-owner', policy=BatchUnitPolicy())
     projector.store.read.return_value = (job, entry, binding)
     projector._project = Mock(return_value={'outcome': 'success'})
     assert projector.project('synthetic-segment') == {'outcome': 'success'}
@@ -319,7 +323,10 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     operation = Mock(
         side_effect=[InvalidArgument('The referenced transaction has expired or is no longer valid'), 'persisted']
     )
-    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert (
+        ProjectionStore(Mock(client=client)).run(operation, policy=resolve_batch_policy('synthetic-owner'))
+        == 'persisted'
+    )
     assert operation.call_count == client.transaction.call_count == 2
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
@@ -328,6 +335,7 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
 def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(binding, monkeypatch, caplog, enabled):
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
+    binding = replace(binding, policy=resolve_batch_policy(binding.owner_id))
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)

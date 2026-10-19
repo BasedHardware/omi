@@ -99,6 +99,20 @@ class BatchStack(Stack):
         self.control_dir = state_dir / 'batch-control'
         super().__init__(state_dir)
         self.control_dir.mkdir(parents=True, exist_ok=True)
+        from config.policy import resolve_batch_policy
+
+        policy = resolve_batch_policy(
+            'synthetic-stack-owner',
+            flags={
+                'BATCH_PIPELINE_ENABLED': 'true',
+                'BATCH_PIPELINE_PERCENT': '100',
+                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
+                'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
+            },
+        )
+        # No owner identity is serialized; this 100% policy covers every
+        # synthetic owner through the admission seam.
+        (self.control_dir / 'policy.json').write_text(json.dumps(policy.to_dict()))
         self.owner_variants = 0
         self.worker_generation = 0
         self.serving_generation = 0
@@ -124,12 +138,12 @@ class BatchStack(Stack):
 
     def _role_env(self, role: str) -> dict[str, str]:
         if role == 'admission':
-            return {'BATCH_PIPELINE_ENABLED': 'true', 'BATCH_PIPELINE_PERCENT': '100'}
+            return {'OMI_BATCH_STACK_POLICY_FILE': str(self.control_dir / 'policy.json')}
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
-                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
-                'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
+                # Recovery's rollout decision comes from the job policy, even
+                # though this serving process retains the code-default off mode.
                 # Projection enrichment obligations bind to an HTTPS sync
                 # handler; the strict recorder captures, never delivers, them.
                 'SYNC_TASKS_HANDLER_URL': SERVING_ORIGIN + '/v2/sync-jobs/run',
@@ -423,6 +437,12 @@ def _upload(
     upload.content_id = intake['content_id']
     for segment in upload.segment_ids:
         job = stack.doc('jobs', segment)
+        expected_policy = json.loads((stack.control_dir / 'policy.json').read_text())
+        if (
+            job.get('policy') != expected_policy
+            or (job.get('projection_binding') or {}).get('policy') != expected_policy
+        ):
+            raise StackFailure('batch job and binding did not retain the admission policy')
         if not job.get('requires_compute_admission') or not str(job.get('audio_uri', '')).startswith('gs://'):
             raise StackFailure('batch job row lacks compute admission or a staged encrypted artifact')
     _record_job_event(

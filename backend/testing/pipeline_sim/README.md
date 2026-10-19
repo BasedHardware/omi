@@ -51,9 +51,13 @@ inside `testing.hermetic_network.block_outbound_network`.
 | | Cloud Run revision drain (`models.RevisionModel`) |
 
 These module attributes are patched for the duration of a run and then restored: `pump.time`,
-`pump.run_blocking`, `serving.time`, and three `quarantine_recovery` leaves. Environment flags come
-from `sim.DEFAULT_FLAGS`. That is an explicit flag set *assumed* to be production-like and can be
-overridden per scenario. Empty-ASR disposition stays off because it needs real WAV bytes.
+`pump.run_blocking`, `serving.time`, and three `quarantine_recovery` leaves. `SimConfig.policy` accepts
+an immutable `BatchUnitPolicy`; otherwise admission resolves each owner from `DEFAULT_FLAGS` plus
+`SimConfig.flags`, without installing scoped flags in the environment. The recorded policy follows
+each upload through queueing, recovery and first-summary grading. Only excluded worker dispositions
+and process/provider settings retain isolated environment injection. Empty-ASR disposition stays off
+because it needs real WAV bytes. Characterization configs explicitly pin the historical recovery
+dispatch budget of 1 (before #22321 changed the process default to 16); production defaults are unchanged.
 
 The revision-drain model mirrors the `request_scoped`/`fire_and_forget` vocabulary of
 `tests/unit/fixtures/revision_drain.py` from the unmerged `lane/opus-drain-harness` branch. That

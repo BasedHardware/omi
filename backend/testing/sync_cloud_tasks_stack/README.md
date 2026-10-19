@@ -110,3 +110,10 @@ three-capture single-owner burst. Provider behavior per owner comes from
 `batch-control/*.json` in the state directory; defaults come from
 `OMI_BATCH_STACK_WORDS_{LATENCY_MS,EMPTY_RATE,FAILURE_RATE}`,
 `OMI_BATCH_STACK_PAID_LATENCY_MS`, and `OMI_BATCH_STACK_CAPACITY`.
+
+Batch admission receives a serialized `BatchUnitPolicy` from the coordinator's
+`batch-control/policy.json`; the admission seam supplies it to the real upload
+route, which records it on each binding/job. Serving and worker role environments
+therefore cannot change an admitted unit's E1 decisions. Their environment still
+carries excluded worker, provider, process and authentication settings. No cloud
+credentials or live endpoints participate in this replay.

@@ -8,7 +8,9 @@ import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts, head_priority_enabled
+from config.batch_pipeline import scheduler_control_key
+from config.policy import resolve_batch_policy
+from database.batch_pipeline_policy import policy_in_transaction
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -89,6 +91,7 @@ def _prefer_merge_head(
         or head['state'] != 'ready'
         or head['priority'] != job['priority']
         or not _pool_allows(head, max_seconds, shared_gpu)
+        or not policy_in_transaction(tx, head, observations=observations).head_priority
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
@@ -137,13 +140,12 @@ class Scheduler:
         self.store = store
         self.metrics = metrics
         self.pool = pool
-        self.max_attempts = max_worker_attempts()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float) -> bool:
+    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
         previous = tx.get('jobs', item.segment_id)
         immutable = {**asdict(item), 'priority': int(item.priority)}
         if previous.get('state') == 'record_pending' and (
@@ -160,12 +162,15 @@ class Scheduler:
             ):
                 raise ValueError('segment ID reused with different immutable work')
             return False
+        policy = policy or resolve_batch_policy(item.owner_id)
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
             **immutable,
+            'policy': policy.to_dict(),
+            'policy_source': 'admission',
             'protocol_version': 1,
             'owner_key': key,
             'enqueued_at': now,
@@ -197,7 +202,7 @@ class Scheduler:
         # callers must supply a fresh exclusive-admission snapshot every pull.
         allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
         if capacity is not None:
-            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=shared_live_enabled())
+            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=True)
             limit = min(limit, slots)
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
@@ -267,7 +272,8 @@ class Scheduler:
                     continue
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
-                    if head_priority_enabled():
+                    policy = policy_in_transaction(tx, job, observations=observations)
+                    if policy.head_priority:
                         job = _prefer_merge_head(
                             tx,
                             queue,
@@ -285,7 +291,8 @@ class Scheduler:
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
                         )
-                        allowed = _pool_allows(job, max_seconds, bool(gpu_key))
+                        policy = policy_in_transaction(tx, job)
+                        allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (not gpu_key or policy.shared_live)
                     except BatchPrivacyBlocked:
                         allowed = False
                     if allowed:
@@ -353,9 +360,16 @@ class Scheduler:
             return None, bool(eligible_queues), observations
 
         receipt, eligible, observations = self.store.run(commit)
+        from config.policy.telemetry import record_policy_source
+
+        for event, value in observations:
+            if event == 'policy_fallback':
+                record_policy_source('fallback', value)
         # Only committed attempts emit telemetry; Firestore may retry callbacks.
         if self.metrics:
             for event, age in observations:
+                if event == 'policy_fallback':
+                    continue
                 try:
                     self.metrics.record_head(event, priority, age=age)
                 except Exception:
@@ -423,7 +437,11 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if quarantine or worker_failure is not None or job['attempt'] >= self.max_attempts:
+            if (
+                quarantine
+                or worker_failure is not None
+                or job['attempt'] >= policy_in_transaction(tx, job).max_attempts
+            ):
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])

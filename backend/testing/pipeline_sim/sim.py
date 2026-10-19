@@ -31,9 +31,12 @@ import contextlib
 import hashlib
 import logging
 import math
-import os
 import random
 from dataclasses import dataclass, field
+from unittest.mock import patch
+
+from config.policy import BatchUnitPolicy, resolve_batch_policy
+from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
 from typing import Any
 
@@ -88,6 +91,8 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
+    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
+    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
@@ -158,12 +163,14 @@ class SimConfig:
     pump_restart_seconds: float = 60.0
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
+    policy: BatchUnitPolicy | None = None
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
 
 
 @dataclass
 class UploadRecord:
     spec: UploadSpec
+    policy: BatchUnitPolicy | None = None
     status: str = 'pending'  # admitted | rejected_privacy | deduplicated | rejected_other
     accepted_at: float | None = None
     job_id: str | None = None
@@ -336,7 +343,15 @@ class Simulation:
     # --------------------------------------------------------------- patching
     @contextlib.contextmanager
     def _patched(self):
-        saved_env = {key: os.environ.get(key) for key in {**DEFAULT_FLAGS, **self.config.flags}}
+        flags = {**DEFAULT_FLAGS, **self.config.flags}
+        # Only E1b worker dispositions and process/provider config use env.
+        # Per-unit E1 inputs are supplied exclusively through the resolver.
+        outside_scope = {
+            key: value
+            for key, value in flags.items()
+            if key not in SNAPSHOT_ENV_KEYS and not key.startswith(('FIRST_SUMMARY_', 'TRANSCRIPTION_FINAL_PASS_'))
+        }
+        env_patch = patch.dict('os.environ', outside_scope)
         patches = [
             (pump_module, 'time', self.clock.module()),
             (pump_module, 'run_blocking', self._run_blocking),
@@ -347,18 +362,14 @@ class Simulation:
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
-            os.environ.update({**DEFAULT_FLAGS, **self.config.flags})
+            env_patch.start()
             for module, name, value in patches:
                 setattr(module, name, value)
             yield
         finally:
             for module, name, value in originals:
                 setattr(module, name, value)
-            for key, value in saved_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            env_patch.stop()
 
     async def _run_blocking(self, executor, fn, *args, **kwargs):
         owner = getattr(fn, '__self__', None)
@@ -545,6 +556,9 @@ class Simulation:
     def _accept_batch(self, record: UploadRecord) -> None:
         """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
         upload = record.spec
+        record.policy = self.config.policy or resolve_batch_policy(
+            upload.owner, flags={**DEFAULT_FLAGS, **self.config.flags}
+        )
         target = self._target_id(upload) if upload.target else None
         try:
             generation = self.customer.check(upload.owner, (target,) if target else ())
@@ -557,6 +571,7 @@ class Simulation:
                 target_conversation_id=target,
                 privacy_generation=generation,
                 language='en',
+                policy=record.policy,
             )
             outcome = batch_pipeline_intake.admit(
                 self.store,
@@ -681,6 +696,10 @@ class Simulation:
 
     # ---------------------------------------------------------- first summary
     async def _start_summary(self, record: UploadRecord) -> None:
+        if record.policy is None:
+            record.policy = self.config.policy or resolve_batch_policy(
+                record.spec.owner, flags={**DEFAULT_FLAGS, **self.config.flags}
+            )
         if record.summary_pending_at is None:
             record.summary_pending_at = self.clock.now
         record.summary_dispatches += 1

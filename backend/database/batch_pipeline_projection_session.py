@@ -236,4 +236,4 @@ class ProjectionSession:
             self.prepare(transaction)
             return self.persist(transaction, superseded=superseded)
 
-        return self.store.run(commit)
+        return self.store.run(commit, policy=self.binding.policy)

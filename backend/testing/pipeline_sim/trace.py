@@ -52,6 +52,8 @@ _DROP_FIELDS = frozenset(
         'previous',
         'shared_gpu_key',
         'projection_binding',
+        'policy',  # metadata, not part of the pre-E1 external behavior trace
+        'policy_source',
         'segment_id',
         'segment_ids',
         'log_tail',
@@ -289,7 +291,7 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
                 'result_artifact': aliases.scrub(_artifact(sim, result_row)),
             }
 
-    return {
+    output = {
         'schema': SCHEMA,
         'config': config.name,
         'seed': config.seed,
@@ -304,6 +306,21 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
             'recovery_states': _count(row.get('recovery_state') for row in store.jobs() if row.get('recovery_state')),
         },
     }
+
+    if any(record.policy and not record.policy.first_summary_enabled for record in result.records):
+        from testing.pipeline_sim.scorer import score
+
+        # Expose policy-window grading only when an obligation is outside the
+        # first-summary cohort. Historical (all-enabled) traces stay identical.
+        sample = score(result)
+        output['first_summary_policy'] = {
+            'recorded_enabled': sorted(
+                {record.policy.first_summary_enabled for record in result.records if record.policy}
+            ),
+            'checked': sample['first_summary_checked_conversations'],
+            'breaches': sample['first_summary_deadline_breaches'],
+        }
+    return output
 
 
 def _lines(entries: list[tuple[str, tuple[str, ...]]]) -> list[str]:
@@ -363,6 +380,9 @@ _SMALL = dict(owners=3, uploads_per_owner_per_hour=3.0, arrival_seconds=1200.0, 
 
 def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes: Any) -> SimConfig:
     spec = WorkloadSpec(**{**_SMALL, 'near_silence_fraction': 0.0, **(workload or {})})
+    # These goldens predate #22321's process dispatch default of 16. Pin the
+    # historical input (1), rather than silently changing their behavior.
+    changes['flags'] = {'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1', **changes.get('flags', {})}
     changes.setdefault('stt', STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=0.0))
     return replace(SimConfig(name=name, seed=seed, horizon_seconds=2 * 3600.0), workload=spec, **changes)
 
@@ -370,6 +390,13 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.
     'healthy': lambda: _config('healthy'),
+    # 10-18: creation at percent zero must not acquire a 120s obligation after a ramp.
+    'policy_window': lambda: _config(
+        'policy_window',
+        flags={'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
+        summary_seconds=300.0,
+        summary_sigma=0.0,
+    ),
     # Near-silence with empty first ASR: padded retry recovers some; the rest quarantine as empty_asr,
     # spend one paid call and either recover or settle as terminal empty (no_recoverable_speech).
     'empty_asr_padded_retry': lambda: _config(

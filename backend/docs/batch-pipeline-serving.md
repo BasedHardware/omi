@@ -535,3 +535,17 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+## Per-unit policy snapshots
+
+E1 resolves batch admission, projection, scheduler and recovery decisions once and
+records an immutable policy on the intake binding and jobs. Rollout changes affect
+new admissions; accepted work drains using its recorded policy. The live stop
+levers remain recovery task dispatch and projection pagination. Privacy/deletion
+fences and paid-intent fencing always apply. Old rows acquire one durable fallback
+snapshot and record `policy_source=fallback` with bounded telemetry.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

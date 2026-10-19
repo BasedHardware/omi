@@ -5,13 +5,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 """
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from config.batch_pipeline import (
-    authoritative_labels_enabled,
-    require_live_target_enabled,
-    projection_contention_enabled,
-    async_projection_enabled,
-    projection_timing_enabled,
-)
+from config.policy import BatchUnitPolicy
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -36,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 @contextmanager
-def projection_phase(phase: str) -> Iterator[None]:
+def projection_phase(phase: str, policy: BatchUnitPolicy | None = None) -> Iterator[None]:
     """Static phase tokens only; never log bindings, payloads or exception text."""
-    if not projection_timing_enabled():
+    if policy is None or not policy.projection_timing:
         yield
         return
     started = time.monotonic()
@@ -81,7 +75,9 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None, 
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
-    authoritative = (binding.record_origin or authoritative_labels_enabled()) and payload.get('recovery_version') != 1
+    authoritative = (
+        binding.record_origin or (binding.policy or BatchUnitPolicy()).authoritative_labels
+    ) and payload.get('recovery_version') != 1
     if authoritative:
         # The legacy grouper imputes None from adjacent voices. Keep each gap an
         # explicit anonymous abstention instead of borrowing a speaker/owner.
@@ -192,12 +188,16 @@ class Projector:
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
         self.followups = None
+        self.has_async_followups = False
         self.discovery = ProjectionDiscovery(store)
 
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
         with projection_phase('read'):
             job, entry, binding = self.store.read(segment_id)
+        self._persist_read(segment_id, job, entry, binding)
+
+    def _persist_read(self, segment_id, job, entry, binding):
         with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
             if not acquired:
                 raise ProjectionBlocked('projection assignment claim busy')
@@ -212,25 +212,26 @@ class Projector:
         await self.followups.schedule()
 
     def project(self, segment_id: str) -> dict | None:
-        if async_projection_enabled():
-            self.persist(segment_id)
+        return self._project_read(segment_id, *self.store.read(segment_id))
+
+    def _project_read(self, segment_id, job, entry, binding):
+        if binding.policy.async_projection:
+            self._persist_read(segment_id, job, entry, binding)
             job, entry, binding = self.store.read(segment_id)
             return self._finish(segment_id, job, entry, binding)
-        with projection_phase('read'):
-            job, entry, binding = self.store.read(segment_id)
-        if projection_contention_enabled():
+        if binding.policy.projection_contention:
             with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
                 if not acquired:
                     logger.info('event=batch_projection action=claim outcome=busy')
                     return None
-                with projection_phase('project'):
+                with projection_phase('project', binding.policy):
                     result = self._project(segment_id, job, entry, binding)
                 logger.info(
                     'event=batch_projection action=project outcome=%s',
                     'completed' if result is not None else 'waiting',
                 )
                 return result
-        with projection_phase('project'):
+        with projection_phase('project', binding.policy):
             return self._project(segment_id, job, entry, binding)
 
     def _project(self, segment_id, job, entry, binding):
@@ -241,7 +242,7 @@ class Projector:
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
-            with projection_phase('predecessor'):
+            with projection_phase('predecessor', binding.policy):
                 self.store.check(session)
         except ProjectionReplay:
             pass
@@ -261,14 +262,14 @@ class Projector:
                     else:
                         session.persist_empty()
                 except ProjectionReplay:
-                    if not projection_contention_enabled():
+                    if not binding.policy.projection_contention:
                         raise
                     # A receipt is assignment progress, not completion. Resume
                     # every post-persist obligation after losing the empty race.
                 except SyncAssignmentSuperseded:
                     self.supersede(session)
             else:
-                with projection_phase('assignment'):
+                with projection_phase('assignment', binding.policy):
                     self.assign_parts(item, entry, binding, finish=finish)
 
     def _finish(self, segment_id, job, entry, binding):
@@ -282,7 +283,7 @@ class Projector:
         return self.complete_content(item.segment_id, binding)
 
     def complete_content(self, segment_id, binding):
-        with projection_phase('accounting'):
+        with projection_phase('accounting', binding.policy):
             accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock())
@@ -290,7 +291,7 @@ class Projector:
         if accounting['seconds'] > 0 and not accounting['completed']:
             from utils.fair_use import record_speech_ms
 
-            with projection_phase('usage'):
+            with projection_phase('usage', binding.policy):
                 record_speech_ms(
                     binding.owner_id,
                     int(accounting['seconds'] * 1000),
@@ -298,10 +299,10 @@ class Projector:
                     idempotency_key=binding.content_id,
                     raise_on_error=True,
                 )
-        with projection_phase('completion'):
+        with projection_phase('completion', binding.policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting)
         if result is not None:
-            with projection_phase('publication'):
+            with projection_phase('publication', binding.policy):
                 self.publish(binding, result)
             from utils.batch_pipeline.retention import expire_completed_segment
 
@@ -309,7 +310,7 @@ class Projector:
                 retained = self.store.ref('results', sibling).get().to_dict() or {}
                 if retained.get('projection_state') == 'erased':
                     continue
-                with projection_phase('retention'):
+                with projection_phase('retention', binding.policy):
                     if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
                         raise ProjectionBlocked('completion retention receipt unavailable')
                     self.store.acknowledge(sibling, binding, self.clock())
@@ -333,7 +334,7 @@ class Projector:
             before_assign=session.prepare,
             validate_plan=session.validate_plan,
             after_assign=lambda transaction, planned: session.persist(transaction, planned),
-            retry_contention=projection_contention_enabled(),
+            retry_contention=binding.policy.projection_contention,
         )
 
     def assign_parts(self, item, entry, binding, *, finish=True):
@@ -392,7 +393,7 @@ class Projector:
                             'start': item.capture_at,
                             'end': item.capture_at + item.duration_seconds,
                         }
-                    if (binding.record_origin or require_live_target_enabled()) and context.target_id:
+                    if (binding.record_origin or binding.policy.require_live_target) and context.target_id:
                         incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
@@ -418,7 +419,7 @@ class Projector:
                         before_assign=session.prepare,
                         validate_plan=session.validate_plan,
                         after_assign=persisted,
-                        retry_contention=projection_contention_enabled(),
+                        retry_contention=binding.policy.projection_contention,
                     )
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
@@ -427,7 +428,7 @@ class Projector:
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except Exception as error:
-                if projection_contention_enabled():
+                if binding.policy.projection_contention:
                     logger.error(
                         'event=batch_projection action=assignment outcome=error exception_type=%s', type(error).__name__
                     )
@@ -452,20 +453,20 @@ class Projector:
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
-            with projection_phase('bridge'):
+            with projection_phase('bridge', binding.policy):
                 canonical = (
                     receipt['conversation_id']
                     if binding.record_origin
                     else finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
                 )
             if receipt.get('audio_required') and not binding.native_record:
-                with projection_phase('playback'):
+                with projection_phase('playback', binding.policy):
                     if self.playback is not None:
                         self.playback(item, canonical)
                     else:
                         self.persist_playback(item, binding, canonical, receipt)
             if receipt['enrichment_required']:
-                with projection_phase('enrichment'):
+                with projection_phase('enrichment', binding.policy):
                     self.store.mark_enrichment(
                         item.segment_id,
                         binding,
@@ -557,13 +558,20 @@ class Projector:
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+        contention = False
+        self.has_async_followups = False
         for segment_id in self.discovery.next(limit=max(1, min(limit, 100))):
             try:
-                if async_projection_enabled():
-                    self.persist(segment_id)
+                job, entry, binding = self.store.read(segment_id)
+                if binding.policy is None:
+                    raise ProjectionBlocked('durable policy required before projection')
+                contention = contention or binding.policy.projection_contention
+                if binding.policy.async_projection:
+                    self.has_async_followups = True
+                    self._persist_read(segment_id, job, entry, binding)
                     result = None
                 else:
-                    result = self.project(segment_id)
+                    result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
@@ -572,7 +580,7 @@ class Projector:
                 logger.error(
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
-        if projection_contention_enabled():
+        if contention:
             logger.info(
                 'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
                 counts['completed'],

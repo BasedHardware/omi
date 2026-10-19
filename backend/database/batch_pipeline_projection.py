@@ -9,7 +9,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.batch_pipeline import projection_contention_enabled
+from database.batch_pipeline_policy import load_job_policy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -42,6 +42,8 @@ class ProjectionStore:
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
+        if job.get('projection_binding') and not job['projection_binding'].get('policy'):
+            job, _ = load_job_policy(self.store, segment_id)
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -64,14 +66,14 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit)
+        return self.run(commit, policy=binding.policy)
 
     def check(self, session):
         @firestore.transactional
         def read(transaction):
             session.prepare(transaction)
 
-        self.run(read)
+        self.run(read, policy=session.binding.policy)
 
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float):
         @firestore.transactional
@@ -82,7 +84,7 @@ class ProjectionStore:
                 raise ProjectionBlocked('client publication preceded durable completion')
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
-        self.run(commit)
+        self.run(commit, policy=binding.policy)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -146,18 +148,18 @@ class ProjectionStore:
                 session.write_receipt(transaction, receipt)
                 return result
 
-            return self.run(commit)
+            return self.run(commit, policy=binding.policy)
 
-        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate)
+        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate, policy=binding.policy)
 
-    def run(self, operation):
+    def run(self, operation, *, policy=None):
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
         import os
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
         if (
-            not projection_contention_enabled()
+            not (policy and policy.projection_contention)
             and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
         ):
             return run_transactional(self.client, operation)
@@ -191,7 +193,7 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit)
+        return self.run(commit, policy=binding.policy)
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -364,7 +366,7 @@ class ProjectionStore:
             return result, True, captured_seconds
 
         with writing('usage_month_cache', binding.owner_id):
-            result, changed, seconds = self.run(commit)
+            result, changed, seconds = self.run(commit, policy=binding.policy)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result

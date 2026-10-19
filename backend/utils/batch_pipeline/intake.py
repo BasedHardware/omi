@@ -9,7 +9,8 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for, live_record_enabled_for
+from config.batch_pipeline import priority_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
@@ -128,8 +129,10 @@ async def accept_upload(
     byok_enabled: bool = False,
     intake_context: dict | None = None,
     record_router=None,
+    policy: BatchUnitPolicy | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -200,11 +203,12 @@ async def accept_upload(
                 client_device_id=client_device_id,
                 byok_enabled=byok_enabled,
                 loaded_conversation=target,
+                policy=policy,
             )
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             return None
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        if live_record_enabled_for(uid) and language not in (
+        if policy.live_record_enabled and language not in (
             PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
         ):
             # Keep the supported existing provider route. Never silently send
@@ -216,7 +220,7 @@ async def accept_upload(
         record_origin = bool(
             target
             and source == 'desktop'
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and not target.get('uses_custom_stt')
             and user.get('private_cloud_sync_enabled', True)
             and normalized_stt_language(target.get('language'))
@@ -276,6 +280,7 @@ async def accept_upload(
             privacy_generation=context.generation,
             language=target.get('language'),
             record_origin=record_origin,
+            policy=policy,
         )
         outcome = await run_blocking(
             db_executor,

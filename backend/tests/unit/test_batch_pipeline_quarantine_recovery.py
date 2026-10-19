@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from config.batch_pipeline import recovery_owners
+from config.policy import resolve_batch_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
@@ -262,6 +263,7 @@ def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
         'projection_state': 'pending',
     }
     projection = ProjectionStore(store)
+    binding = projection.read('bad')[2]
     session = projection.session('bad', binding, 101)
 
     def assign(transaction):
@@ -482,7 +484,9 @@ def test_all_admitted_gate_drains_non_allowlisted_obligations_without_admission_
 def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(monkeypatch, legacy_dependencies):
     _, _, _, build_incoming, *_ = legacy_dependencies
     monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
-    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
+    binding = ProjectionBinding(
+        'synthetic-owner', 'job', 'content', ('unit',), policy=resolve_batch_policy('synthetic-owner')
+    )
     item = WorkItem('part', binding.owner_id, 100, 'gs://synthetic/audio', 5, Priority.FRESH)
     payload = {
         'audio_seconds': 5,
@@ -795,6 +799,7 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     _, _, binding, _, _, recovery = setup
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
     candidates = [(f'bad-{i:02}', binding.owner_id) for i in range(33)]
+    monkeypatch.setattr(module, 'load_job_policy', lambda *args: ({}, resolve_batch_policy(binding.owner_id)))
 
     def page(client, namespace, owner, limit, *, after_id):
         assert limit == 16
@@ -812,15 +817,15 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     assert recovery.sweep() == {'queued': 16}
 
 
-def test_sweep_bounds_held_errors_and_rotates_allowlisted_owners(setup, monkeypatch):
+def test_sweep_bounds_held_errors_and_advances_global_cursor(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 
-    _, _, _, _, _, recovery = setup
+    _, _, binding, _, _, recovery = setup
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '2')
-    monkeypatch.setattr(module, 'recovery_owners', lambda: ('first', 'second'))
-    query = Mock(side_effect=lambda client, namespace, owner, limit: [(f'{owner}-{i}', owner) for i in range(limit)])
+    monkeypatch.setattr(module, 'load_job_policy', lambda *args: ({}, resolve_batch_policy(binding.owner_id)))
+    query = Mock(side_effect=[[("a", "first"), ("b", "first")], [("c", "second")]])
     monkeypatch.setattr(module, 'recovery_candidates', query)
-    recovery.dispatch = Mock(side_effect=[RuntimeError('synthetic'), 'held', 'queued', 'queued'])
+    recovery.dispatch = Mock(side_effect=["held", RuntimeError("private"), "queued"])
     assert recovery.sweep() == {'held': 2}
-    assert recovery.sweep() == {'queued': 2}
-    assert [call.args[2] for call in query.call_args_list] == ['first', 'second']
+    assert recovery.sweep() == {'queued': 1}
+    assert query.call_args_list[1].kwargs['after_id'] == 'b'

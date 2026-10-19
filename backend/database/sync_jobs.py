@@ -188,10 +188,14 @@ def create_sync_job(
     content_id: Optional[str] = None,
     dispatch_mode: str = 'inline',
     ledger_fence_mode: str = SyncLedgerFenceMode.LEGACY.value,
+    policy=None,
 ) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
     if job_id is None:
         job_id = str(uuid.uuid4())
+    from config.policy import resolve_batch_policy
+
+    policy = policy or resolve_batch_policy(uid)
     now = time.time()
     job: Dict[str, Any] = {
         'job_id': job_id,
@@ -220,6 +224,8 @@ def create_sync_job(
         # revision from fencing a job started before the hard old-revision
         # retirement, and prevents a later configuration regression from
         # silently downgrading a fenced job to legacy behavior.
+        'policy': policy.to_dict(),
+        'policy_source': 'admission',
         'ledger_fence_mode': (
             SyncLedgerFenceMode.ACTIVE.value
             if ledger_fence_mode == SyncLedgerFenceMode.ACTIVE.value
@@ -262,7 +268,46 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
         # fenced mutation paths below already guard the identical json.loads; an unparseable job
         # is treated as an unknown job.
         return None
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    if isinstance(raw.get('policy'), dict) or not isinstance(raw.get('uid'), str):
+        return cast(Dict[str, Any], raw)
+    return _pin_legacy_job_policy(job_id, raw, _as_redis_text(data))
+
+
+def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str) -> Optional[Dict[str, Any]]:
+    """CAS an old job's first policy without losing progress or resetting TTL."""
+    from config.policy import resolve_batch_policy
+    from config.policy.telemetry import record_policy_source
+
+    policy = resolve_batch_policy(job['uid'], source='fallback')
+    original_uid = job['uid']
+    script = (
+        "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end "
+        "redis.call('SET', KEYS[1], ARGV[2], 'KEEPTTL') return 1"
+    )
+    key = _key(f'{JOB_KEY_PREFIX}{job_id}')
+    for _ in range(3):
+        updated = {**job, 'policy': policy.to_dict(), 'policy_source': 'fallback'}
+        if r.eval(script, 1, key, raw, json.dumps(updated, default=str)) == 1:
+            record_policy_source('fallback', policy.policy_id)
+            record_fallback(
+                component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='recovered'
+            )
+            return updated
+        current = r.get(key)
+        if not current:
+            return None
+        try:
+            raw = _as_redis_text(current)
+            job = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(job, dict) or job.get('uid') != original_uid:
+            return None
+        if isinstance(job.get('policy'), dict):
+            return job  # A concurrent reader's persisted snapshot wins.
+    raise RuntimeError('sync job policy persistence contended')  # Never expose an unrecorded policy.
 
 
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:

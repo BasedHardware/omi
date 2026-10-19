@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import contextmanager
 from dataclasses import asdict
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -40,7 +41,7 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
-    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'))
+    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), policy=resolve_batch_policy('owner'))
     projector.store.read = Mock(return_value=({}, {}, binding))
     projector._assign = Mock(side_effect=lambda *a, **k: assert_claim())
 
@@ -66,7 +67,9 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
 @pytest.fixture
 def followup(monkeypatch, owner_claim):
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
-    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), native_record=True)
+    binding = ProjectionBinding(
+        'owner', 'job', 'content', ('head', 'later'), native_record=True, policy=BatchUnitPolicy(async_projection=True)
+    )
     jobs = {
         sid: asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP))
         for i, sid in enumerate(binding.segment_ids)
@@ -191,7 +194,7 @@ async def test_followups_are_bounded_and_duplicate_sweeps_coalesce(followup, mon
 @pytest.mark.asyncio
 async def test_async_flag_off_preserves_synchronous_serving_without_followup_task(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', raising=False)
-    projector = Mock()
+    projector = Mock(has_async_followups=False)
     projector.start_followups = AsyncMock(side_effect=AssertionError('dark async task launched'))
     await Serving(MemoryStore(), projector=projector).reconcile_async()
     projector.sweep.assert_called_once()

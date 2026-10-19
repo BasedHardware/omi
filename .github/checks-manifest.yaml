@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: batch-policy-boundary
+    command: ["python3", "backend/config/policy/guard.py"]
+    triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-18 policy-window incident: obligations admitted at first-summary percent zero were graded under another revision's policy; prevent per-stage batch env reads outside the immutable resolver and explicit live/process exceptions"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]

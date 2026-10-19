@@ -18,7 +18,8 @@ import pytest
 
 from diarizer import batch_pipeline as worker_module
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS, describe_diff, dumps, golden_trace
-from utils.batch_pipeline import quarantine_recovery as recovery_module
+from testing.pipeline_sim import sim as sim_module
+from dataclasses import replace
 
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 UPDATE = os.environ.get('PIPELINE_GOLDEN_UPDATE') == '1'
@@ -28,8 +29,11 @@ def _never_fits(samples, max_padded_seconds):
     return False
 
 
-def _terminal_empty_disabled():
-    return False
+_resolve_policy = sim_module.resolve_batch_policy
+
+
+def _terminal_empty_disabled(*args, **kwargs):
+    return replace(_resolve_policy(*args, **kwargs), terminal_empty_disposition=False)
 
 
 # Deliberate behavior changes in REAL product modules; each must change its golden.
@@ -39,8 +43,8 @@ PERTURBATIONS = {
     # Paid recovery that hears nothing no longer settles as terminal empty.
     'no_terminal_empty': (
         'empty_asr_terminal',
-        recovery_module,
-        'terminal_empty_disposition_enabled',
+        sim_module,
+        'resolve_batch_policy',
         _terminal_empty_disabled,
     ),
 }

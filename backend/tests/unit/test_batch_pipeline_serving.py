@@ -295,7 +295,7 @@ def test_reconcile_and_metrics_routes_share_flagged_async_coordinator(api, monke
     client, _ = api
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
     service = module.serving_for_stage('dev')
-    service.projector = Mock()
+    service.projector = Mock(has_async_followups=enabled)
     service.projector.start_followups = AsyncMock()
     service.recovery = Mock()
     response = client.post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
@@ -344,10 +344,13 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     if scrape_flag is not None:
         monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    from unittest.mock import AsyncMock
+
     service = Mock(store=store)
+    service.reconcile_async = AsyncMock()
     monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
     assert client.get('/v2/batch-pipeline/metrics').status_code == 200
-    service.reconcile.assert_called_once_with()
+    service.reconcile_async.assert_awaited_once_with()
     service.metrics.refresh.assert_not_called()
 
 

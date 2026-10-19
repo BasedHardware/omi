@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from typing import Any, Callable
+from config.policy.cohorts import batch_members, recovery_members
 
 COLLECTION = 'rollout_cohorts'
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
-    'batch-pipeline': lambda: os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', ''),
-    'batch-pipeline-recovery': lambda: os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', ''),
+    'batch-pipeline': batch_members,
+    'batch-pipeline-recovery': recovery_members,
     'first-summary': lambda: os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', ''),
     'audio-archive': lambda: os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', ''),
     'dream-agent': lambda: os.getenv('DREAM_AGENT_UID_ALLOWLIST', ''),
