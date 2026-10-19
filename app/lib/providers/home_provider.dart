@@ -94,6 +94,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
