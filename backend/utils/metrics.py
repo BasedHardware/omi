@@ -402,7 +402,7 @@ for _outcome in ('requeued', 'enqueue_failed'):
 #     per-conversation one: a failed enrichment re-arms `deferred`, so the next
 #     open counts a second `enrich_started`, and a retried deferred persist can
 #     count `stored` (or `fenced`) more than once for a single conversation.
-#  3. The ratio is undefined while `FREE_TIER_LOCAL_PROCESSING` is on: the
+#  3. The ratio is undefined when funded budget admission defers capture: the
 #     deferred-store path stops emitting `stored` while the already-stored
 #     backlog keeps emitting `enrich_*`, so the ratio drifts above 100%.
 LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
@@ -425,7 +425,7 @@ LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
         'stored/fenced are emitted by every host running the finalizer, enrich_* only by the '
         'backend first-open route. enrich_complete/stored is an attempt/persist ratio, not a '
         'per-conversation one (a re-armed retry counts again). The ratio is undefined while '
-        'FREE_TIER_LOCAL_PROCESSING is on: stored stops while the enrich_* backlog drains.'
+        'funded cap deferral replaces legacy lazy stores while the enrich_* backlog drains.'
     ),
     ['event'],
 )

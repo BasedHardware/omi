@@ -11,12 +11,6 @@ import os
 from collections.abc import Iterable
 from typing import Any, cast
 
-from config.free_tier_rollout import (
-    FREE_TIER_DEPLOY_KEYS,
-    LOCAL_PROCESSING_COHORT,
-    EMERGENCY_STOP,
-    validate_free_tier_deploy_value,
-)
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_compat import VOICE_STAGING_BUCKET_ENV, VOICE_STAGING_BUCKETS
@@ -50,9 +44,8 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
 
-# The remaining free-tier processing gate must agree on every finalization
-# host; an omitted declaration must fail admission rather than use the default.
-FINALIZATION_GATE_FLAGS = ('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',)
+# Summary acceptance must agree on every finalization host.
+FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
@@ -61,11 +54,8 @@ FINALIZATION_GATE_FLAGS = ('BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',)
 # like the omitted/False case the contract exists to reject.
 _SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
 
-# utils.free_tier_basic_gates lights a gate only on an exact case-insensitive
-# ``true`` with no trimming (the FREE_TIER_* convention). Admission must not
-# accept a spelling the reader treats as off: ``on`` or `` true `` on every
-# host would pass co-host agreement and silently disable the gate.
-_EXACT_BOOLEAN_FLAGS = frozenset({'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'})
+# Deploys pin exact booleans; the runtime summary kill switch defaults on.
+_EXACT_BOOLEAN_FLAGS = frozenset({'CLIENT_SUMMARIES_AT_CAP_ENABLED'})
 _EXACT_BOOLEAN_LITERALS = frozenset({'true', 'false'})
 
 
@@ -244,61 +234,6 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
     return errors
 
 
-# main:app also runs integration and backfill; desktop_backend hosts the
-# shared emergency-stop reader through its basic-plan gates. Keep this roster
-# independent of env-key presence, as in #14316's finalization contract.
-FREE_TIER_DEPLOY_HOSTS = (
-    ('gke', 'backend-listen'),
-    ('gke', 'pusher'),
-    ('cloud_run', 'backend'),
-    ('cloud_run', 'backend-sync'),
-    ('cloud_run', 'backend-sync-backfill'),
-    ('cloud_run', 'backend-integration'),
-    ('desktop_backend', 'desktop-backend'),
-)
-
-
-def validate_free_tier_deploy_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    errors: list[ValidationError] = []
-    for platform, host in FREE_TIER_DEPLOY_HOSTS:
-        service = (
-            env_config.get('desktop_backend')
-            if platform == 'desktop_backend'
-            else _service_config(env_config, platform, host)
-        )
-        entries = (service or {}).get('env', {})
-        scope = f'{env}/{platform}/{host}'
-        for name in FREE_TIER_DEPLOY_KEYS:
-            entry = entries.get(name, {})
-            if name == LOCAL_PROCESSING_COHORT and env == 'dev':
-                if platform == 'gke':
-                    expected = {'name': 'dev-omi-backend-config', 'key': name}
-                    config_entry = env_config.get('gke', {}).get('config_map', {}).get('entries', {}).get(name, {})
-                    if entry.get('config_map') != expected or config_entry != {'source': 'environment', 'default': ''}:
-                        errors.append(
-                            ValidationError(scope, f'{name} requires the shared ConfigMap variable with empty default')
-                        )
-                elif entry.get('env_var') != name or entry.get('default') != '' or 'value' in entry:
-                    errors.append(ValidationError(scope, f'{name} requires the Actions variable with empty default'))
-                value = os.getenv(name, '')
-            else:
-                value = entry.get('value')
-                if value is None:
-                    errors.append(ValidationError(scope, f'{name} requires an explicit literal'))
-                    continue
-            try:
-                validate_free_tier_deploy_value(name, str(value))
-            except ValueError as exc:
-                errors.append(ValidationError(scope, str(exc)))
-            if (
-                env == 'prod'
-                and name != EMERGENCY_STOP
-                and value != ('' if name == LOCAL_PROCESSING_COHORT else 'false')
-            ):
-                errors.append(ValidationError(scope, f'{name} must remain dark in prod'))
-    return errors
-
-
 SPEAKER_EMBEDDING_ENV = 'HOSTED_SPEAKER_EMBEDDING_API_URL'
 SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('gke', 'backend-listen'),
@@ -371,11 +306,9 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
 __all__ = [
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
-    'SUMMARY_PIPELINE_FLAGS',
+    'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
-    'FREE_TIER_DEPLOY_HOSTS',
-    'validate_free_tier_deploy_contract',
     'validate_conversation_finalization_capabilities',
     'validate_speaker_embedding_hosts',
 ]

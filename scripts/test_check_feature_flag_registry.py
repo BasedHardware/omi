@@ -111,6 +111,18 @@ class RegistryFixture(unittest.TestCase):
             "web/paywall/track.js:2: unregistered feature flag: missing-web-paywall-flag", "\n".join(self.errors())
         )
 
+    def test_swift_sdk_constant_read_is_a_real_surface_not_an_unconditional_declaration(self) -> None:
+        key = "fixture-remote-stop"
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag(
+            key, kind="posthog", surfaces=["macos"], posthog={"row": "expected", "role": "kill"}
+        )]))
+        source = 'enum Stop {\n static let key = "fixture-remote-stop"\n static var killed: Bool {\n PostHogSDK.shared.getFeatureFlag(key, sendFeatureFlagEvent: false) as? Bool == true\n }\n}\n'
+        self.write("desktop/macos/Desktop/Sources/Stop.swift", source)
+        self.assertEqual(self.errors(), [])
+        self.write("desktop/macos/Desktop/Sources/Stop.swift", source.replace(
+            ' PostHogSDK.shared.getFeatureFlag', ' // PostHogSDK.shared.getFeatureFlag'))
+        self.assertIn("stale registry entry: delete it or restore the read: " + key, self.errors())
+
     def test_cataloged_node_runtime_gate_is_not_stale(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
         self.write("web/admin/lib/flags.ts", "process.env.ADMIN_GATE_ENABLED !== '1'\n")

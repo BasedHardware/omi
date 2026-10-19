@@ -17,6 +17,93 @@ or replacing a legacy billing env ID is rejected. Recognition of a bound ladder
 price does not depend on the storefront switch, so renewals retain their identity
 on rollback. Binding env vars must remain present while subscribers use those IDs.
 
+The main backend, GKE backend-listen, and separate desktop-backend deploy paths
+propagate six optional price references through the runtime manifest. Main backend
+and GKE callers use selected-environment `vars.LADDER_V1_*_PRICE_ID`; desktop callers
+explicitly use `vars.DESKTOP_LADDER_V1_*_PRICE_ID` for the same six runtime names.
+Dev desktop reads production customer subscriptions, while normal dev backend uses
+its own dev plane. Desktop bindings must therefore select the customer billing realm
+explicitly; they never inherit main-dev price references.
+
+Cloud Run omits unset optional references from deployment assignments and expected
+state constraints, so env merge preserves any existing operator-configured values.
+Explicit references are rendered and pinned. GKE uses startup-safe empty defaults
+only for new maps and retains existing references as described below. No path
+implicitly clears commercial bindings, requires W3 prices, or enables checkout.
+This is reference plumbing, not price creation, activation, or reclassification.
+The listener and pusher charts already consume the same environment-specific
+ConfigMap through `envFrom`; its six optional references therefore reach both
+co-hosts without divergent chart literals. The full backend caller and standalone
+listener/pusher writers read variables in their selected deployment environment.
+When a ConfigMap refresh omits a binding, it retains that reference from the
+current canonical ConfigMap (also for isolated canary maps). A missing ConfigMap
+is safe on first setup; read/auth failures stop the write. Clearing an existing
+commercial reference requires a separate explicit operator action.
+
+The subscription endpoint resolves `cloud_screen_vectors` and its allowance from
+the real subscription snapshot, including a successfully refreshed Stripe price,
+before any released-client plan remap. Synthetic BYOK display plans grant no cloud
+storage capability. If the optional capability authority is unavailable, the
+endpoint omits that field and records a degraded fallback; the embedding proxy
+still returns 503 when its required entitlement authority is unavailable.
+
+All three screen-vector consumers use `utils/screen_vector_entitlements.py`.
+With no configured or catalog-recognized ladder prices, policy is legacy-only:
+embedding and vector-persistence hot paths need no billed-identity lookup or new
+credential. Explicit subscription refresh retains its existing Stripe price read,
+including unknown legacy price IDs, before remapping the response.
+Once ladder prices are configured, a recognized stored legacy price is not proof
+of current billed identity: the shared authority retrieves that exact subscription
+and requires a single known catalog price and matching subscription ID (and UID
+metadata when present). Missing, malformed, unknown, or unavailable billed identity
+never falls back to a legacy grant. Non-Stripe and grandfathered records keep their
+catalog policy. The helper copies price identity in memory and never repairs a
+Firestore row or writes to Stripe.
+
+Desktop uses the optional runtime `SCREEN_VECTOR_STRIPE_API_KEY`, sourced from
+the non-secret selected-environment operator reference
+`vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET`, passed to the renderer as
+`SCREEN_VECTOR_STRIPE_READ_SECRET`. This reference must explicitly select the
+desktop customer billing realm, independently of normal backend dev configuration. The reference names a Secret Manager secret,
+not a key payload; malformed references and payload-shaped inputs are rejected.
+The shared client prefers this restricted key; main backend/listener retain their
+already-present Stripe binding. Desktop workflows never add the main billing key.
+With no supplied restricted reference and no supplied price, the renderer emits
+no new secret binding. An explicitly supplied read reference is mounted even when
+price inputs are omitted, since effective state may retain previously configured
+prices. With any supplied price it rejects a missing restricted reference before
+output or deployment. Source-only rendering cannot inspect preserved live state:
+before any desktop deployment retaining mixed ladder bindings, operators must
+ensure its effective configuration has the matching customer-realm restricted
+read key and runtime access. Existing expected-state checks constrain supplied
+values only; they cannot attest this precondition for omitted live values. Mixed
+runtime configuration without established authority returns temporary unavailable,
+never a legacy grant.
+Before enabling W3 references on desktop, an operator must separately provision a
+Stripe subscription-read-only secret and grant runtime access through an authorized
+provisioning/deploy action. This PR creates no secret, changes no IAM, configures
+no actual secret/price reference, and cannot attest key scope or runtime access.
+
+Successful billed identities are cached for 60 seconds; failed refreshes for 5
+seconds, with no stale-success fallback after expiry. The 2,048-entry LRU is keyed
+by UID, Stripe credential/subscription identity, stored plan/price, paid-period
+end and status. Credential identities remain in process memory and are never logged.
+Catalog mapping is re-evaluated on every hit. A changed stored identity misses the
+cache; explicit subscription GET force-refreshes once and reuses that snapshot for
+capability and allowance before client remapping. Existing Firestore read-cache
+semantics still apply. Concurrent frame requests coalesce through 32 fixed locks.
+The lazy Stripe SDK client uses a 5-second transport timeout and zero automatic
+retries. A billed change can take up to the positive TTL to reach frame consumers
+unless GET refreshes it first; transient failures delay retries by at most the
+negative TTL. Async callers sequence database and Stripe executors without nested
+executor waits; synchronous GET runs in FastAPI's worker thread.
+
+Unknown vector authority is retryable, not known-unentitled. A vector-bearing
+screen sync returns 503 with `Retry-After: 5`, without `synced`/`last_id` success
+acknowledgement or a vector write. Its idempotent OCR upsert may already have
+committed; retry the batch after recovery. Known Free/ladder Plus intentionally
+keep OCR without cloud vectors. OCR-only batches do not consult vector authority.
+
 Only `STOREFRONT_LADDER_V1_ENABLED=true` admits purchases of those IDs. The existing
 v1 purchase catalog and its platform partition stay compatible with installed
 clients. The v2 sheet offers the unified ladder on all platforms. Checkout and
@@ -37,7 +124,7 @@ ramping. Keep every existing price and legacy env binding intact.
 | `STOREFRONT_LADDER_V1_ENABLED` | Existing v2 presentation endpoint; admits bound ladder checkout IDs |
 | `LADDER_V1_LANE_METERING_ENABLED` | Adds live/batch/on-device/unknown shadow attribution to existing hourly writes |
 | `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` | Shared monthly ledger admission for Free and ladder-price accounts; legacy bypass |
-| `LADDER_V1_PRO_GATES_ENABLED` | Pro/Architect proactive producers, managed screen context and cloud screen vectors; Plus core desktop |
+| `LADDER_V1_PRO_GATES_ENABLED` | Pro/Architect proactive producers, managed screen context; Plus core desktop |
 | `LADDER_V1_MCP_DAILY_CAPS_ENABLED` | Atomic shared daily request cap across MCP and developer keys: 100/500/5,000/5,000 |
 | `LADDER_V1_WIRE_IDENTITY_ENABLED` | Uses approved `LADDER_V1_MIN_MOBILE_VERSION` and `LADDER_V1_MIN_WINDOWS_VERSION` floors |
 | `LADDER_V1_RETIRE_PRO_ALIAS_ENABLED` | Rejects retired `pro` alias; enable only after old-client retirement and stored-row audit |
@@ -224,3 +311,10 @@ closed-bucket sums. Hour/day rollover closes old buckets once. A bounded 1,024-u
 process cache shares closed-bucket totals; every later funded dispatch rereads open
 usage so an earlier admission cannot hide a newly exhausted allowance. These are
 admission snapshots, not distributed spend reservations; already dispatched work can drain.
+
+
+Cloud-screen-vector eligibility is now an independent versioned catalog
+capability, shipped on with a header-conjoined proxy refusal kill switch. At-cap
+client summaries follow the funded deferral/backlog policy rather than the retired
+basic-plan terminal policy. See [the lifecycle contract](listen_pusher_pipeline.mdx#default-on-free-tier-capability-fold-2026-10-18-ruling).
+These two default-on controls do not enable the budget/storefront switches above.

@@ -215,7 +215,7 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
             if http_get is not None:
                 http_get.setdefault("scheme", "HTTP")
     # The API server marshals env value with omitempty, so a Helm-rendered
-    # `value: ""` (e.g. FREE_TIER_LOCAL_PROCESSING_COHORT from an unset repo
+    # `value: ""` (e.g. an optional ConfigMap entry from an unset repo
     # variable) is stored and read back as {name} without the value key. Strip
     # the empty value key from the rendered projection before hashing, the same
     # way this projection already normalizes probe defaults and quantities.
