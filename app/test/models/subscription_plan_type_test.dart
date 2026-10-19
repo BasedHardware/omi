@@ -9,7 +9,8 @@ Subscription _subFromWirePlan(String plan) {
     'features': <String>[],
     'cancel_at_period_end': false,
     'deprecated': false,
-    'limits': <String, dynamic>{},
+    'future_subscription_field': {'enabled': true},
+    'limits': <String, dynamic>{'future_allowance': 42},
   });
 }
 

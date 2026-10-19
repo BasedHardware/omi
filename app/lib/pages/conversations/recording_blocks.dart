@@ -49,16 +49,23 @@ int _rank(WalSyncDisplayState state) => switch (state) {
 
 bool _onDevice(Wal wal) => wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
 
+bool _copiedFromDevice(Wal wal) =>
+    wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage;
+
 /// Groups [newestFirst] into recordings. A file joins the open block from the
 /// same device and the same place (on the device or on the phone — the same
 /// audio can exist in both) when it ends within [recordingBlockGapSeconds] of
 /// where that block's oldest file starts. Each device and place keeps its own
 /// open block, because their files interleave in newest-first order.
-List<RecordingBlock> groupRecordingBlocks(List<Wal> newestFirst) {
+///
+/// With [joinDeviceCopies], a phone copy of device audio counts as on the device: a device drain
+/// that stopped part way leaves copied pieces beside the rest still on the device, and both are one
+/// recording still on its way.
+List<RecordingBlock> groupRecordingBlocks(List<Wal> newestFirst, {bool joinDeviceCopies = false}) {
   final blocks = <List<Wal>>[];
   final open = <(String, bool), List<Wal>>{};
   for (final wal in newestFirst) {
-    final key = (wal.device, _onDevice(wal));
+    final key = (wal.device, _onDevice(wal) || (joinDeviceCopies && _copiedFromDevice(wal)));
     final current = open[key];
     final next = current?.last;
     final joins = next != null &&

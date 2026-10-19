@@ -1,0 +1,102 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 10,
+  "show_subscription_ui": true,
+  "header": "You've used 80% of this month's usage",
+  "current": {
+    "plan_id": "operator",
+    "name": "Pro",
+    "price_id": "price_operator_month",
+    "interval": "month",
+    "legacy": false,
+    "cancel_at_period_end": false,
+    "line": "You're on Pro · $49.99/mo · renews Nov 1",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "usage_budget",
+    "percent": 80,
+    "period_id": "2026-10",
+    "reset_label": "resets Nov 1",
+    "meter_line": "80% used · about 50 hours of recording left · resets Nov 1",
+    "hours_left": 50,
+    "nudge_line": "You've used 80% of this month's usage · resets Nov 1",
+    "more_label": "Get more usage",
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
+  },
+  "tiers": [
+    {
+      "tier_id": "plus:ladder_v1",
+      "plan_id": "plus",
+      "name": "Plus",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "About 100 hours of recording a month, around 3 hours a day",
+      "bullets": [
+        "Everything in Free, with much more room",
+        "Use Omi on your Mac as well as your phone",
+        "500 MCP requests a day"
+      ],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_plus_month",
+          "interval": "month",
+          "amount_minor": 1999,
+          "currency": "usd",
+          "headline": "$19.99/month",
+          "subline": null,
+          "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
+        },
+        {
+          "price_id": "price_plus_year",
+          "interval": "year",
+          "amount_minor": 19990,
+          "currency": "usd",
+          "headline": "$16.66/month",
+          "subline": "$199.90 billed yearly · 2 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "operator:ladder_v1",
+      "plan_id": "operator",
+      "name": "Pro",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "About 280 hours of recording a month, enough to wear it all day",
+      "bullets": [],
+      "action": "checkout",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_operator_year",
+          "interval": "year",
+          "amount_minor": 49990,
+          "currency": "usd",
+          "headline": "$49.99/month",
+          "subline": "$499.90 billed yearly · 2 months free",
+          "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
+          "months_free": 2,
+          "confirm_lines": [
+            "Your monthly plan continues until Nov 1",
+            "Your payment method will be charged $499.90 when your yearly plan starts",
+            "Your yearly plan starts on Nov 1"
+          ],
+          "cta_label": "Switch to yearly · save $99.98"
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": "Yearly · 2 months free"
+}

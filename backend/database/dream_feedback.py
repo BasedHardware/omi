@@ -13,7 +13,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from models.dream_agent import Feedback
-from utils.dream_guards import feedback_rejection
+from utils.agent_capabilities.guards import feedback_rejection
 
 
 def words(text):
@@ -72,7 +72,7 @@ def _name_terms(inputs, vocabulary):
 
 
 def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
-    reason = feedback_rejection(report)
+    reason = feedback_rejection(report, full=getattr(inputs, 'context_mode', 'bounded') == 'full')
     if reason:
         raise ValueError(reason)
     text = report.reproduction

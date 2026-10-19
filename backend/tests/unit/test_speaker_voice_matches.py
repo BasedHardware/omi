@@ -174,8 +174,10 @@ def test_manual_decisions_exclude_whole_voice(env, receipt):
     assert env.reads == []
 
 
-def test_ignored_store_excludes_voice_even_without_receipt(env):
-    env.ignored = {'c1:2': {'conversation_id': 'c1', 'speaker_id': 2}}
+@pytest.mark.parametrize('conversation_id', ['c1', 'x' * 1500])
+def test_ignored_store_excludes_voice_even_without_receipt(env, conversation_id):
+    env.conversations = [_conversation(conversation_id)]
+    env.ignored = {f'{conversation_id}:2': {'conversation_id': conversation_id, 'speaker_id': 2}}
     assert _find() == []
     assert env.reads == []
 

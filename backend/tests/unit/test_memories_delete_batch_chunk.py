@@ -9,6 +9,9 @@ commit, so the pre-fix single-batch code fails here.
 """
 
 from contextlib import nullcontext
+from types import SimpleNamespace
+
+import pytest
 
 import database.memories as memories
 
@@ -98,6 +101,13 @@ class _UnlockDoc:
 
 
 class _UnlockQuery:
+    def select(self, fields):
+        assert fields == []
+        return self
+
+    def limit(self, count):
+        return _UnlockQuery(self._docs[:count])
+
     def __init__(self, docs):
         self._docs = docs
 
@@ -126,6 +136,10 @@ class _UnlockDocument:
     def collection(self, name):
         return _UnlockCollection(self._db, f"{self._path}/{name}")
 
+    def get(self):
+        payload = self._db.markers.get(self._path)
+        return SimpleNamespace(exists=payload is not None, to_dict=lambda: payload)
+
 
 class _UnlockBatch:
     def __init__(self, db):
@@ -145,6 +159,7 @@ class _UnlockDb:
             "users/u1/memories": [_UnlockDoc("legacy-locked")],
             "users/u1/memory_items": [_UnlockDoc("canonical-locked")],
         }
+        self.markers = {}
         self.filters = []
         self.updates = []
 
@@ -165,3 +180,136 @@ def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields(monkeypatc
     assert ("users/u1/memory_items", "promotion.is_locked", "==", True) in fake.filters
     assert ("legacy-locked", {"is_locked": False}) in fake.updates
     assert ("canonical-locked", {"promotion.is_locked": False}) in fake.updates
+
+
+def test_unlock_memories_bounds_each_legacy_and_canonical_page(monkeypatch):
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        "users/u1/memories": [_UnlockDoc(f"legacy-{i}") for i in range(101)],
+        "users/u1/memory_items": [_UnlockDoc(f"canonical-{i}") for i in range(101)],
+    }
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
+    unlocked = memories.unlock_all_memories("u1", firestore_client=fake, limit=100)
+    assert unlocked == 200
+    assert unlocked.page_saturated is True
+    assert len(fake.updates) == 200
+
+
+def test_unlock_memories_short_pages_are_not_saturated(monkeypatch):
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        "users/u1/memories": [_UnlockDoc(f"legacy-{i}") for i in range(60)],
+        "users/u1/memory_items": [_UnlockDoc(f"canonical-{i}") for i in range(60)],
+    }
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
+    unlocked = memories.unlock_all_memories("u1", firestore_client=fake, limit=100)
+    assert unlocked == 120
+    assert unlocked.page_saturated is False
+
+
+def _allow_unlocked_data_plane(monkeypatch):
+    """Deletion authority is the data plane, not the content client under test."""
+    import database.account_deletion_marker as marker
+
+    monkeypatch.setattr(marker, 'get_data_plane_firestore_client', lambda: _UnlockDb())
+
+
+@pytest.mark.parametrize('limit', [None, 100])
+def test_unlock_action_items_empty_locked_query_does_not_bump_list_cache(monkeypatch, limit):
+    import database.action_items as action_items
+
+    fake = _UnlockDb()
+    fake.docs_by_collection['users/u1/action_items'] = []
+    invalidations = []
+    monkeypatch.setattr(action_items, 'db', fake)
+    _allow_unlocked_data_plane(monkeypatch)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: invalidations.append(uid))
+    assert action_items.unlock_all_action_items('u1', limit=limit) == 0
+    assert fake.updates == []
+    assert invalidations == []
+
+
+def test_has_recoverable_locked_content_stops_at_the_first_locked_collection(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        'users/u1/conversations': [_UnlockDoc('conversation-locked')],
+        'users/u1/memories': [_UnlockDoc('legacy-locked')],
+        'users/u1/memory_items': [_UnlockDoc('canonical-locked')],
+        'users/u1/action_items': [_UnlockDoc('task-locked')],
+    }
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is True
+    assert [path for path, *_rest in fake.filters] == ['users/u1/conversations']
+
+
+def test_has_recoverable_locked_content_checks_every_paid_lock_field(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        'users/u1/action_items': [_UnlockDoc('task-locked')],
+    }
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is True
+    assert fake.filters == [
+        ('users/u1/conversations', 'is_locked', '==', True),
+        ('users/u1/memories', 'is_locked', '==', True),
+        ('users/u1/memory_items', 'promotion.is_locked', '==', True),
+        ('users/u1/action_items', 'is_locked', '==', True),
+    ]
+
+
+def test_has_recoverable_locked_content_is_false_when_nothing_is_locked(monkeypatch):
+    import database.locked_content as locked_content
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {}
+    monkeypatch.setattr(locked_content, 'db', fake)
+    assert locked_content.has_recoverable_locked_content('u1') is False
+    assert len(fake.filters) == 4
+
+
+def test_unlock_action_items_bounds_updates_and_invalidates_list(monkeypatch):
+    import database.action_items as action_items
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {'users/u1/action_items': [_UnlockDoc(f'task-{i}') for i in range(101)]}
+    invalidations = []
+    monkeypatch.setattr(action_items, 'db', fake)
+    _allow_unlocked_data_plane(monkeypatch)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: invalidations.append(uid))
+    assert action_items.unlock_all_action_items('u1', limit=100) == 100
+    assert len(fake.updates) == 100
+    assert all(update['is_locked'] is False and update['updated_at'] for _, update in fake.updates)
+    assert invalidations == ['u1']
+
+
+@pytest.mark.parametrize('kind', ['conversations', 'action_items'])
+@pytest.mark.parametrize('limit', [None, 100])
+def test_unlock_helpers_fence_deletion_visible_after_memory_page(monkeypatch, kind, limit):
+    import database.account_deletion_marker as marker
+    from database import action_items, conversations
+    from database.legal_holds import DestructiveOperationInProgress
+
+    content = _UnlockDb()
+    data_plane = _UnlockDb()
+    content.docs_by_collection[f'users/u1/{kind}'] = [_UnlockDoc(f'{kind}-locked')]
+    # The earlier memory page has committed before deletion becomes visible.
+    monkeypatch.setattr(memories, 'external_write_fence', lambda *args, **kwargs: nullcontext())
+    assert memories.unlock_all_memories('u1', firestore_client=content, limit=100) == 2
+    committed = list(content.updates)
+    # Uninjected fences read account_deletions on the data-plane client.
+    data_plane.markers['account_deletions/u1'] = {'wipe_status': 'in_progress'}
+    monkeypatch.setattr(marker, 'get_data_plane_firestore_client', lambda: data_plane)
+    module = conversations if kind == 'conversations' else action_items
+    monkeypatch.setattr(module, 'db', content)
+    invalidations = []
+    cache_name = 'invalidate_people_stats_cache' if kind == 'conversations' else 'bump_action_items_list_version'
+    monkeypatch.setattr(module, cache_name, lambda uid: invalidations.append(uid))
+    with pytest.raises(DestructiveOperationInProgress):
+        getattr(module, f'unlock_all_{kind}')('u1', limit=limit)
+    assert content.updates == committed
+    assert 'account_deletions/u1' not in content.markers
+    assert invalidations == []

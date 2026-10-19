@@ -83,6 +83,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: PARAKEET_PACKING_ENABLED
+    value: "false"
+  - name: PARAKEET_EXPLICIT_CUDA_GRAPHS
+    value: "false"
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -110,7 +114,7 @@ env:
   - name: PARAKEET_CUDA_GRAPHS
     value: "false"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080"
+    value: "http://172.16.48.49/diarizer"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -229,3 +233,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: dev-omi-internal-gateway

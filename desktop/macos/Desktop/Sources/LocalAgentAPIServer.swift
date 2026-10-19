@@ -315,7 +315,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
 
     var arguments = json["arguments"] as? [String: Any] ?? [:]
-    let canonicalToolName = toolName == "look_at_frame" ? "get_screenshot" : toolName
+    let canonicalToolName = toolName
     guard Self.tools.contains(where: { $0.name == canonicalToolName }) else {
       return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }

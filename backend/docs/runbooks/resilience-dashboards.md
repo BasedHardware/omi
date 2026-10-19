@@ -176,3 +176,24 @@ Not in this PR; track before adding PAGE alerts:
 | `webhook` | Circuit breaker open → drop or defer partner delivery | `get_webhook_circuit_breaker` state per URL | `record_fallback` with `reason=circuit_open`, bounded URL host label; ticket-tier alert on open-share |
 
 `audio_merge` and `webhook` are in the shared component allowlist so call sites can adopt the helper without schema churn later.
+
+## Client telemetry ingest
+
+Durable upload, voice, ingress, wedge, session, screen-task and fallback
+counters live in Firestore (`client_telemetry_days`), not in process-local
+Prometheus. Server HTTP metrics stay complementary. The process counter
+`omi_client_telemetry_ingest_events_total{result}` only counts collector
+outcomes (`accepted`, `invalid`, `conflict`, `rate_limited`, `too_large`,
+`unavailable`, `truncated`, `stale`, `forbidden`) and resets when a pod
+restarts.
+
+| Signal | Where to look | What not to do |
+|---|---|---|
+| Rejected or conflicting batches | `result=~"invalid\|conflict\|too_large"` | Do not treat a 422/409 as an empty healthy day |
+| Per-owner 429s | `result="rate_limited"` (10 batches/minute, durable) | Do not raise the cap to hide a hot client |
+| Store failures | `result="unavailable"` and HTTP 503 `telemetry_unavailable` | Do not graph a failed read as zero observations |
+| Truncated admin reads | HTTP 503 `telemetry_query_truncated` | Do not drop rows to stay under 50,000 |
+| Stale ingest | aggregate `partial=true` with an unsealed day whose last accept is older than 15 minutes; `result="stale"` | Do not backfill zeros for the missing receipt |
+| Missing rollup receipt | `available=false` until `seal` is recorded for that UTC day | A recent event is not a health receipt |
+
+Detail: [client-telemetry-ingestion.md](./client-telemetry-ingestion.md). PostHog raw-schema shutdown is [posthog-raw-schema-disablement.md](./posthog-raw-schema-disablement.md). Neither flag (`CLIENT_TELEMETRY_TRANSPORT`, `CLIENT_TELEMETRY_READER`, `CLIENT_TELEMETRY_RETIREMENT`) is on by default, and none of them pages.

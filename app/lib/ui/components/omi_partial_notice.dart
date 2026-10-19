@@ -6,9 +6,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// A quiet line above incomplete results: one kind failed to load; retry runs the search again.
 class OmiPartialNotice extends StatelessWidget {
-  const OmiPartialNotice({super.key, required this.onRetry});
+  const OmiPartialNotice({super.key, required this.onRetry, this.message});
 
   final VoidCallback onRetry;
+
+  /// What did not load; defaults to the search copy.
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +25,8 @@ class OmiPartialNotice extends StatelessWidget {
             Icon(Icons.error_outline_rounded, size: 16, color: OmiColors.textTertiary),
             const SizedBox(width: OmiSpacing.xs),
             Expanded(
-              child: Text(l10n.searchPartialFailure, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+              child: Text(message ?? l10n.searchPartialFailure,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
             ),
             OmiButton.secondary(
               key: const ValueKey('search_partial_retry'),

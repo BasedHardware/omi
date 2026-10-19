@@ -17,6 +17,12 @@ from typing import Any
 import yaml
 
 
+def _load_yaml_document(text: str) -> Any:
+    """Load YAML with the accelerated safe parser when libyaml is available."""
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    return yaml.load(text, Loader=loader)
+
+
 def _find_bindings(value: Any, env_name: str) -> list[Mapping[str, Any]]:
     if isinstance(value, Mapping):
         bindings: list[Mapping[str, Any]] = []
@@ -187,7 +193,7 @@ def main() -> int:
     contract_document = None
     if args.runtime_env:
         try:
-            runtime_document = yaml.safe_load(args.runtime_env.read_text(encoding="utf-8"))
+            runtime_document = _load_yaml_document(args.runtime_env.read_text(encoding="utf-8"))
         except (OSError, yaml.YAMLError) as exc:
             errors.append(f"could not read runtime env manifest: {exc}")
         else:

@@ -113,7 +113,7 @@ def _call(*, request=None, response=None, uid='user-1', limit=50, offset=0, comp
 @pytest.fixture
 def fake_redis(monkeypatch):
     fake = _FakeRedis()
-    monkeypatch.setattr(ai_cache.redis_db, 'r', fake)
+    monkeypatch.setattr(ai_cache, '_redis', lambda: fake)
     monkeypatch.setenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', '30')
     return fake
 
@@ -204,7 +204,7 @@ def test_redis_outage_falls_open_to_a_real_read(monkeypatch):
         def set(self, *_a, **_k):
             raise redis_pkg.exceptions.ConnectionError('down')
 
-    monkeypatch.setattr(ai_cache.redis_db, 'r', _Broken())
+    monkeypatch.setattr(ai_cache, '_redis', lambda: _Broken())
     monkeypatch.setenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', '30')
     with patch.object(action_items_router.action_items_db, 'get_action_items', return_value=[_item('one')]) as db_call:
         result = _call(request=_request(), response=_Response())

@@ -9,7 +9,7 @@ from utils.executors import storage_executor, run_blocking
 from utils.messaging.adapters.delivery import DeliveryLedger
 from utils.messaging.adapters.media import ChatMediaStore, prepare_media
 from utils.messaging.adapters.transport import Transport
-from utils.messaging.delivery_context import send_sequence
+from utils.messaging.delivery_context import send_sequence, send_first_chunk, send_reply_target
 from utils.messaging.identity import key
 from utils.messaging.projection import surface_runtime
 
@@ -29,7 +29,10 @@ class BaseAdapter:
 
     async def prepare(self, message, uid, session, guard):
         if message.attachments or message.media:
-            return await prepare_media(self, message, uid, session, guard)
+            from utils.http_client import get_messaging_media_semaphore
+
+            async with get_messaging_media_semaphore():
+                return await prepare_media(self, message, uid, session, guard)
         return message
 
     async def pace(self, chat, interval=1.05):
@@ -42,6 +45,14 @@ class BaseAdapter:
             self._rates.popitem(last=False)
         if deadline > now:
             await self.sleep(deadline - now)
+
+    async def reply_target(self, message):
+        if not send_first_chunk.get():
+            return None
+        resolver = send_reply_target.get()
+        if resolver is not None:
+            return await resolver()
+        return message.reply_to if message.callback_id else None
 
     def operation(self, message, label):
         return key(message.provider_message_id, str(send_sequence.get()), label)

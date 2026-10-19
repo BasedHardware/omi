@@ -823,7 +823,8 @@ enum RealtimeHubToolFailureKind: String, Equatable {
         default:
           return .backendTransport
         }
-      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked:
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked,
+        .memoryDeleteGateBusy:
         return .backendClientRejected
       }
     }

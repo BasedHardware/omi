@@ -72,6 +72,25 @@ Widget _app(Widget home) => MaterialApp(
     );
 
 void main() {
+  testWidgets('retired item report shows the before and removed state', (tester) async {
+    final run = _runJson('synthetic-retired');
+    run['edits'] = [
+      {
+        'kind': 'retire_task',
+        'target_label': 'Invented duplicate',
+        'before': 'Invented obligation',
+        'after': '',
+        'reason': 'Synthetic duplicate',
+        'evidence_count': 1,
+        'outcome': 'applied'
+      },
+    ];
+    await tester.pumpWidget(_app(DreamReportPage(loadReport: () async => ApiSuccess(_report(runs: [run])))));
+    await tester.pumpAndSettle();
+    expect(find.text('Invented obligation → Removed from the active list'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('wire parsing', () {
     test('keeps well-formed runs and drops a run without an id or timestamp', () {
       final report = _report(runs: [

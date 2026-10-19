@@ -569,3 +569,25 @@ Import known facts and preferences about the user:
     Shareable, notable facts — things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
   </Card>
 </CardGroup>
+
+## Pagination and search coverage
+
+List responses remain arrays. `limit` is clamped to **1–1000**. Read
+`X-Omi-Effective-Limit`, `X-Omi-Has-More`, and `X-Omi-Next-Offset` for continuation.
+`X-Omi-List-Truncated: true` signals that the read budget ran out. An empty
+truncated page cannot guarantee progress; narrow the category filter or reduce
+the page size. Unknown list parameters are ignored and counted in `X-Omi-Ignored-Query-Params`, except `query`, which returns 400; use the search route.
+
+`GET /v1/dev/user/memories/search?query=budget&limit=10` returns
+`{memories, effective_limit, search_coverage, message}` using the same eligible
+memory search as MCP. Limit is 1–20. It requires `memories:read`, the persisted
+app/key memory grant, and account readiness. Empty indexed results do not prove
+absence: inspect the memory list for unindexed content. Eligibility and privacy
+rules apply to both paths; archive is excluded by default.
+
+The existing `/v1/dev/user/memories/vector/search` remains available and reports
+`effective_limit` (at most 20) plus coverage and an empty-result message.
+
+The compatibility list has a 5000-item `offset + limit` window. Requests beyond
+it return 413. A full page ending exactly at that boundary reports truncated
+coverage without a next offset; it cannot certify that the account ends there.

@@ -211,3 +211,123 @@ def test_successful_reprocess_schedules_durable_learning():
     from utils.speaker_learning_jobs import run_speaker_learning_jobs
 
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
+
+
+@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
+def test_busy_claim_answers_409_only_under_the_result_contract(monkeypatch, enabled):
+    """Another writer owns the conversation: never report the stale row as an update."""
+    from database import processing_attention as attention
+
+    if enabled:
+        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
+    else:
+        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+    monkeypatch.setattr(attention, 'claim', lambda *a, **k: ({'operation_id': 'other'}, False))
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        if enabled:
+            with pytest.raises(HTTPException) as exc:
+                conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+            assert exc.value.status_code == 409
+            assert exc.value.detail['code'] == 'conversation_processing_in_progress'
+        else:
+            assert conv_router.reprocess_conversation(conversation_id='c1', uid='u1') is model
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('app_id', 'overview', 'apps_results', 'expected'),
+    [
+        (None, 'Omi notes', [], 'succeeded'),
+        (None, '', [SimpleNamespace(app_id='summary-app', content='APP')], 'failed'),
+        ('summary-app', '', [SimpleNamespace(app_id='summary-app', content='APP')], 'succeeded'),
+        ('summary-app', 'Omi notes', [SimpleNamespace(app_id='other', content='OTHER')], 'failed'),
+        ('summary-app', 'Omi notes', [SimpleNamespace(app_id='summary-app', content='  ')], 'failed'),
+    ],
+)
+def test_attention_outcome_follows_the_requested_summary(monkeypatch, app_id, overview, apps_results, expected):
+    from database import processing_attention as attention
+
+    states = []
+    real_finish = attention.finish
+
+    def record_finish(uid, operation, state, *args, **kwargs):
+        states.append(state)
+        return real_finish(uid, operation, state, *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'finish', record_finish)
+    selected = _app()
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app={'id': selected.id}, available_app=selected, enabled=True
+    )
+    model.structured = SimpleNamespace(overview=overview)
+    model.apps_results = apps_results
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        conv_router.reprocess_conversation(conversation_id='c1', app_id=app_id, uid='u1')
+
+    assert states == [expected]
+
+
+def test_suggested_apps_hydrate_concurrently_in_suggestion_order(monkeypatch):
+    import asyncio
+    import threading
+
+    conversation = SimpleNamespace(suggested_summarization_apps=['a', 'missing', 'b'])
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda data: conversation)
+    barrier = threading.Barrier(3, timeout=5)
+
+    def hydrate(app_id, uid):
+        barrier.wait()  # deadlocks (BrokenBarrierError) unless all three run at once
+        if app_id == 'missing':
+            return None
+        return SimpleNamespace(model_dump=lambda: {'id': app_id})
+
+    monkeypatch.setattr(conv_router, '_hydrate_suggested_app', hydrate)
+    result = asyncio.run(conv_router.get_conversation_suggested_apps('c1', uid='u1'))
+
+    assert result == {'suggested_apps': [{'id': 'a'}, {'id': 'b'}], 'conversation_id': 'c1'}
+
+
+def test_hydrate_suggested_app_adds_user_specific_fields(monkeypatch):
+    app_data = {
+        'id': 'good',
+        'name': 'Summary assistant',
+        'category': 'productivity',
+        'author': 'omi',
+        'description': 'Summarizes conversations',
+        'image': '',
+        'capabilities': [],
+        'payment_link': 'https://pay.example/x',
+        'thumbnails': ['t1'],
+    }
+    monkeypatch.setattr(
+        conv_router, 'get_app_thumbnail_url', lambda thumbnail_id: f'https://cdn.example/{thumbnail_id}'
+    )
+    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)), patch(
+        'utils.apps.get_is_user_paid_app', return_value=True
+    ):
+        app = conv_router._hydrate_suggested_app('good', 'u1')
+    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=None):
+        missing = conv_router._hydrate_suggested_app('gone', 'u1')
+
+    assert app.is_user_paid is True
+    assert app.payment_link == 'https://pay.example/x?client_reference_id=uid_u1'
+    assert app.thumbnail_urls == ['https://cdn.example/t1']
+    assert missing is None
+
+
+@pytest.fixture(autouse=True)
+def retry_ledger(monkeypatch):
+    from database import processing_attention as attention
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    client = StrictFirestore({('users', 'u1', 'conversations', 'c1'): {'id': 'c1', 'status': 'completed'}})
+    monkeypatch.setattr(attention, 'db', client)
+    monkeypatch.setattr(attention.firestore, 'transactional', lambda fn: fn)
+
+    def run(client, fn, *args, **kwargs):
+        with client.lock:
+            return fn(client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'run_transactional', run)

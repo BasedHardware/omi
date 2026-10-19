@@ -10,9 +10,10 @@ from utils.http_client import get_webhook_client
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, message, *, status_code=None):
+    def __init__(self, message, *, status_code=None, rendering_rejected=False):
         super().__init__(message)
         self.status_code = status_code
+        self.rendering_rejected = rendering_rejected
 
 
 class DeliveryUncertain(ProviderError):
@@ -62,16 +63,26 @@ class Transport:
             raise ProviderError('Media transport failed') from None
 
 
-async def request_json(transport, method, url, *, idempotent=False, sleep=asyncio.sleep, **kwargs) -> dict[str, Any]:
+async def request_json(
+    transport, method, url, *, idempotent=False, sleep=asyncio.sleep, before_request=None, before_attempt=None, **kwargs
+) -> dict[str, Any]:
     from utils.messaging.delivery_context import send_guard
 
+    safe_to_prepare = True
     for attempt in range(4):
         guard = send_guard.get()
         if guard is not None:
             await guard()
+        if before_attempt is not None:
+            await before_attempt()
+            if guard is not None:
+                await guard()
+        if before_request is not None and safe_to_prepare:
+            await before_request()
         try:
             response = await transport.request(method, url, **kwargs)
         except DeliveryUncertain:
+            safe_to_prepare = False  # a potentially accepted request must remain identical
             if not idempotent or attempt == 3:
                 raise
             await sleep(2**attempt)
@@ -83,6 +94,10 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
         if not isinstance(value, dict):
             raise ProviderError('Invalid provider response shape')
         status = response.status_code
+        from utils.messaging.metrics import HTTP
+
+        provider = 'telegram' if urlparse(url).hostname == 'api.telegram.org' else 'linq'
+        HTTP.labels(provider, str(status)).inc()
         if status == 429 or value.get('error_code') == 429:
             delay = value.get('parameters', {}).get('retry_after', response.headers.get('Retry-After', 1))
             try:
@@ -94,12 +109,24 @@ async def request_json(transport, method, url, *, idempotent=False, sleep=asynci
             await sleep(max(delay, 0.1))
             continue
         if status >= 500:
+            safe_to_prepare = False
             if not idempotent:
                 raise DeliveryUncertain('Provider send outcome unknown')
             if attempt < 3:
                 await sleep(2**attempt)
                 continue
         if status >= 400 or value.get('ok') is False:
-            raise ProviderError('Provider rejected request', status_code=status)
+            raise ProviderError(
+                'Provider rejected request',
+                status_code=status,
+                rendering_rejected=(
+                    status == 400
+                    and isinstance(value.get('description'), str)
+                    and any(
+                        marker in value['description'].lower()
+                        for marker in ("can't parse entities", 'unsupported start tag', 'wrong entity')
+                    )
+                ),
+            )
         return value
     raise ProviderError('Provider retry budget exhausted')

@@ -8,8 +8,15 @@ from typing import Any, TypeAlias, cast
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
-from llm_gateway.gateway.dream_lanes import dream_lane_items
+from config.jev_decisions import (
+    JEV_AUTO_LANE_ID,
+    JEV_GATEWAY_REQUEST_MS,
+    JEV_MODEL,
+    JEV_PROVIDER,
+    SCREEN_TASK_JEV_AUTO_LANE_ID,
+    SCREEN_TASK_JEV_MODEL,
+)
+from llm_gateway.gateway.dream_lanes import DREAM_LANES, dream_lane_items, validate_dream_route
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -52,7 +59,7 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
         generated_route_overrides
     )
     desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
-    dream_lanes, dream_artifacts = dream_lane_items(desktop_lane_items, desktop_artifact_items)
+    dream_lanes, dream_artifacts = dream_lane_items()
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
     systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
@@ -318,8 +325,9 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
 
     One lane per desktop-requested anchor model: the desktop BFF maps the
     requested model to `vertex_pt_routing.DESKTOP_TEXT_LANES`, and the Vertex
-    provider applies pin/overflow to the anchor at request time — so this
-    table and the policy stay derived from the same module, never forked.
+    provider consumes the declarative INACTIVE destinations at request time.
+    A luna destination skips Vertex and enters this existing Luna fallback;
+    after the move only Dream uses Gemini. No generated route permits PayGo.
     """
     lanes: list[ConfigItem] = []
     artifacts: list[ConfigItem] = []
@@ -384,14 +392,14 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
         )
     luna_lane = {
         **lanes[0],
-        'lane_id': 'omi:auto:desktop-luna',
+        'lane_id': ptr.DESKTOP_LUNA_LANE_ID,
         'active_route': 'route.desktop-luna.001',
         'last_known_good': 'route.desktop-luna.001',
     }
     luna_artifact = {
         **artifacts[0],
         'route_artifact_id': 'route.desktop-luna.001',
-        'lane_id': 'omi:auto:desktop-luna',
+        'lane_id': ptr.DESKTOP_LUNA_LANE_ID,
         'primary': ptr.LUNA_FALLBACK,
         'fallbacks': [],
         'provider_options': {'reasoning_effort': 'none'},
@@ -475,12 +483,7 @@ def _generated_embedding_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
 
 
 def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
-    """The one decision-model lane (``omi:auto:jev-decisions``, #14835).
-
-    Pinned to one Jev version on OpenRouter's systemone endpoint. One provider
-    attempt and no fallback: callers treat any failure as "no answer" and keep
-    their safe default, so a second provider would only add latency.
-    """
+    """Decision-model lanes pinned to their reviewed Jev model versions."""
     capabilities = {
         'text_input': True,
         'streaming': False,
@@ -488,50 +491,64 @@ def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
         'tools': False,
         'translation': False,
     }
-    route_id = 'route.jev-decisions.systemone.001'
-    lane = {
-        'lane_id': JEV_AUTO_LANE_ID,
-        'surface': 'openrouter.systemone',
-        'capabilities': capabilities,
-        'objective': {'quality': 0.4, 'latency': 0.5, 'cost': 0.1},
-        'credential_policy': _credential_policy(),
-        'active_route': route_id,
-        'last_known_good': route_id,
-    }
-    artifact = {
-        'route_artifact_id': route_id,
-        'lane_id': JEV_AUTO_LANE_ID,
-        'surface': 'openrouter.systemone',
-        'primary': {'provider': JEV_PROVIDER, 'model': JEV_MODEL},
-        'fallbacks': [],
-        'provider_options': {},
-        'output_budget': None,
-        'timeouts': {'request_ms': JEV_GATEWAY_REQUEST_MS},
-        'retry': {'max_attempts': 1},
-        'capabilities': capabilities,
-        'evidence': {
-            'benchmark_snapshot': 'jev_pilots_2026_09_23',
-            'eval_report': 'github.com/BasedHardware/omi/issues/14835',
-            'benchmark_source': 'omi_eval',
-            'dev_only': False,
-        },
-        'rollout': {'stage': 'active', 'percent': 100},
-        'credential_policy': _credential_policy(),
-        'fallback_policy': {
-            'fallback_on': [],
-            'never_fallback_on': [
-                'byok_auth',
-                'byok_quota',
-                'byok_rate_limit',
-                'byok_unsupported_provider',
-                'missing_byok_key',
-                'capability_mismatch',
-                'provider_invalid_request',
-                'invalid_config',
-            ],
-        },
-    }
-    return [lane], [artifact]
+    lanes: list[ConfigItem] = []
+    artifacts: list[ConfigItem] = []
+    for lane_id, model, route_id, benchmark in (
+        (JEV_AUTO_LANE_ID, JEV_MODEL, 'route.jev-decisions.systemone.001', 'jev_pilots_2026_09_23'),
+        (
+            SCREEN_TASK_JEV_AUTO_LANE_ID,
+            SCREEN_TASK_JEV_MODEL,
+            'route.screen-task.jev.systemone.001',
+            'jev_screen_task_1_14_2026_10_18',
+        ),
+    ):
+        lanes.append(
+            {
+                'lane_id': lane_id,
+                'surface': 'openrouter.systemone',
+                'capabilities': capabilities,
+                'objective': {'quality': 0.4, 'latency': 0.5, 'cost': 0.1},
+                'credential_policy': _credential_policy(),
+                'active_route': route_id,
+                'last_known_good': route_id,
+            }
+        )
+        artifacts.append(
+            {
+                'route_artifact_id': route_id,
+                'lane_id': lane_id,
+                'surface': 'openrouter.systemone',
+                'primary': {'provider': JEV_PROVIDER, 'model': model},
+                'fallbacks': [],
+                'provider_options': {},
+                'output_budget': None,
+                'timeouts': {'request_ms': JEV_GATEWAY_REQUEST_MS},
+                'retry': {'max_attempts': 1},
+                'capabilities': capabilities,
+                'evidence': {
+                    'benchmark_snapshot': benchmark,
+                    'eval_report': 'github.com/BasedHardware/omi/issues/14835',
+                    'benchmark_source': 'omi_eval',
+                    'dev_only': False,
+                },
+                'rollout': {'stage': 'active', 'percent': 100},
+                'credential_policy': _credential_policy(),
+                'fallback_policy': {
+                    'fallback_on': [],
+                    'never_fallback_on': [
+                        'byok_auth',
+                        'byok_quota',
+                        'byok_rate_limit',
+                        'byok_unsupported_provider',
+                        'missing_byok_key',
+                        'capability_mismatch',
+                        'provider_invalid_request',
+                        'invalid_config',
+                    ],
+                },
+            }
+        )
+    return lanes, artifacts
 
 
 def _surface_for_feature(feature: str, provider: str) -> str:
@@ -596,6 +613,9 @@ def _validate_reserved_generation_routes(artifacts: dict[str, RouteArtifact]) ->
     from llm_gateway.gateway.schemas import CredentialMode, Surface, FailureClass
 
     for artifact in artifacts.values():
+        if artifact.lane_id in DREAM_LANES:
+            validate_dream_route(artifact)
+            continue
         if artifact.credential_policy.mode == CredentialMode.BYOK or artifact.surface == Surface.OPENAI_EMBEDDINGS:
             continue
         refs = [artifact.primary, *artifact.fallbacks]

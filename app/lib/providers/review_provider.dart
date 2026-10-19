@@ -131,7 +131,7 @@ class ReviewProvider extends ChangeNotifier {
   }
 
   Future<void> _load() async {
-    // First release: TestFlight and dev builds only. Store builds never ask, whatever the server says.
+    // Availability comes from the server, including Store builds and auto-only changes.
     if (!_isEligible()) {
       availability = ReviewAvailability.off;
       _notify();
@@ -275,7 +275,7 @@ class ReviewProvider extends ChangeNotifier {
   static String _defaultReleaseChannel() =>
       Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev');
 
-  static bool _defaultEligible() => Env.isTestFlight || F.env == Environment.dev;
+  static bool _defaultEligible() => true;
 
   static Future<ApiResult<Uint8List>> _defaultLoadClip(SpeakerItem speaker) => speaker_api.getSpeakerTagPromptClip(
         conversationId: speaker.conversationId,

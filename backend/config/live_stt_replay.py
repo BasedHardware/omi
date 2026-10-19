@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +27,14 @@ class ReplayLimits:
 DEFAULT_REPLAY_LIMITS = ReplayLimits()
 
 _FIELDS = frozenset(ReplayLimits.__dataclass_fields__)
+
+NONWINDOW_REPLAY_SETTLE_ENV = 'LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED'
+
+
+def nonwindow_replay_settle_enabled() -> bool:
+    """Kill switch, default on: a non-window replacement leg whose provider has
+    nothing pending settles horizon-aged quiet capture instead of failing over."""
+    return os.getenv(NONWINDOW_REPLAY_SETTLE_ENV, 'true').strip().lower() not in {'false', '0', 'off'}
 
 
 def parse_replay_limits(value: Any) -> ReplayLimits:

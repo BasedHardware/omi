@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -25,11 +26,15 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
+import 'package:omi/services/external_haptic_trigger.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -67,10 +72,45 @@ class _AppShellState extends State<AppShell> {
   static const Set<String> _appLinkRoutes = {'action-items', 'capture', 'conversation', 'conversations', 'settings'};
 
   void openAppLink(Uri uri) async {
+    final externalHapticResult = await runExternalHapticTrigger(
+      uri,
+      deviceId: SharedPreferencesUtil().btDevice.id,
+      playHaptic: (deviceId, level) async {
+        try {
+          final connection = await ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+          if (connection == null) return false;
+          final transport = connection.transport;
+          // Watch and Ray-Ban transports implement writeCharacteristic as a
+          // successful no-op, so performPlayToSpeakerHaptic would report
+          // played without a motor write. Only a native BLE transport that
+          // actually exposes the speaker haptic characteristic may proceed.
+          if (transport is! NativeBleTransport ||
+              !transport.hasCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid)) {
+            return false;
+          }
+          return connection.performPlayToSpeakerHaptic(level);
+        } catch (e) {
+          Logger.debug('External haptic trigger failed: $e');
+          return false;
+        }
+      },
+    );
+    if (!mounted) return;
+    if (externalHapticResult != ExternalHapticTriggerResult.notHandled) {
+      Logger.debug('External haptic trigger result: $externalHapticResult');
+      return;
+    }
+
     // Omi's own links (the Home Screen widgets): <scheme>://app/<route> opens that place in Home —
     // To do, a conversation, the Conversations tab, device settings.
     if (uri.host == 'app' && _appLinkRoutes.contains(uri.pathSegments.firstOrNull)) {
       await HomeNavigation.openRoute(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
+      return;
+    }
+    // h.omi.me item links (chat edit receipts, messaging channels) open the item in Home.
+    final itemRoute = HomeDeepLink.itemRouteFromAppLink(uri);
+    if (itemRoute != null) {
+      await HomeNavigation.openRoute(itemRoute);
       return;
     }
     if (uri.pathSegments.isEmpty) {
@@ -107,8 +147,10 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
+        final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
         PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
-        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+        PlatformManager.instance.analytics.paywallOpened('unlimited_deeplink', currentPlan: plan);
+        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'unlimited_deeplink'));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback

@@ -68,6 +68,7 @@ def calendar_continuity_identity(row: Mapping[str, Any]) -> tuple[str, str] | No
 def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SECONDS) -> float:
     """A stored calendar identity extends silence only through its scheduled window.
 
+    The window never shortens the caller's ordinary or user-configured deadline.
     No meeting-treatment eligibility gate: that gate controls summarization, not
     capture ownership. Empty generations retain their ordinary deletion deadline.
     """
@@ -92,7 +93,7 @@ def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SE
     remaining = (end - finish).total_seconds() + MEETING_END_GRACE_SECONDS
     if finish < start or remaining <= 0:
         return timeout
-    return min(remaining, MAX_CONVERSATION_TIMEOUT_SECONDS)
+    return max(timeout, min(remaining, MAX_CONVERSATION_TIMEOUT_SECONDS))
 
 
 def resumable_continuation(

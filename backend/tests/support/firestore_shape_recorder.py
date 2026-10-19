@@ -356,7 +356,7 @@ class RecordingDocumentReference:
     def get(self, field_paths: Any = None, transaction: Any = None, **kwargs: Any) -> RecordingDocumentSnapshot:
         return RecordingDocumentSnapshot(self, self._client.documents.get(self.path))
 
-    def set(self, data: Any, merge: Any = False) -> Any:
+    def set(self, data: Any, merge: Any = False, *, timeout: float | None = None) -> Any:
         return _neutral_write_result()
 
     def create(self, data: Any) -> Any:

@@ -233,7 +233,7 @@ do not hand-edit those paths to match a specific machine.
 - `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
-- Local embeddings (opt-in): [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
+- Local embeddings: [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
@@ -293,7 +293,6 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
 - Use short names: the name sets the app name and bundle ID suffix.
 - The named bundle gets its own permissions and writable database. A full `./run.sh` install auto-seeds auth/onboarding and a one-time consistent Rewind snapshot from the shared local profile; every full or fast named-bundle launch mirrors the curated settings allowlist — including both hotkeys — from the resolved settings authority: `OMI_SETTINGS_SEED_SOURCE` if set (fail-closed when that domain is missing), else production "Omi" (`com.omi.computer-macos`) when installed, else "Omi Dev". Set `OMI_SKIP_REWIND_SEED=1` to start with an empty Rewind profile or `OMI_SKIP_SETTINGS_SEED=1` to preserve intentional bundle-local settings.
-- JIT QA: [runbook](../../backend/docs/runbooks/jit-qa-cloud-run.md).
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch, falling back to the production "Omi" session when Omi Dev's is missing (`OMI_AUTH_DUMP_SOURCE=<bundle-id>` pins a source explicitly).
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.

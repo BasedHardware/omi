@@ -1,5 +1,4 @@
 import json
-import os
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,21 +40,6 @@ def valid_note(title='Written approval', overview='The message shows approval.')
 def claim_generation_mode(monkeypatch):
     # These regression fixtures exercise the existing annotated path explicitly.
     monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    # Isolate annotation/repair regressions from the separately tested selector.
-    from dataclasses import replace
-    from config import episode_writer
-
-    configured = episode_writer.episode_writer_settings
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_SELECTION', 'compact')
-    monkeypatch.setattr(
-        episode_writer,
-        'episode_writer_settings',
-        lambda: (
-            replace(configured(), selection='compact')
-            if os.getenv('MEETING_NOTES_EPISODE_SELECTION') == 'compact'
-            else configured()
-        ),
-    )
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'default')
 
 
@@ -134,6 +118,7 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
 def test_sdk_and_backend_fallback_keep_claims_optional():
     import ast
     from pydantic import BaseModel, Field, field_validator, model_serializer
+    from pydantic.json_schema import SkipJsonSchema
     from typing import List, Literal, Optional
 
     source = Path('models/structured.py').read_text()
@@ -143,6 +128,7 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         Field=Field,
         field_validator=field_validator,
         model_serializer=model_serializer,
+        SkipJsonSchema=SkipJsonSchema,
         datetime=datetime,
         List=List,
         Literal=Literal,
@@ -150,6 +136,7 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
     )
     exec(compile(ast.Module(body=fallback, type_ignores=[]), 'structured_fallback', 'exec'), namespace)
     for model in (Structured, namespace['Structured']):
+        assert 'title_provenance' not in model.model_json_schema()['properties']
         assert 'note_claims' not in model().model_dump()
         value = model.model_validate(valid_note().model_dump(mode='json'))
         assert value.model_dump()['note_claims'][0]['provenance'] == 'written'
@@ -209,7 +196,6 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     sources = SimpleNamespace(load_people_documents=lambda *a: [], resolve_owner_identity=lambda *a: (None, ()))
     monkeypatch.setattr(wiring, 'meeting_context_sources', lambda: sources)
     monkeypatch.setattr(wiring, '_rich_meeting_context_block', lambda *a, **k: None)
-    monkeypatch.setattr(wiring, 'meeting_notes_screen_frames_context_enabled', lambda: True)
     observed = []
     image = NotesFrameImage('frame', '+00:00', 'data:image/jpeg;base64,eA==')
     monkeypatch.setattr(

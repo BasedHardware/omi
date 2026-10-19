@@ -60,7 +60,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Modules: iOS `ios/Runner/PhoneMic/` (self-healing AVAudioEngine capture; interruptions/routes recover natively); Android `android/app/src/main/kotlin/com/friend/ios/phonemic/` (AudioRecord with self-healing rebuild + silencing detection; `PhoneMicForegroundService` keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus)
 - Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` arbitrates the two stacks
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
-- Two capture modes fixed at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Selection: `CaptureController.streamRecording` (explicit or offline fallback); `omibatchphoneauto` auto-uploads on reconnect
+- Two capture modes fixed at `start(mode)`: `stream` (frames → Dart → socket/WAL) and `batch` (Transcribe Later — opus → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = `onBatchProgress`: iOS 4s healthy/1s fault, Android 1Hz; Dart 10s unchanged). Selection: `CaptureController.streamRecording` (explicit/offline); `omibatchphoneauto` uploads on reconnect
 
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
@@ -128,9 +128,8 @@ CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analy
 4. 401 responses trigger automatic refresh + retry
 
 ### Auth Methods
-- Google Sign In (`google_sign_in` package)
-- Apple Sign In (`sign_in_with_apple` package, includes PKCE via nonce+sha256)
-- Firebase Auth as the identity layer
+- Google `google_sign_in`; Apple `sign_in_with_apple` (nonce+SHA256 PKCE).
+- Firebase Auth; browser flows: [mobile auth](docs/mobile-browser-auth.md).
 
 ### Request Headers
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.

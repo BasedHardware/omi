@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "observation-counters-ready-alerts-held",
+  "grafana_import_authorized": false,
+  "rules": {
+    "omi-desktop-platform-5xx-ratio-candidate": "GMP datasource, DELTA PromQL semantics and volume threshold need live replay; no service-name or response-code label assumptions without verification.",
+    "omi-desktop-long-504-candidate": "Counter creation is prepared; post-create increments, actual resource/label domains, request-log coverage and threshold replay remain unverified.",
+    "omi-armor-storm-escalation-candidate": "Verify actual monitored_resource type and same-metric baseline/sampling first; no broad inhibition permitted."
+  },
+  "storm_inhibition": "none; existing broad backend4xx and global Armor warnings remain unchanged",
+  "route_coverage": "Only two fixed Gemini families classified by platform metric; all other request5xx count in unclassified route bucket. Complete router templates require the structured emitter contract.",
+  "automatic_metric_creation_authorized": false
+}

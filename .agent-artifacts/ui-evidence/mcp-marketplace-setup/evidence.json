@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-marketplace-preview.png",
+      "platform": "desktop-macos",
+      "description": "Named QA bundle: literal loopback fixture preview before installation. This is the initial state of the new journey, not a screenshot of the previous release.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-desktop-macos-marketplace-setup.png",
+      "platform": "desktop-macos",
+      "description": "Actual marketplace installation keeps one sheet open and hands off the exact collision-safe mcp-setup-qa-2 receipt to existing connection controls. The fixture correctly reports Needs sign-in; authentication has not started automatically.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-desktop-macos-marketplace-signed-in.png",
+      "platform": "desktop-macos",
+      "description": "Explicit Sign In completes the production OAuth client against the local DCR/PKCE/resource/code-exchange fixture. The actual UI reports one responding tool. No real integration account or customer credential was used.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-desktop-macos-marketplace-large-text.png",
+      "platform": "desktop-macos",
+      "description": "Actual named QA app at the supported 200% text size. Exact installed identity wraps and the connection actions remain available; larger content uses the native scroll view.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-desktop-macos-marketplace-large-scrolled.png",
+      "platform": "desktop-macos",
+      "description": "Native accessibility Scroll Down reaches the remaining 200% setup content and Remove action. Escape closes the sheet without removing its configuration. The QA-only text preference was restored afterward.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-desktop-macos-marketplace-clean-connected.png",
+      "platform": "desktop-macos",
+      "description": "After unlocking, clean named-app source revision 7bac42d1b6 replays actual Install to mcp-setup-qa-5, explicit loopback OAuth and one responding tool. Escape returns to Apps with the installed entry retained; production loader/client also complete qa_read. No real provider account or credential is involved.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

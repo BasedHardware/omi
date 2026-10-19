@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omi Unlimited</title>
+<style>
+  :root { --bg:#000; --surface:#1c1c1e; --surface2:#2c2c2e; --border:#38383a; --text:#fff; --text2:#aeaeb2; --text3:#8e8e93; --accent:#fff; --on:#000; --ok:#30d158; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  body { min-height:100vh; display:flex; flex-direction:column; }
+  .hero { height:calc(150px + env(safe-area-inset-top)); background:radial-gradient(circle at 70% 20%, var(--surface2), var(--bg) 70%); position:relative; overflow:hidden; }
+  .hero img { position:absolute; right:-10px; top:calc(env(safe-area-inset-top) - 10px); height:190px; }
+  .hero .bar { position:absolute; left:8px; right:20px; top:calc(env(safe-area-inset-top) + 8px); display:flex; justify-content:flex-end; }
+  .hero .bar button { background:none; border:0; color:var(--text); font:500 14px/1 inherit; padding:12px; }
+  main { flex:1; display:flex; flex-direction:column; padding:16px 24px calc(16px + env(safe-area-inset-bottom)); gap:10px; }
+  h1 { margin:0; font-size:30px; line-height:1.1; letter-spacing:-0.6px; font-weight:600; }
+  p { margin:0; color:var(--text2); font-size:16px; line-height:1.4; }
+  .eyebrow { font-size:12px; letter-spacing:1px; color:var(--text3); text-transform:uppercase; font-weight:600; }
+  .plan { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--border); border-radius:16px; background:var(--surface); cursor:pointer; }
+  .plan.selected { border:2px solid var(--accent); padding:13px 15px; }
+  .radio { width:22px; height:22px; border-radius:50%; border:1.5px solid var(--text3); flex:none; }
+  .plan.selected .radio { background:var(--accent); border-color:var(--accent); }
+  .plan .t { flex:1; }
+  .plan .title { font-size:16px; font-weight:600; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .badge { font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; background:var(--ok); color:var(--on); padding:2px 7px; border-radius:6px; }
+  .plan .sub { font-size:13px; color:var(--text2); margin-top:2px; }
+  .plan .price { text-align:right; }
+  .plan .price b { display:block; font-size:16px; font-weight:600; }
+  .plan .price span { font-size:12px; color:var(--text3); }
+  .spacer { flex:1; }
+  button.cta { height:54px; border:0; border-radius:14px; background:var(--accent); color:var(--on); font:600 17px/1 inherit; width:100%; }
+  button.cta:disabled { opacity:.35; }
+  button.text { height:54px; border:0; background:none; color:var(--text2); font:600 17px/1 inherit; width:100%; }
+  .caption { text-align:center; font-size:12px; color:var(--text3); }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <img src="/omi-with-rope-no-padding.webp" alt="" onerror="this.remove()">
+    <div class="bar"><button id="restore" type="button">Restore</button></div>
+  </div>
+  <main>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1 id="headline">Never miss a word again.</h1>
+    <p id="body">Upgrade to go unlimited.</p>
+    <div style="height:8px"></div>
+    <div class="plan" id="yearly" data-interval="year">
+      <div class="radio"></div>
+      <div class="t"><div class="title">Yearly <span class="badge" id="yearly-badge"></span></div><div class="sub" id="yearly-sub"></div></div>
+      <div class="price"><b id="yearly-price"></b><span>/ month</span></div>
+    </div>
+    <div class="plan" id="monthly" data-interval="month">
+      <div class="radio"></div>
+      <div class="t"><div class="title">Monthly</div><div class="sub" id="monthly-sub"></div></div>
+      <div class="price"><b id="monthly-price"></b><span>/ month</span></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="cta" id="cta" type="button">Upgrade to Unlimited</button>
+    <div class="caption">Cancel anytime.</div>
+    <button class="text" id="free" type="button">Use Free Plan</button>
+  </main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var selected = 'year';
+  function send(msg) {
+    var channel = window.OmiPaywall;
+    if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
+    else console.log('[OmiPaywall]', JSON.stringify(msg));
+  }
+  function money(minor, currency) {
+    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
+    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  }
+  var name = q.get('name');
+  if (name) document.getElementById('eyebrow').textContent = 'For ' + name;
+  var freeMinutes = parseInt(q.get('free_minutes') || '0', 10);
+  if (freeMinutes > 0) document.getElementById('body').textContent = 'Your plan includes ' + freeMinutes + ' free minutes per month. Upgrade to go unlimited.';
+
+  var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
+  var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
+  var yc = q.get('year_currency'), mc = q.get('month_currency');
+  if (year != null) {
+    document.getElementById('yearly-price').textContent = money(Math.round(year / 12), yc);
+    document.getElementById('yearly-sub').textContent = money(year, yc) + ' · Yearly';
+    if (month) { var pct = Math.round((1 - year / (month * 12)) * 100); if (pct > 0) document.getElementById('yearly-badge').textContent = 'Save ~' + pct + '%'; else document.getElementById('yearly-badge').classList.add('hidden'); }
+    else document.getElementById('yearly-badge').classList.add('hidden');
+  } else { document.getElementById('yearly').classList.add('hidden'); selected = 'month'; }
+  if (month != null) {
+    document.getElementById('monthly-price').textContent = money(month, mc);
+    document.getElementById('monthly-sub').textContent = money(month, mc) + ' · Monthly';
+  } else document.getElementById('monthly').classList.add('hidden');
+  if (year == null && month == null) { document.getElementById('cta').disabled = true; document.getElementById('body').textContent = 'Unable to load plans'; }
+
+  function render() {
+    ['yearly', 'monthly'].forEach(function (id) {
+      var el = document.getElementById(id);
+      el.classList.toggle('selected', el.dataset.interval === selected);
+    });
+  }
+  ['yearly', 'monthly'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', function () { selected = this.dataset.interval; render(); });
+  });
+  document.getElementById('cta').addEventListener('click', function () {
+    this.disabled = true;
+    send({ type: 'checkout', interval: selected });
+  });
+  document.getElementById('free').addEventListener('click', function () { send({ type: 'free' }); });
+  document.getElementById('restore').addEventListener('click', function () { send({ type: 'restore' }); });
+  window.OmiPaywallHost = {
+    onCheckout: function (outcome) { document.getElementById('cta').disabled = false; },
+    onRestore: function () {}
+  };
+  render();
+  send({ type: 'ready' });
+})();
+</script>
+</body>
+</html>

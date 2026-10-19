@@ -34,6 +34,7 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
     assert conversation.get_person_ids() == ['correct']
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *a, **k: 'Owner')
     monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: nullcontext())
     prompts = []

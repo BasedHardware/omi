@@ -87,6 +87,9 @@ struct DesktopHomeView: View {
   @State private var chatFirstCapability = ChatFirstCapabilitySample()
   /// EXP-002 arm state; the body gate holds the shell until it resolves.
   @ObservedObject private var desktopExperiment = DesktopExperimentCoordinator.shared
+  /// App-scheme item links (`<scheme>://items?…`, `<scheme>://task/<id>`, …).
+  /// Consumed only here, inside the signed-in shell.
+  @ObservedObject private var itemLinks = ItemLinkPresenter.shared
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -1142,6 +1145,18 @@ struct DesktopHomeView: View {
       .overlay {
         // Goal completion celebration overlay
         GoalCelebrationView()
+      }
+      .sheet(item: $itemLinks.sheet) { state in
+        ItemLinkListSheet(
+          state: state,
+          onOpen: { itemLinks.open($0) },
+          onDismiss: { itemLinks.dismiss() }
+        )
+      }
+      .task(id: itemLinks.pendingGeneration) {
+        // Runs on mount too, so a link received at cold launch or while
+        // signed out resolves once this signed-in shell exists.
+        await itemLinks.consumePending()
       }
       .overlay(alignment: .bottom) {
         // One-time rating ask, due after the user's 3rd question. Remote

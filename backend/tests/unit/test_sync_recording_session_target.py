@@ -270,8 +270,9 @@ def test_live_bound_mixed_wal_drops_one_near_exact_repeat_and_keeps_new_speech(m
 
 
 @pytest.mark.parametrize('skew', [1, 30])
-def test_flag_on_keeps_short_repeat_that_coverage_cannot_prove(skew):
+def test_flag_on_keeps_short_repeat_that_coverage_cannot_prove(skew, monkeypatch):
     """The default-on conservative rule never drops a 7-token line it cannot prove."""
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
     store = StrictFirestore()
     original = live_row()
     store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)

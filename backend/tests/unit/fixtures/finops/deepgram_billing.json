@@ -1,0 +1,10 @@
+{
+  "start": "2026-04-01",
+  "end": "2026-04-01",
+  "resolution": {"units": "day", "amount": 1},
+  "results": [
+    {"dollars": 0.25, "grouping": {"start": "2026-04-01", "end": "2026-04-01", "line_item": "streaming::nova-3"}},
+    {"dollars": 0.10, "grouping": {"start": "2026-04-01", "end": "2026-04-01", "line_item": "sync::nova-3"}},
+    {"dollars": 0.50, "grouping": {"start": "2026-04-01", "end": "2026-04-01", "line_item": "sync::aura-2"}}
+  ]
+}
