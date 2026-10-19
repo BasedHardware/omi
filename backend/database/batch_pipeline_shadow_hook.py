@@ -13,9 +13,14 @@ from typing import Iterable
 logger = logging.getLogger(__name__)
 
 
+def _shadow_mode() -> bool:
+    # Store-selection infrastructure config, not per-unit policy (baselined in the batch-stage env ratchet).
+    return os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() == 'shadow'
+
+
 def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
     """After a commit outside ``Store.run``: re-copy ``keys`` [(table, key)] to the shadow. Never raises."""
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or namespace == 'batch_pipeline_prod':
+    if not _shadow_mode() or namespace == 'batch_pipeline_prod':
         return
     try:
         import database.jobstore.dual_store as dual_store
@@ -31,7 +36,7 @@ def shadow_from_env(primary):
     In shadow mode it defers to ``database.jobstore.dual_store.shadow_from_env`` (which still refuses prod,
     a missing setting or a missing driver); any failure there keeps the plain primary.
     """
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow':
+    if not _shadow_mode():
         return primary
     try:
         import database.jobstore.dual_store as dual_store
