@@ -2,12 +2,12 @@
   "schema_version": 1,
   "id": "FC-durable-queue-outlives-executable-work",
   "violated_contract": "A durable per-owner pending registry must not serialize expired ephemeral jobs through full worker dispatches, preventing executable work from reaching the owner.",
-  "canonical_prevention": "Before dispatch, prove raw job-key absence under the per-job run lock, transactionally retire only exact unbound pending work and release its claim, and continue within a bounded retirement budget. Reconcile dispatching owners with the same fences; preserve flag-off behavior and measure retirement separately from transcription success.",
+  "canonical_prevention": "Before dispatch, prove raw job-key absence under the per-job run lock, transactionally retire only exact unbound pending work and release its claim, and continue within a bounded retirement budget. Reconcile dispatching owners with the same fences; preserve flag-off behavior and measure retirement separately from transcription success. Dormant since legacy-retire C10 (lr/10-delete-c10v2) deleted the legacy path this class guarded; the legacy-dark fence (test_legacy_dark.py) answers its remaining traffic.",
   "canonical_prevention_artifact": [
-    "backend/tests/unit/test_sync_backfill_uid_sequencer.py",
-    "backend/tests/integration/test_sync_backfill_retirement_emulator.py"
+    "backend/tests/unit/test_legacy_dark.py"
   ],
   "evidence_prs": [],
   "scope_hints": ["backend/database/sync_backfill_sequencer.py", "backend/utils/sync/uid_sequencer.py"],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-10-19T17:37:30Z"
 }
