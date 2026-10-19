@@ -499,6 +499,51 @@ def test_rendered_state_file_must_exist_and_have_services(checker, tmp_path: Pat
         checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=bad)
 
 
+def test_rendered_state_drops_omitted_provisional_bindings(checker, tmp_path: Path) -> None:
+    # The renderer omits a provisional env_var that was unset at deploy time; the
+    # exact rendered state must not inherit that key as a name-only requirement.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {
+                                'ALWAYS_THERE': {'value': 'a'},
+                                'PROVISIONAL_THING': {
+                                    'env_var': 'PROVISIONAL_THING_FOR_TEST',
+                                    'provisional': True,
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    rendered = tmp_path / 'state.json'
+    rendered.write_text(
+        json.dumps({'services': {'backend': {'env': [{'name': 'ALWAYS_THERE', 'value': 'a'}]}}}), encoding='utf-8'
+    )
+    _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
+    assert expected['backend'] == {'ALWAYS_THERE': checker.value_hash('value', 'a')}
+    # Without rendered state the provisional binding stays a name-only expectation.
+    _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path)
+    assert expected['backend']['PROVISIONAL_THING'] is None
+    # And a serving env that never received it reports clean against exact state.
+    state = {'services': {'backend': {'env': [{'name': 'ALWAYS_THERE', 'value': 'a'}]}}}
+    _, _, (result,) = checker.inspect_services_drift(
+        env='prod', services=('backend',), manifest_path=path, rendered_state_path=rendered, cloud_run_state=state
+    )
+    assert result.status == 'OK'
+    assert result.missing_from_live == ()
+
+
 def test_reports_never_print_values_and_redact_sensitive_hashes(checker, tmp_path: Path, capsys) -> None:
     manifest_path = _two_service_manifest(tmp_path)
     state = _replay_state(serving_env=_sync_env(queue=OPERATOR_QUEUE, repair='false', uid_allowlist=SENSITIVE_UID))
@@ -616,6 +661,19 @@ def test_render_failure_returns_render_error_code(checker, tmp_path: Path, capsy
         checker.main(['--manifest', str(manifest_path), '--rendered-state', str(tmp_path / 'nope.json'), '--strict'])
         == 2
     )
+
+
+def test_offline_state_load_failures_are_operational(checker, tmp_path: Path, capsys) -> None:
+    manifest_path = _two_service_manifest(tmp_path)
+    assert (
+        checker.main(['--manifest', str(manifest_path), '--cloud-run-state', str(tmp_path / 'nope.json'), '--strict'])
+        == 2
+    )
+    bad = tmp_path / 'bad_state.json'
+    bad.write_text('{', encoding='utf-8')
+    assert checker.main(['--manifest', str(manifest_path), '--cloud-run-state', str(bad), '--strict']) == 2
+    assert 'could not render expected state' in capsys.readouterr().err
+    assert checker.main(['--manifest', str(manifest_path), '--cloud-run-state', str(tmp_path / 'nope.json')]) == 0
 
 
 def test_no_cloud_run_requires_a_gke_target(checker) -> None:
@@ -828,6 +886,98 @@ def test_gke_envfrom_reference_drift_is_flagged(checker) -> None:
     )
     assert result.envfrom_mismatched_refs == ('prod-omi-backend-config', 'prod-omi-someone-elses-config')
     assert result.status == 'DRIFT'
+
+
+def test_gke_envfrom_prefix_is_part_of_the_reference(checker) -> None:
+    # A prefixed envFrom source yields X_KEY, not KEY: both the reference
+    # identity and the expanded key names must carry the prefix.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+    prefixed = [{'prefix': 'CFG_', 'configMapRef': {'name': cm_name}}]
+
+    def run(envfrom: list[dict]):
+        gke_state = {
+            'configmaps': {cm_name: {'data': cm_data}},
+            'pusher': {
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                },
+                'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+        )
+        return result
+
+    prefixed_result = run(prefixed)
+    # The chart declares the unprefixed reference; the symmetric difference flags both.
+    assert prefixed_result.envfrom_mismatched_refs == (cm_name, f'{cm_name}#CFG_')
+    assert prefixed_result.status == 'DRIFT'
+    assert prefixed_result.missing_from_live  # CFG_-prefixed names are absent from the unprefixed expectations
+    # Sanity: the same fixture without the prefix is OK (covered fully below).
+    unprefixed = run([{'configMapRef': {'name': cm_name}}])
+    assert unprefixed.status == 'OK'
+
+
+def test_gke_live_envfrom_data_is_unproven_and_reports_inventory(checker) -> None:
+    # Live reads cannot prove the current ConfigMap data matches what running
+    # pods resolved at container start; keys must not be asserted (P1).
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    cm_doc = {'data': {'GOOGLE_CLIENT_ID': 'id'}}
+    calls: list[list[str]] = []
+
+    def runner(argv, **_kwargs):
+        calls.append(argv)
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(cm_doc), stderr='')
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unproven == ('prod-omi-backend-config',)
+    assert result.status == 'INVENTORY'
+    assert result.missing_from_live == ()  # envFrom keys not asserted against unproven data
+    assert result.value_mismatches == ()
+    assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
 
 
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
