@@ -15,7 +15,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
     canonical callback still takes its normal snapshot and publication fences;
     transferring metadata is never a summary/provider completion receipt.
     """
-    from utils.sync import reprocess
+    from utils.enrichment import outbox as reprocess
 
     client = reprocess.get_firestore_client()
     source = client.collection(reprocess.COLLECTION).document(document_id)
