@@ -132,6 +132,151 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  Map<String, dynamic> oauthRegistration(String id) =>
+      {'app_id': id, 'requires_oauth': true, 'auth_url': 'https://provider.test/auth-$id'};
+
+  Future<void> editUrl(WidgetTester tester, String url) async {
+    await tester.enterText(find.byType(TextFormField).at(2), url);
+    await tester.pump();
+  }
+
+  testWidgets('a URL edited while the browser launch is pending never polls the earlier server', (tester) async {
+    final reads = <String>[];
+    browser.pending = Completer<bool>();
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) async => oauthRegistration('server-a'),
+            appDetailsLoader: (id) async {
+              reads.add(id);
+              return {'status': 'pending_mcp_auth'};
+            },
+            probeTimeout: const Duration(seconds: 1),
+            waitTimeout: const Duration(seconds: 5)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(browser.launches.map((l) => l.$1), ['https://provider.test/auth-server-a']);
+
+    await editUrl(tester, 'https://other.example.test/mcp');
+    browser.pending!.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(reads, isEmpty, reason: 'the form shows B; nothing may poll A');
+    expect(tester.widget<OmiButton>(find.widgetWithText(OmiButton, 'Connect')).onPressed, isNotNull);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a cached-registration retry retires with its URL while the browser launch is pending', (tester) async {
+    var creates = 0;
+    final reads = <String>[];
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) async {
+              creates++;
+              return oauthRegistration('server-a');
+            },
+            appDetailsLoader: (id) async {
+              reads.add(id);
+              return {'status': 'pending_mcp_auth'};
+            },
+            probeTimeout: const Duration(milliseconds: 200),
+            waitTimeout: const Duration(seconds: 1)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    final readsAfterFirstWait = reads.length;
+    expect(readsAfterFirstWait, greaterThan(0));
+
+    browser.pending = Completer<bool>();
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    expect(creates, 1, reason: 'the retry reuses the registration made for this URL');
+    expect(browser.launches, hasLength(2));
+
+    await editUrl(tester, 'https://other.example.test/mcp');
+    browser.pending!.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(reads.length, readsAfterFirstWait, reason: 'the retired retry must not start polling');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a URL edited while the direct detail read is pending never navigates', (tester) async {
+    final read = Completer<Map<String, dynamic>?>();
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) async => {'app_id': 'server-a', 'requires_oauth': false},
+            appDetailsLoader: (_) => read.future));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await editUrl(tester, 'https://other.example.test/mcp');
+    read.complete({
+      'id': 'server-a',
+      'name': 'Synthetic MCP',
+      'author': 'Omi',
+      'description': 'Fixture',
+      'image': '',
+      'capabilities': <String>[],
+      'category': 'utilities',
+      'status': 'approved',
+      'enabled': true,
+    });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(AddMcpServerPage), findsOneWidget);
+    expect(find.byType(AppDetailPage), findsNothing);
+    expect(tester.widget<OmiButton>(find.widgetWithText(OmiButton, 'Connect')).isLoading, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('returning A to B to A does not resurrect the old attempt; an explicit retry reuses A', (tester) async {
+    var creates = 0;
+    final reads = <String>[];
+    browser.pending = Completer<bool>();
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) async {
+              creates++;
+              return oauthRegistration('server-a');
+            },
+            appDetailsLoader: (id) async {
+              reads.add(id);
+              return {'status': 'pending_mcp_auth'};
+            },
+            probeTimeout: const Duration(seconds: 1),
+            waitTimeout: const Duration(seconds: 5)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await editUrl(tester, 'https://other.example.test/mcp');
+    await editUrl(tester, 'https://mcp.example.test/mcp');
+    browser.pending!.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(reads, isEmpty, reason: 'the first attempt was retired by the edit, not paused');
+
+    browser.pending = null;
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(creates, 1, reason: 'the registration stays keyed to URL A');
+    expect(reads, ['server-a'], reason: 'the explicit retry owns A and polls it');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('malformed MCP creation never claims success and releases the button', (tester) async {
     await pump(tester, AddMcpServerPage(addServer: (name, url, {description}) async => {'requires_oauth': false}));
     await tester.tap(find.widgetWithText(OmiButton, 'Connect'));

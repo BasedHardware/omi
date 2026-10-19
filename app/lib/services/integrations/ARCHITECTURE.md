@@ -15,9 +15,14 @@ cannot leave timers or publish after their owner is cleared/disposed.
 Marketplace app-detail setup uses the page's `app_setup_owner.dart` part: one
 probe, one wait and a separate install receipt. MCP setup uses the same wait
 policy and requires an approved, identity-matching server record before reporting
-connection. A registration and its authorization belong to the URL submitted for
-them: a response for a URL the user has since edited never launches, and editing
-the URL stops waiting on the old server, so a retry never reopens another server. Native task selection is saved only after a confirmed grant. Each
+connection. Each Connect press is one attempt with an immutable submitted URL,
+account and generation; every await in it (registration, browser launch, detail
+read, wait) rechecks that it still owns the page before polling, navigating,
+showing an error or changing the loading state. Editing the URL retires the whole
+attempt, including a pending browser launch, so a late launch receipt never polls
+the earlier server, and returning to that URL does not revive it. The registration
+stays keyed to its own URL and account, so only an explicit new Connect on that URL
+reuses it. Native task selection is saved only after a confirmed grant. Each
 task selection owns its whole attempt from before its first await: confirmation
 dialog, URL lookup and browser launch, polling and the default save. A newer
 selection, a departed page or an account change retires it, so a late launch
@@ -29,4 +34,5 @@ and failed-launch retry; embedded Google OAuth/user-agent spoofing is retired.
 
 No timer, presentation widget or SDK launch callback may assert a saved grant.
 Regression coverage: `test/services/integrations/`, the integration provider
-suites, `app_install_flow_test.dart` and `android_hanging_flows_test.dart`.
+suites, `app_install_flow_test.dart`, `android_hanging_flows_test.dart` and
+`mcp_connection_recovery_test.dart` (held browser-launch, cached-retry and detail-read Futures).

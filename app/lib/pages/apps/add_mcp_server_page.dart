@@ -43,6 +43,22 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   String? _authUrl;
   String? _submittedUid;
 
+  /// The one connect attempt allowed to act on this page. Each Connect press mints a
+  /// new one; editing the URL, an account change or disposal retires it. Every await
+  /// in an attempt rechecks [_owns] before it polls, navigates, shows an error or
+  /// touches the loading state, so a retired attempt can never act for the URL the
+  /// form shows now, and returning to its URL does not bring it back.
+  _ConnectAttempt? _attempt;
+  int _attemptGeneration = 0;
+
+  _ConnectAttempt _beginAttempt(String url, String uid) => _attempt = _ConnectAttempt(++_attemptGeneration, url, uid);
+
+  bool _owns(_ConnectAttempt attempt) =>
+      mounted &&
+      identical(_attempt, attempt) &&
+      SharedPreferencesUtil().uid == attempt.uid &&
+      _urlController.text.trim() == attempt.url;
+
   @override
   void initState() {
     super.initState();
@@ -51,15 +67,25 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   }
 
   /// A registration and its authorization belong to the URL they were made for.
-  /// Editing the URL away from it stops waiting on that server; the registration
-  /// stays keyed to its own URL, so only returning to that exact URL reuses it.
+  /// Editing the URL away from the attempt's URL retires the whole attempt: its
+  /// pending registration, browser launch, detail read and wait. The registration
+  /// stays keyed to its own URL, so only an explicit Connect on that exact URL reuses it.
   void _serverChanged() {
-    final submitted = _submittedUrl;
-    if (submitted == null || _urlController.text.trim() == submitted) return;
-    if (_connectionWait == null && !_isPolling) return;
+    final attempt = _attempt;
+    if (attempt == null || _urlController.text.trim() == attempt.url) return;
+    _retireAttempt();
+  }
+
+  void _retireAttempt() {
+    _attempt = null;
     _connectionWait?.cancel();
     _connectionWait = null;
-    if (_isPolling && mounted) setState(() => _isPolling = false);
+    if (mounted && (_isPolling || _isLoading)) {
+      setState(() {
+        _isPolling = false;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -72,6 +98,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     _nameController.dispose();
     _urlController.dispose();
     _descriptionController.dispose();
+    _attempt = null;
     _connectionWait?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -80,25 +107,26 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   Future<void> _connect() async {
     if (_isLoading || _isPolling || !_formKey.currentState!.validate()) return;
     final uid = SharedPreferencesUtil().uid;
-    if (_submittedUid != null && _submittedUid != SharedPreferencesUtil().uid) {
-      _connectionWait?.cancel();
+    if (_submittedUid != null && _submittedUid != uid) {
+      _retireAttempt();
       _appId = null;
       _authUrl = null;
       _submittedUrl = null;
     }
-    if (_appId != null && _submittedUrl == _urlController.text.trim()) {
-      if (_authUrl != null &&
-          !await launchIntegrationOAuth(() async => _authUrl,
-              isCurrent: () => mounted && SharedPreferencesUtil().uid == uid)) {
-        if (mounted && SharedPreferencesUtil().uid == uid) _showError(context.l10n.mcpConnectionFailed);
+    // Own the submission before awaiting: everything that follows belongs to this
+    // URL and account, not to whatever the field holds when a response arrives.
+    final url = _urlController.text.trim();
+    final attempt = _beginAttempt(url, uid);
+    if (_appId != null && _submittedUrl == url) {
+      // An explicit retry on the URL the registration was made for reuses it.
+      final authUrl = _authUrl;
+      if (authUrl != null && !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
+        if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
         return;
       }
-      if (mounted && SharedPreferencesUtil().uid == uid) _startPollingForCompletion();
+      if (_owns(attempt)) _startPollingForCompletion(attempt);
       return;
     }
-    // Own the submission before awaiting: the response belongs to this URL, not
-    // to whatever the field holds when it arrives.
-    final url = _urlController.text.trim();
     setState(() => _isLoading = true);
     try {
       final result = await widget
@@ -106,54 +134,56 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
           .timeout(const Duration(seconds: 45));
       if (!mounted || SharedPreferencesUtil().uid != uid) return;
       if (result == null || result['error'] != null) {
-        _showError(result?['error'] is String ? result!['error'] as String : context.l10n.mcpConnectionFailed);
+        if (_owns(attempt)) {
+          _showError(result?['error'] is String ? result!['error'] as String : context.l10n.mcpConnectionFailed);
+        }
         return;
       }
       final id = result['app_id'];
       if (id is! String || id.isEmpty || result['requires_oauth'] is! bool) {
-        _showError(context.l10n.mcpConnectionFailed);
+        if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
         return;
       }
+      // The server registered this URL for this account even if the attempt was
+      // retired meanwhile; keep it keyed to that URL for an explicit retry.
       _appId = id;
       _submittedUrl = url;
       _submittedUid = uid;
       final authUrl = result['auth_url'];
       _authUrl = result['requires_oauth'] == true && authUrl is String ? authUrl : null;
-      // The user moved on to another server while this one registered.
-      if (_urlController.text.trim() != url) return;
+      if (!_owns(attempt)) return;
       if (result['requires_oauth'] == true) {
-        if (authUrl is! String ||
-            !await launchIntegrationOAuth(() async => authUrl,
-                isCurrent: () => mounted && SharedPreferencesUtil().uid == uid)) {
-          if (mounted) _showError(context.l10n.mcpConnectionFailed);
+        if (authUrl is! String || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
+          if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
           return;
         }
-        if (mounted && SharedPreferencesUtil().uid == uid) _startPollingForCompletion();
+        if (_owns(attempt)) _startPollingForCompletion(attempt);
       } else {
-        await _navigateToAppDetail(id, uid);
+        await _navigateToAppDetail(id, attempt);
       }
     } catch (_) {
-      if (mounted && SharedPreferencesUtil().uid == uid) _showError(context.l10n.mcpConnectionFailed);
+      if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      // A retired attempt already released the button, and a newer one owns it now;
+      // the current attempt releases it even when its account has changed.
+      if (mounted && identical(_attempt, attempt)) setState(() => _isLoading = false);
     }
   }
 
-  void _startPollingForCompletion() {
+  void _startPollingForCompletion(_ConnectAttempt attempt) {
     final id = _appId;
-    if (id == null || !mounted) return;
+    if (id == null || !_owns(attempt)) return;
     _connectionWait?.cancel();
     _readyApp = null;
-    final uid = SharedPreferencesUtil().uid;
     setState(() => _isPolling = true);
     late final ConnectionWait wait;
     wait = ConnectionWait(
-      isCurrent: () => mounted && _appId == id && SharedPreferencesUtil().uid == uid,
+      isCurrent: () => _owns(attempt) && _appId == id,
       probeTimeout: widget.probeTimeout,
       waitTimeout: widget.waitTimeout,
       probe: () async {
         final data = await widget.appDetailsLoader(id);
-        if (!mounted || !wait.isActive || _appId != id || SharedPreferencesUtil().uid != uid) {
+        if (!wait.isActive || !_owns(attempt) || _appId != id) {
           return ConnectionProbe.pending;
         }
         if (data == null) return ConnectionProbe.failed;
@@ -170,7 +200,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     );
     _connectionWait = wait;
     unawaited(wait.start().then((outcome) {
-      if (!mounted || !identical(_connectionWait, wait)) return;
+      if (!identical(_connectionWait, wait) || !_owns(attempt)) return;
       setState(() => _isPolling = false);
       if (outcome == ConnectionWaitOutcome.connected && _readyApp != null) {
         _showConnectedApp(_readyApp!);
@@ -180,9 +210,9 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     }));
   }
 
-  Future<void> _navigateToAppDetail(String id, String uid) async {
+  Future<void> _navigateToAppDetail(String id, _ConnectAttempt attempt) async {
     final data = await widget.appDetailsLoader(id).timeout(widget.probeTimeout);
-    if (!mounted || SharedPreferencesUtil().uid != uid) return;
+    if (!_owns(attempt)) return;
     if (data == null) {
       _showError(context.l10n.mcpConnectionFailed);
       return;
@@ -286,4 +316,12 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       ),
     );
   }
+}
+
+/// One Connect press: the URL and account it was made for, and its place in order.
+class _ConnectAttempt {
+  _ConnectAttempt(this.generation, this.url, this.uid);
+  final int generation;
+  final String url;
+  final String uid;
 }
