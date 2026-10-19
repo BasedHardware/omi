@@ -1,0 +1,52 @@
+# Staging ops values (B4), contract (i). Mirrors prod.yaml; the differences are
+# names (the `-staging` services and `staging-` queues in based-hardware-dev)
+# and the bounded backfill controller, which staging does not run.
+# test_config_train.py asserts every prod key has a staging counterpart.
+schema: omi.ops/v1
+environment: staging
+project: based-hardware-dev
+region: us-central1
+
+cloud_run:
+  backend-sync-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
+      SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+    max_instances: 80
+    min_instances: 1
+  backend-sync-backfill-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-backfill-fresh
+      SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+    max_instances: {owner: none, floor: 8, ceiling: 40}
+  backend-integration-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
+    min_instances: 1
+
+cloud_tasks:
+  staging-batch-quarantine-recovery:
+    max_concurrent_dispatches: 16
+    max_dispatches_per_second: 8
+    max_attempts: 5
+    min_backoff: 5s
+    max_backoff: 60s
+  staging-sync-jobs-fresh:
+    max_concurrent_dispatches: 160
+    max_dispatches_per_second: 25
+    max_attempts: 10
+    min_backoff: 60s
+    max_backoff: 300s
+    log_sampling_ratio: 1.0
+  staging-sync-backfill-fresh:
+    max_concurrent_dispatches: 90
+    max_dispatches_per_second: 15
+    min_backoff: 5s
+    max_backoff: 60s
+    log_sampling_ratio: 1.0
+  staging-enrichment:
+    max_concurrent_dispatches: 50
+    max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s

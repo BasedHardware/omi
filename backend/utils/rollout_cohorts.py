@@ -26,6 +26,7 @@ from config.rollout_cohorts import (
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
+from utils.rollout.runtime_percent import configure_runtime_percent
 
 TTL_SECONDS = 60
 MAX_USERS = 4096
@@ -169,3 +170,5 @@ def configure_rollout_runtime() -> None:
     policy.configure_resolvers(
         _in_rollout_cohort, _rollout_cohort_members, _load_rollout_cohorts, _warm_rollout_cohorts
     )
+    # Runtime percents and legacy_sync (`rollout_cohorts/_ramp`, contract (f)) bind with the cohorts.
+    configure_runtime_percent()

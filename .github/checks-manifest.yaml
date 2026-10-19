@@ -1776,6 +1776,8 @@ exempt:
     reason: "runtime promotion gate invoked by desktop_backend_auto_dev.yml; contract and fixtures are desktop-backend-traffic-lineage-fixtures"
   - path: ".github/scripts/check_desktop_backend_drift.py"
     reason: "runtime promotion reporter invoked by desktop_promote_prod.yml; contract and fixtures are desktop-backend-drift-*"
+  - path: "backend/scripts/check_release_tree.py"
+    reason: "runtime promotion gate invoked by gcp_diarizer.yml worker digest promotion and the M3 train pre-check; fixtures are backend/tests/unit/test_check_release_tree.py"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
