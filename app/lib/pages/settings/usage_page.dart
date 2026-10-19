@@ -19,6 +19,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
@@ -727,6 +728,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 ],
               ],
               if (stats != null) ..._buildAllowanceMeters(provider.subscription),
+              const HeldAudioUsageSection(),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),

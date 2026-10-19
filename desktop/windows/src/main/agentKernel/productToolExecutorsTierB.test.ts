@@ -536,9 +536,7 @@ describe('Tier-B tools are registered + serviceable', () => {
     'get_goals',
     'get_work_context',
     'get_daily_recap',
-    'save_knowledge_graph',
-    'get_jit_knowledge',
-    'query_jit_history'
+    'save_knowledge_graph'
   ]
 
   it('every Tier-B tool is in the default registry and the serviceable allowlist', () => {

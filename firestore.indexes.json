@@ -3045,6 +3045,24 @@
       ]
     },
     {
+      "collectionGroup": "stt_cap_holds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "listed_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "review_proposals",
       "queryScope": "COLLECTION",
       "fields": [
@@ -3942,24 +3960,6 @@
         },
         {
           "fieldPath": "month",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "conversations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folder_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "discarded",
           "order": "ASCENDING"
         },
         {

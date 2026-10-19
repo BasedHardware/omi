@@ -1,7 +1,6 @@
 name: Auto Deploy Day 3 Re-engagement Email Job to Development
 
-# Mirrors gcp_daily_memory_sweep_job_auto_dev.yml, minus the LLM-gateway
-# serving gate and VPC lane probe: this job makes no model call.
+# This job makes no model call; the email body is a fixed template.
 
 on:
   workflow_run:

@@ -30,6 +30,13 @@ void main() {
       expect(PaywallExperiment.parse(variant: 'outline', payload: 'not json').variant, PaywallVariant.outline);
     });
 
+    test('trial reads the onboarding placement like outline', () {
+      expect(PaywallExperiment.parse(variant: 'trial').variant, PaywallVariant.trial);
+      expect(PaywallExperiment.parse(variant: 'trial').onboardingPaywall, isFalse);
+      expect(
+          PaywallExperiment.parse(variant: 'trial', payload: {'onboarding_paywall': true}).onboardingPaywall, isTrue);
+    });
+
     test('web needs an https URL, otherwise control', () {
       final ok = PaywallExperiment.parse(variant: 'web', payload: {'url': 'https://omi-paywall.vercel.app/'});
       expect(ok.variant, PaywallVariant.web);

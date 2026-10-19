@@ -237,10 +237,12 @@ async def test_fatal_gpu_restarts_without_fail_or_attempt_charge_then_fresh_work
 
 
 @pytest.mark.asyncio
-async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch):
+@pytest.mark.parametrize('dispatch', [False, True])
+async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch, dispatch):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     calls = []
 
     def authorize(leases):

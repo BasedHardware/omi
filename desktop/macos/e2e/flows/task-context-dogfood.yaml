@@ -1,7 +1,7 @@
 version: 2
 name: task-context-dogfood
 tier: manual
-description: Retained task binding, screen extraction and Rewind privacy after legacy context proactivity retirement
+description: Retained task binding, screen extraction and Rewind privacy
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AsyncFirstResolved.swift
@@ -9,9 +9,6 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskDeduplicationService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPrioritizationService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+RewindCapture.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerMirrorSnapshot.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/EnvironmentalSpeakerContext.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift

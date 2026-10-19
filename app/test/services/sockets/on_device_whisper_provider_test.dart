@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_engine.dart';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -35,7 +36,7 @@ void main() {
     });
   });
 
-  group('OnDeviceWhisperProvider.audioDurationSeconds', () {
+  group('pcmWavDurationSeconds', () {
     // Regression: transcribe() derived the segment duration from the whole
     // WAV buffer length divided by a hardcoded 32000 (16000 Hz * 2 bytes).
     // The buffer is a WAV container, so the 44-byte header was counted as
@@ -54,18 +55,18 @@ void main() {
     test('uses the WAV sample rate and excludes the 44-byte header', () {
       // 16000 Hz, 16-bit mono => 32000 bytes per second.
       final bytes = wav(sampleRate: 16000, pcmBytes: 32000);
-      expect(OnDeviceWhisperProvider.audioDurationSeconds(bytes), closeTo(1.0, 0.001));
+      expect(pcmWavDurationSeconds(bytes), closeTo(1.0, 0.001));
     });
 
     test('reports an 8 kHz WAV at its real length, not half', () {
       // 8000 Hz, 16-bit mono => 16000 bytes per second.
       final bytes = wav(sampleRate: 8000, pcmBytes: 16000);
-      expect(OnDeviceWhisperProvider.audioDurationSeconds(bytes), closeTo(1.0, 0.001));
+      expect(pcmWavDurationSeconds(bytes), closeTo(1.0, 0.001));
     });
 
     test('falls back to 16 kHz for non-WAV input', () {
       final raw = Uint8List(32000);
-      expect(OnDeviceWhisperProvider.audioDurationSeconds(raw), closeTo(1.0, 0.001));
+      expect(pcmWavDurationSeconds(raw), closeTo(1.0, 0.001));
     });
   });
 }

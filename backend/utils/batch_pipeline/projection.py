@@ -4,7 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.batch_pipeline import (
     authoritative_labels_enabled,
     require_live_target_enabled,
@@ -30,6 +30,7 @@ from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,8 @@ class Projector:
                         raise
                     # A receipt is assignment progress, not completion. Resume
                     # every post-persist obligation after losing the empty race.
+                except SyncAssignmentSuperseded:
+                    self.supersede(session)
             else:
                 with projection_phase('assignment'):
                     self.assign_parts(item, entry, binding, finish=finish)
@@ -421,6 +424,8 @@ class Projector:
                     record_labels(assigned[2])
             except ProjectionReplay as replay:
                 receipt = replay.receipt
+            except SyncAssignmentSuperseded:
+                receipt = self.supersede(session)
             except Exception as error:
                 if projection_contention_enabled():
                     logger.error(
@@ -429,6 +434,17 @@ class Projector:
                 raise
             if finish:
                 self.finish_part(item, binding, receipt, index)
+
+    def supersede(self, session):
+        # Assignment wrote no content. Recheck binding, ledger ownership, ordering
+        # and privacy in a fresh transaction before acknowledging this part. A
+        # competing assignment receipt wins; never replace it with a no-op.
+        try:
+            receipt = session.persist_empty(superseded=True)
+        except ProjectionReplay as replay:
+            return replay.receipt
+        logger.info('event=batch_projection action=assignment outcome=superseded')
+        return receipt
 
     def finish_part(self, item, binding, receipt, index):
         if receipt['state'] == 'ready':

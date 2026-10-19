@@ -27,9 +27,12 @@ Future<void> capture(WidgetTester tester, String name) async {
   await tester.pump(const Duration(milliseconds: 50));
   InlineSpan productFont(InlineSpan span) {
     if (span is! TextSpan) return span;
+    final style = span.style ?? const TextStyle();
     return TextSpan(
       text: span.text,
-      style: (span.style ?? const TextStyle()).copyWith(fontFamily: span.style?.fontFamily ?? 'SF Pro Display'),
+      // Keep package icon fonts intact: copying their already-qualified fontFamily
+      // would apply the package prefix a second time.
+      style: style.fontFamily == null ? style.copyWith(fontFamily: 'SF Pro Display') : style,
       children: span.children?.map(productFont).toList(),
       recognizer: span.recognizer,
       semanticsLabel: span.semanticsLabel,

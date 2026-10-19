@@ -119,6 +119,14 @@ existing job error taxonomy. Copy/checkpoint failures also retain retry behavior
 Donor retraction that collides with the account destructive-operation gate is
 deferred and converges on a later append; it does not fail the accepted chunk.
 
+Batch projection uses the same terminal assignment outcome: a metadata-only ready
+receipt records `disposition=superseded`, contributes zero content speech usage,
+and advances the ordered cursor only after the final part. Successful parts and
+siblings retain their own receipts and usage. The content ledger completes with
+zero errors and `superseded_segments`, without returning IDs for rejected parts.
+Settlement rechecks the existing privacy, deletion, binding and ledger fences;
+privacy revocation remains owned by erasure, not by this acknowledgment.
+
 ## Speaker identity
 
 Speaker IDs are conversation-local. Each independently transcribed WAL chunk

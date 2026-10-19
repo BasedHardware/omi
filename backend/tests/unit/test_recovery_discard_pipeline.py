@@ -67,7 +67,6 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *args: None)
     monkeypatch.setattr(pc, 'is_release_probe_uid', lambda uid: False)
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda uid: False)
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
@@ -492,9 +491,6 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
         return Structured(title='Synthetic meeting', overview='Synthetic meeting notes'), False
 
     monkeypatch.setattr(pc, '_get_structured', keep)
-    monkeypatch.setattr(
-        pc, 'resolve_authorized_first_open_plan', lambda **kwargs: SimpleNamespace(defer_derived_work=False)
-    )
     monkeypatch.setattr(pc, 'trigger_conversation_apps', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, '_extract_memories', lambda *args: None)
     monkeypatch.setattr(pc, 'submit_with_context', lambda *args, **kwargs: None)

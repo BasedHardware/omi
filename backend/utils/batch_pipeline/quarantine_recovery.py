@@ -10,7 +10,7 @@ import time
 import wave
 
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
@@ -315,7 +315,7 @@ class QuarantineRecovery:
         wake = int(self.clock() // 120)
         task_id = f'bpr-{current_stage()}-{hashlib.sha256(segment_id.encode()).hexdigest()}-{token}-{wake}'
         enqueue_named_task(
-            os.getenv('SYNC_TASKS_QUEUE', ''),
+            os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
             audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
             task_id,
             {'stage': current_stage(), 'segment_id': segment_id},

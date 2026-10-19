@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -182,6 +183,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
           ownersChanged = true;
         }
         if (owners[name] != uid) continue;
+        if (OnDeviceTranscriptionController.instance.completedRecordingNames.contains(name)) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -277,6 +279,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
 
   Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
+    if (rec.fileName.startsWith('audio_omibatchoverflow_')) {
+      await OnDeviceTranscriptionController.instance.transcribeNow();
+      return LocalUploadOutcome.busy;
+    }
     if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
     _isUploading = true;
     _uploadingName = rec.fileName;

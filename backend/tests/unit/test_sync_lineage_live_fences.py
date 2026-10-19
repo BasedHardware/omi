@@ -12,6 +12,7 @@ from tests.unit.test_manual_speaker_assignments import world, read
 @pytest.mark.parametrize('flag', ['', 'off'])
 def test_live_speech_after_sync_fences_an_older_processor(world, monkeypatch, flag):
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', flag)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store, path, segments = world
     store.rows[path].update(sync_live_target=True, sync_content_revision=1, data_protection_level='standard')
     stale = deepcopy(store.rows[path])

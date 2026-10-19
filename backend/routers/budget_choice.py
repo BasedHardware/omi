@@ -54,7 +54,7 @@ async def get_budget_choice(
     period = budget_period()
     allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid, x_app_platform)
     choice = await run_blocking(db_executor, choices_db.get_choice, uid, period)
-    exhausted = allowance.reason == 'plan_allowance_exhausted'
+    exhausted = allowance.reason in {'plan_allowance_exhausted', 'usage_budget_exhausted'}
     return {
         'period': period,
         'state': capture_state(managed=allowance.managed, exhausted=exhausted, choice=choice),
@@ -75,7 +75,7 @@ async def put_budget_choice(
     if body.period != period:
         raise HTTPException(status_code=409, detail='budget_period_changed')
     allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid, x_app_platform)
-    if allowance.reason != 'plan_allowance_exhausted':
+    if allowance.reason not in {'plan_allowance_exhausted', 'usage_budget_exhausted'}:
         raise HTTPException(status_code=409, detail='budget_not_exhausted')
     try:
         choice = await run_blocking(db_executor, choices_db.set_choice, uid, period, body.choice, body.dont_ask_again)
