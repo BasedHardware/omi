@@ -12,7 +12,11 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline import provider_stt
+from unittest.mock import Mock
+
 from config.policy import BatchUnitPolicy
+from testing.pipeline_sim.trace import GOLDEN_CONFIGS
+from utils.batch_pipeline import admission  # warm its fair-use/backfill imports outside the call budget
 from utils.batch_pipeline.provider_stt import (
     ABANDON_SECONDS,
     PENDING,
@@ -409,8 +413,6 @@ def test_byok_golden_pins_the_ordinary_gpu_route_and_no_vendor_spend():
 @pytest.mark.parametrize('name', PROVIDER_GOLDENS)
 def test_provider_golden_is_pinned_by_the_simulation(name):
     # test_pipeline_characterization re-runs every GOLDEN_CONFIGS entry and requires a byte-identical trace.
-    from testing.pipeline_sim.trace import GOLDEN_CONFIGS
-
     assert name in GOLDEN_CONFIGS and (GOLDEN_DIR / f'{name}.json').exists()
 
 
@@ -778,9 +780,6 @@ async def test_intake_records_the_route_it_takes_in_the_admission_policy(
 @pytest.mark.parametrize('byok', [True, False])
 async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake, monkeypatch, byok):
     """Lane 6's e2e: a BYOK upload's GPU unit is never re-held by the keyless dispatch re-check."""
-    from unittest.mock import Mock
-
-    from utils.batch_pipeline import admission
     from utils.sync.legacy_dark import LegacySyncMode
 
     dark_intake.mode['value'] = LegacySyncMode.ON
