@@ -7,6 +7,7 @@ Also asserts per-effect error isolation during deferred effects emission.
 """
 
 import os
+import sys
 from unittest.mock import MagicMock
 import pytest
 
@@ -20,45 +21,75 @@ install_database_client_stub()
 import utils.conversations.merge_conversations as merge
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _warm_merge_imports():
+    """perform_merge_async does heavy local imports at call time.
+    Charge them to module setup so the fast-unit CPU-time guard measures
+    only the call phase."""
+    import utils.conversations.process_conversation  # noqa: F401
+    import utils.notifications  # noqa: F401
+
+
 def _setup_merge_mocks(monkeypatch, *, transfer_side_effect=None, custom_effects_observer=None):
-    mock_source_1 = {
-        "id": "c1",
-        "created_at": "2026-10-19T00:00:00Z",
-        "started_at": "2026-10-19T00:00:00Z",
-        "finished_at": "2026-10-19T00:05:00Z",
-        "language": "en",
-        "source": "omi",
-        "transcript_segments": [],
-        "photos": [],
-        "audio_files": [],
-        "deleted": False,
-    }
-    mock_source_2 = {
-        "id": "c2",
-        "created_at": "2026-10-19T00:06:00Z",
-        "started_at": "2026-10-19T00:06:00Z",
-        "finished_at": "2026-10-19T00:10:00Z",
-        "language": "en",
-        "source": "omi",
-        "transcript_segments": [],
-        "photos": [],
-        "audio_files": [],
-        "deleted": False,
+    sources = {
+        "c1": {
+            "id": "c1",
+            "created_at": "2026-10-19T00:00:00Z",
+            "started_at": None,
+            "finished_at": None,
+            "language": "en",
+            "source": "omi",
+            "status": "completed",
+            "transcript_segments": [],
+            "photos": [],
+            "audio_files": [],
+            "deleted": False,
+        },
+        "c2": {
+            "id": "c2",
+            "created_at": "2026-10-19T00:06:00Z",
+            "started_at": None,
+            "finished_at": None,
+            "language": "en",
+            "source": "omi",
+            "status": "completed",
+            "transcript_segments": [],
+            "photos": [],
+            "audio_files": [],
+            "deleted": False,
+        },
     }
 
-    def _get_conv(uid, conv_id):
-        if conv_id == "c1":
-            return dict(mock_source_1)
-        if conv_id == "c2":
-            return dict(mock_source_2)
-        return None
-
-    monkeypatch.setattr(merge.conversations_db, "get_conversation", _get_conv)
+    monkeypatch.setattr(merge.conversations_db, "get_conversation", lambda uid, cid: sources.get(cid))
+    monkeypatch.setattr(merge, "_normalize_conversation_timestamps", lambda convs: convs)
+    monkeypatch.setattr(merge, "_merge_transcript_segments", lambda convs: [])
+    monkeypatch.setattr(merge, "_collect_all_photos", lambda uid, convs: [])
     monkeypatch.setattr(merge, "_copy_audio_chunks_for_merge", lambda uid, convs, new_id: [])
-    monkeypatch.setattr(merge.lifecycle_service, "create_processing_conversation", MagicMock())
-    monkeypatch.setattr(merge.lifecycle_service, "complete", MagicMock())
-    # Patch at module level where perform_merge_async imports function-locally
-    monkeypatch.setattr("utils.notifications.send_merge_completed_message", MagicMock())
+    monkeypatch.setattr(merge, "_determine_visibility", lambda convs: "private")
+    monkeypatch.setattr(merge, "_shared_client_device_provenance", lambda convs: (None, None))
+    monkeypatch.setattr(merge, "is_audio_merge_dispatch_enabled", lambda: False)
+
+    # Hermetic mock for Conversation instance
+    mock_conv = MagicMock(
+        **{
+            "model_dump.return_value": {"id": "new-merge-id", "language": "en", "photos": []},
+            "id": "new-merge-id",
+            "language": "en",
+            "photos": [],
+        }
+    )
+    monkeypatch.setattr(merge, "Conversation", lambda **kw: mock_conv)
+
+    # Mock lifecycle and lease heartbeat
+    monkeypatch.setattr(merge.lifecycle_service, "create_processing_conversation", MagicMock(return_value=True))
+    monkeypatch.setattr(merge.lifecycle_service, "complete", MagicMock(return_value=True))
+    monkeypatch.setattr(merge.lifecycle_service.jobs_db, "renew_processing_lease", lambda *a, **kw: True)
+    monkeypatch.setattr(merge.lifecycle_service, "_processing_lease_renewal_interval", lambda: 100.0)
+
+    # Patch notification module
+    import utils.notifications as notif_mod
+    monkeypatch.setattr(notif_mod, "send_merge_completed_message", MagicMock())
+
     monkeypatch.setattr(merge, "_delete_conversation_and_related_data", MagicMock())
 
     derived_effects_fn = MagicMock()
@@ -72,7 +103,8 @@ def _setup_merge_mocks(monkeypatch, *, transfer_side_effect=None, custom_effects
                 observer(derived_effects_fn)
         return conv
 
-    monkeypatch.setattr("utils.conversations.process_conversation.process_conversation", fake_process_conversation)
+    pc_mod = sys.modules["utils.conversations.process_conversation"]
+    monkeypatch.setattr(pc_mod, "process_conversation", fake_process_conversation)
 
     mock_transfer = MagicMock()
     if transfer_side_effect:
@@ -80,9 +112,8 @@ def _setup_merge_mocks(monkeypatch, *, transfer_side_effect=None, custom_effects
     else:
         mock_transfer.return_value = True
 
-    import database.review_overlay_merge as rom
-
-    monkeypatch.setattr(rom, "transfer", mock_transfer)
+    from database import review_overlay_merge
+    monkeypatch.setattr(review_overlay_merge, "transfer", mock_transfer)
 
     mock_handle_failure = MagicMock()
     monkeypatch.setattr(merge, "_handle_merge_failure", mock_handle_failure)
