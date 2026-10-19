@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response, JSONResponse
 
 from config.batch_pipeline import read_only_metrics_enabled, async_projection_enabled
@@ -22,6 +22,27 @@ from utils.executors import db_executor, postprocess_executor, run_blocking, syn
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
+
+# Static retry classes; never IDs. 'unexpected' answers 500, the others 409.
+ENRICHMENT_RETRIES = Counter(
+    'batch_enrichment_sync_reprocess_retries_total',
+    'Enrichment task retries by expected or unexpected class',
+    ['retry_class'],
+)
+# Deliberate retain-and-retry signals, matched by defining module and name so
+# this router does not import the sync pipeline at startup.
+EXPECTED_RETRIES = {
+    ('utils.sync.reprocess', 'FirstSummaryCallbackPending'): 'callback_pending',
+    ('utils.sync.pipeline', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
+}
+
+
+def expected_retry_reason(error: BaseException) -> str | None:
+    for cls in type(error).__mro__:
+        reason = EXPECTED_RETRIES.get((cls.__module__, cls.__qualname__))
+        if reason is not None:
+            return reason
+    return None
 
 
 def verify_worker(request: Request) -> int:
@@ -183,9 +204,10 @@ async def metrics():
     if read_only_metrics_enabled() and service.metrics is not None:
         await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
     elif async_projection_enabled():
-        await service.reconcile_async()
+        # A scrape is a periodic tick: maintenance runs on the lease holder only.
+        await service.reconcile_async(periodic=True)
     else:
-        await run_blocking(sync_executor, service.reconcile)
+        await run_blocking(sync_executor, service.reconcile, periodic=True)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 
@@ -222,8 +244,21 @@ async def enrichment_response(payload: dict):
     except Exception as error:
         from config.sync_telemetry import bounded_exception_class
 
-        logger.error(
-            'event=batch_enrichment_sync_reprocess outcome=retry site=run_enrichment exception_type=%s',
+        reason = expected_retry_reason(error)
+        if reason is None:
+            ENRICHMENT_RETRIES.labels('unexpected').inc()
+            logger.error(
+                'event=batch_enrichment_sync_reprocess outcome=retry retry_class=unexpected site=run_enrichment exception_type=%s',
+                bounded_exception_class(error),
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+        ENRICHMENT_RETRIES.labels(reason).inc()
+        logger.warning(
+            'event=batch_enrichment_sync_reprocess outcome=retry retry_class=%s site=run_enrichment exception_type=%s',
+            reason,
             bounded_exception_class(error),
         )
-        return JSONResponse(status_code=500, content={'status': 'retry'})
+        # 409 keeps Cloud Tasks retrying (any non-2xx) without the 429/503
+        # queue throttling that caused the 2026-10-18 backlog, and keeps these
+        # by-design waits out of 5xx error gates.
+        return JSONResponse(status_code=409, content={'status': 'retry', 'reason': reason})

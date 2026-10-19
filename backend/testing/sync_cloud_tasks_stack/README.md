@@ -108,8 +108,10 @@ polls `failed` with `poll_after_ms: 0` without re-paying; worker SIGTERM drain;
 worker SIGTERM + SIGKILL after grace → lease expiry → replacement completes;
 serving SIGTERM during the paid call → graceful settle → replacement never
 re-pays; serving SIGKILL during the paid call → intent stays `running`, never
-re-paid; privacy fence during compute and before paid recovery; and a
-three-capture single-owner burst. Provider behavior per owner comes from
+re-paid; privacy fence during compute and before paid recovery; a
+three-capture single-owner burst; and two concurrent worker replicas (the prod
+replica count) draining a split burst, independent owners and one empty-ASR
+capture with once-only compute, capture-order commits and one paid recovery. Provider behavior per owner comes from
 `batch-control/*.json` in the state directory; defaults come from
 `OMI_BATCH_STACK_WORDS_{LATENCY_MS,EMPTY_RATE,FAILURE_RATE}`,
 `OMI_BATCH_STACK_PAID_LATENCY_MS`, and `OMI_BATCH_STACK_CAPACITY`.
