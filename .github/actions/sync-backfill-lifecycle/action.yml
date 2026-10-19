@@ -49,7 +49,7 @@ inputs:
     required: false
     default: ''
   backfill_env_vars:
-    description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
+    description: Manifest-rendered backend-sync-backfill env overlay (worker env; platform and dispatch read its SYNC_BACKFILL_TASKS_QUEUE)
     required: false
     default: ''
   backfill_secrets:
@@ -87,17 +87,51 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve ops-owned backfill queues
+      if: ${{ inputs.mode == 'worker' }}
+      id: ops-queues
+      shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
+      run: |
+        set -euo pipefail
+        # B4: the live backfill queue is an ops value (backend/deploy/ops/prod.yaml), read from the
+        # reviewed deploy-control source, so a train never re-points backfill at a queue an operator
+        # retired (10-19 04:52Z sync-backfill stall). Prod fails closed if the ops file has no value.
+        # Non-prod: the manifest's values win (main #22460), sync-backfill only when it declares none.
+        backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        backfill_queue="${backfill_queue:-sync-backfill}"
+        worker_queue="${worker_queue:-sync-backfill}"
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          python3 -m pip install -q PyYAML==6.0.1
+          DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+          ops_env="$(python3 "$DEPLOY_CONTROL_SCRIPT_DIR/ops_train.py" render-env --env prod \
+            --service '${{ inputs.service }}-sync-backfill')"
+          backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"$ops_env")"
+          worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"$ops_env")"
+          if [[ -z "$backfill_queue" || -z "$worker_queue" ]]; then
+            echo "ops file declares no backfill queues for ${{ inputs.service }}-sync-backfill" >&2
+            exit 1
+          fi
+        fi
+        echo "Backfill queues: SYNC_BACKFILL_TASKS_QUEUE=$backfill_queue SYNC_TASKS_QUEUE=$worker_queue"
+        echo "backfill_queue=$backfill_queue" >> "$GITHUB_OUTPUT"
+        echo "worker_queue=$worker_queue" >> "$GITHUB_OUTPUT"
+
     - name: Resolve backfill service URL
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
+      env:
+        BACKFILL_QUEUE: ${{ steps.ops-queues.outputs.backfill_queue }}
       run: |
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"
-          echo "SYNC_BACKFILL_TASKS_QUEUE=sync-backfill"
+          echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"
           echo "SYNC_BACKFILL_TASKS_HANDLER_URL=${URL}/v2/sync-jobs/run"
           echo "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${URL}/v2/sync-jobs/run"
           echo "EOF"
@@ -110,7 +144,7 @@ runs:
       env:
         ENV_OVERLAY: |-
           ${{ inputs.backfill_env_vars }}
-          SYNC_TASKS_QUEUE=sync-backfill
+          SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
@@ -243,8 +277,13 @@ runs:
       shell: bash
       env:
         BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
+        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
+        # retired sync-backfill queue is left as it is.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
         # The 15/s rate caps starts, not in-flight work; the concurrency limit below
         # independently prevents dispatch beyond worker capacity, including bursts.
@@ -259,8 +298,8 @@ runs:
         # sizing that compounded until queued recordings were scheduled almost
         # a day out. The bounded backoff keeps a transient rejection from
         # stranding a recording for hours.
-        if gcloud tasks queues describe sync-backfill --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
-          gcloud tasks queues update sync-backfill \
+        if gcloud tasks queues describe "$BACKFILL_QUEUE" --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
@@ -268,7 +307,7 @@ runs:
             --min-backoff=5s \
             --max-backoff=60s
         else
-          gcloud tasks queues create sync-backfill \
+          gcloud tasks queues create "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \

@@ -17,7 +17,7 @@ import time
 import uuid
 from contextlib import contextmanager, nullcontext
 from collections.abc import Iterator
-from typing import Any, Callable, TypeVar, TypeAlias, TypeGuard
+from typing import Any, Callable, Literal, TypeVar, TypeAlias, TypeGuard
 from urllib.parse import urlsplit
 from time import monotonic
 
@@ -50,6 +50,8 @@ FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 WAKE_CHECK_SECONDS = 300
 LIVE_DEFER_SECONDS = 120
+# Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
+HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 
@@ -71,7 +73,10 @@ def owns_runtime() -> bool:
 def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
     if not owns_runtime():
         raise RuntimeError('sync reprocess outbox requires production or a Firestore emulator')
-    client = get_firestore_client()
+    return _cas(get_firestore_client(), document_id, operation)
+
+
+def _cas(client: Any, document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
     ref = client.collection(COLLECTION).document(document_id)
 
     # All state for one obligation is in one document. Optimistic conditional
@@ -100,6 +105,20 @@ def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None
     raise AssertionError('outbox CAS loop must return or raise within its retry budget')
 
 
+def mutate_row(
+    document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]], *, client: Any = None
+) -> ResultT:
+    """Public CAS entry for ``database.outbox_firestore``; resolves ``_mutate`` per call unless bound to a client."""
+    if client is not None:
+        return _cas(client, document_id, operation)
+    return _mutate(document_id, operation)
+
+
+def wake_row(row: Row) -> None:
+    """Public wake entry for ``database.outbox_firestore``; resolves ``_enqueue`` per call."""
+    _enqueue(row)
+
+
 def valid_dispatch_binding(dispatch: object) -> TypeGuard[dict[str, str]]:
     """A binding belongs to the receiving sync handler, including its audience."""
     if not isinstance(dispatch, dict):
@@ -115,7 +134,7 @@ def valid_dispatch_binding(dispatch: object) -> TypeGuard[dict[str, str]]:
     return (
         url.scheme == 'https'
         and bool(url.netloc)
-        and url.path.endswith('/v2/sync-jobs/run')
+        and url.path.endswith(HANDLER_PATHS)
         and not url.query
         and not url.fragment
         and dispatch['audience'] == dispatch['handler']
@@ -151,6 +170,22 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
 
 
 def _dispatch_binding() -> dict[str, str] | None:
+    from config import enrichment as enrichment_config
+
+    if enrichment_config.route() == 'enrichment_queue':
+        binding = enrichment_config.dispatch_binding()
+        if valid_dispatch_binding(binding):
+            return binding
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='enrichment_queue',
+            to_mode='sync_handler',
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
     handler = os.getenv('SYNC_TASKS_HANDLER_URL', '')
     binding = {
         'queue': os.getenv('SYNC_TASKS_QUEUE', ''),
@@ -187,7 +222,7 @@ def _enqueue(row: dict[str, Any]) -> None:
     assert isinstance(dispatch, dict)
     handler = dispatch['handler']
     if not (
-        handler.endswith('/v2/sync-jobs/run')
+        handler.endswith(HANDLER_PATHS)
         or row.get('effects_only')
         and handler.endswith('/v1/conversation-finalization-jobs/run')
     ):
@@ -242,6 +277,45 @@ def mark(
     if mutate is not None and not owns_runtime():
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
+    update = mark_update(
+        uid,
+        conversation_id,
+        language,
+        current=current,
+        settle_at=current + settle_seconds(),
+        coalesce='max',
+        effects_only=effects_only,
+        batch=mutate is not None,
+    )
+    document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
+    row, coalesced = (mutate or _mutate)(document_id, update)
+    if coalesced:
+        COALESCED.inc()
+    if row.get('_wake', not coalesced) and valid_dispatch_binding(row.get('dispatch')):
+        _enqueue(row)  # Failure leaves the obligation durable for the sweep.
+    elif not valid_dispatch_binding(row.get('dispatch')):
+        UNBOUND.labels(action='mark').inc()
+
+
+def mark_update(
+    uid: str,
+    conversation_id: str,
+    language: str,
+    *,
+    current: float,
+    settle_at: float,
+    coalesce: Literal['min', 'max'],
+    effects_only: bool,
+    batch: bool,
+    policy_id: str | None = None,
+    new_dispatch: Callable[[], dict[str, str] | None] | None = None,
+) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
+    """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
+
+    ``settle_at`` is the requested wake; an open row keeps the later (``max``, settle) or the earlier
+    (``min``, deadline) of the two. ``new_dispatch`` may supply a new row's binding (backfill); it is
+    called only when no row exists, so a coalesced append never re-resolves it.
+    """
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
         if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
@@ -254,8 +328,14 @@ def mark(
             conversation_id=conversation_id,
             language=language,
             version=row.get('version', 0) + 1,
-            due_at=max(row.get('due_at') or 0, current + settle_seconds()),
+            due_at=(
+                max(row.get('due_at') or 0, settle_at)
+                if coalesce == 'max'
+                else min(row.get('due_at') or float('inf'), settle_at)
+            ),
         )
+        if policy_id is not None:
+            row['policy_id'] = policy_id
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
@@ -279,10 +359,13 @@ def mark(
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
 
-        row.setdefault('summary_lane', 'batch' if mutate is not None else summary_delivery.lane({}))
+        row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         if old is None:
             row.update(
-                task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
+                task_token=uuid.uuid4().hex,
+                task_due_at=row['due_at'],
+                lease_until=0,
+                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(),
             )
         elif old.get('dormant'):
             row['dispatch'] = _dispatch_binding()
@@ -294,14 +377,7 @@ def mark(
             wake = True
         return row, ({**row, '_wake': wake}, old is not None)
 
-    document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
-    row, coalesced = (mutate or _mutate)(document_id, update)
-    if coalesced:
-        COALESCED.inc()
-    if row.get('_wake', not coalesced) and valid_dispatch_binding(row.get('dispatch')):
-        _enqueue(row)  # Failure leaves the obligation durable for the sweep.
-    elif not valid_dispatch_binding(row.get('dispatch')):
-        UNBOUND.labels(action='mark').inc()
+    return update
 
 
 @contextmanager
@@ -531,17 +607,36 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     return 'superseded' if superseded else 'processed'
 
 
-def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
+def sweep(
+    *,
+    now: float | None = None,
+    limit: int = 100,
+    discard: Callable[[str], bool] | None = None,
+    client: Any = None,
+    wake: Callable[[Row], None] | None = None,
+) -> dict[str, int]:
+    """Re-wake due obligations; ``discard`` retires privacy-fenced rows instead (contract (b) invariant 6).
+
+    ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite).
+    """
     from utils.enrichment import scan as enrichment_scan
 
     current = time.time() if now is None else now
     counts = {'repaired': 0, 'error': 0}
+    if discard is not None:
+        counts['discarded'] = 0
     if not owns_runtime():
         return counts
 
     binding = _dispatch_binding()
     limit = max(1, min(100, limit))
-    client = get_firestore_client()
+    bound = client
+    client = bound or get_firestore_client()
+
+    def mutate(document_id: str, operation):
+        return _cas(bound, document_id, operation) if bound is not None else _mutate(document_id, operation)
+
+    enqueue = wake or _enqueue
     # One range/order field uses the automatic single-field index.
     previous, cursor = enrichment_scan.begin(client, COLLECTION)
     query = (
@@ -596,7 +691,7 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
             return row, ('ready', row)
 
         try:
-            status, row = _mutate(snapshot.id, repair)
+            status, row = mutate(snapshot.id, repair)
             if status == 'check' and row is not None:
                 checked += 1
                 if _wake_exists(row):
@@ -619,11 +714,14 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
                     replacement.pop('wake_generation', None)
                     return replacement, replacement
 
-                row = _mutate(snapshot.id, replace)
+                row = mutate(snapshot.id, replace)
             if status == 'unbound':
                 UNBOUND.labels(action='repair').inc()
+            if row is not None and discard is not None and discard(snapshot.id):
+                counts['discarded'] += 1
+                row = None
             if row is not None:
-                _enqueue(row)
+                enqueue(row)
                 counts['repaired'] += 1
         except Exception as error:
             counts['error'] += 1
@@ -632,6 +730,23 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
             break
     enrichment_scan.finish(previous, last, exhausted)
     return counts
+
+
+def due_rows(*, now: float, limit: int, client: Any = None) -> list[tuple[str, Row]]:
+    """Pull mode: up to ``limit`` due, unleased, awake rows as ``(document_id, row)`` (single-field index)."""
+    query = (
+        (client or get_firestore_client())
+        .collection(COLLECTION)
+        .where('due_at', '<=', now)
+        .order_by('due_at')
+        .limit(max(1, min(100, limit)))
+    )
+    rows = []
+    for snapshot in query.stream():
+        row = snapshot.to_dict() or {}
+        if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
+            rows.append((snapshot.id, row))
+    return rows
 
 
 def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:

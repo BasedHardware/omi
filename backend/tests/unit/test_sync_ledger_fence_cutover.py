@@ -496,3 +496,26 @@ def test_state_parser_rejects_candidate_image_mismatch_without_cloud_call(tmp_pa
         _orchestrator(active_config, runner, mode="active").activate_prepare(probe_tag="ledger-123-1")
 
     assert runner.commands == []
+
+
+def test_production_cutover_pauses_the_fresh_queues_that_now_carry_dispatch(tmp_path: Path) -> None:
+    """Prod dispatches on sync-jobs-fresh / sync-backfill-fresh since the 10-18 and 10-19 stalls;
+    a barrier that paused only the legacy queues would let both protocols overlap."""
+
+    import dataclasses
+
+    runner = FakeCloudRunner(
+        queue_states={
+            "sync-jobs": "RUNNING",
+            "sync-backfill": "PAUSED",
+            "sync-jobs-fresh": "RUNNING",
+            "sync-backfill-fresh": "RUNNING",
+        }
+    )
+    config = dataclasses.replace(_config(tmp_path), project="based-hardware")
+
+    state = _orchestrator(config, runner, mode="standby").stage()
+
+    assert set(state["queues"]) == set(cutover.PRODUCTION_QUEUES)
+    assert runner.queues == {queue: "PAUSED" for queue in cutover.PRODUCTION_QUEUES}
+    assert cutover.queues_for("based-hardware-dev") == cutover.QUEUES
