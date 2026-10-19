@@ -321,3 +321,30 @@ def test_unused_malformed_knobs_do_not_block_admission(key):
 def test_invalid_demand_defaults_keep_restart_content_hash(flags):
     policy = resolve_listen_policy('owner', flags=flags)
     assert ListenSessionPolicy.from_dict(json.loads(json.dumps(policy.to_dict()))) == policy
+
+
+def test_default_policy_is_exactly_the_current_defaults():
+    assert resolve_listen_policy('owner', flags={}) == ListenSessionPolicy()
+
+
+@pytest.mark.parametrize('raw', ['bad', '-1', '0.02', '5', 'nan'])
+def test_redis_timeout_getter_matrix(monkeypatch, raw):
+    monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', raw)
+    try:
+        expected = min(0.1, max(0.01, float(raw)))
+    except ValueError:
+        expected = 0.075
+    policy = resolve_listen_policy('owner', flags={'STT_ROUTING_REDIS_TIMEOUT_SECONDS': raw})
+    assert policy.routing_redis_timeout_seconds == routing_timeout() == expected
+
+
+@pytest.mark.parametrize('raw', ['bad', 'nan', '0', '1', '0.08'])
+def test_disruption_gate_preserves_legacy_validation(monkeypatch, raw):
+    monkeypatch.setenv('STT_ROUTING_DISRUPTION_GATE', raw)
+    policy = resolve_listen_policy('owner', flags={'STT_ROUTING_DISRUPTION_GATE': raw})
+    current_listen_policy.set(policy)
+    if raw == '0.08':
+        assert disruption_gate() == 0.08
+    else:
+        with pytest.raises(ValueError):
+            disruption_gate()
