@@ -241,3 +241,43 @@ def worker_io_concurrency() -> int:
     except ValueError:
         return WORKER_IO_CONCURRENCY_DEFAULT
     return value if 1 <= value <= WORKER_IO_CONCURRENCY_MAX else WORKER_IO_CONCURRENCY_DEFAULT
+
+
+DEFAULT_PUBLISH_CONCURRENCY = 4
+MAX_PUBLISH_CONCURRENCY = 16
+
+
+def publish_concurrency() -> int:
+    """Ship-on bounded post-flight publication; 1 is the kill switch.
+
+    Bounds concurrent fenced transitions and cross-owner ordered drains after
+    one GPU flight. ``1`` restores serial transitions with one drain after each
+    accepted transition. Malformed values fall back to that serial path.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PUBLISH_CONCURRENCY', str(DEFAULT_PUBLISH_CONCURRENCY)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 1
+    return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+RECOVERY_WAKE_LEASE_DEFAULT = 600
+RECOVERY_WAKE_LEASE_MAX = 3600
+
+
+def recovery_wake_lease_seconds() -> int:
+    """Ship-on: one outstanding recovery delivery task per prepared intent.
+
+    The lease bounds how long an undelivered wake is trusted before the sweep
+    repairs it with a new one. ``0`` is the kill switch: the legacy 120s
+    time-bucketed wake on every sweep. Malformed or out-of-range values keep the
+    default.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', str(RECOVERY_WAKE_LEASE_DEFAULT)))
+    except ValueError:
+        return RECOVERY_WAKE_LEASE_DEFAULT
+    if value == 0:
+        return 0
+    return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT

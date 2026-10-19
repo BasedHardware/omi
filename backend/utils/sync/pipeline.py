@@ -39,6 +39,8 @@ from database._client import (
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
+from utils.sync import cap_recovery_provider
+
 from database import conversations as conversations_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
@@ -61,7 +63,6 @@ from database.sync_jobs import (
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
     fenced_finalize_sync_job,
-    fenced_finalize_sync_job_from_durable_ledger,
     fenced_mark_job_failed,
     fenced_mark_job_processing,
     fenced_update_sync_job,
@@ -78,11 +79,9 @@ from database.sync_jobs import (
 )
 from database.sync_ledger import (
     add_processed_sync_segment_id,
-    bind_sync_content_run_token,
     checkpoint_sync_content_partial_result,
     get_processed_sync_segment_ids,
     get_sync_content_partial_result,
-    is_valid_completed_sync_content_result,
     mark_sync_content_completed,
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
@@ -181,6 +180,11 @@ from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
 from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync import recording_lineage as sync_recording_lineage
+from utils.sync.ledger_completion import (  # noqa: F401  (re-exported seam)
+    SyncJobRunLeaseLost,
+    _require_run_owner,
+    bind_or_converge_sync_ledger_completion,
+)
 from utils.sync.recording_lineage import (
     ambiguous_binding_pending,
     fallback_segment_targets,
@@ -648,10 +652,6 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncJobRunLeaseLost(RuntimeError):
-    """A worker tried to write after its run token stopped owning the job."""
-
-
 class SyncConversationPersistenceFenced(RuntimeError):
     """Conversation lifecycle rejected this worker's stale processing result."""
 
@@ -666,13 +666,6 @@ def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
         raise result
-
-
-def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
-    """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if mutation.applied:
-        return mutation.job
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -771,51 +764,6 @@ def _add_processed_segment_for_run(job_id: str, run_lock_token: str | None, segm
         add_processed_segment(job_id, segment_path)
         return
     _require_run_owner(add_processed_segment_if_run_owner(job_id, run_lock_token, segment_path), job_id=job_id)
-
-
-def bind_or_converge_sync_ledger_completion(
-    *,
-    job_id: str,
-    uid: str,
-    content_id: str | None,
-    run_lock_token: str | None,
-) -> Dict | None:
-    """Bind a live lease to the durable ledger or converge a proven completion.
-
-    This synchronous DB-boundary helper is shared by Cloud Tasks, inline work,
-    and stale polling. A higher epoch displaces an old owner before any decode,
-    provider, ledger mutation, or stale failure can occur. A valid completion
-    that landed just before lease replacement becomes the current Redis result
-    through the caller's *current* fenced token rather than being overwritten
-    as a failure.
-    """
-    if not content_id or run_lock_token is None:
-        return None
-
-    binding = bind_sync_content_run_token(
-        uid,
-        content_id,
-        job_id,
-        run_lock_token,
-        get_sync_job_run_lock_epoch(run_lock_token),
-    )
-    if binding.bound:
-        return None
-    held = getattr(binding, 'held', False) is True
-    if not (
-        held
-        and isinstance(binding.result, dict)
-        and binding.result.get('held_audio') is True
-        or binding.completed
-        and is_valid_completed_sync_content_result(binding.result)
-    ):
-        raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
-
-    finalized = _require_run_owner(
-        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
-    )
-    delete_sync_job_run_lock_epoch(job_id)
-    return finalized
 
 
 async def finalize_sync_job_superseded(
@@ -1517,7 +1465,10 @@ def process_segment(
                 # Explicit request-boundary signal survives later cap denial,
                 # parse/ingest errors, and the bounded empty-result retry.
                 deferred_outcome['provider_called'] = True
-            words, detected_language = prerecorded(
+            words, detected_language = cap_recovery_provider.transcribe(
+                uid,
+                cap_recovery_checkpoint if stt_cap_dispatch_enabled() and cap_recovery else None,
+                prerecorded,
                 url,
                 speakers_count=3,
                 attempts=0,

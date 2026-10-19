@@ -3,6 +3,7 @@
 from dataclasses import fields
 import hashlib
 import os
+import re
 from urllib.parse import urlsplit
 import io
 import logging
@@ -17,6 +18,7 @@ from config.batch_pipeline import (
     recovery_owners,
     recovery_dispatch_batch_size,
     recovery_tasks_enabled,
+    recovery_wake_lease_seconds,
     recovery_enabled_for,
     recover_all_admitted,
     empty_asr_disposition_enabled,
@@ -38,10 +40,16 @@ from utils.batch_pipeline.recovery_disposition import (
     terminal_empty_payload,
 )
 
-from utils.cloud_tasks import enqueue_named_task
+from utils.cloud_tasks import enqueue_named_task, named_task_exists
 from utils.sync.stage import current_stage
 
 logger = logging.getLogger(__name__)
+
+# A delivered wake that could not start (allowance, cap or transient refusal)
+# is retried on the former 120s cadence rather than waiting out the lease.
+REWAKE_AFTER_HELD_SECONDS = 120
+# Consecutive failed custody probes before a new wake is minted regardless.
+MAX_WAKE_PROBE_ERRORS = 3
 
 
 def log_failure(failure):
@@ -312,19 +320,65 @@ class QuarantineRecovery:
         ):
             raise ValueError('recovery task requires the serving origin audience')
         token = job['recovery']['token']
-        # Repair an exhausted/missing wake without ever resetting its paid
-        # intent. Parallel deliveries remain fenced by RecoveryStore.start.
-        wake = int(self.clock() // 120)
-        task_id = f'bpr-{current_stage()}-{hashlib.sha256(segment_id.encode()).hexdigest()}-{token}-{wake}'
-        enqueue_named_task(
-            os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
-            audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
-            task_id,
-            {'stage': current_stage(), 'segment_id': segment_id},
-            audience=audience,
-            invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
-        )
+        digest = hashlib.sha256(segment_id.encode()).hexdigest()
+        queue = os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', '')
+        lease, seq = recovery_wake_lease_seconds(), 0
+        if lease:
+            # One outstanding wake per intent. A leased wake is queued or being
+            # delivered, so the sweep adds nothing. At expiry only an
+            # authoritative NotFound for that task permits the next wake: a
+            # task still waiting in a saturated queue keeps its lease. Parallel
+            # deliveries remain fenced by RecoveryStore.start.
+            now = self.clock()
+            wake = job.get('recovery_wake') or {}
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current and wake.get('wake_until', 0) > now:
+                return 'pending'  # Read from prepare()'s snapshot: no extra transaction.
+            if current and wake.get('probe_errors', 0) < MAX_WAKE_PROBE_ERRORS:
+                previous = f'bpr-{current_stage()}-{digest}-{token}-w{current}'
+                probe_error = False
+                try:
+                    alive = named_task_exists(wake.get('queue') or queue, previous)
+                except Exception:
+                    # Unknown custody keeps the old wake; bounded so a broken
+                    # probe cannot strand the intent.
+                    alive, probe_error = True, True
+                if alive:
+                    self.protocol.extend_wake(segment_id, token, current, now, lease, probe_error=probe_error)
+                    return 'pending'
+            seq = self.protocol.claim_wake(segment_id, token, now, lease, queue=queue, expected_seq=current)
+            if seq is None:
+                return 'pending'
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-w{seq}'
+        else:
+            # Kill switch: legacy time-bucketed wake on every sweep.
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-{int(self.clock() // 120)}'
+        try:
+            enqueue_named_task(
+                queue,
+                audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
+                task_id,
+                {'stage': current_stage(), 'segment_id': segment_id},
+                audience=audience,
+                invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
+            )
+        except Exception:
+            # The task may not exist. If the inline fallback leaves the intent
+            # prepared, re-wake on the 120s cadence rather than the full lease.
+            if lease:
+                try:
+                    self.protocol.shorten_wake(segment_id, seq, self.clock(), REWAKE_AFTER_HELD_SECONDS)
+                except Exception:
+                    pass
+            raise
         return 'queued'
+
+    def delivered(self, segment_id, outcome, task_name=None):
+        """A delivery of wake ``-w<seq>`` that left the intent prepared re-arms the
+        120s cadence for that wake only. Legacy or unnamed deliveries change nothing."""
+        match = re.search(r'-w([0-9]{1,9})$', str(task_name or '').rsplit('/', 1)[-1])
+        if outcome == 'held' and match and recovery_wake_lease_seconds():
+            self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
 
     def sweep(self):
         counts = {}
