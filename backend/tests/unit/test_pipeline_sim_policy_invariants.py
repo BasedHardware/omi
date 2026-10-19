@@ -6,7 +6,7 @@ import pytest
 
 from config.policy.batch import BatchUnitPolicy
 from config.policy.covering_array import pairwise_covering_array
-from config.policy.generator import FACTOR_DOMAINS, policy_case_subset, policy_pairwise_array
+from config.policy.generator import FACTOR_DOMAINS, generate_policy_cases, policy_pairwise_array
 from config.policy.listen import ListenSessionPolicy
 from testing.pipeline_sim import sim as sim_module
 from testing.pipeline_sim.policy_invariants import assert_policy_invariants, simulate_policy_case
@@ -16,12 +16,11 @@ from testing.pipeline_sim.trace import GOLDEN_CONFIGS, golden_trace, trace
 from testing.pipeline_sim.workload import NORMAL, SegmentSpec, UploadSpec, Workload, WorkloadSpec, content_id_for
 
 PR_SEED = 20261020
-PR_POLICY_LIMIT = 8
 
 
 @pytest.fixture(scope='module')
 def generated_runs():
-    cases = policy_case_subset(PR_SEED, PR_POLICY_LIMIT)
+    cases = generate_policy_cases(PR_SEED)
     return tuple((case, simulate_policy_case(case, seed=PR_SEED + case.index)) for case in cases)
 
 
@@ -35,8 +34,9 @@ def test_policy_pairwise_generator_covers_every_feasible_pair(policy_array):
     assert array.factor_count == len(FACTOR_DOMAINS)
     assert array.candidate_count > 0
     assert array.feasible_pair_count == array.covered_pair_count
-    assert len(array.rows) >= 2
-    assert len(policy_case_subset(PR_SEED, PR_POLICY_LIMIT)) == PR_POLICY_LIMIT
+    assert array.feasible_pair_count == 5_045
+    assert len(array.rows) == 33
+    assert len(generate_policy_cases(PR_SEED)) == len(array.rows)
     assert (
         pairwise_covering_array(
             {'left': (False, True), 'right': ('a', 'b')},
@@ -61,9 +61,10 @@ def test_covering_array_proves_feasibility_for_rare_constrained_pairs():
     assert array.rows == ({name: True for name in factors},)
 
 
-def test_fixed_seed_generated_policies_preserve_pipeline_and_listen_invariants(generated_runs):
+def test_full_pairwise_generated_policies_preserve_pipeline_and_listen_invariants(generated_runs):
     cases = [case for case, _ in generated_runs]
     results = [result for _, result in generated_runs]
+    assert len(cases) == 33
     assert any(case.batch_policy.batch_enabled for case in cases)
     assert any(not case.batch_policy.batch_enabled for case in cases)
     assert any(result.records for result in results)
