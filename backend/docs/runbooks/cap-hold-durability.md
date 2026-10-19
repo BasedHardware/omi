@@ -65,8 +65,11 @@ keyset cursor. Each wraps on a short/empty page. The cursor advances before work
 so a blocked owner cannot hide later existing users. A crash can defer that page
 until the next rotation; it cannot erase intent. For N queued owners, discovery
 latency is roughly `ceil(N/5)` successful scheduler executions; blocked choices
-also consume visits. A long request delays subsequent scheduler delivery. This
-is bounded fair recovery, not a per-user two-minute SLA. A single owner's 100
+also consume visits. A long request delays subsequent scheduler delivery.
+[Cloud Scheduler's Job.schedule contract](https://docs.cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#job)
+serializes regular executions of the same job: a later scheduled execution waits
+for the current one to finish. This is bounded fair recovery, not a per-user
+two-minute SLA. A single owner's 100
 short items can now drain in one visit (plus a later no-op finish visit at an exact
 100-item boundary), rather than a minimum 200 minutes. Slow calls constrain this:
 900 seconds permits about three 300-second provider calls before the next-piece
@@ -188,10 +191,16 @@ encoding, upload and cleanup belong to one synchronous storage-executor leaf, so
 even direct event-loop cancellation of the publication task cannot unlink a file
 still used by the executor. A cancelled waiter leaves uncertain capacity reserved
 and stable publication IDs available for retry. It does not delete the upload's
-file to meet the coordinator deadline. GKE listen/pusher
-have 120-second termination grace and 15-second preStop; their uvicorn graceful
-session drain is bounded to 60 seconds, leaving at least 45 seconds for lifespan
-flush/drain. SIGKILL and a flush exceeding the grace can lose the last volatile
+file to meet the coordinator deadline. GKE listen and pusher have a 120-second
+termination grace. Listen's preStop sleeps for 15 seconds; pusher first calls its
+drain endpoint with `curl -m 5`, then sleeps for 15 seconds, so budget up to
+20 seconds for pusher preStop. Allowing the full 60-second uvicorn connection/session
+drain leaves nominal lifespan margins of `120 - 15 - 60 = 45` seconds for listen
+and `120 - 20 - 60 = 40` seconds for pusher, before process and scheduling overhead.
+Budgeting 30 seconds for coordinator flush followed by 10 seconds for background
+drain consumes pusher's nominal margin; completion before hard termination is not
+guaranteed. Pusher owns no second cap-held PCM sink.
+SIGKILL and a flush exceeding the grace can lose the last volatile
 fragment, while staging remains recoverable after the 120-second writer expiry
 and its next bounded staging discovery rotation. The 30-second coordinator bound
 is not a guarantee that a parked upload finishes before process termination;
