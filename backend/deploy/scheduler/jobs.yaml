@@ -340,6 +340,7 @@ environments:
         attempt_deadline: 180s
         owner: web/admin/jobs/omi-tv-rollup/README.md
       - name: cap-hold-durable-redrive
+        lifecycle: planned
         region: us-central1
         schedule: "*/2 * * * *"
         time_zone: UTC
