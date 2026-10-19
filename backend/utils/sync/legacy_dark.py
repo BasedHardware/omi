@@ -23,6 +23,7 @@ decision into their response. Nothing in this module logs a uid.
 
 from __future__ import annotations
 
+import importlib
 import logging
 import math
 from dataclasses import dataclass
@@ -149,12 +150,13 @@ def _fallback(source: str) -> LegacySyncMode:
 def current_mode() -> LegacySyncMode:
     """The served mode. Never raises; every failure serves ``on``."""
     try:
-        from utils.rollout.runtime_percent import legacy_sync_mode
-    except ImportError:
-        # Before the (f) stub reaches this tree the switch does not exist.
+        # Resolved at call time: until lane 6's (f) module reaches this tree the
+        # switch does not exist and every process serves ``on``.
+        reader = importlib.import_module('utils.rollout.runtime_percent').legacy_sync_mode
+    except (ImportError, AttributeError):
         return _fallback('absent')
     try:
-        raw = legacy_sync_mode()
+        raw: object = reader()
     except Exception as error:
         logger.error('event=legacy_dark action=mode_read outcome=error exception_type=%s', type(error).__name__)
         return _fallback('error')
