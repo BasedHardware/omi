@@ -26,7 +26,10 @@ def _runtime_accept_call() -> ast.Call:
 def test_runtime_passes_the_sanitized_client_version():
     keywords = {keyword.arg: keyword.value for keyword in _runtime_accept_call().keywords}
     assert 'app_build' in keywords
-    assert ast.unparse(keywords['app_build']) == 'sanitize_app_build(self.client_device_context.app_version)'
+    assert (
+        ast.unparse(keywords['app_build'])
+        == "sanitize_app_build(getattr(self.client_device_context, 'app_version', None))"
+    )
 
 
 def test_flutter_version_header_becomes_the_build_number_label():

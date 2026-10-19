@@ -1138,7 +1138,7 @@ class ListenSessionRuntime:
             record_listen_session_accepted(
                 source=self.request.source,
                 platform=self.client_device_context.platform,
-                app_build=sanitize_app_build(self.client_device_context.app_version),
+                app_build=sanitize_app_build(getattr(self.client_device_context, 'app_version', None)),
             )
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
