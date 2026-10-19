@@ -18,6 +18,7 @@ from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
+from utils.screen_vector_entitlements import ScreenVectorAuthorityUnavailable
 from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
 
 logger = logging.getLogger(__name__)
@@ -154,11 +155,20 @@ async def sync_screen_activity(
         # semantic screen search, which is a paid desktop capability. Gate it here rather than on
         # the client: the client cannot be trusted to know its own entitlement, and the row is
         # still stored either way, so a later upgrade can backfill vectors from the stored text.
-        embedded_rows = (
-            [row for row in rows if row.get("embedding")]
-            if await _timed_phase(phase_ms, "entitlement", run_blocking(db_executor, grants_cloud_screen_vectors, uid))
-            else []
-        )
+        embedded_rows = [row for row in rows if row.get("embedding")]
+        if embedded_rows:
+            try:
+                entitled = await _timed_phase(phase_ms, "entitlement", grants_cloud_screen_vectors(uid))
+            except ScreenVectorAuthorityUnavailable as error:
+                # Raw upsert is idempotent. Do not acknowledge client-paid vector
+                # work that a temporary authority outage prevented us from storing.
+                raise HTTPException(
+                    status_code=503,
+                    detail="screen vector authorization is temporarily unavailable",
+                    headers={"Retry-After": "5"},
+                ) from error
+            if not entitled:
+                embedded_rows = []
         if embedded_rows:
             try:
                 await _timed_phase(

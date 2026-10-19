@@ -441,7 +441,6 @@ tests/unit/test_translation_negative_cache_detection.py::test_negative_cached_se
 # call phase. Measured 0.31s alone and 0.32-0.47s inside pre-push (local fail
 # limit 0.30s). The pusher release contract selects this file whenever
 # verify_pusher_live_alert_route.py changes. Assertions still run.
-tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service
 # 2026-10-16: parses the full runtime-env manifest per env (0.41-0.49s CPU at load avg ~4). Assertions still run.
 tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[dev]
 tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[prod]
@@ -475,4 +474,3 @@ tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requi
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
 tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
-tests/unit/test_free_tier_basic_gates.py::test_dev_lights_each_gate_on_the_identities_that_run_its_code_path

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -14,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
-from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
 from scripts.runtime_env_compat import normalize_runtime_manifest  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -183,13 +183,16 @@ def main() -> int:
                 f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
                 for name in FIRESTORE_READ_RUNTIME_ENV_NAMES
             )
-            _emit_output('firestore_read_env_vars', firestore_read_env_vars)
-            cohort = next(
-                entry['value']
-                for entry in desktop_state['services']['desktop-backend']['env']
-                if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT'
+            ladder_price_env_vars = '\n'.join(
+                f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
+                for name in desktop_env
+                if name.startswith('LADDER_V1_') and name.endswith('_PRICE_ID')
             )
-            _emit_output_line('free_tier_local_processing_cohort', _escape_deploy_cloud_run_env_value(cohort))
+            _emit_output('ladder_price_env_vars', ladder_price_env_vars)
+            # Resource references remain in the validated expected state. The
+            # deploy action binds the same selected-environment reference directly,
+            # without copying credential-shaped mappings through workflow outputs.
+            _emit_output('firestore_read_env_vars', firestore_read_env_vars)
             return 0
 
     if not args.job:
@@ -281,7 +284,7 @@ def _render_env_entries(env_entries: ConfigDict) -> list[ConfigDict]:
         if value is None:
             # Provisional values belong to services not yet deployed in every environment.
             continue
-        validate_free_tier_deploy_value(str(name), value)
+
         rendered.append({'name': str(name), 'value': value})
     return rendered
 
@@ -301,19 +304,44 @@ def _escape_deploy_cloud_run_env_value(value: str) -> str:
     )
 
 
+def _validated_resource_name(binding_name: str, candidate: object) -> str:
+    """Accept Secret Manager resource metadata, never a credential payload.
+
+    Both checked-in literal descriptors and operator-provided references cross
+    this boundary before state or workflow output is written. No secret version
+    is accessed here; the runtime resolves the resulting secretKeyRef itself.
+    """
+    if (
+        not isinstance(candidate, str)
+        or candidate.startswith(('sk_', 'rk_'))
+        or not re.fullmatch(r'(?:projects/[a-z0-9][a-z0-9-]{0,62}/secrets/)?[A-Za-z0-9_-]{1,255}', candidate)
+    ):
+        raise ValueError(f'Cloud Run secret binding {binding_name} has an invalid resource reference')
+    return candidate
+
+
 def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
     rendered: list[ConfigDict] = []
     for name, raw_entry in secret_entries.items():
         entry = _as_config_dict(raw_entry)
-        if entry is None or 'secret' not in entry:
-            raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
+        if entry is None:
+            raise ValueError(f'Cloud Run secret binding {name} must be a mapping')
+        if 'secret' in entry:
+            resource_name = _validated_resource_name(name, entry['secret'])
+        elif 'env_var' in entry:
+            resource_name = _runtime_value(name, entry)
+            if not resource_name:
+                continue
+            resource_name = _validated_resource_name(name, resource_name)
+        else:
+            raise ValueError(f'Cloud Run secret binding {name} must define secret or env_var')
         version = entry.get('version', 'latest')
         rendered.append(
             {
                 'name': str(name),
                 'valueFrom': {
                     'secretKeyRef': {
-                        'name': str(entry['secret']),
+                        'name': resource_name,
                         'key': str(version),
                     }
                 },
@@ -330,7 +358,7 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
 
 
 def _render_secret_names(secret_entries: ConfigDict) -> str:
-    return ','.join(secret_entries.keys())
+    return ','.join(entry['name'] for entry in _render_secret_entries(secret_entries))
 
 
 def _render_flag_values(flag_entries: ConfigDict) -> dict[str, str]:
@@ -430,7 +458,15 @@ def _render_desktop_backend_state(env_config: ConfigDict) -> ConfigDict:
     """
     desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
     env_entries = _render_env_entries(_as_config_dict(desktop_backend.get('env')) or {})
-    return {'services': {'desktop-backend': {'env': env_entries}}}
+    mixed = any(
+        entry['name'].startswith('LADDER_V1_') and entry['name'].endswith('_PRICE_ID') and entry['value'].strip()
+        for entry in env_entries
+    )
+    entries = _as_config_dict(desktop_backend.get('secrets')) or {}
+    secrets = _render_secret_entries({'SCREEN_VECTOR_STRIPE_API_KEY': entries.get('SCREEN_VECTOR_STRIPE_API_KEY')})
+    if mixed and not secrets:
+        raise ValueError('Desktop ladder price bindings require SCREEN_VECTOR_STRIPE_READ_SECRET')
+    return {'services': {'desktop-backend': {'env': env_entries, 'secrets': secrets}}}
 
 
 def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False) -> str | None:
@@ -453,10 +489,6 @@ def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False)
 def _emit_output(name: str, value: str) -> None:
     delimiter = f'__BACKEND_RUNTIME_ENV_{name}__'
     _append_github_output(f'{name}<<{delimiter}\n{value}\n{delimiter}\n')
-
-
-def _emit_output_line(name: str, value: str) -> None:
-    _append_github_output(f'{name}={value}\n')
 
 
 def _append_github_output(value: str) -> None:

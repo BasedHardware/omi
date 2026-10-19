@@ -212,7 +212,6 @@ def test_desktop_startup_and_removed_jit_routes_need_no_v2_redis(monkeypatch):
     monkeypatch.setattr(desktop_backend, 'shutdown_managed_spend_ledger', AsyncMock())
     monkeypatch.setattr(desktop_backend, 'close_all_clients', AsyncMock())
     monkeypatch.setattr(desktop_backend.reservation_state, 'aclose', AsyncMock())
-    monkeypatch.setattr(desktop_backend, 'close_free_tier_control_plane', lambda: None)
     # Readiness continues to probe the existing desktop Redis, independent of v2.
     monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-desktop.example')
     normal_ping = Mock(return_value=True)
