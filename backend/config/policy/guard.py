@@ -97,6 +97,59 @@ def env_reads(source):
             yield constants[key.id]
 
 
+STAGE_PATHS = {
+    'utils/batch_pipeline/projection.py',
+    'utils/batch_pipeline/projection_followup.py',
+    'utils/batch_pipeline/scheduler.py',
+    'utils/batch_pipeline/quarantine_recovery.py',
+    'database/batch_pipeline_projection.py',
+    'database/batch_pipeline_projection_session.py',
+    'routers/batch_pipeline.py',
+}
+SNAPSHOT_GETTERS = {
+    'enabled_for',
+    'live_record_enabled_for',
+    'shared_live_enabled',
+    'max_worker_attempts',
+    'authoritative_labels_enabled',
+    'require_live_target_enabled',
+    'recover_all_admitted',
+    'recovery_enabled_for',
+    'projection_contention_enabled',
+    'speech_empty_multilingual_enabled',
+    'terminal_empty_disposition_enabled',
+    'projection_timing_enabled',
+    'head_priority_enabled',
+    'async_projection_enabled',
+}
+
+
+def stage_policy_reads(source, relative):
+    if relative not in STAGE_PATHS:
+        return []
+    tree = ast.parse(source)
+    aliases = {}
+    functions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {'config.batch_pipeline', 'config.policy'}:
+            aliases.update({item.asname or item.name: item.name for item in node.names})
+    out = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called = (
+            aliases.get(node.func.id, node.func.id)
+            if isinstance(node.func, ast.Name)
+            else (node.func.attr if isinstance(node.func, ast.Attribute) else '')
+        )
+        if called == 'resolve_batch_policy' and relative == 'utils/batch_pipeline/scheduler.py':
+            if any(f.name == 'enqueue_in_transaction' and f.lineno <= node.lineno <= f.end_lineno for f in functions):
+                continue  # Standalone queue admission is an explicit resolver edge.
+        if called in SNAPSHOT_GETTERS or called == 'resolve_batch_policy':
+            out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')
+    return out
+
+
 def violations(root: Path):
     out = []
     backend = root / 'backend'
@@ -105,7 +158,9 @@ def violations(root: Path):
             relative = path.relative_to(backend).as_posix()
             if relative.startswith('config/policy/'):
                 continue
-            for key in env_reads(path.read_text()):
+            source = path.read_text()
+            out.extend(stage_policy_reads(source, relative))
+            for key in env_reads(source):
                 if isinstance(key, str) and (
                     key.startswith('BATCH_PIPELINE_') or key == 'BATCH_LIVE_STT_RETIRE_PERCENT'
                 ):

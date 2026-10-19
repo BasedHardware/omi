@@ -288,3 +288,13 @@ def test_redis_policy_cas_adopts_an_existing_winner(sync_jobs_with_redis, monkey
 
     monkeypatch.setattr(redis, 'eval', race)
     assert jobs.get_sync_job('legacy')['policy'] == winner
+
+
+def test_guard_rejects_a_stage_reresolving_through_a_legacy_getter():
+    from config.policy.guard import stage_policy_reads
+
+    source = "from config.batch_pipeline import head_priority_enabled as selected\ndef pull():\n    return selected()\n"
+    assert len(stage_policy_reads(source, 'utils/batch_pipeline/scheduler.py')) == 1
+    source = "from config.policy import resolve_batch_policy\ndef enqueue_in_transaction():\n    return resolve_batch_policy('owner')\n"
+    assert not stage_policy_reads(source, 'utils/batch_pipeline/scheduler.py')
+    assert len(stage_policy_reads(source, 'utils/batch_pipeline/projection.py')) == 1
