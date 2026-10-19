@@ -468,3 +468,29 @@ class TestWiring:
         names, images, moments, _loaded = self._run(monkeypatch, screen_text=True)
         assert names == ['Jordan Rivera'] and images == FRAMES
         assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
+
+
+class TestScreenFrameTimestampNormalization:
+    """Coerce ISO strings, naive datetimes, and numeric epoch timestamps to UTC (#22593)."""
+
+    def test_as_utc_iso_string_and_epoch(self):
+        from utils.conversations.screen_frame_evidence import _as_utc
+        res = _as_utc("2026-09-30T17:02:00Z")
+        assert res is not None and res.tzinfo == timezone.utc
+        res_epoch = _as_utc(1700000000)
+        assert res_epoch is not None and res_epoch.tzinfo == timezone.utc
+        assert _as_utc(True) is None
+
+    def test_offset_label_with_mixed_tz(self):
+        from utils.conversations.screen_frame_evidence import _offset_label
+        start = datetime(2026, 9, 30, 17, 0, 0, tzinfo=timezone.utc)
+        assert _offset_label("2026-09-30T17:02:30Z", start) == "+02:30"
+        naive_cap = datetime(2026, 9, 30, 17, 2, 30)
+        assert _offset_label(naive_cap, start) == "+02:30"
+
+    def test_select_for_images_sorting_mixed_tz(self):
+        from utils.conversations.screen_frame_evidence import _select_for_images, ScreenFrameEvidence
+        f1 = ScreenFrameEvidence("1", datetime(2026, 9, 30, 17, 5, 0, tzinfo=timezone.utc), "strip", 0.5, (), "t1")
+        f2 = ScreenFrameEvidence("2", datetime(2026, 9, 30, 17, 2, 0), "banner", 0.9, (), "t2")
+        selected = _select_for_images([f1, f2])
+        assert len(selected) == 2
