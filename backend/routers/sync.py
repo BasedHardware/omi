@@ -205,7 +205,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
@@ -1039,12 +1039,15 @@ async def sync_local_files_v2(
         client_device_context.client_device_id,
         snapshot_out=record_snapshot,
     )
+    legacy_mode = legacy_dark.current_mode()
+    legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        allow_legacy_fresh=legacy_fresh.enabled_for(uid),
+        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
+        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
     )
-    if lane_decision.reason == 'recent_legacy_capture':
+    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
         lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
@@ -1202,12 +1205,14 @@ async def sync_local_files_v2(
         if isinstance(record_response, JSONResponse):
             return record_response
 
+        batch_attempted = False
         if record_response is RecordUploadRoute.BATCH or (
             record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
+            batch_attempted = True
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1237,6 +1242,25 @@ async def sync_local_files_v2(
             if batch_response is not None:
                 return batch_response
             sequencer_registration_started = False
+
+        if not legacy_allowed:
+            # Legacy-dark (contract (h)): never create a legacy job. Content legacy
+            # already owns is answered by the fence; anything else keeps its audio.
+            ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+            decision = legacy_dark.fence_decision(ledger_row, legacy_mode)
+            await run_blocking(sync_executor, _cleanup_files, paths)
+            await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            return (
+                legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
+                or legacy_dark.admission_refused_response()
+            )
+        if record_response is RecordUploadRoute.LEGACY:
+            admission_reason = legacy_dark.LegacyAdmissionReason.LEGACY_RECORD_OWNER
+        elif batch_attempted:
+            admission_reason = legacy_dark.LegacyAdmissionReason.INTAKE_FALLBACK
+        else:
+            admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
+        legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1432,7 +1456,11 @@ async def sync_local_files_v2(
                     SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
                 ),
             }
-            if lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled():
+            if (
+                lane_decision.lane == SyncLane.BACKFILL
+                and uid_sequencer.enabled()
+                and legacy_dark.sequencer_registration_allowed(legacy_mode)
+            ):
                 # The Firestore record, not a Cloud Task acknowledgement, is
                 # the durable 202 boundary. Waiting jobs hold no HTTP worker.
                 # An ambiguous Firestore acknowledgement may already have
@@ -1953,7 +1981,13 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 @read_origin('job:sync_backfill_sequencer')
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    # Legacy-dark: ``dark`` stops claiming/dispatching only. Enrichment repair and
+    # summary-debt repair below keep running until C4 moves them (lead ruling 10-19).
+    if legacy_dark.sequencer_dispatch_allowed():
+        outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    else:
+        legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_DARK)
+        outcomes = {'legacy_dark': 1}
     from utils.sync import reprocess
 
     if reprocess.owns_runtime():
@@ -1984,6 +2018,8 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
+    if not legacy_dark.sequencer_dispatch_allowed():
+        return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
     except Exception as error:
@@ -2052,6 +2088,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
+            and legacy_dark.sequencer_registration_allowed()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):

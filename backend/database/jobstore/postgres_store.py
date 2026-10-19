@@ -23,6 +23,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.jobstore import codec
 from database.jobstore.connection import Pool
 
 T = TypeVar('T')
@@ -46,7 +47,7 @@ def jsonb(value: dict):
     # psycopg joins the lockfile separately; until then pyright cannot resolve it.
     from psycopg.types.json import Jsonb  # pyright: ignore[reportMissingImports]
 
-    return Jsonb(value)
+    return Jsonb(value, dumps=codec.dumps)
 
 
 def _is_retryable(exc: BaseException) -> bool:

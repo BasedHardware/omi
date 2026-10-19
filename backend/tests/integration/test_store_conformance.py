@@ -90,6 +90,15 @@ def test_put_get_round_trip_preserves_types_and_nesting(h):
     assert got['nested'] == doc['nested']
 
 
+def test_firestore_native_values_round_trip(h):
+    from datetime import datetime, timezone
+
+    stamp = datetime(2026, 10, 19, 12, 30, 15, 123456, tzinfo=timezone.utc)
+    put_all(h, [('jobs', 's1', job(h, 's1', expires_at=stamp, blob=b'\x00\xffbytes'))])
+    got = h.store.run(lambda tx: tx.get('jobs', 's1'))
+    assert got['expires_at'] == stamp and got['blob'] == b'\x00\xffbytes'
+
+
 def test_reads_inside_a_transaction_see_its_own_writes_but_returns_copies(h):
     put_all(h, [('jobs', 's1', job(h, 's1'))])
 
