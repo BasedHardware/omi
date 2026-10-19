@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// The two visual directions from the Figma exploration
-/// ("Omi — Paywall Redesign", pages E and F).
+/// The visual directions. Graphite and Aurora come from the Figma exploration
+/// ("Omi — Paywall Redesign", pages E and F); Aurora Light is the light,
+/// Pocket-inspired take on Aurora used for the paywall-first flow and the app.
 enum DfDirection {
-  graphite('Graphite'),
-  aurora('Aurora');
+  auroraLight('Aurora Light'),
+  aurora('Aurora'),
+  graphite('Graphite');
 
   const DfDirection(this.label);
 
@@ -33,6 +35,8 @@ class DfTheme {
     required this.buttonRadius,
     required this.headlineTracking,
     this.glow,
+    this.isLight = false,
+    this.serifHeadlines = false,
   });
 
   final DfDirection direction;
@@ -57,6 +61,12 @@ class DfTheme {
   /// Aurora only: the "Omi is listening" glow. Reserved for the pendant ring,
   /// progress and badges; never used as a background or for body text.
   final List<Color>? glow;
+
+  /// Light canvas (dark text, black buttons).
+  final bool isLight;
+
+  /// Headlines in Instrument Serif instead of the system sans.
+  final bool serifHeadlines;
 
   /// Pure black, white and nothing else, like an Apple keynote slide.
   static const DfTheme graphite = DfTheme(
@@ -95,7 +105,46 @@ class DfTheme {
     glow: <Color>[Color(0xFF7B61FF), Color(0xFFFF6FB5), Color(0xFFFFB86B)],
   );
 
-  static DfTheme of(DfDirection direction) => direction == DfDirection.aurora ? aurora : graphite;
+  /// Aurora, lightened: a soft white canvas with a faint aurora wash, black
+  /// pill buttons and serif headlines (after Pocket's onboarding). The glow
+  /// stays reserved for "Omi is listening" moments, badges and the trial path.
+  static const DfTheme auroraLight = DfTheme(
+    direction: DfDirection.auroraLight,
+    background: Color(0xFFFAFAFC),
+    surface: Color(0xFFFFFFFF),
+    surface2: Color(0xFFF1F1F6),
+    border: Color(0xFFE6E6EE),
+    text: Color(0xFF111114),
+    textSecondary: Color(0xFF5E5E6A),
+    textTertiary: Color(0xFF94949F),
+    accent: Color(0xFF111114),
+    onAccent: Color(0xFFFFFFFF),
+    success: Color(0xFF1FA463),
+    danger: Color(0xFFE5484D),
+    buttonRadius: 999,
+    headlineTracking: -0.01,
+    glow: <Color>[Color(0xFF7B61FF), Color(0xFFFF6FB5), Color(0xFFFFB86B)],
+    isLight: true,
+    serifHeadlines: true,
+  );
+
+  static DfTheme of(DfDirection direction) => switch (direction) {
+        DfDirection.auroraLight => auroraLight,
+        DfDirection.aurora => aurora,
+        DfDirection.graphite => graphite,
+      };
+
+  static const String serifFamily = 'InstrumentSerif';
+
+  /// Faint aurora wash for the top of light screens.
+  Gradient get wash => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          (glow ?? <Color>[surface2]).first.withValues(alpha: isLight ? 0.10 : 0.16),
+          background,
+        ],
+      );
 
   bool get hasGlow => glow != null;
 
@@ -105,13 +154,22 @@ class DfTheme {
   /// Fill for small badges ("Best value", "Save $50").
   Gradient get badgeGradient => LinearGradient(colors: glow ?? <Color>[success, success]);
 
-  TextStyle headline(double size) => TextStyle(
-        fontSize: size,
-        height: 1.1,
-        fontWeight: FontWeight.w600,
-        letterSpacing: headlineTracking * size,
-        color: text,
-      );
+  TextStyle headline(double size) => serifHeadlines
+      ? TextStyle(
+          fontFamily: serifFamily,
+          fontSize: size * 1.12,
+          height: 1.08,
+          fontWeight: FontWeight.w400,
+          letterSpacing: headlineTracking * size,
+          color: text,
+        )
+      : TextStyle(
+          fontSize: size,
+          height: 1.1,
+          fontWeight: FontWeight.w600,
+          letterSpacing: headlineTracking * size,
+          color: text,
+        );
 
   TextStyle body({double size = 16, Color? color, FontWeight weight = FontWeight.w400, double height = 1.4}) =>
       TextStyle(fontSize: size, height: height, fontWeight: weight, color: color ?? textSecondary);
@@ -130,7 +188,7 @@ class DfThemeScope extends InheritedWidget {
   final DfTheme theme;
 
   static DfTheme of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<DfThemeScope>()?.theme ?? DfTheme.graphite;
+      context.dependOnInheritedWidgetOfExactType<DfThemeScope>()?.theme ?? DfTheme.auroraLight;
 
   @override
   bool updateShouldNotify(DfThemeScope oldWidget) => oldWidget.theme != theme;

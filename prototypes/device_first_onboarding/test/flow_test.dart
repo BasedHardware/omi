@@ -5,11 +5,7 @@ import 'package:omi_device_first_prototype/src/content.dart';
 import 'package:omi_device_first_prototype/src/flow.dart';
 import 'package:omi_device_first_prototype/src/theme.dart';
 
-Future<void> settle(WidgetTester tester) async {
-  for (var i = 0; i < 4; i++) {
-    await tester.pump(const Duration(milliseconds: 150));
-  }
-}
+import 'support.dart';
 
 Future<void> pumpFlow(
   WidgetTester tester, {
@@ -27,15 +23,6 @@ Future<void> pumpFlow(
       home: DeviceFirstFlow(direction: direction, trial: trial, initialStep: step, searchDuration: searchDuration),
     ),
   );
-  await settle(tester);
-}
-
-Future<void> tapText(WidgetTester tester, String text) async {
-  final finder = find.text(text);
-  expect(finder, findsOneWidget, reason: 'expected exactly one "$text" on screen');
-  await tester.ensureVisible(finder);
-  await tester.pump();
-  await tester.tap(finder);
   await settle(tester);
 }
 
@@ -143,18 +130,17 @@ void main() {
     expect(find.text('Trial started · monthly · 7 days'), findsOneWidget);
   });
 
-  testWidgets('launcher opens the flow in the chosen direction and trial arm', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  testWidgets('launcher opens the v1 flow in the chosen direction and trial arm', (tester) async {
+    setSize(tester, const Size(390, 844));
     await tester.pumpWidget(const DeviceFirstPrototypeApp());
     await settle(tester);
+    await tapText(tester, 'Device first (v1)');
     await tapText(tester, 'Aurora');
-    await tapText(tester, '14 days');
+    await tapText(tester, '30 days');
     await tapText(tester, 'Play the flow');
     expect(find.text('Get Started'), findsOneWidget);
     final flow = tester.widget<DeviceFirstFlow>(find.byType(DeviceFirstFlow));
     expect(flow.direction, DfDirection.aurora);
-    expect(flow.trial, TrialLength.twoWeeks);
+    expect(flow.trial, TrialLength.oneMonth);
   });
 }

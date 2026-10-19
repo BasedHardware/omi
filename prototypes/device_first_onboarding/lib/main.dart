@@ -14,7 +14,7 @@ class DeviceFirstPrototypeApp extends StatelessWidget {
     return MaterialApp(
       title: 'Omi device-first prototype',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+      theme: ThemeData(brightness: Brightness.light, useMaterial3: true),
       home: const PrototypeLauncher(),
     );
   }

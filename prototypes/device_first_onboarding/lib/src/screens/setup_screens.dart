@@ -6,7 +6,10 @@ import '../widgets.dart';
 
 /// 08 — Name.
 class NameScreen extends StatefulWidget {
-  const NameScreen({super.key, required this.onContinue});
+  const NameScreen({super.key, this.progress = (step: 2, total: 5), required this.onContinue});
+
+  /// Position in the progress bar; differs between the v1 and paywall-first flows.
+  final ({int step, int total}) progress;
 
   final ValueChanged<String> onContinue;
 
@@ -29,7 +32,7 @@ class _NameScreenState extends State<NameScreen> {
     final name = _controller.text.trim();
     return DfPage(
       children: <Widget>[
-        const DfProgress(step: 2),
+        DfProgress(step: widget.progress.step, total: widget.progress.total),
         const DfHeadline("What's your name?"),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -185,7 +188,10 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
 
 /// 11 — Voice introduction. Prompts from `speech_profile_widget.dart`.
 class VoiceIntroScreen extends StatefulWidget {
-  const VoiceIntroScreen({super.key, required this.onDone});
+  const VoiceIntroScreen({super.key, this.progress = (step: 5, total: 5), required this.onDone});
+
+  /// Position in the progress bar; differs between the v1 and paywall-first flows.
+  final ({int step, int total}) progress;
 
   final VoidCallback onDone;
 
@@ -221,7 +227,7 @@ class _VoiceIntroScreenState extends State<VoiceIntroScreen> {
     final last = _index == _prompts.length - 1;
     return DfPage(
       children: <Widget>[
-        const DfProgress(step: 5),
+        DfProgress(step: widget.progress.step, total: widget.progress.total),
         const DfHeadline('Let Omi get to know you'),
         const DfBody("Finish four short sentences out loud. Speak toward your Omi — it's learning your voice."),
         Center(child: _VoiceOrb(listening: _listening)),
@@ -282,10 +288,13 @@ class _VoiceOrb extends StatelessWidget {
 /// with social proof: asking for a rating before anything has been recorded
 /// wastes the prompt.
 class SetupScreen extends StatefulWidget {
-  const SetupScreen({super.key, required this.name, required this.onSeePlan});
+  const SetupScreen({super.key, required this.name, required this.onSeePlan, this.ctaLabel = 'See my plan'});
 
   final String name;
   final VoidCallback onSeePlan;
+
+  /// 'See my plan' when the paywall comes next (v1), 'Continue' otherwise.
+  final String ctaLabel;
 
   @override
   State<SetupScreen> createState() => _SetupScreenState();
@@ -345,7 +354,7 @@ class _SetupScreenState extends State<SetupScreen> with SingleTickerProviderStat
                 ],
               ),
             ),
-            DfButton('See my plan', onPressed: done ? widget.onSeePlan : null),
+            DfButton(widget.ctaLabel, onPressed: done ? widget.onSeePlan : null),
           ],
         );
       },
@@ -380,11 +389,18 @@ class _SetupStep extends StatelessWidget {
 
 /// 13 — Your Omi is ready: plays back what onboarding captured.
 class ReadyScreen extends StatelessWidget {
-  const ReadyScreen({super.key, required this.name, required this.language, required this.onContinue});
+  const ReadyScreen({
+    super.key,
+    required this.name,
+    required this.language,
+    required this.onContinue,
+    this.ctaLabel = 'Continue',
+  });
 
   final String name;
   final String language;
   final VoidCallback onContinue;
+  final String ctaLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +434,7 @@ class ReadyScreen extends StatelessWidget {
             ],
           ),
         const Spacer(),
-        DfButton('Continue', onPressed: onContinue),
+        DfButton(ctaLabel, onPressed: onContinue),
       ],
     );
   }

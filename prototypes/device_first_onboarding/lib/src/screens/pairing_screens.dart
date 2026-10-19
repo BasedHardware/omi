@@ -11,7 +11,14 @@ import '../widgets.dart';
 /// The prototype fakes discovery: after [searchDuration] it reports the
 /// device as found. In the app this is the BLE scan.
 class FindDeviceScreen extends StatefulWidget {
-  const FindDeviceScreen({super.key, required this.onFound, this.searchDuration = const Duration(seconds: 3)});
+  const FindDeviceScreen(
+      {super.key,
+      this.progress = (step: 1, total: 5),
+      required this.onFound,
+      this.searchDuration = const Duration(seconds: 3)});
+
+  /// Position in the progress bar; differs between the v1 and paywall-first flows.
+  final ({int step, int total}) progress;
 
   final VoidCallback onFound;
   final Duration searchDuration;
@@ -41,7 +48,7 @@ class _FindDeviceScreenState extends State<FindDeviceScreen> {
     final t = DfThemeScope.of(context);
     return DfPage(
       children: <Widget>[
-        const DfProgress(step: 1),
+        DfProgress(step: widget.progress.step, total: widget.progress.total),
         const DfHeadline('Turn on your Omi'),
         const DfBody('Press its button once and hold it near your phone.'),
         const Center(
@@ -77,7 +84,11 @@ class _FindDeviceScreenState extends State<FindDeviceScreen> {
 
 /// 06 — Omi found.
 class DeviceFoundScreen extends StatelessWidget {
-  const DeviceFoundScreen({super.key, required this.onPair, required this.onScanAgain});
+  const DeviceFoundScreen(
+      {super.key, this.progress = (step: 1, total: 5), required this.onPair, required this.onScanAgain});
+
+  /// Position in the progress bar; differs between the v1 and paywall-first flows.
+  final ({int step, int total}) progress;
 
   final VoidCallback onPair;
   final VoidCallback onScanAgain;
@@ -87,7 +98,7 @@ class DeviceFoundScreen extends StatelessWidget {
     final t = DfThemeScope.of(context);
     return DfPage(
       children: <Widget>[
-        const DfProgress(step: 1),
+        DfProgress(step: progress.step, total: progress.total),
         const DfEyebrow('1 device found nearby'),
         const DfHeadline('We found your Omi'),
         DfCard(
@@ -126,7 +137,10 @@ class DeviceFoundScreen extends StatelessWidget {
 
 /// 07 — Paired.
 class PairedScreen extends StatelessWidget {
-  const PairedScreen({super.key, required this.onContinue});
+  const PairedScreen({super.key, this.progress = (step: 1, total: 5), required this.onContinue});
+
+  /// Position in the progress bar; differs between the v1 and paywall-first flows.
+  final ({int step, int total}) progress;
 
   final VoidCallback onContinue;
 
@@ -135,7 +149,7 @@ class PairedScreen extends StatelessWidget {
     final t = DfThemeScope.of(context);
     return DfPage(
       children: <Widget>[
-        const DfProgress(step: 1),
+        DfProgress(step: progress.step, total: progress.total),
         const Spacer(),
         const Center(child: DfPendant(size: 168, showCord: false, glow: true)),
         DfEyebrow('Pairing successful', color: t.success),

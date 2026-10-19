@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'content.dart';
 import 'theme.dart';
@@ -7,18 +8,21 @@ import 'theme.dart';
 /// fills the screen (so a [Spacer] pushes the actions to the bottom) and
 /// scrolls when it does not fit.
 class DfPage extends StatelessWidget {
-  const DfPage({super.key, required this.children, this.header, this.spacing = 14});
+  const DfPage({super.key, required this.children, this.header, this.spacing = 14, this.wash = false});
 
   final List<Widget> children;
   final Widget? header;
   final double spacing;
 
+  /// Paint the faint aurora wash behind the page (light, Pocket-style screens).
+  final bool wash;
+
   @override
   Widget build(BuildContext context) {
     final t = DfThemeScope.of(context);
     final header = this.header;
-    return ColoredBox(
-      color: t.background,
+    return DecoratedBox(
+      decoration: wash ? BoxDecoration(gradient: t.wash) : BoxDecoration(color: t.background),
       child: SafeArea(
         top: header == null,
         child: CustomScrollView(
@@ -73,11 +77,15 @@ class DfButton extends StatelessWidget {
       DfButtonKind.text => t.textSecondary,
     };
     final radius = BorderRadius.circular(t.buttonRadius);
+    final outlined = kind == DfButtonKind.secondary && t.isLight;
     return Opacity(
       opacity: onPressed == null ? 0.35 : 1,
       child: Material(
         color: background,
-        borderRadius: radius,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: outlined ? BorderSide(color: t.border) : BorderSide.none,
+        ),
         child: InkWell(
           borderRadius: radius,
           onTap: onPressed,
@@ -93,7 +101,7 @@ class DfButton extends StatelessWidget {
   }
 }
 
-/// Five-segment progress for the paired part of onboarding.
+/// Segmented progress for the paired part of onboarding.
 class DfProgress extends StatelessWidget {
   const DfProgress({super.key, required this.step, this.total = 5});
 
@@ -178,7 +186,11 @@ class DfCard extends StatelessWidget {
     final t = DfThemeScope.of(context);
     return Container(
       padding: padding,
-      decoration: BoxDecoration(color: t.surface, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: t.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: t.isLight ? Border.all(color: t.border) : null,
+      ),
       child: child,
     );
   }
@@ -518,4 +530,269 @@ class DfBackRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The Omi mark: a ring and the wordmark.
+class DfOmiMark extends StatelessWidget {
+  const DfOmiMark({super.key, this.size = 18, this.color});
+
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    final c = color ?? t.text;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: c, width: size * 0.16),
+          ),
+        ),
+        SizedBox(width: size * 0.35),
+        Text('omi', style: TextStyle(fontSize: size, fontWeight: FontWeight.w700, color: c, letterSpacing: -0.3)),
+      ],
+    );
+  }
+}
+
+/// Pill-style segmented control ("Summary | Transcript").
+class DfSegmented extends StatelessWidget {
+  const DfSegmented({super.key, required this.labels, required this.index, required this.onChanged});
+
+  final List<String> labels;
+  final int index;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(color: t.surface2, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: <Widget>[
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: i == index,
+                child: GestureDetector(
+                  onTap: () => onChanged(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: i == index ? t.surface : Colors.transparent,
+                      borderRadius: BorderRadius.circular(9),
+                      boxShadow: i == index && t.isLight
+                          ? <BoxShadow>[BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6)]
+                          : null,
+                    ),
+                    child: Text(
+                      labels[i],
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.label(
+                        size: 13,
+                        weight: FontWeight.w600,
+                        color: i == index ? t.text : t.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Rounded search / text field.
+class DfSearchField extends StatelessWidget {
+  const DfSearchField(
+      {super.key, required this.hint, this.onChanged, this.autofocus = false, this.icon = Icons.search});
+
+  final String hint;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: t.isLight ? t.surface : t.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: t.isLight ? Border.all(color: t.border) : null,
+      ),
+      child: TextField(
+        autofocus: autofocus,
+        cursorColor: t.accent,
+        style: t.label(size: 16),
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          icon: Icon(icon, size: 18, color: t.textTertiary),
+          hintText: hint,
+          hintStyle: t.label(size: 16, color: t.textTertiary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small section title above a card ("Action items", "Today").
+class DfSectionTitle extends StatelessWidget {
+  const DfSectionTitle(this.text, {super.key, this.trailing});
+
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    final trailing = this.trailing;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 2),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Text(text, style: t.label(size: 13, weight: FontWeight.w600, color: t.textTertiary))),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+}
+
+/// Top bar for pushed pages: back, centred title, optional actions.
+class DfTopBar extends StatelessWidget {
+  const DfTopBar({super.key, required this.title, this.onBack, this.actions = const <Widget>[]});
+
+  final String title;
+  final VoidCallback? onBack;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 96,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                tooltip: 'Back',
+                onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+                icon: Icon(Icons.arrow_back_ios_new, size: 20, color: t.text),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.label(size: 17, weight: FontWeight.w600),
+            ),
+          ),
+          SizedBox(
+            width: 96,
+            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Status-bar icons that suit the theme (dark icons on Aurora Light).
+class DfStatusBar extends StatelessWidget {
+  const DfStatusBar({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: t.isLight ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
+      child: child,
+    );
+  }
+}
+
+/// A screen with [sheet] presented over a dimmed, inert [behind] screen.
+/// Used for the checkout sheets and the winback, so each is its own step.
+class DfSheetOver extends StatelessWidget {
+  const DfSheetOver({super.key, required this.behind, required this.sheet, this.floating = false});
+
+  final Widget behind;
+  final Widget sheet;
+
+  /// A floating card with margins (winback) rather than an edge-to-edge sheet.
+  final bool floating;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DfThemeScope.of(context);
+    final media = MediaQuery.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        IgnorePointer(child: ExcludeSemantics(child: behind)),
+        ColoredBox(color: Colors.black.withValues(alpha: t.isLight ? 0.32 : 0.55)),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: floating
+                ? EdgeInsets.fromLTRB(10, media.padding.top + 24, 10, media.padding.bottom + 10)
+                : EdgeInsets.only(top: media.padding.top + 24),
+            child: Container(
+              decoration: BoxDecoration(
+                color: t.surface,
+                borderRadius:
+                    floating ? BorderRadius.circular(30) : const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SafeArea(top: false, bottom: !floating, child: SingleChildScrollView(child: sheet)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pushes [builder] as a full page that keeps the current [DfTheme].
+Future<T?> pushDf<T>(BuildContext context, WidgetBuilder builder) {
+  final theme = DfThemeScope.of(context);
+  return Navigator.of(context).push<T>(
+    MaterialPageRoute<T>(
+      builder: (_) => DfThemeScope(
+        theme: theme,
+        child: DfStatusBar(child: Builder(builder: builder)),
+      ),
+    ),
+  );
+}
+
+/// Snackbar for controls that exist in the app but not in this prototype.
+void dfNotInPrototype(BuildContext context, String what) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text('$what isn\u2019t part of this prototype')));
 }

@@ -1,12 +1,20 @@
-# Device-first onboarding: design prototype
+# Onboarding, paywall & app: design prototype
 
-A clickable Flutter prototype of a new first-run flow for the Omi app, in two
-visual directions (**Graphite** and **Aurora**). It is a design proposal for
-review, not production code: it lives outside `app/` and depends only on
-Flutter, so it runs without Firebase, the backend or app flavors.
+A clickable Flutter prototype of a new first run and the main app for Omi. It
+is a design proposal for review, not production code: it lives outside `app/`
+and depends only on Flutter, so it runs without Firebase, the backend or app
+flavors.
 
-Figma: "Omi — Paywall Redesign", pages **E · Device-first · Graphite** and
-**F · Device-first · Aurora**.
+It holds two onboarding flows and the app they lead into:
+
+- **Paywall first** (default, modelled on Pocket's onboarding): the paywall
+  comes straight after sign-in, a one-time 30-day winback follows if it is
+  closed, then a soft setup and pairing. In **Aurora Light**.
+- **Device first (v1)**: pairing first, soft paywall at the end. In
+  **Graphite** and **Aurora** (the earlier review round).
+- **The app**: home, tasks, conversations, daily recaps, Ask Omi, search,
+  settings, plan & usage, device, memories, integrations and recording, mirroring
+  the screens in `app/lib` in the Aurora Light design language.
 
 ## Run it
 
@@ -16,15 +24,48 @@ flutter create --platforms=ios,android,web .   # once: generates the platform fo
 flutter run                                    # or: flutter run -d chrome
 ```
 
-The launcher lets you pick a direction and a trial length, then play the whole
-flow or jump to any screen.
+The launcher picks a flow, a look and a trial arm, then plays the flow or jumps
+to any onboarding or app screen (as a Free or Unlimited user).
 
 ```bash
-flutter test --exclude-tags screenshots                 # behaviour tests
+flutter test --exclude-tags screenshots                 # behaviour and overflow tests
 flutter test --tags screenshots --update-goldens        # renders every screen to test/goldens/
 ```
 
-## The flow
+## Paywall first
+
+```
+Welcome (sign in) → Paywall ──"Try for $0.00"──→ Pay via web (Stripe) ─┐
+                     │      ──"Try with App Store"→ App Store sheet ───┤ trial
+                     └ close → Winback: "upgraded to 30 days free" ────┤
+                                  └ No thanks → (Free) ────────────────┤
+Permissions (Bluetooth required) → "Let's get your Omi set up"  ←──────┘
+  → Find → Found → Paired → Name → Voice → Setting up → Ready → App
+No Omi ("Get one now" / "I don't have my Omi yet") → Buy → Order → Waiting room → Find …
+```
+
+- **Paywall before onboarding.** Users see the offer at peak intent, right
+  after sign-in. The paywall explains the trial with a dated timeline (today,
+  reminder, charge date) and a swipeable carousel of what Unlimited does.
+- **Two ways to pay.** "Try for $0.00" opens web checkout (Stripe, Apple Pay or
+  card; no App Store fee); "Try with App Store" uses In-App Purchase. Apple's
+  rules on linking out to web checkout differ by storefront (the US allows it
+  since the 2025 Epic ruling), so the web option should be gated by region.
+- **Winback.** Closing the paywall shows a one-time offer that upgrades the
+  trial to 30 days. Declining lands on Free; the paywall does not return during
+  onboarding.
+- **Pairing is still required.** Every path ends in pairing; users without an
+  Omi are sent to buy one.
+- **Trial-length test.** The first paywall's arms are 3, 7 and 14 days
+  (`DfOffer.paywallFirstArms` in `lib/src/content.dart`); the winback is always
+  30 days. Judge arms on trial-to-paid conversion and revenue per user who saw
+  the paywall, not on trial starts.
+
+In the app, Free users see their monthly minutes, conversations older than two
+days are locked behind "Upgrade to Unlimited", and Plan & Usage previews the
+paywall shown when the monthly cap is hit.
+
+## Device first (v1)
 
 ```
 Everyone        Welcome → Sign in → Data & Privacy → Do you have your Omi?
@@ -35,37 +76,26 @@ It's on the way Waiting room → delivery push → Find Omi → …
 No              Get your Omi ($129) → Order summary → Waiting room → …
 ```
 
-- **The pendant is required.** The device question comes right after sign-in,
-  before the user spends time on setup they can't use. Without a paired Omi
-  there is no path to the paywall or home; users without one are sent to buy it
-  and wait in a waiting room that only leads to pairing.
-- **Soft paywall.** Pricing first appears at the end of onboarding, with
-  "Continue with Free" always visible. A paired Omi works on Free (300 cloud
-  minutes a month, then on-device).
-- **Trial-length test.** The paywall's four arms differ only in trial length;
-  headline, button, caption and reminder day follow from it (`TrialLength` in
-  `lib/src/content.dart`). Judge the arms on trial-to-paid conversion and
-  revenue per user who saw the paywall, not on trial starts.
-
 ## What is real and what is stubbed
 
 | Area | In the prototype | In the app |
 |---|---|---|
-| Sign in, Data & Privacy | Stand-ins with today's copy | `auth.dart`, `ai_consent_widget.dart` |
-| Find / pair Omi | Fake scan that "finds" the device after 3 s; copy from `find_device` | BLE scan and pairing |
-| Name, language, permissions, voice | Same steps and copy as today's onboarding | Existing onboarding pages |
-| Paywall plans | Static prices | Plan catalog + Stripe; needs a free trial (`trial_period_days` or an App Store / Play intro offer) |
+| Sign in | Buttons that continue | `auth.dart` |
+| Paywall, winback, checkout | Static prices and dated copy; checkout sheets are mock-ups | Plan catalog + Stripe Checkout / RevenueCat; needs a free trial (`trial_period_days` or an App Store / Play intro offer) and a winback offer |
+| Find / pair Omi | Fake scan that "finds" the device after 3 s | BLE scan and pairing |
+| Permissions | Bluetooth prompt is a stand-in dialog | System permission prompts |
 | Buy Omi / checkout | Static order summary | Physical goods can't use In-App Purchase: Apple Pay / Shop Pay via the store |
-| Waiting room, delivery push | Static order status | Store order status + a "delivered" webhook |
+| App screens | Sample conversations, tasks, memories and apps (`lib/src/app/mock_data.dart`); chat answers are canned | Backend data |
 | Product imagery | The pendant is drawn in code (no assets) | Real product photography |
 
 Values marked `Placeholder:` still need a decision: the monthly price, shipping
 price and delivery window, the order data, and a real App Store review.
+Headlines use Instrument Serif (SIL Open Font License, `fonts/OFL.txt`).
 
 ## Moving a direction into the app
 
 Everything visual reads from `DfTheme` (`lib/src/theme.dart`), so adopting a
 direction means mapping its tokens onto `OmiColors` / `OmiType` / `OmiRadius`,
 moving copy into ARB files with `app/scripts/l10n.py`, and swapping the stubbed
-screens for the existing onboarding pages. The mobile UX contract
+screens for the existing pages. The mobile UX contract
 (`app/docs/ux-contract.md`) applies once the code moves under `app/lib/`.

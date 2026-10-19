@@ -20,3 +20,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Instrument Serif (SIL Open Font License, fonts/OFL.txt): Aurora Light headlines.
+  fonts:
+    - family: InstrumentSerif
+      fonts:
+        - asset: fonts/InstrumentSerif-Regular.ttf
+        - asset: fonts/InstrumentSerif-Italic.ttf
+          style: italic

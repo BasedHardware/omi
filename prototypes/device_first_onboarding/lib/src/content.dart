@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Prices and trial settings used across the prototype.
 ///
 /// Anything marked "Placeholder:" is a stand-in value that still needs a
@@ -73,3 +75,65 @@ enum TrialLength {
 
   int get daysOfNotice => days - reminderDay;
 }
+
+/// The paywall-first flow's offer, after Pocket: a base free trial on the
+/// first paywall (tested at 3 / 7 / 14 days), and a one-time upgrade to a
+/// 30-day trial if the user closes it (the winback).
+class DfOffer {
+  const DfOffer._();
+
+  static const int winbackDays = 30;
+
+  static const List<TrialLength> paywallFirstArms = <TrialLength>[
+    TrialLength.threeDays,
+    TrialLength.oneWeek,
+    TrialLength.twoWeeks,
+  ];
+
+  /// The reminder lands two days before the trial ends (a day for 3-day trials).
+  static int reminderDayFor(int days) => days <= 3 ? days - 1 : days - 2;
+
+  /// "3 days", "1 week", "2 weeks", "30 days".
+  static String trialPhrase(int days) => switch (days) {
+        7 => '1 week',
+        14 => '2 weeks',
+        _ => '$days days',
+      };
+}
+
+/// What the user ended onboarding with.
+@immutable
+class DfPlanState {
+  const DfPlanState.free() : trialDays = null;
+  const DfPlanState.trial(int this.trialDays);
+
+  final int? trialDays;
+
+  bool get unlimited => trialDays != null;
+}
+
+const List<String> _months = <String>[
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', //
+];
+const List<String> _weekdays = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// "Oct 19".
+String dfShortDate(DateTime d) => '${_months[d.month - 1]} ${d.day}';
+
+/// "Oct 19, 2026".
+String dfLongDate(DateTime d) => '${_months[d.month - 1]} ${d.day}, ${d.year}';
+
+/// "Thu, Oct 16".
+String dfDayDate(DateTime d) => '${_weekdays[d.weekday - 1]}, ${dfShortDate(d)}';
+
+/// "Thu".
+String dfWeekday(DateTime d) => _weekdays[d.weekday - 1];
+
+/// "9:41 AM".
+String dfTime(DateTime d) {
+  final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final minute = d.minute.toString().padLeft(2, '0');
+  return '$hour:$minute ${d.hour < 12 ? 'AM' : 'PM'}';
+}
+
+DateTime dfDay(DateTime d) => DateTime(d.year, d.month, d.day);
