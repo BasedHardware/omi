@@ -24,10 +24,13 @@
      "live_admission_enabled": false,
      "live_record_enabled": false,
      "live_stt_retired": false,
-     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "policy_id": "930c01867652b4490e512899a779e716192fcdb7073286fdfb214a9971505659",
+     "provider_reason": "none",
+     "provider_service": "none",
      "retire_percent": 0.0,
      "schema_version": 1,
-     "source_role": "sync"
+     "source_role": "sync",
+     "stt_route": "parakeet"
     },
     "policy_parts": {
      "first_summary": {
@@ -168,10 +171,13 @@
      "live_admission_enabled": false,
      "live_record_enabled": false,
      "live_stt_retired": false,
-     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "policy_id": "930c01867652b4490e512899a779e716192fcdb7073286fdfb214a9971505659",
+     "provider_reason": "none",
+     "provider_service": "none",
      "retire_percent": 0.0,
      "schema_version": 1,
-     "source_role": "sync"
+     "source_role": "sync",
+     "stt_route": "parakeet"
     },
     "policy_parts": {
      "first_summary": {
@@ -302,10 +308,13 @@
      "live_admission_enabled": false,
      "live_record_enabled": false,
      "live_stt_retired": false,
-     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "policy_id": "930c01867652b4490e512899a779e716192fcdb7073286fdfb214a9971505659",
+     "provider_reason": "none",
+     "provider_service": "none",
      "retire_percent": 0.0,
      "schema_version": 1,
-     "source_role": "sync"
+     "source_role": "sync",
+     "stt_route": "parakeet"
     },
     "policy_parts": {
      "first_summary": {
@@ -436,10 +445,13 @@
      "live_admission_enabled": false,
      "live_record_enabled": false,
      "live_stt_retired": false,
-     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "policy_id": "930c01867652b4490e512899a779e716192fcdb7073286fdfb214a9971505659",
+     "provider_reason": "none",
+     "provider_service": "none",
      "retire_percent": 0.0,
      "schema_version": 1,
-     "source_role": "sync"
+     "source_role": "sync",
+     "stt_route": "parakeet"
     },
     "policy_parts": {
      "first_summary": {
