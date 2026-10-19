@@ -234,14 +234,14 @@ def test_allowance_and_deleted_target_fence_epoch2(setup, monkeypatch, legacy_de
     from utils.sync.capture import chunk_identity
 
     client, store, binding, artifacts, _, alternate, old = enabled(setup, monkeypatch, legacy_dependencies)
-    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args: False)
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args, **kwargs: False)
     assert redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100) == 'allowance_held'
     assert row(client)['speech_redrive']['state'] == 'prepared'
     target = chunk_identity(
         binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, row(client)['capture_at']
     )
     client.rows[('users', binding.owner_id, 'deleted_conversations', target)] = {'deleted': True}
-    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args: True)
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args, **kwargs: True)
     with pytest.raises(BatchPrivacyBlocked):
         redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100)
     alternate.assert_not_called()
@@ -252,9 +252,9 @@ def test_paid_epoch_attributes_provider_audio_to_modulate(setup, monkeypatch, le
     from utils.batch_pipeline import speech_redrive
 
     _, store, binding, artifacts, _, alternate, old = enabled(setup, monkeypatch, legacy_dependencies)
-    monkeypatch.setattr(speech_redrive, 'sync_allowed', lambda *args: True)
-    monkeypatch.setattr(speech_redrive, 'cap_enabled', lambda: True)
-    monkeypatch.setattr(speech_redrive, 'funded_allowance', lambda *args: SimpleNamespace(reason='managed'))
+    monkeypatch.setattr(speech_redrive, 'sync_allowed', lambda *args, **kwargs: True)
+    monkeypatch.setattr(speech_redrive, 'cap_enabled', lambda uid, lane: True)
+    monkeypatch.setattr(speech_redrive, 'funded_allowance', lambda *args, **kwargs: SimpleNamespace(reason='managed'))
     meter = Mock()
     monkeypatch.setattr(speech_redrive, 'record_audio', meter)
     assert redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100) == 'recovered'

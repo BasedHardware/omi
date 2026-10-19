@@ -386,7 +386,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
@@ -612,7 +612,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = True
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))

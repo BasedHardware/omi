@@ -1,5 +1,7 @@
 import logging
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from utils.observability.stt_cap_dispatch import RECONCILIATION, record_reconciliation
