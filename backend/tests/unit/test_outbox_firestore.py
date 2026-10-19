@@ -199,3 +199,9 @@ def test_pull_claims_due_rows_by_their_stored_wake(rows, monkeypatch):
     claims = outbox.claim(5, 120, now=10)
     assert [claim.row_id for claim in claims] == [KEY]
     assert outbox.claim(5, 120, now=11) == []  # the leased row answers BUSY, not a second claim
+
+
+def test_outbox_for_selects_the_firestore_enrichment_outbox():
+    from database.outbox import outbox_for
+
+    assert outbox_for(OutboxKind.ENRICHMENT) is outbox

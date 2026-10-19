@@ -114,4 +114,6 @@ def outbox_for(kind: OutboxKind) -> Outbox:
     Reads the table-group mode 'outbox' from A's ``BATCH_JOBSTORE_MODE``; in this window it always returns the
     Firestore implementation (lane 9). The mode for a unit is pinned in its policy snapshot (``jobstore_mode``).
     """
-    raise NotImplementedError('outbox_for: Firestore outbox lands with lane 9 (database/outbox_firestore.py)')
+    from database.outbox_firestore import firestore_outbox
+
+    return firestore_outbox(kind)
