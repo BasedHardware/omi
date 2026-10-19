@@ -112,3 +112,45 @@ def test_non_staging_secret_binding_is_reported(tmp_path):
     _edit_staging_overlay(root, mutate)
     problems = staging_check.staging_diff(root)
     assert any(name == 'ENCRYPTION_SECRET' and 'staging-*' in problem for _, name, problem in problems)
+
+
+# CodeQL clear-text logging: neither output can carry a payload, only names and staging-* references.
+def _render_module():
+    import importlib.util
+
+    path = ROOT / 'backend' / 'deploy' / 'staging' / 'render_cloud_run.py'
+    spec = importlib.util.spec_from_file_location('_staging_render_cloud_run', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_rendered_flags_carry_only_validated_mount_references(composer):
+    import re
+
+    render = _render_module()
+    staging = composer.compose_staging(inputs=INPUTS)
+    for service in staging['cloud_run']['services']:
+        env, flags = render.render(staging, service, release_sha='a' * 40, release_tree='b' * 40)
+        mounts = [flag for flag in flags if flag.startswith('--set-secrets=')]
+        assert len(mounts) == 1
+        for ref in mounts[0].removeprefix('--set-secrets=').split(','):
+            assert re.fullmatch(r'[A-Z][A-Z0-9_]*=staging-[a-z0-9-]+:(latest|[0-9]+)', ref), ref
+            assert ref.split('=')[0] not in env  # a mounted name never also travels as a literal value
+
+
+def test_payload_shaped_mount_reference_is_refused():
+    render = _render_module()
+    payload = 'sk_live_' + 'x' * 24
+    config = {'secrets': {'STRIPE_API_KEY': {'secret': payload}}}
+    with pytest.raises(SystemExit) as excinfo:
+        render.mount_refs(config)
+    assert payload not in str(excinfo.value)
+
+
+def test_diff_summary_prints_names_and_counts_only():
+    lines = staging_check.summary(
+        [('backend', 'ENCRYPTION_SECRET', 'staging secret binding is not a staging-* secret')]
+    )
+    assert lines[-1] == '1 difference(s) outside STAGING_DIFF_ALLOWLIST'
+    assert 'backend/ENCRYPTION_SECRET' in lines[0] and ': 1 (' in lines[0]

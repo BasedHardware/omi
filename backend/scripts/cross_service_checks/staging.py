@@ -113,10 +113,10 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
     for service in sorted(set(prod_services) & set(staging_services)):
         p_cfg, s_cfg = prod_services[service], staging_services[service]
         p_env, s_env = _env_values(p_cfg.get('env', {})), _env_values(s_cfg.get('env', {}))
-        p_secrets = p_cfg.get('secrets', {}) or {}
-        s_secrets = s_cfg.get('secrets', {}) or {}
+        p_mounts = p_cfg.get('secrets', {}) or {}
+        s_mounts = s_cfg.get('secrets', {}) or {}
         for name in sorted(set(p_env) | set(s_env)):
-            if name in s_secrets or name in p_secrets:
+            if name in s_mounts or name in p_mounts:
                 continue  # judged as a secret binding below
             if name in p_env and name in s_env and p_env[name] == s_env[name]:
                 continue
@@ -128,9 +128,9 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
                 problems.append((service, name, 'env only in staging'))
             else:
                 problems.append((service, name, 'env value differs from prod'))
-        for name in sorted(set(s_secrets)):
-            secret = str((s_secrets[name] or {}).get('secret', ''))
-            if not secret.startswith(STAGING_SECRET_PREFIX):
+        for name in sorted(set(s_mounts)):
+            ref = str((s_mounts[name] or {}).get('secret', ''))
+            if not ref.startswith(STAGING_SECRET_PREFIX):
                 problems.append((service, name, 'staging secret binding is not a staging-* secret'))
         p_flags = {str(k): v for k, v in (p_cfg.get('flags') or {}).items()}
         s_flags = {str(k): v for k, v in (s_cfg.get('flags') or {}).items()}
@@ -150,9 +150,19 @@ def check_staging_mirrors_prod(ctx: Any) -> list[Any]:
     return [Violation(INVARIANT, 'staging', f'{scope}/{name}', problem) for scope, name, problem in staging_diff(root)]
 
 
+def summary(problems: list[tuple[str, str, str]]) -> list[str]:
+    """Printable lines: problem kinds with counts and the affected env/flag names (never values)."""
+    by_kind: dict[str, list[str]] = {}
+    for scope, name, problem in problems:
+        by_kind.setdefault(problem, []).append(f'{scope}/{name}')
+    lines = [
+        f'[{INVARIANT}] {kind}: {len(where)} ({", ".join(sorted(where))})' for kind, where in sorted(by_kind.items())
+    ]
+    lines.append(f'{len(problems)} difference(s) outside STAGING_DIFF_ALLOWLIST')
+    return lines
+
+
 if __name__ == '__main__':
     found = staging_diff(Path(__file__).resolve().parents[3])
-    for scope, name, problem in found:
-        print(f'[{INVARIANT}] staging/{scope}/{name}: {problem}')
-    print(f'{len(found)} difference(s) outside STAGING_DIFF_ALLOWLIST')
+    sys.stdout.write('\n'.join(summary(found)) + '\n')
     raise SystemExit(1 if found else 0)

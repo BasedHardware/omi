@@ -31,7 +31,13 @@ BUILDER_SA="projects/${PROJECT}/serviceAccounts/staging-builder@${PROJECT}.iam.g
 IMAGE_REPO="us-central1-docker.pkg.dev/${PROJECT}/staging"
 INTEGRATION_REF=origin/integration/legacy-retire
 ALL_SERVICES=(backend backend-sync backend-sync-backfill backend-integration)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO_ROOT="${STAGING_DEPLOY_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+# bash reads a script as it runs; run from a private copy so edits to the checkout cannot mix versions.
+if [[ -z "${STAGING_DEPLOY_REEXEC:-}" ]]; then
+  self_copy="$(mktemp -t staging-deploy-sh.XXXXXX)"
+  cp "${BASH_SOURCE[0]}" "$self_copy"
+  STAGING_DEPLOY_REEXEC="$self_copy" STAGING_DEPLOY_REPO_ROOT="$REPO_ROOT" exec bash "$self_copy" "$@"
+fi
 PY="${REPO_ROOT}/backend/.venv/bin/python"
 DEPLOY_LOG="${OMI_STAGING_DEPLOY_LOG:-$HOME/workspace/omi/data/run-2026-10-19-legacy-retire/lane02/deploys.log}"
 
@@ -99,6 +105,7 @@ cleanup() {
     gcloud storage rm "$LOCK" --quiet >/dev/null 2>&1 || echo "WARN: could not release $LOCK" >&2
   fi
   rm -rf "$WORK"
+  [[ -f "${STAGING_DEPLOY_REEXEC:-}" ]] && rm -f "$STAGING_DEPLOY_REEXEC"
   # Clear the GKE auth plugin cache this run may have populated (memory: cache crosses tiers).
   rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/gke_gcloud_auth_plugin_cache" 2>/dev/null || true
 }
@@ -240,10 +247,12 @@ for svc in "${SERVICES[@]}"; do
   name="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" --service "$svc" \
     --env-file /dev/null --release-sha "$SHA" --release-tree "$TREE" --field deploy_name)"
   env_file="$WORK/${svc}.env.yaml"
+  flags_file="$WORK/${svc}.flags"
   render_flags=()
-  rendered="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" \
-    --service "$svc" --env-file "$env_file" --release-sha "$SHA" --release-tree "$TREE")" || die "render refused $svc"
-  while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <<<"$rendered"
+  "$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" \
+    --service "$svc" --env-file "$env_file" --flags-file "$flags_file" \
+    --release-sha "$SHA" --release-tree "$TREE" || die "render refused $svc"
+  while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <"$flags_file"
   [[ "${#render_flags[@]}" -gt 0 ]] || die "render produced no flags for $svc"
   # shellcheck disable=SC2207  # shape flags are fixed tokens without spaces
   shape=($(shape_flags "$svc"))
