@@ -1,42 +1,14 @@
-"""One content-free reason vocabulary for live failovers and health evidence."""
+"""One content-free reason vocabulary for live failovers and health evidence.
 
-LIVE_STT_FAILURE_REASONS = frozenset(
-    {
-        'initialization_failed',
-        'connection_lost',
-        'send_failed',
-        'socket_unavailable',
-        'modulate_serve_error',
-        'provider_budget_exhausted',
-        'provider_auth_rejected',
-        'provider_rate_limited',
-        'provider_429',
-        'provider_5xx',
-        'timeout',
-        'soniox_idle_timeout',
-        'soniox_request_timeout',
-        'soniox_no_audio_teardown',
-        'soniox_rotation',
-        'capacity_full',
-        'allocation_rejected',
-        'capability_mismatch',
-        'first_text_deadline',
-        'no_text_rescue_complete',
-        'empty_streak',
-        'soniox_invalid_hint',
-        'vad_failed',
-        'client_disconnect',
-        'normal_close',
-        # Listen cancelled the leg's own task (owner close, recovery switch,
-        # teardown). Censored: it is not evidence about the provider.
-        'cancelled',
-        'other',
-        'config_incomplete',
-        'auth',
-        'quota',
-    }
-)
-LIVE_STT_REASONS = LIVE_STT_FAILURE_REASONS | {'text', 'no_text'}
+The vocabulary itself lives in ``utils.observability.reasons.LiveSttReason``; the
+frozensets below are the unchanged legacy view of it.
+"""
+
+from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_values, reason_label
+
+LIVE_STT_REASONS = reason_values(LiveSttReason)
+# `text` and `no_text` are outcome tokens, not failures.
+LIVE_STT_FAILURE_REASONS = LIVE_STT_REASONS - {'text', 'no_text'}
 
 
 def normalize_live_stt_reason(*reasons: str | None, default: str = 'connection_lost') -> str:
@@ -50,4 +22,8 @@ def normalize_live_stt_reason(*reasons: str | None, default: str = 'connection_l
     for reason in reasons:
         if isinstance(reason, str) and reason in LIVE_STT_REASONS:
             return reason
+    if any(reason is not None for reason in reasons):
+        # Behaviour-neutral: the label stays `default`; the miss is counted
+        # under family=live_stt (omi_reason_unknown_total).
+        reason_label(ReasonFamily.LIVE_STT, next(reason for reason in reasons if reason is not None), LiveSttReason)
     return default if default in LIVE_STT_REASONS else 'connection_lost'
