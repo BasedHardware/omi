@@ -172,17 +172,31 @@ def scanned():
     return scan()
 
 
+def _pending_allowance(key: tuple[str, str, str]) -> int:
+    """Reads that are being *moved* here by another lane (never new): `pending` entries, `name` may end in `*`."""
+    total = 0
+    for (path, function, name), entry in load_baseline().items():
+        if not entry.get('pending') or (path, function) != key[:2]:
+            continue
+        if name == key[2] or (name.endswith('*') and key[2].startswith(name[:-1])):
+            total += entry['count']
+    return total
+
+
 def test_batch_stage_env_reads_match_baseline(scanned):
     baseline = load_baseline()
     problems = []
     for key, count in sorted(scanned.items()):
-        allowed = baseline.get(key, {}).get('count', 0)
+        allowed = baseline.get(key, {}).get('count', 0) if not baseline.get(key, {}).get('pending') else 0
+        allowed += _pending_allowance(key)
         if count > allowed:
             problems.append(
                 f'NEW {_describe(key)} count {count} > baseline {allowed}: batch stages read their policy from the '
                 f'admitted policy snapshot (config/policy), not the process environment.'
             )
     for key, entry in sorted(baseline.items()):
+        if entry.get('pending'):
+            continue  # moved-in reads: the allowance is dropped (delete the entry) once the move lands or is abandoned
         if scanned.get(key, 0) < entry['count']:
             problems.append(
                 f'STALE {_describe(key)} baseline count {entry["count"]} > current {scanned.get(key, 0)}: '
@@ -195,6 +209,19 @@ def test_every_baseline_entry_has_a_reason():
     for key, entry in load_baseline().items():
         assert isinstance(entry.get('why'), str) and entry['why'].strip(), _describe(key)
         assert isinstance(entry.get('count'), int) and entry['count'] > 0, _describe(key)
+
+
+def test_pending_allowance_matches_names_and_prefixes(tmp_path, monkeypatch):
+    entries = {
+        ('a.py', 'f', 'X_*'): {'pending': True, 'count': 2},
+        ('a.py', 'f', 'Y'): {'pending': True, 'count': 1},
+        ('a.py', 'g', 'Z'): {'count': 5},
+    }
+    monkeypatch.setattr(sys.modules[__name__], 'load_baseline', lambda: entries)
+    assert _pending_allowance(('a.py', 'f', 'X_ONE')) == 2
+    assert _pending_allowance(('a.py', 'f', 'Y')) == 1
+    assert _pending_allowance(('a.py', 'f', 'W')) == 0
+    assert _pending_allowance(('a.py', 'g', 'Z')) == 0
 
 
 def test_scope_covers_the_contract_paths():
@@ -245,6 +272,7 @@ def _write_baseline() -> None:
         }
         for key, count in sorted(scan().items())
     ]
+    entries += [e for e in previous.values() if e.get('pending')]  # keep moved-in allowances
     BASELINE_PATH.write_text(json.dumps({'entries': entries}, indent=2) + '\n', encoding='utf-8')
     print(f'wrote {len(entries)} entries ({sum(e["count"] for e in entries)} reads) to {BASELINE_PATH}')
 
