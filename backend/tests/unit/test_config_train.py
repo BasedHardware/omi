@@ -531,3 +531,42 @@ def test_workflow_keeps_the_prod_approval_gate_and_the_train_lock():
     assert 'backend/scripts/ops_train.py plan' in runs
     assert 'backend/scripts/ops_train.py apply' in runs
     assert 'merge-base --is-ancestor' in runs
+
+
+def _ops_queue_step() -> str:
+    action = yaml.safe_load((ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text())
+    return next(step for step in action['runs']['steps'] if step.get('id') == 'ops-queues')['run']
+
+
+@pytest.mark.parametrize(
+    'project, expected',
+    [
+        ('based-hardware', ('sync-backfill-fresh', 'sync-backfill-fresh')),
+        ('based-hardware-dev', ('sync-backfill', 'sync-backfill')),
+    ],
+)
+def test_train_takes_backfill_queues_from_the_ops_file(tmp_path, project, expected):
+    """A train must not re-point the backfill worker at a queue an operator retired (10-19 04:52Z)."""
+
+    import os
+    import subprocess
+
+    shim = tmp_path / 'python3'
+    shim.write_text(f'#!/bin/sh\n[ "$1" = "-m" ] && exit 0\nexec {sys.executable} "$@"\n')
+    shim.chmod(0o755)
+    output = tmp_path / 'out'
+    script = _ops_queue_step().replace("${{ inputs.project_id }}", project).replace("${{ inputs.service }}", 'backend')
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'DEPLOY_CONTROL_SCRIPTS': str(BACKEND / 'scripts'),
+            'GITHUB_OUTPUT': str(output),
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    values = dict(line.split('=', 1) for line in output.read_text().splitlines())
+    assert (values['backfill_queue'], values['worker_queue']) == expected

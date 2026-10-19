@@ -2,9 +2,10 @@
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from config.batch_pipeline import enabled_for
-from database.batch_pipeline_store import Store
+from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -27,7 +28,18 @@ def admit(
     namespace: str,
     intake: dict | None = None,
     require_artifacts: bool = False,
+    enqueue: Callable[[Transaction, WorkItem, float], bool] | None = None,
+    adopt: Callable[[dict], bool] | None = None,
 ) -> dict:
+    """Admit one content upload atomically.
+
+    ``enqueue`` replaces the GPU-ring enqueue for every item (the C8 provider-STT
+    stage writes its units outside the ring). ``adopt`` lets a caller take over a
+    non-batch ledger row it has re-validated inside this transaction (a legacy
+    row legacy can no longer finish); the batch ledger write below replaces it.
+    With both unset, behaviour is unchanged.
+    """
+    enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
         raise ValueError('complete ordered sibling set must match immutable projection binding')
     if any(
@@ -42,7 +54,7 @@ def admit(
             return {'outcome': 'batch', 'job_id': existing['job_id']}
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(existing.get('result')):
             return {'outcome': 'completed', 'result': existing['result']}
-        if existing:
+        if existing and not (adopt is not None and adopt(existing)):
             # Never take a legacy content owner, including ambiguous/expired
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
@@ -79,7 +91,7 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = Scheduler.enqueue_in_transaction(tx, item, now)
+            created = enqueue_item(tx, item, now)
             job = tx.get('jobs', item.segment_id)
             if not created and job.get('projection_binding') != asdict(binding):
                 raise ValueError('existing segment cannot change its immutable intake binding')

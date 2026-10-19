@@ -760,11 +760,16 @@ def test_live_stt_gate_sentinel_is_excluded_from_provider_health_and_alerted_sep
         assert 'to_mode!="vendor"' in provider["data"][0]["model"]["expr"], export_name
         assert 'to_mode!="vendor"' in provider["data"][1]["model"]["expr"], export_name
         assert 'to_mode="vendor"' in gate["data"][0]["model"]["expr"], export_name
-        # Ratio over live sessions with a volume floor; the chronic presence-gate
-        # level (p50 ~24%, p90 ~50%) must not page.
-        assert "omi_live_session_transcript_outcome_total" in gate["data"][0]["model"]["expr"], export_name
-        assert ">= 100" in gate["data"][0]["model"]["expr"], export_name
-        assert gate["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0.6], "type": "gt"}, export_name
+        # Admitted-cohort ratio with a volume floor, plus a label-independent
+        # all-sessions guard: the chronic presence-gate level on non-admitted
+        # sessions (p50 ~24%, p90 ~50%) must not page, and a missing demand_cohort
+        # label must not hide an outage.
+        expr = gate["data"][0]["model"]["expr"]
+        assert 'omi_listen_demand_failure_detail_total{job="backend-listen-metrics",demand_cohort="admitted"' in expr
+        assert 'demand_cohort="admitted"}[15m])) >= 50' in expr, export_name
+        guard = expr[expr.index('"all_sessions_guard"') - 600 :]
+        assert "omi_fallback_total" in guard and "> 0.6)" in guard and ">= 100" in guard, export_name
+        assert gate["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0], "type": "gt"}, export_name
         assert gate["for"] == "15m", export_name
         assert 'reason="gate_unavailable"' in gate["data"][0]["model"]["expr"], export_name
         assert gate["folderUID"] == provider["folderUID"], export_name

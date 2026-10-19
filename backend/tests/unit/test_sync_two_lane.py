@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+import pytest
 import yaml
 from google.cloud import firestore
 
@@ -361,7 +362,9 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
-    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    # B4: the worker's queues come from the ops file in prod (sync-backfill only outside prod).
+    assert 'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}' in action
+    assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
@@ -377,7 +380,15 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
-    assert 'gcloud tasks queues create sync-backfill' in action
+    assert 'gcloud tasks queues create "$BACKFILL_QUEUE"' in action
+    # The reconcile step manages the manifest-selected queue (prod: sync-backfill-fresh).
+    reconcile = next(
+        step
+        for step in yaml.safe_load(action)['runs']['steps']
+        if step.get('name') == 'Reconcile bounded sync backfill queue'
+    )
+    assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
@@ -1201,3 +1212,42 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
             assert rendered[key] == stages['A'][key]
     assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
     assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))
+
+
+@pytest.mark.parametrize(
+    'manifest_env, expected',
+    [
+        ('SYNC_TASKS_QUEUE=sync-backfill-fresh\nSYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh', 'sync-backfill-fresh'),
+        ('REDIS_DB_HOST=10.0.0.2', 'sync-backfill'),
+    ],
+)
+def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest_env, expected):
+    """10-19 04:52Z: the train re-pointed backfill at the stalled sync-backfill queue on every deploy."""
+
+    import os
+    import subprocess
+
+    action = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    steps = {step.get('id'): step for step in action['runs']['steps']}
+    # Queues resolve once in ops-queues (B4): prod reads the ops file (fail-closed, tested in
+    # test_config_train); every other project takes the manifest's values, sync-backfill only as default.
+    queue_step = steps['ops-queues']['run']
+    assert steps['ops-queues']['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    script = queue_step.split('if [[', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${backfill_queue}"'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env={**os.environ, 'BACKFILL_ENV': manifest_env},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f'SYNC_BACKFILL_TASKS_QUEUE={expected}'
+    assert steps['backfill-service']['env']['BACKFILL_QUEUE'] == '${{ steps.ops-queues.outputs.backfill_queue }}'
+    overlay = steps['backfill-runtime']['env']['ENV_OVERLAY'].splitlines()
+    # The resolved worker queue comes after the manifest overlay, so no literal can override it.
+    assert overlay.index('${{ inputs.backfill_env_vars }}') < overlay.index(
+        'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}'
+    )
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' not in overlay

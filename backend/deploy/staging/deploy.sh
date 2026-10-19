@@ -31,7 +31,13 @@ BUILDER_SA="projects/${PROJECT}/serviceAccounts/staging-builder@${PROJECT}.iam.g
 IMAGE_REPO="us-central1-docker.pkg.dev/${PROJECT}/staging"
 INTEGRATION_REF=origin/integration/legacy-retire
 ALL_SERVICES=(backend backend-sync backend-sync-backfill backend-integration)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO_ROOT="${STAGING_DEPLOY_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+# bash reads a script as it runs; run from a private copy so edits to the checkout cannot mix versions.
+if [[ -z "${STAGING_DEPLOY_REEXEC:-}" ]]; then
+  self_copy="$(mktemp -t staging-deploy-sh.XXXXXX)"
+  cp "${BASH_SOURCE[0]}" "$self_copy"
+  STAGING_DEPLOY_REEXEC="$self_copy" STAGING_DEPLOY_REPO_ROOT="$REPO_ROOT" exec bash "$self_copy" "$@"
+fi
 PY="${REPO_ROOT}/backend/.venv/bin/python"
 DEPLOY_LOG="${OMI_STAGING_DEPLOY_LOG:-$HOME/workspace/omi/data/run-2026-10-19-legacy-retire/lane02/deploys.log}"
 
@@ -46,11 +52,9 @@ shape_flags() {
     *) return 1 ;;
   esac
 }
-# Public API surface takes Firebase-token auth like prod's backend; task targets are IAM-only
-# (staging-tasks-invoker holds run.invoker on *-staging).
-auth_flag() {
-  [[ "$1" == backend ]] && echo --allow-unauthenticated || echo --no-allow-unauthenticated
-}
+# Invoker policy is not set here: the agent cannot set Cloud Run IAM. grant_invokers.sh (human tier,
+# once, after the services exist) grants allUsers on backend-staging (Firebase-token auth like prod's
+# backend) and staging-tasks-invoker on every *-staging service. New services start private.
 
 SHA=""
 SERVICES=("${ALL_SERVICES[@]}")
@@ -101,6 +105,7 @@ cleanup() {
     gcloud storage rm "$LOCK" --quiet >/dev/null 2>&1 || echo "WARN: could not release $LOCK" >&2
   fi
   rm -rf "$WORK"
+  [[ -f "${STAGING_DEPLOY_REEXEC:-}" ]] && rm -f "$STAGING_DEPLOY_REEXEC"
   # Clear the GKE auth plugin cache this run may have populated (memory: cache crosses tiers).
   rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/gke_gcloud_auth_plugin_cache" 2>/dev/null || true
 }
@@ -195,8 +200,15 @@ if [[ "$SKIP_BUILD" != 1 ]]; then
     --service-account="$BUILDER_SA" \
     --suppress-logs >/dev/null
 fi
-IMAGE="${IMAGE_REPO}/backend:${SHA}"
-gcloud artifacts docker images describe "$IMAGE" --project="$PROJECT" >/dev/null || die "image $IMAGE not found"
+# Digest of <repo>/<image>:<sha> from the tag listing (images describe needs containeranalysis rights).
+image_digest() {
+  gcloud artifacts docker images list "${IMAGE_REPO}/$1" --project="$PROJECT" --include-tags \
+    --format='value(tags,version)' 2>/dev/null |
+    awk -v sha="$SHA" '{ n = split($1, t, ","); for (i = 1; i <= n; i++) if (t[i] == sha) { print $2; exit } }'
+}
+BACKEND_DIGEST="$(image_digest backend)"
+[[ "$BACKEND_DIGEST" == sha256:* ]] || die "image ${IMAGE_REPO}/backend:${SHA} not found"
+IMAGE="${IMAGE_REPO}/backend@${BACKEND_DIGEST}"
 
 verify_service() { # svc deploy_name env_file
   local svc="$1" name="$2" env_file="$3" state
@@ -216,10 +228,11 @@ if status.get('latestCreatedRevisionName') != ready:
 if traffic.get(ready, 0) != 100:
     problems.append('serving traffic is not 100% on the latest ready revision')
 container = live['spec']['template']['spec']['containers'][0]
-have = {e['name']: e.get('value') for e in container.get('env', []) if 'value' in e}
-missing = sorted(set(want) - set(have))
-differ = sorted(k for k in want if k in have and have[k] != str(want[k]))
-extra = sorted(set(have) - set(want))
+have = {e['name']: e.get('value', '') for e in container.get('env', []) if 'valueFrom' not in e}
+# Cloud Run stores an empty value as a name without a value; an absent empty value is not drift.
+missing = sorted(k for k in set(want) - set(have) if str(want[k]) != '')
+differ = sorted(k for k in want if k in have and str(have[k]) != str(want[k]))
+extra = sorted(k for k in set(have) - set(want) if have[k] != '')
 if have.get('OMI_BACKEND_RELEASE_SHA') != sha:
     problems.append('OMI_BACKEND_RELEASE_SHA mismatch')
 for label, names in (('missing', missing), ('differs', differ), ('unexpected', extra)):
@@ -235,16 +248,18 @@ for svc in "${SERVICES[@]}"; do
   name="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" --service "$svc" \
     --env-file /dev/null --release-sha "$SHA" --release-tree "$TREE" --field deploy_name)"
   env_file="$WORK/${svc}.env.yaml"
+  flags_file="$WORK/${svc}.flags"
   render_flags=()
-  rendered="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" \
-    --service "$svc" --env-file "$env_file" --release-sha "$SHA" --release-tree "$TREE")" || die "render refused $svc"
-  while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <<<"$rendered"
+  "$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" \
+    --service "$svc" --env-file "$env_file" --flags-file "$flags_file" \
+    --release-sha "$SHA" --release-tree "$TREE" || die "render refused $svc"
+  while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <"$flags_file"
   [[ "${#render_flags[@]}" -gt 0 ]] || die "render produced no flags for $svc"
   # shellcheck disable=SC2207  # shape flags are fixed tokens without spaces
   shape=($(shape_flags "$svc"))
   log "deploy: $name @ $SHORT"
   gcloud run deploy "$name" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" "$(auth_flag "$svc")" \
+    --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" \
     --no-cpu-throttling --cpu-boost --execution-environment=gen2 \
     --labels="env=staging,release-sha=${SHORT}" --revision-suffix="${SHORT}-$(date -u +%H%M%S)" \
     --quiet >/dev/null
@@ -259,7 +274,7 @@ if [[ "$WITH_WORKER" == true ]]; then
   kubectl_staging get secret staging-batch-worker >/dev/null 2>&1 ||
     die "k8s secret staging/staging-batch-worker missing (bootstrap_iam.sh --apply creates it)"
   WORKER_IMAGE="${IMAGE_REPO}/batch-pipeline-worker:${SHA}"
-  WORKER_DIGEST="$(gcloud artifacts docker images describe "$WORKER_IMAGE" --project="$PROJECT" --format='value(image_summary.digest)')"
+  WORKER_DIGEST="$(image_digest batch-pipeline-worker)"
   [[ "$WORKER_DIGEST" == sha256:* ]] || die "worker image $WORKER_IMAGE not found (build with --with-worker)"
   log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19}"
   helm template staging-batch-pipeline-worker "$WORK/src/backend/charts/batch-pipeline-worker" \
