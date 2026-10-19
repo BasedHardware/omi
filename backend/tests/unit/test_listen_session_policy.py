@@ -7,7 +7,8 @@ from dataclasses import FrozenInstanceError, replace
 import hashlib
 import json
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -23,9 +24,13 @@ from config.policy.listen import (
     routing_mode,
     routing_timeout,
     disruption_gate,
+    routing_enabled,
+    hintable_allocation,
 )
 from config.policy.guard import violations, stage_policy_reads
 from routers.listen import policy as store
+from utils.stt import streaming
+from utils.stt.live_rollout import window_selection_kwargs
 
 UIDS = tuple(f'listen-policy-fixture-{index:04d}' for index in range(256)) + ('', 'a', 'uid:with:colon', '用户')
 ROOT = Path(__file__).resolve().parents[3]
@@ -144,6 +149,46 @@ def test_env_flip_retains_arm_static_targets_and_ramps(monkeypatch):
     assert policy.routing_arm == 'on'
 
 
+@pytest.mark.parametrize('uid', [None, ''])
+def test_missing_uid_rejected_before_pinned_cohort(uid):
+    current_listen_policy.set(
+        resolve_listen_policy(
+            'owner',
+            flags={
+                'STT_ROUTING_MODE': 'on',
+                'STT_ROUTING_ON_PERCENT': '100',
+                'PARAKEET_WINDOW_ALLOCATION_PERCENT': '100',
+                'STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT': '100',
+            },
+        )
+    )
+    assert not window_allocation(uid)
+    assert not routing_enabled(uid)
+    assert not hintable_allocation(uid)
+
+
+@pytest.mark.parametrize('session_kind', ['multi-channel', 'byok'])
+def test_pinned_window_arm_cannot_select_window_for_nonmanaged_session(monkeypatch, session_kind):
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.invalid')
+    monkeypatch.setenv('MODULATE_API_KEY', 'test')
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'modulate': 'test'} if session_kind == 'byok' else {})
+    policy = resolve_listen_policy(
+        'owner', flags={'PARAKEET_WINDOW_ALLOCATION_PERCENT': '100'}, models=['parakeet-window', 'modulate-velma-2']
+    )
+    current_listen_policy.set(policy)
+    assert policy.window_allocated
+    host = SimpleNamespace(is_multi_channel=session_kind == 'multi-channel', use_custom_stt=False)
+    selection = window_selection_kwargs(host, 'owner')
+    assert selection == {}  # This surface deliberately omits window_uid.
+    assert not window_allocation(None)
+    assert streaming.get_stt_service_for_language('en', multi_lang_enabled=False, **selection) == (
+        streaming.STTService.modulate,
+        'en',
+        'velma-2',
+    )
+
+
 class Redis:
     def __init__(self):
         self.data = {}
@@ -173,7 +218,7 @@ async def test_restart_reconnect_loads_without_resolving(monkeypatch):
     original = resolve_listen_policy('owner', flags={'STT_ROUTING_MODE': 'on', 'STT_ROUTING_ON_PERCENT': '100'})
     resolver = Mock(return_value=original)
     first, source = await store.load_listen_policy('owner', 'conversation', resolver=resolver, redis_client=redis)
-    assert source == 'fallback'
+    assert source == 'resolved'
     resolver.assert_called_once()
     resolver.reset_mock(side_effect=True)
     resolver.side_effect = AssertionError('restart must load, never resolve')
@@ -184,6 +229,48 @@ async def test_restart_reconnect_loads_without_resolving(monkeypatch):
     resolver.assert_not_called()
     assert redis.ttls[store.policy_key('owner', 'conversation')] == store.POLICY_TTL_SECONDS >= 4 * 3600
     assert store.policy_key('another-owner', 'conversation') != store.policy_key('owner', 'conversation')
+
+
+@pytest.mark.asyncio
+async def test_healthy_first_write_is_not_fallback(monkeypatch, caplog):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+
+    def fallback_count():
+        return sum(
+            sample.value
+            for family in OMI_FALLBACK_TOTAL.collect()
+            for sample in family.samples
+            if sample.name == 'omi_fallback_total'
+        )
+
+    before = fallback_count()
+    policy, source = await store.load_listen_policy(
+        'owner', 'new-session', resolver=lambda: resolve_listen_policy('owner', flags={}), redis_client=Redis()
+    )
+    with caplog.at_level('INFO'):
+        store.record_source(source, policy)
+    assert source == 'resolved'
+    assert fallback_count() == before
+    assert not any('component=stt_live_session' in record.message for record in caplog.records)
+    assert any('policy_source=resolved' in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_policy_storage_reuses_shared_async_client_without_closing_it(monkeypatch):
+    from database import redis_db
+
+    redis = Redis()
+    redis.aclose = AsyncMock()
+    shared = AsyncMock(return_value=redis)
+    monkeypatch.setattr(redis_db, 'get_async_redis_client', shared)
+    first, source = await store.load_listen_policy(
+        'owner', 'session', resolver=lambda: resolve_listen_policy('owner', flags={})
+    )
+    assert source == 'resolved'
+    second, source = await store.load_listen_policy('owner', 'session', resolver=Mock(side_effect=AssertionError))
+    assert source == 'redis' and second == first
+    assert shared.await_count == 2
+    redis.aclose.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -202,7 +289,7 @@ async def test_concurrent_first_writer_wins():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure', ['get', 'set', 'timeout', 'invalid'])
+@pytest.mark.parametrize('failure', ['get', 'set', 'timeout', 'pool', 'invalid'])
 async def test_redis_fail_open_is_bounded_and_records_fallback(monkeypatch, caplog, failure):
     redis = Redis()
 
@@ -214,15 +301,23 @@ async def test_redis_fail_open_is_bounded_and_records_fallback(monkeypatch, capl
 
     if failure in {'get', 'set'}:
         setattr(redis, failure, broken)
-    elif failure == 'timeout':
-        redis.get = slow
+    elif failure in {'timeout', 'pool'}:
+        if failure == 'pool':
+            from database import redis_db
+
+            monkeypatch.setattr(redis_db, 'get_async_redis_client', slow)
+        else:
+            redis.get = slow
         monkeypatch.setattr(store, 'REDIS_TIMEOUT_SECONDS', 0.01)
     else:
         redis.data[store.policy_key('owner', 'conversation')] = 'broken'
     policy = resolve_listen_policy('owner', flags={})
     resolver = Mock(return_value=policy)
     result, source = await asyncio.wait_for(
-        store.load_listen_policy('owner', 'conversation', resolver=resolver, redis_client=redis), timeout=0.2
+        store.load_listen_policy(
+            'owner', 'conversation', resolver=resolver, redis_client=None if failure == 'pool' else redis
+        ),
+        timeout=0.2,
     )
     resolver.assert_called_once()
     before = store._source_counter().labels(policy_source='fallback')._value.get()

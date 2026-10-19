@@ -176,6 +176,8 @@ def window_allocation(uid: str | None) -> bool:
 
 
 def routing_enabled(uid: str | None) -> bool:
+    if not uid:
+        return False
     policy = current_listen_policy.get()
     if policy is not None:
         if not policy.routing_percent_valid and policy.routing_mode_raw.lower() == 'on':
@@ -260,6 +262,8 @@ def service_models(default: list[str]) -> list[str]:
 
 
 def hintable_allocation(uid):
+    if not uid:
+        return False
     policy = current_listen_policy.get()
     if policy is not None:
         return policy.hintable_allocated

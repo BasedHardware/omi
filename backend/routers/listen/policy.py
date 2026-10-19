@@ -9,9 +9,6 @@ from functools import lru_cache
 import hashlib
 import json
 import logging
-import os
-
-import redis.asyncio as aioredis
 
 from config.policy.listen import ListenSessionPolicy, resolve_listen_policy
 from utils.observability.fallback import record_fallback
@@ -57,17 +54,11 @@ async def _client(injected=None):
     if injected is not None:
         yield injected
     else:
-        async with aioredis.Redis(
-            host=os.getenv('REDIS_DB_HOST') or 'localhost',
-            port=int(os.getenv('REDIS_DB_PORT', '6379')),
-            username='default',
-            password=os.getenv('REDIS_DB_PASSWORD'),
-            health_check_interval=30,
-            socket_connect_timeout=REDIS_TIMEOUT_SECONDS,
-            socket_timeout=REDIS_TIMEOUT_SECONDS,
-            retry_on_timeout=False,
-        ) as client:
-            yield client
+        from database.redis_db import get_async_redis_client
+
+        # The process-owned async client pools connections across sessions.
+        # Do not enter/close it here: lifecycle and shutdown belong to its owner.
+        yield await get_async_redis_client()
 
 
 def _decode(raw):
@@ -79,8 +70,8 @@ def _decode(raw):
 async def load_listen_policy(uid, identity, *, resolver, redis_client=None):
     """First writer wins; a restart loads without consulting current env.
 
-    Missing/invalid state or Redis faults resolve exactly once and record fallback.
-    Timeout covers connection cleanup as well as I/O. No worker thread is used.
+    A healthy first write is resolved; invalid state or Redis faults are fallback.
+    One total timeout covers pool acquisition and I/O. No worker thread is used.
     """
     candidate = None
     loaded = None
@@ -100,7 +91,7 @@ async def load_listen_policy(uid, identity, *, resolver, redis_client=None):
                 if not await client.set(key, payload, nx=True, ex=POLICY_TTL_SECONDS):
                     policy = loaded = _decode(await client.get(key))
                     return policy, 'redis'
-                return candidate, 'fallback'
+                return candidate, 'resolved'
     except Exception:
         # A failed TTL refresh/connection close must not discard a valid stamp.
         if loaded is not None:

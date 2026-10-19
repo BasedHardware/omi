@@ -116,10 +116,11 @@ and recording UUIDs with SET NX; they are distinct after a rollover. Legacy clie
 selection; `prepare()` consumes that same row rather than issuing another lookup.
 The legacy ownership, source, device and continuation fences still apply.
 
-Redis uses `redis.asyncio`, with a 75 ms **total** get/CAS/read deadline and bounded
-socket timeouts. SET NX makes simultaneous reconnects use the first writer. A
-usable stored snapshot wins even if TTL renewal fails. Missing, corrupt or
-unavailable state resolves once using current listen inputs; source `fallback`
+Redis reuses `database.redis_db.get_async_redis_client()` and its process-owned
+async connection pool, with a 75 ms **total** pool-acquisition/get/CAS/read deadline.
+Session boundaries never close the shared client. SET NX makes simultaneous reconnects use the first writer. A
+usable stored snapshot wins even if TTL renewal fails. A healthy first write records source `resolved`; reconnect loads record `redis`.
+Corrupt or unavailable state resolves once using current listen inputs; source `fallback`
 is recorded in `omi_listen_session_policy_total{policy_source}` and shared
 fallback telemetry. The one `listen_session_policy` line contains only bounded
 source/arm values, the content hash and a count. No UID, transcript, endpoint,
