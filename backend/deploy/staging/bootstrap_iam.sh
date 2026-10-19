@@ -363,6 +363,7 @@ bootstrap() {
     grant_secret "$(secret_name "$name")" staging-runtime
   done
   grant_secret "$(secret_name ENCRYPTION_SECRET)" staging-worker
+  grant_secret "$(secret_name HUGGINGFACE_TOKEN)" staging-worker
   # Lane 4 (mirror/replay), run on agent-dev-operator: re-encrypt David's mirrored recordings under the
   # staging key, and act as synthetic users through the staging admin key. Secret-level bindings on
   # these two staging secrets only; no other secret, and nothing in dev or prod.
@@ -430,6 +431,21 @@ bootstrap() {
     echo "k8s secret staging/staging-redis applied"
   else
     echo "[dry-run] secrets versions access staging-redis-password | kubectl -n $NAMESPACE create secret generic staging-redis --from-file=password=/dev/stdin | kubectl apply (never printed)"
+  fi
+  echo "== batch worker: k8s Secret staging/staging-batch-worker (ENCRYPTION_SECRET, HUGGINGFACE_TOKEN)"
+  if [[ "$MODE" == apply ]]; then
+    local wdir
+    wdir="$(mktemp -d -t staging-worker-secret.XXXXXX)"
+    chmod 700 "$wdir"
+    gcloud secrets versions access latest --secret=staging-encryption-secret --project="$DEV" >"$wdir/ENCRYPTION_SECRET"
+    gcloud secrets versions access latest --secret=staging-huggingface-token --project="$DEV" >"$wdir/HUGGINGFACE_TOKEN"
+    with_dev_kubeconfig kubectl -n "$NAMESPACE" create secret generic staging-batch-worker \
+      --from-file="$wdir/ENCRYPTION_SECRET" --from-file="$wdir/HUGGINGFACE_TOKEN" --dry-run=client -o yaml |
+      with_dev_kubeconfig kubectl apply -f - >/dev/null
+    rm -rf "$wdir"
+    echo "k8s secret staging/staging-batch-worker applied"
+  else
+    echo "[dry-run] staging-encryption-secret + staging-huggingface-token -> k8s secret staging/staging-batch-worker (temp files 0700, removed; never printed)"
   fi
   echo "== Direct VPC egress for staging Cloud Run (the agent deploys with --network/--subnet)"
   run gcloud compute networks subnets add-iam-policy-binding "$VPC_SUBNET" --region="$REGION" --project="$DEV" \

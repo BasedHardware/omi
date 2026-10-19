@@ -18,8 +18,7 @@ spec:
     metadata:
       labels: {app: staging-redis, env: staging}
     spec:
-      nodeSelector:
-        cloud.google.com/gke-nodepool: default-pool
+      # No nodeSelector: default-pool is at its max size; any untainted CPU node fits 100m/512Mi.
       containers:
         - name: redis
           image: redis:7.2.5-alpine

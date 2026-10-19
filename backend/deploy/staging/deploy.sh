@@ -3,7 +3,7 @@
 #
 #   backend/deploy/staging/deploy.sh <sha> [--services backend,backend-sync,...] [--with-worker]
 #                                          [--skip-build] [--allow-non-integration] [--break-lock]
-#   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services
+#   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services and the batch worker
 #
 # Tier: dev-operator only. Only lanes 1 and 2 deploy staging; other lanes ask on the board.
 # Order (each step gates the next):
@@ -129,6 +129,7 @@ acquire_lock() {
 
 if [[ "$TEARDOWN" == 1 ]]; then
   acquire_lock
+  kubectl_staging delete deployment staging-batch-pipeline-worker --ignore-not-found >/dev/null && log "worker deleted (if present)"
   for svc in "${ALL_SERVICES[@]}"; do
     gcloud run services delete "${svc}-staging" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null &&
       log "deleted ${svc}-staging" || log "absent ${svc}-staging"
@@ -244,6 +245,27 @@ for svc in "${SERVICES[@]}"; do
   verdict="$(verify_service "$svc" "$name" "$env_file")" || die "verify failed for $name: $verdict"
   log "verify: $name $verdict"
 done
+
+if [[ "$WITH_WORKER" == true ]]; then
+  # Batch worker on dev's idle GPUs (values file pins the pool). The shared chart is rendered with
+  # `helm template` and the staging post-renderer adds the staging identity/fence env, then applied.
+  kubectl_staging get secret staging-batch-worker >/dev/null 2>&1 ||
+    die "k8s secret staging/staging-batch-worker missing (bootstrap_iam.sh --apply creates it)"
+  WORKER_IMAGE="${IMAGE_REPO}/batch-pipeline-worker:${SHA}"
+  WORKER_DIGEST="$(gcloud artifacts docker images describe "$WORKER_IMAGE" --project="$PROJECT" --format='value(image_summary.digest)')"
+  [[ "$WORKER_DIGEST" == sha256:* ]] || die "worker image $WORKER_IMAGE not found (build with --with-worker)"
+  log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19}"
+  helm template staging-batch-pipeline-worker "$WORK/src/backend/charts/batch-pipeline-worker" \
+    -f "$WORK/src/backend/charts/batch-pipeline-worker/staging_omi_batch-pipeline-worker_values.yaml" \
+    --set "image.digest=${WORKER_DIGEST}" --namespace "$NAMESPACE" |
+    "$PY" "$WORK/src/backend/deploy/staging/worker_post_render.py" >"$WORK/worker.yaml"
+  kubectl_staging apply -f "$WORK/worker.yaml" >/dev/null
+  kubectl_staging annotate deployment/staging-batch-pipeline-worker --overwrite \
+    "omi.ai/release-sha=${SHA}" "omi.ai/release-tree=${TREE}" >/dev/null
+  kubectl_staging rollout status deployment/staging-batch-pipeline-worker --timeout=1800s >/dev/null ||
+    die "batch worker rollout did not complete in 30 min"
+  log "worker: $(kubectl_staging get deployment staging-batch-pipeline-worker -o jsonpath='{.status.readyReplicas}/{.spec.replicas}') ready"
+fi
 
 mkdir -p "$(dirname "$DEPLOY_LOG")"
 printf '%s sha=%s tree=%s services=%s worker=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
