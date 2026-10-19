@@ -219,6 +219,8 @@ class TestCreateOrchestration:
         assert args[1]['description'] == 'Email Bob'  # trimmed
         assert args[1]['due_at'] == datetime(2026, 7, 1, tzinfo=timezone.utc)
         assert kwargs['idempotency_key'] == actions.content_idempotency_key(UID, 'Email Bob')
+        # The key is the title's hash, so a finished task holding it is an earlier task, not a retry.
+        assert kwargs['reuse_finished'] is False
         mock_vec.assert_called_once_with(UID, 'a1', 'Email Bob')
         assert out['id'] == 'a1' and out['description'] == 'Email Bob'
 

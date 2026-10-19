@@ -14,8 +14,12 @@ would happily produce a duplicate document. The fix:
   named "123" are two tasks, and hashing the title returned the first
   document (wrong due date, gone after reload).
 
+- ``utils/mcp_action_items.create_action_item`` still derives its retry key
+  from the title, so it may only collapse onto a task that is still open: a
+  finished task with the same title is an earlier task, not a retry.
+
 These tests exercise the db-layer contract (idempotency hit / miss / no-key
-backwards compat) and the router-layer key handling.
+backwards compat), the MCP title-derived key, and the router-layer key handling.
 """
 
 from datetime import datetime, timezone
@@ -28,6 +32,7 @@ from google.api_core.exceptions import Aborted
 from database import action_items as action_items_db  # noqa: E402
 from database import firestore_transaction_retry
 from routers import action_items as action_items_router  # noqa: E402
+from utils import mcp_action_items  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # create_action_item — db layer
@@ -269,6 +274,72 @@ def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch
     assert result == 'newly-created-id'
     assert attempts == 2
     assert len(captured['added']) == 1
+
+
+# ---------------------------------------------------------------------------
+# MCP create — the retry key is derived from the title
+# ---------------------------------------------------------------------------
+
+
+def _stub_mcp_create(monkeypatch, existing):
+    """Real MCP orchestration over the real db create. ``existing`` maps doc id -> stored fields."""
+    captured = _stub_collection(monkeypatch, [_make_doc(doc_id, data) for doc_id, data in existing.items()])
+    reminders = []
+    monkeypatch.setattr(mcp_action_items, 'upsert_action_item_vector', lambda *args, **kwargs: None)
+    monkeypatch.setattr(mcp_action_items, 'sync_action_item_reminder', lambda **kwargs: reminders.append(kwargs))
+    monkeypatch.setattr(
+        action_items_db,
+        'get_action_item',
+        lambda uid, item_id: {'id': item_id, **{**existing, **captured['set']}[item_id]},
+    )
+    return captured, reminders
+
+
+@pytest.mark.parametrize(
+    'finished',
+    [{'completed': True, 'status': 'completed'}, {'completed': True}, {'completed': False, 'status': 'cancelled'}],
+    ids=['completed', 'legacy-completed', 'cancelled'],
+)
+def test_mcp_create_with_the_title_of_a_finished_task_creates_a_new_task(monkeypatch, finished):
+    """Last week's finished "Call mom" must not swallow this week's MCP create.
+
+    The MCP key is a hash of the title, so the finished task carries the same key.
+    Returning it reported success while nothing new reached the task list, and the
+    requested due date never armed a reminder.
+    """
+    key = mcp_action_items.content_idempotency_key('uid', 'Call mom')
+    captured, reminders = _stub_mcp_create(
+        monkeypatch, {'last-week': {'idempotency_key': key, 'description': 'Call mom', **finished}}
+    )
+
+    item = mcp_action_items.create_action_item('uid', 'Call mom', due_at='2030-01-06')
+
+    assert item['id'] == 'newly-created-id'
+    assert item['completed'] is False
+    assert item['due_at'] == datetime(2030, 1, 6, tzinfo=timezone.utc)
+    assert [row['idempotency_key'] for row in captured['added']] == [key]
+    assert [call['action_item_id'] for call in reminders] == ['newly-created-id']
+
+
+def test_mcp_create_retry_still_returns_the_open_task_with_that_title(monkeypatch):
+    key = mcp_action_items.content_idempotency_key('uid', 'Call mom')
+    captured, _reminders = _stub_mcp_create(
+        monkeypatch,
+        {
+            'last-week': {'idempotency_key': key, 'description': 'Call mom', 'completed': True, 'status': 'completed'},
+            'first-attempt': {
+                'idempotency_key': key,
+                'description': 'Call mom',
+                'completed': False,
+                'status': 'active',
+            },
+        },
+    )
+
+    item = mcp_action_items.create_action_item('uid', 'Call mom')
+
+    assert item['id'] == 'first-attempt'
+    assert captured['added'] == []
 
 
 # ---------------------------------------------------------------------------
