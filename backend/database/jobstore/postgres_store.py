@@ -23,7 +23,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
-from database.jobstore import codec
+import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
 
 T = TypeVar('T')

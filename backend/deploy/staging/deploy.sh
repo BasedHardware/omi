@@ -8,6 +8,11 @@
 #             overlay render (still fenced, logged by name in the deploy log). Not committed config:
 #             re-run without it to restore the overlay values.
 #     --warm  min-instances=1 on the named services for the window (default: overlay's 0).
+#     --services none   deploy only the batch worker (with --with-worker), e.g. for an A/B arm.
+#     --worker-set KEY=VALUE  worker-only rehearsal override (not committed; plain redeploy restores).
+#     --worker-probe FILE     run the worker through a staging-only measurement wrapper (ConfigMap
+#                             staging-asrctx-probe from FILE); observation only.
+#   Committed worker config: backend/deploy/staging/worker_env.yaml (plain values or secretKeyRef).
 #   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services and the batch worker
 #
 # Tier: dev-operator only. Only lanes 1 and 2 deploy staging; other lanes ask on the board.
@@ -76,6 +81,8 @@ BREAK_LOCK=0
 TEARDOWN=0
 OVERRIDES=()
 WARM=()
+WORKER_SETS=()
+WORKER_PROBE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --services)
@@ -86,6 +93,16 @@ while [[ $# -gt 0 ]]; do
     --set)
       [[ "$2" =~ ^[A-Z][A-Z0-9_]*=.*$ ]] || die "--set expects KEY=VALUE"
       OVERRIDES+=("$2")
+      shift
+      ;;
+    --worker-set)
+      [[ "$2" =~ ^[A-Z][A-Z0-9_]*=.*$ ]] || die "--worker-set expects KEY=VALUE"
+      WORKER_SETS+=("$2")
+      shift
+      ;;
+    --worker-probe)
+      [[ -f "$2" ]] || die "--worker-probe file not found: $2"
+      WORKER_PROBE="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       shift
       ;;
     --warm)
@@ -112,6 +129,10 @@ done
 
 [[ "${GCP_AGENT_TIER:-}" == dev-operator ]] || die "run on the dev-operator tier (source ~/.local/bin/gcp-agent-env.sh dev-operator)"
 [[ "$(gcloud config get-value project 2>/dev/null)" == "$PROJECT" ]] || die "active project must be $PROJECT"
+if [[ "${SERVICES[*]}" == none ]]; then
+  SERVICES=()
+  [[ "$WITH_WORKER" == true ]] || die "--services none needs --with-worker"
+fi
 for svc in "${SERVICES[@]}"; do shape_flags "$svc" >/dev/null || die "unknown service $svc"; done
 
 WORK="$(mktemp -d -t staging-deploy.XXXXXX)"
@@ -313,10 +334,17 @@ if [[ "$WITH_WORKER" == true ]]; then
   WORKER_DIGEST="$(image_digest batch-pipeline-worker)"
   [[ "$WORKER_DIGEST" == sha256:* ]] || die "worker image $WORKER_IMAGE not found (build with --with-worker)"
   log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19}"
+  post_args=(--env-file "$WORK/src/backend/deploy/staging/worker_env.yaml")
+  for item in "${WORKER_SETS[@]}"; do post_args+=(--set "$item"); done
+  if [[ -n "$WORKER_PROBE" ]]; then
+    kubectl_staging create configmap staging-asrctx-probe --from-file="asrctx_probe.py=${WORKER_PROBE}" \
+      --dry-run=client -o yaml | kubectl_staging apply -f - >/dev/null
+    post_args+=(--probe-configmap staging-asrctx-probe)
+  fi
   helm template staging-batch-pipeline-worker "$WORK/src/backend/charts/batch-pipeline-worker" \
     -f "$WORK/src/backend/charts/batch-pipeline-worker/staging_omi_batch-pipeline-worker_values.yaml" \
     --set "image.digest=${WORKER_DIGEST}" --namespace "$NAMESPACE" |
-    "$PY" "$WORK/src/backend/deploy/staging/worker_post_render.py" >"$WORK/worker.yaml"
+    "$PY" "$WORK/src/backend/deploy/staging/worker_post_render.py" "${post_args[@]}" >"$WORK/worker.yaml"
   kubectl_staging apply -f "$WORK/worker.yaml" >/dev/null
   kubectl_staging annotate deployment/staging-batch-pipeline-worker --overwrite \
     "omi.ai/release-sha=${SHA}" "omi.ai/release-tree=${TREE}" >/dev/null
@@ -326,7 +354,7 @@ if [[ "$WITH_WORKER" == true ]]; then
 fi
 
 mkdir -p "$(dirname "$DEPLOY_LOG")"
-printf '%s sha=%s tree=%s services=%s worker=%s overrides=%s warm=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
+printf '%s sha=%s tree=%s services=%s worker=%s overrides=%s warm=%s worker_sets=%s probe=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
   "$(
     IFS=,
     echo "${SERVICES[*]}"
@@ -336,5 +364,8 @@ printf '%s sha=%s tree=%s services=%s worker=%s overrides=%s warm=%s\n' "$(date 
   )" "$(
     IFS=,
     echo "${WARM[*]}"
-  )" >>"$DEPLOY_LOG"
+  )" "$(
+    IFS=,
+    echo "${WORKER_SETS[*]}"
+  )" "${WORKER_PROBE:+yes}" >>"$DEPLOY_LOG"
 log "done: staging serves $SHORT (tree ${TREE:0:12})"

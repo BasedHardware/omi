@@ -29,7 +29,7 @@ def configure(conn: Any) -> Any:
     """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
     from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]
 
-    from database.jobstore import codec
+    import database.jobstore.codec as codec
 
     set_json_loads(codec.loads, conn)
     return conn

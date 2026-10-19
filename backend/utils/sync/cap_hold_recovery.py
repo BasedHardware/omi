@@ -4,6 +4,7 @@ The async coordinator borrows leaf workers. Audio stays held until transcription
 content persistence and idempotent usage settlement succeed, including silence.
 """
 
+from functools import partial
 import logging
 import threading
 import time
@@ -11,6 +12,7 @@ import time
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
+from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
@@ -19,7 +21,8 @@ from utils.executors import run_blocking, db_executor, sync_executor, storage_ex
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
+from utils import funded_processing
+from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -403,6 +406,20 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
             if admitted.outcome not in ('admitted', 'already_admitted'):
                 return False
+            # Batch debits at projection, not here. Reserve the hold's units (the backlog worker's own
+            # candidate units) before the hand-off is durable, so the next candidate sees this spend
+            # (lane 6, Subscription ruling 10-19). Idempotent per hold; settled by the batch outcome.
+            await run_blocking(
+                db_executor,
+                partial(
+                    cap_hold_reservations.reserve,
+                    uid,
+                    snapshot.id,
+                    units=cap_hold.remaining_seconds(row) * float(recording_units_per_hour('batch')) / 3600,
+                    period=funded_processing.period_id(),
+                    batch_job_id=admitted.batch_job_id or '',
+                ),
+            )
             if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
                 return False
             await run_blocking(storage_executor, _erase, uid, snapshot, row)
