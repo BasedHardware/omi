@@ -289,6 +289,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | — | unowned |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | — | unowned |
+| `BATCH_PIPELINE_LEADER_LEASE_ENABLED` | Default on unless false; one batch worker or serving replica per Firestore lease runs periodic recovery, drain, cleanup and quarantine discovery | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` | Default on; independently advance assignment and follow-up discovery beyond blocked projection pages | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | dazheng |
 | `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` | Request-backed paid quarantine recovery survives ordinary revision draining | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_ENABLED` | Default-off dedicated GPU process switch; drains admitted work without enabling upload admission | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | dazheng |
@@ -460,6 +461,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
 - `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
 - `BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED` — Default off; hand speech-bearing empty ASR after padded retry to fenced per-segment recovery (fail: closed)
+- `BATCH_PIPELINE_LEADER_LEASE_ENABLED` — Default on unless false; one batch worker or serving replica per Firestore lease runs periodic recovery, drain, cleanup and quarantine discovery (fail: open)
 - `BATCH_PIPELINE_MODEL_BATCH_SIZE` — GPU chain maximum model window batch size; default 8; hard ceiling 32 (fail: closed)
 - `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 (fail: closed)
 - `BATCH_PIPELINE_POOL_KIND` — Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter (fail: closed)
