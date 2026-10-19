@@ -297,6 +297,7 @@ class ProjectionStore:
                     mapped.append((cid, receipt['created'] and cid == original_id))
             new = sorted({cid for cid, created in mapped if created})
             updated = sorted({cid for cid, created in mapped if not created})
+            superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
             result = {
@@ -305,10 +306,16 @@ class ProjectionStore:
                 'failed_segments': 0,
                 'total_segments': len(receipts),
                 'errors': [],
-                'outcome': 'success' if new or updated or erased_count or terminal_empty_count else 'expected_silence',
+                'outcome': (
+                    'success'
+                    if new or updated or erased_count or terminal_empty_count or superseded_count
+                    else 'expected_silence'
+                ),
             }
             if terminal_empty_count:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
+            if superseded_count:
+                result['superseded_segments'] = superseded_count
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):
