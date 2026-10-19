@@ -8,7 +8,7 @@ Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Swit
 |---|---|---|---|
 | `on` | today | today | today |
 | `draining` | no new legacy job: `admit_or_legacy` admits batch, `legacy_fresh.admit` is skipped, intake never falls back to legacy (BYOK and unsupported languages go to `provider_stt`) | dispatches only already-accepted `sync_backfill_pending` entries; registers no new owner | running legacy tasks finish; `sr-` rows on the old binding drain |
-| `dark` | as `draining` | sweep and wake return 200 `legacy_dark` without claiming | none (entry precondition) |
+| `dark` | as `draining` | sweep and wake return 200 `legacy_dark` without claiming or dispatching; the sweep still runs enrichment repair (`reprocess.sweep`) and `summary_debt_repair.tick` until C4 moves them to `enrichment-maintenance` (lead ruling 10-19) | none (entry precondition) |
 
 Any failure to read the mode serves `on`. During the soak the legacy image, queues and scheduler job are untouched, so `on` is always the safe direction.
 
@@ -44,7 +44,7 @@ Content already claimed in `sync_content_ledger` by legacy is never re-admitted 
 |---|---|---|
 | completed (valid result) | 202 `completed` with the cached segment count, no job | `legacy_completed` |
 | cap hold `held` | 202 `completed`, no job | `legacy_held` |
-| processing, fresh, owner present | 409 `sync_content_in_progress` with the legacy job id (the shipped "follow the owner" response); the running legacy task finishes it | `legacy_active` (`legacy_active_in_dark` pages in `dark`) |
+| processing, fresh, owner present | 409 `sync_content_in_progress` with the legacy job id (the shipped "follow the owner" response, lead ruling 10-19); the running legacy task finishes it | `legacy_active` (`legacy_active_in_dark` pages in `dark`) |
 | retryable, stale, owner missing, invalid completion | batch adopts it when the intake supports the ledger takeover; otherwise 409 retry-later, client keeps the audio | `legacy_stranded_adopted` / `legacy_stranded` |
 | repeat-failure pause active | 409 with `Retry-After` = the pause remaining | `legacy_capped` |
 
@@ -63,7 +63,7 @@ Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced
 ## After the soak: deletion
 
 1. David's `go` on the board.
-2. Capture the live queue configs (needs `cloudtasks.queues.get`; `ro-prod` lacks it):
+2. **Lead action on `prod-operator`:** capture the live queue configs. This needs `cloudtasks.queues.get`, which `ro-prod` lacks. Commit the spec to the run dir before anything is deleted:
 
    ```bash
    source ~/.local/bin/gcp-agent-env.sh prod-operator
