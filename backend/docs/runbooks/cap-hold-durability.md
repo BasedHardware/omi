@@ -23,6 +23,19 @@ origin stays paused. Never infer origin from device source, freshness, or the
 batch execution method. Excluded owners/holds retain audio and consent without
 consuming the chosen estimate. Rollback both admission switches false or clear
 the cohort, preserving current custody readers and sealing/cleanup redrive.
+A reserved excluded source yields to selected work only after the worker/store
+transaction proves no dispatch ever started, rechecks choice ownership and the
+current month, and atomically refunds its chosen estimate once. Unlimited choices
+stay unlimited. Source rows remain queued; cursor rewind preserves widening.
+Any audio receipt/ingest, nonzero lease or lease token, text claim history, unknown
+origin, missing source/legacy lease proof or failed read retains the reservation;
+these narrower ambiguous cases can still block the choice. No usage-ledger refund
+or automatic provider repeat is introduced. See the dispatch contract for the
+exact proof and lost-response behavior. Page completion consumes an accepted
+same-month pending upgrade before retaining/rewinding skipped scope; an actual
+reservation still blocks upgrade consumption. No wrong-month intent creates
+consent, and excluded rows alone never finish the choice to waiting-choice.
+
 This change adds no scheduler lifecycle or indexes; the pre-existing job and
 index prerequisites below are unchanged and are not deployed by this lane.
 

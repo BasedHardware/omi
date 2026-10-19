@@ -348,7 +348,7 @@ def test_managed_authorizer_reuses_shared_admission_without_another_monthly_scan
         '_authorize_omi',
         dict(
             generated_compute_allowed=module.generated_compute_allowed,
-            generated_compute_configured=module.generated_compute_configured,
+            execution_admission_enabled=module.execution_admission_enabled,
             _resolve_plan=lambda *args: ('basic', True),
             _UNRESOLVED=object(),
             _decision=lambda **kwargs: SimpleNamespace(**kwargs),

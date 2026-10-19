@@ -29,6 +29,11 @@ to `batch`, so a live-only rollout does not enable its budget denial paths.
 Owner-facing summaries, consent and worker entrypoints require membership in at
 least one selected lane, then each paid audio dispatch checks the original lane.
 
+Managed compute uses the same batch selection before treating shared admission
+as a completed ladder budget check. An excluded UID, empty cohort or live-only
+scope falls through the existing paid-plan/free-feature policy without reading
+budget snapshots or allowance. Independent Pro feature gates still apply.
+
 ### Original held-audio provenance
 
 Encrypted hold metadata owns `origin`. New sync intake and late-segment holds
@@ -44,8 +49,25 @@ unknown/null origin pauses recovery
 and retains the manifest/audio. No historical rewrite or new index is needed.
 Excluded backlog items spend no chosen allowance. The worker scans past disabled
 lanes for selected work and rewinds its cursors before stopping, retaining the
-choice for widening. A reserved excluded item remains paused under its existing
-reservation. Custody sealing/cleanup stays active during rollback because it is
+choice for widening. A reserved excluded item can yield to later selected work
+only when a transaction proves it never started: the active choice token/lease,
+current month and exact debit must match; an audio manifest must still match the
+decrypted provenance and have `state=held`, zero lease and no dispatch receipts,
+ingest proofs or completion markers. Text must have no claim history. The same
+transaction refunds the chosen estimate once (preserving unlimited remaining),
+clears the reservation and records `scope_skipped`. It does not refund metered
+usage or remove the source; cursor rewind keeps excluded work discoverable.
+Any intent/receipt (including ambiguous dispatch), audio lease/token, text claim
+(even expired), missing legacy lease proof, unknown origin or failed read retains
+the reservation. Such ambiguous reservations conservatively block that choice
+until their lane is restored and normal recovery resolves them. A lost refund
+response leaves the choice active for a fresh read, never a second refund.
+At page completion the store refuses any actual reservation first, then consumes
+an already-authorized current-month pending upgrade into a fresh token, allowance
+and cutoff. Excluded rows do not block that upgrade. Without an eligible upgrade,
+skipped scope keeps the choice processing and atomically rewinds its cursors;
+it never finishes to waiting-choice solely because excluded rows remain.
+Custody sealing/cleanup stays active during rollback because it is
 owed persistence, not permission to dispatch STT.
 
 ### Controlled expansion and rollback

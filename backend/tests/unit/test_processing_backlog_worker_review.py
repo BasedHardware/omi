@@ -210,11 +210,15 @@ def job_harness(monkeypatch):
                 cutoff=pending['cutoff'],
                 pending_upgrade={},
                 reserved={},
+                scope_skipped=False,
                 cursor_audio=None,
                 cursor_text=None,
                 lease_until=0,
             )
             return True
+        if job.get('scope_skipped'):
+            job.update(cursor_audio=None, cursor_text=None, scope_skipped=False, lease_until=0)
+            return False
         job.update(state='waiting_choice', pending_upgrade={}, lease_until=0)
         return False
 
@@ -767,7 +771,7 @@ async def test_disabled_lane_does_not_spend_estimate_or_finish_choice(job_harnes
     before = job['remaining']
     await worker.run('owner')
     assert job['remaining'] == before and job['reserved'] == {}
-    assert job['state'] == 'processing' and not finishes and not processed
+    assert job['state'] == 'processing' and len(finishes) == 1 and not processed
     assert job['cursor_audio'] is None and job['scope_skipped'] is False
 
 
@@ -777,7 +781,7 @@ async def test_skipped_lane_survives_restart_until_cursor_rewinds(job_harness, m
     monkeypatch.setattr(worker, '_page', lambda *args: [])
     await worker.run('owner')
     assert job['cursor_audio'] is None and job['scope_skipped'] is False
-    assert job['state'] == 'processing' and not finishes
+    assert job['state'] == 'processing' and len(finishes) == 1
 
 
 @pytest.mark.parametrize('origin,selected', [('live', True), ('sync', False), ('batch', False), ('unknown', False)])
