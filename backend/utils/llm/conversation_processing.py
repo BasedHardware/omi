@@ -284,12 +284,23 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # The notes run_loop deadline is the transport's whole recovery budget, not one
 # attempt. The conv_structure model client already enforces the per-attempt
 # deadline above — the seam this class's earlier fixes designated — and the
-# direct lane retries once inside the route's 120s budget, so a loop deadline
-# equal to a single attempt fired while that attempt or its retry was still in
-# flight and ended whole-transcript structuring as a bare TimeoutError
-# (2026-10-18 prod: asyncio/timeouts.py:115 surfacing at _get_structured's
-# llm_input_dedupe.notes call). messaging.summarize sizes its mount the same
-# way at 2x its lane's per-attempt deadline.
+# direct lane retries once, so a loop deadline equal to a single attempt fired
+# while that attempt or its retry was still in flight and ended whole-transcript
+# structuring as a bare TimeoutError (2026-10-18 prod: asyncio/timeouts.py:115
+# surfacing at _get_structured's llm_input_dedupe.notes call).
+#
+# The route, not this loop, owns the client-visible cut on synchronous
+# create/reprocess: 2x60s of transport recovery plus the auth/db preamble does
+# not fit the middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at
+# one 60s attempt with extended recovery owned by the durable finalizer's 1500s
+# lease — the lane where this whole budget actually fits. Never shrink this
+# deadline to "reserve headroom" under the route budget: that would preempt the
+# retry again on that lease and resurrect this error group there. A sync request
+# that outruns the middleware gets a 504 on the response only — the handler runs
+# on a threadpool thread and the notes loop on its own asyncio.run loop, so the
+# recovery finishes after the 504 — with the processing_admission_guard orphan
+# sweep as the crash floor. messaging.summarize sizes its mount the same way at
+# 2x its lane's per-attempt deadline.
 NOTES_LOOP_DEADLINE_SECONDS = 2 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 _NOTES_TIER_MIN_WORDS = 1500

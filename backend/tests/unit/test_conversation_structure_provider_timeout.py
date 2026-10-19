@@ -214,8 +214,20 @@ def test_notes_loop_deadline_covers_the_whole_transport_recovery_budget():
     ``_get_structured``): the shaped notes mount reused the per-attempt transport
     deadline as run_loop's total deadline, so structuring that outlived one attempt
     died as a bare ``TimeoutError`` instead of letting the client-owned deadline —
-    and the direct lane's single retry — govern inside the route budget."""
+    and the direct lane's single retry — govern."""
     assert processing.notes_mount().budget.deadline_seconds == 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_notes_loop_deadline_is_not_headroom_capped_under_the_sync_route_budget():
+    """The route, not the loop, owns the client-visible cut on synchronous
+    create/reprocess: a 2x60s transport recovery plus the auth/db preamble cannot
+    fit the middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at one
+    60s attempt. Capping the loop deadline under that budget to "reserve headroom"
+    would preempt the direct lane's retry again on the durable finalizer's 1500s
+    lease — the lane where the whole recovery budget fits — resurrecting this
+    error group there. A sync request that outruns the middleware gets a 504 on
+    the response only; the threadpool handler finishes the recovery out-of-band."""
+    assert processing.NOTES_LOOP_DEADLINE_SECONDS >= 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 
 
 def test_first_attempt_past_the_per_attempt_deadline_still_summarizes(monkeypatch):
