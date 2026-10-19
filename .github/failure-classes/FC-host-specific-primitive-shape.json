@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-host-specific-primitive-shape",
+  "violated_contract": "What a command decides or prints must not depend on which supported OS or Python release runs it. Code that branches on the exception class a primitive raises, or prints a value through a stdlib str() whose format changed between releases, inherits that primitive's per-host shape, so the same input gives a different result on another host. In the Omi CLI, config.load() told a missing config from an unusable path by the exception open() raised: a regular file in the parent path is NotADirectoryError on POSIX but FileNotFoundError on Windows, so on Windows the unusable path loaded as a clean first run and save()'s overwrite guard stayed unarmed. omi app webhook verify printed resolved addresses with str(IPv6Address), which renders ::ffff:100.64.0.1 as ::ffff:6440:1 on CPython 3.12.10 (the newest 3.12 with Windows installers) and in dotted form on newer releases. Both passed the Linux jobs and failed only in the Windows lane.",
+  "canonical_prevention": "Decide from a host-neutral fact and render with an explicit formatter: check the path itself (an existing parent that is not a directory) instead of trusting which OSError subclass the host raised, and spell IPv4-mapped addresses out instead of relying on the release-dependent str(). Give each case a test that reproduces the other host's primitive (patch Path.open to raise what Windows raises; give IPv6Address the older all-hex str()) so the Linux jobs cover it too, and keep the native Windows lane in python-cli-ci.yml.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_config.py",
+    "sdks/python-cli/tests/test_app_webhooks.py",
+    ".github/workflows/python-cli-ci.yml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/config.py",
+    "sdks/python-cli/omi_cli/webhook_target.py"
+  ],
+  "status": "open"
+}
