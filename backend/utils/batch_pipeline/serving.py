@@ -9,7 +9,7 @@ import time
 
 from config.batch_pipeline import owner_chain_projection_enabled
 from database.batch_pipeline_store import FirestoreStore
-from database.jobstore.dual_store import shadow_from_env
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
 from utils.batch_pipeline.live import drain_recordings

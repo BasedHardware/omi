@@ -36,6 +36,13 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "database/batch_pipeline_shadow_hook.py",
+      "function": "_shadow_mode",
+      "name": "BATCH_JOBSTORE_MODE",
+      "count": 1,
+      "why": "store-selection infrastructure config, read once at store construction, not per-unit policy (E1 BatchUnitPolicy covers unit policy); lead ruling 10-19"
+    },
+    {
       "path": "database/batch_pipeline_store.py",
       "function": "FirestoreStore._require_stage",
       "name": "FIRESTORE_EMULATOR_HOST",
