@@ -1,4 +1,4 @@
-progressDeadlineSeconds: 1800
+progressDeadlineSeconds: 3000
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
