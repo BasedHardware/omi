@@ -1122,6 +1122,7 @@ def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, mo
 
 
 def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '10')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
     from unittest.mock import Mock
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
@@ -1449,3 +1450,70 @@ def test_all_multipart_superseded_lost_settlement_reply_recovers_without_usage(l
     assert not list(lane.user.collection('hourly_usage').stream())
     assert not lane.tasks
     assert lane.projector.project(batch.ids[0]) == result
+
+
+def test_recovery_batch_dispatch_duplicate_start_and_ordered_merge(lane, monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import intake, quarantine_recovery as module
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.invalid')
+    batch = lane.seed(names=tuple(f'unit-{i:02}' for i in range(17)))
+    for sid in batch.ids:
+        assert lane.queue.fail(sid, batch.leases[sid].token, 1, quarantine=True)
+    lane.projector.store.ref('intakes', batch.binding.job_id).set(
+        {
+            'owner_id': lane.uid,
+            'content_id': batch.binding.content_id,
+            'segment_ids': list(batch.ids),
+            'total_files': 1,
+            'lane': 'backfill',
+        }
+    )
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['status'] == 'processing'
+    recovery = QuarantineRecovery(lane.store, Mock(), clock=lambda: 100)
+    enqueued = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueued)
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 1}
+    assert enqueued.call_count == 17
+    # Settle in reverse capture order, with racing duplicate deliveries for
+    # each token: only one provider-start winner, then capture-ordered merge.
+    for sid in reversed(batch.ids):
+        job = recovery.protocol.prepare(sid, lane.uid, 100)
+        token = job['recovery']['token']
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            starts = list(pool.map(lambda _: recovery.protocol.start(sid, token, 100), range(2)))
+        assert sorted(starts) == [False, True]
+        assert recovery.protocol.settle(sid, token, 101, f'gs://synthetic/{sid}')
+        assert not recovery.protocol.start(sid, token, 102)
+    entries = [lane.merge.commit_next(lane.uid, 103) for _ in batch.ids]
+    assert [entry['segment_id'] for entry in entries] == list(batch.ids)
+    assert [entry['previous_segment_id'] for entry in entries] == [None, *batch.ids[:-1]]
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['poll_after_ms'] == 3000
+    # Exercise the real HTTP boundary with the emulator's real privacy fence.
+    from database.batch_pipeline_privacy import advance_privacy_generation
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import routers.sync as route
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *args, **kwargs: lane.store)
+    monkeypatch.setattr(route, 'admit_sync_job_poll', lambda uid: True)
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid] = lambda: lane.uid
+    # Public IDs are bp_ prefixed; alias the same durable receipt for the route.
+    public_id = 'bp_recovery_test'
+    lane.projector.store.ref('intakes', public_id).set(
+        lane.projector.store.ref('intakes', batch.binding.job_id).get().to_dict()
+    )
+    with TestClient(app) as client:
+        active = client.get(f'/v2/sync-local-files/{public_id}')
+        assert active.status_code == 200
+        assert active.json()['status'] == 'processing' and active.json()['poll_after_ms'] > 0
+        advance_privacy_generation(lane.client, lane.uid, blocked=True)
+        response = client.get(f'/v2/sync-local-files/{public_id}')
+    assert response.status_code == 409
+    assert response.json()['code'] == 'sync_batch_privacy_blocked'

@@ -1,6 +1,8 @@
-"""Ship-on kill switches for skipping batch GPU work that cannot change output.
+"""Kill switches for skipping batch GPU work that cannot change output.
 
-Read at the call boundary; set a flag to ``false`` to restore the full stage.
+Read at the call boundary. Speech-only diarization ships on (unset is on; only
+``false`` disables it). The short single-speaker skip ships OFF: only ``true``
+enables it, after the prod-revision qualification in batch_pipeline_runtime.md.
 """
 
 import os
@@ -12,5 +14,5 @@ def diarize_speech_only_enabled() -> bool:
 
 
 def short_speech_single_enabled() -> bool:
-    """One short contiguous speech region takes the existing skipped_single result."""
-    return os.getenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true').strip().lower() != 'false'
+    """Default off. One short region takes skipped_single without a model check."""
+    return os.getenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false').strip().lower() == 'true'

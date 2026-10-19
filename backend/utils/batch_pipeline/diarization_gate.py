@@ -30,7 +30,7 @@ SEAM_SECONDS = 0.5
 MAX_KEPT_FRACTION = 0.8
 # One contiguous evidence region at or under this length skips diarization.
 SHORT_SINGLE_SECONDS = 2.0
-# Evidence pieces closer than this are one region for the single-speaker test.
+# Evidence pauses of at most this (inclusive) are one region for the single test.
 SHORT_SINGLE_JOIN_SECONDS = 0.5
 
 
@@ -73,7 +73,11 @@ def speech_regions(speech_spans, words, duration):
 
 
 def short_single_region(regions, *, limit=SHORT_SINGLE_SECONDS, join=SHORT_SINGLE_JOIN_SECONDS):
-    """True when all evidence is one contiguous region no longer than ``limit``."""
+    """True when all evidence is one region no longer than ``limit``.
+
+    Pauses of at most ``join`` seconds (inclusive) do not split the region; a
+    pause strictly longer than ``join`` does.
+    """
     if not regions:
         return False
     for (_, end), (start, _) in zip(regions, regions[1:]):
@@ -163,3 +167,14 @@ def map_back(regions, plan):
                     }
                 )
     return mapped
+
+
+def unassigned_word_count(words, turns):
+    """Words overlapping no turn (a diarizer gap inside a retained piece)."""
+    ordered = sorted((float(t['start']), float(t['end'])) for t in turns)
+    missing = 0
+    for word in words:
+        left, right = map(float, word['timestamp'])
+        if not any(start <= left < end or (min(right, end) - max(left, start)) > 0 for start, end in ordered):
+            missing += 1
+    return missing

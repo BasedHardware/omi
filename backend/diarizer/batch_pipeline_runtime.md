@@ -201,26 +201,41 @@ retries; existing held intents and receipts remain authoritative.
 
 Diarization was the dominant per-unit GPU cost (pyannote RTF ~0.04 versus
 Parakeet ~0.0025) and ran over the whole unit, silence included, while ASR
-already saw only padded VAD windows. Two ship-on Helm kill switches now decide
-whether and on what audio diarization runs; batching is unchanged.
+already saw only padded VAD windows. Two Helm switches decide whether and on
+what audio diarization runs; batching is unchanged.
 
-- `worker.diarizeSpeechOnlyEnabled` (`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`):
-  evidence is unpadded VAD speech plus every emitted word clock (so a word in
-  ASR context outside VAD is never withheld). Each region is padded 1 s,
-  regions under 4 s apart keep their in-between audio, and pieces are joined
-  with 0.5 s of zeros. Turns and overlaps map back to capture clocks; seam audio
-  maps to nothing. Units keeping over 80% of their samples, compacted output
-  with no turns while words exist, and any mapping error diarize the full unit
-  (`omi_fallback_total{component="vad",from="batch_speech_only_diarization"}`).
-  The persisted diarization adds `speech_compaction.diarized_seconds`.
-- `worker.shortSpeechSingleEnabled` (`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED`):
-  one contiguous evidence region (pauses under 0.5 s) of at most 2 s takes the
-  existing `skipped_single` `SPEAKER_00` result with
-  `single_evidence: short_speech`.
+- `worker.diarizeSpeechOnlyEnabled` (`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`,
+  **on**; unset is on, only `false` disables): evidence is unpadded VAD speech
+  plus every emitted word clock (so a word in ASR context outside VAD is never
+  withheld). Each region is padded 1 s, regions under 4 s apart keep their
+  in-between audio, and pieces are joined with 0.5 s of zeros. Turns and
+  overlaps map back to capture clocks; seam audio maps to nothing. The full
+  unit is diarized when:
+  - over 80% of samples would be kept: `omi_fallback_total{component="vad",
+    from="batch_speech_only_diarization",reason="kept_over_80pct",outcome="recovered"}`;
+  - compaction or mapping raises, or compacted output has no turns while words
+    exist: same series with `reason="other",outcome="degraded"`.
+  Every decision increments `omi_batch_pipeline_diarization_decisions_total{decision}`
+  (`compacted`, `full_flag_off`, `full_no_evidence`, `full_kept_over_80pct`,
+  `full_compaction_error`, `full_compacted_empty`, `skipped_short`), and
+  `omi_batch_pipeline_diarization_audio_seconds_total{kind="unit"|"diarized"}`
+  gives the measured retained fraction. A persisted compacted result with any
+  word outside every turn (a diarizer gap inside a retained piece) increments
+  `omi_batch_pipeline_compacted_unassigned_units_total` and `..._words_total`;
+  such words abstain exactly as they do in full-unit gaps. The persisted
+  diarization adds `speech_compaction.diarized_seconds`.
+- `worker.shortSpeechSingleEnabled` (`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED`,
+  **off**; only `true` enables): one evidence region of at most 2 s, where
+  pauses of at most 0.5 s (inclusive) join and a longer pause splits, takes the
+  existing `skipped_single` `SPEAKER_00` result with `single_evidence:
+  short_speech` and no model check. **Enablement precondition:** a paired run on
+  the prod pyannote revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee`
+  showing the full diarizer returns a single speaker on the gate's own evidence
+  (VAD plus words), including two bursts separated by at most 0.5 s. The AMI
+  bench used other weights and only single continuous slices.
 
-ASR inputs and words are identical with either switch on or off. Fixture
-evidence (public AMI, full versus speech-only pyannote) is in the PR. Rollback:
-set either value to `false`.
+ASR inputs and words are identical with either switch on or off. Rollback:
+set `worker.diarizeSpeechOnlyEnabled=false`.
 
 Quarantine events are cumulative transitions, not current debt. For read-only
 Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==
