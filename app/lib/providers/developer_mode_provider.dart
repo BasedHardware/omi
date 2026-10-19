@@ -83,44 +83,41 @@ class DeveloperModeProvider extends BaseProvider {
         current.keys.any((k) => current[k] != (_savedWebhookText[k] ?? ''));
   }
 
-  void onConversationEventsToggled(bool value) {
-    conversationEventsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'memory_created');
-    } else {
-      enableWebhook(type: 'memory_created');
-    }
-    notifyListeners();
-  }
+  /// Webhook types with an on/off request still running. Another tap on that switch is ignored until
+  /// the answer arrives, like a second Save, so two requests for one webhook cannot cross.
+  final Set<String> _switchingWebhooks = {};
 
-  void onTranscriptsToggled(bool value) {
-    transcriptsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'realtime_transcript');
-    } else {
-      enableWebhook(type: 'realtime_transcript');
-    }
-    notifyListeners();
-  }
+  Future<void> onConversationEventsToggled(bool value) =>
+      _switchWebhook('memory_created', value, (enabled) => conversationEventsToggled = enabled);
 
-  void onAudioBytesToggled(bool value) {
-    audioBytesToggled = value;
-    if (!value) {
-      disableWebhook(type: 'audio_bytes');
-    } else {
-      enableWebhook(type: 'audio_bytes');
-    }
-    notifyListeners();
-  }
+  Future<void> onTranscriptsToggled(bool value) =>
+      _switchWebhook('realtime_transcript', value, (enabled) => transcriptsToggled = enabled);
 
-  void onDaySummaryToggled(bool value) {
-    daySummaryToggled = value;
-    if (!value) {
-      disableWebhook(type: 'day_summary');
-    } else {
-      enableWebhook(type: 'day_summary');
-    }
+  Future<void> onAudioBytesToggled(bool value) =>
+      _switchWebhook('audio_bytes', value, (enabled) => audioBytesToggled = enabled);
+
+  Future<void> onDaySummaryToggled(bool value) =>
+      _switchWebhook('day_summary', value, (enabled) => daySummaryToggled = enabled);
+
+  /// Shows the [type] webhook's switch at [enabled] and asks the server to turn that webhook on or off.
+  /// If the server does not confirm it, the webhook did not change, so the switch goes back and an
+  /// error is shown.
+  Future<void> _switchWebhook(String type, bool enabled, void Function(bool enabled) showSwitch) async {
+    if (!_switchingWebhooks.add(type)) return;
+    showSwitch(enabled);
     notifyListeners();
+    try {
+      final saved = enabled ? await enableWebhook(type: type) : await disableWebhook(type: type);
+      if (saved) return;
+    } finally {
+      _switchingWebhooks.remove(type);
+    }
+    showSwitch(!enabled);
+    notifyListeners();
+    AppSnackbar.showSnackbarError(
+      globalNavigatorKey.currentContext?.l10n.failedToSaveCheckConnection ??
+          'Failed to save. Please check your connection.',
+    );
   }
 
   Future getWebhooksStatus() async {
