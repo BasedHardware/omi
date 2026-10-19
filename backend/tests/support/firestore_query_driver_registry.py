@@ -3170,6 +3170,30 @@ _add(
 )
 
 
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+_provider_stt_outbox = FirestoreProviderSttOutbox(
+    privacy_blocked=lambda row_id: False,
+    create_wake=lambda row: None,
+    collection='batch_pipeline_prod_provider_stt_outbox',
+)
+for _method in ('claim', 'sweep'):
+    _add(
+        DriverEntry(
+            f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',
+            base={'self': _provider_stt_outbox},
+            neutrals={
+                'now': (T0.timestamp(), 'operand clock only; due/lease checks run per row after the query'),
+                **(
+                    {'n': (4, 'claim count; bounds the page only'), 'lease_seconds': (1800, 'lease length only')}
+                    if _method == 'claim'
+                    else {'limit': _LIMIT}
+                ),
+            },
+        )
+    )
+
+
 _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
