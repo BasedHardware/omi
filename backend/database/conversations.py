@@ -930,7 +930,8 @@ def _collect_visible_conversation_page(
             if last_doc is not None:
                 try:
                     cursor_page['next_cursor'] = encode_cursor(last_doc.to_dict().get(sort_field), last_doc.id, scope)
-                except ValueError:
+                except (ValueError, TypeError, AttributeError):
+                    # A null/corrupt ordering key must omit the cursor, not 500 the list route.
                     logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
         return rows
 
@@ -938,12 +939,11 @@ def _collect_visible_conversation_page(
         try:
             stamp, doc_id = decode_cursor(cursor, scope)
         except ValueError:
-            logger.warning('conversation_list_cursor: invalid or expired cursor; using offset pagination')
             record_fallback(
                 component='firestore_read',
                 from_mode='cursor',
                 to_mode='offset',
-                reason='invalid_payload',
+                reason='malformed',
                 outcome='degraded',
                 log=logger,
             )

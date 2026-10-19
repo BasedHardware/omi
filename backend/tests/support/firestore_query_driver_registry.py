@@ -887,7 +887,7 @@ _add(
         ),
         reason='cursor page collector only runs when the conversation_list_cursor lever is on; drivers run with levers off',
         expect_observed=False,
-        body_digest='1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
+        body_digest=BODY_DIGEST['database.conversations._collect_cursor_conversation_page'],
     )
 )
 _add(

@@ -234,7 +234,7 @@ def test_invalid_cursor_falls_back_with_warning(monkeypatch, enable, caplog, inv
     result, counts = fetch(monkeypatch, rows(), limit=2, offset=6, page_envelope=True, cursor=invalid)
     expected, _ = fetch(monkeypatch, rows(), limit=2, offset=6)
     assert result['conversations'] == expected and counts['reads'] == 8
-    assert 'invalid or expired cursor; using offset' in caplog.text
+    assert 'fallback' in caplog.text and 'cursor' in caplog.text
 
 
 @pytest.mark.parametrize('change', ['expired', 'tampered', 'user', 'filter', 'order', 'visibility'])
@@ -258,7 +258,7 @@ def test_cursor_rejects_expiry_tampering_and_scope_changes(monkeypatch, enable, 
     result, counts = fetch(monkeypatch, rows(), limit=2, offset=6, page_envelope=True, cursor=token, **kwargs)
     expected, _ = fetch(monkeypatch, rows(), limit=2, offset=6, **kwargs)
     assert result['conversations'] == expected
-    assert 'invalid or expired cursor; using offset' in caplog.text
+    assert 'fallback' in caplog.text and 'cursor' in caplog.text
     assert counts['offsets'] == ([] if kwargs.get('include_discarded') else [6])
 
 

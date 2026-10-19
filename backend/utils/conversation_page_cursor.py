@@ -61,7 +61,9 @@ def decode_cursor(token: str, scope: str) -> tuple[datetime, str]:
             raise ValueError('invalid cursor scope or version')
         issued = data['issued']
         age = time.time() - issued if type(issued) is int else -1
-        if age < 0 or age > _ttl():
+        # Tolerate ~1 minute of issuer-ahead clock skew so a cursor minted on a
+        # slightly fast pod does not fail decode on a slower one.
+        if age < -60 or age > _ttl():
             raise ValueError('expired cursor')
         document_id = data['id']
         if not isinstance(document_id, str) or not document_id or '/' in document_id or document_id in {'.', '..'}:
@@ -87,6 +89,9 @@ class BookmarkDict(dict):
     """
 
     def __deepcopy__(self, memo):
+        # Values are exactly the ordering key (DatetimeWithNanoseconds, immutable)
+        # and the doc id (str) today; if a mutable value ever lands here it must
+        # be added to the copy branch below, not passed through.
         out = BookmarkDict()
         for key, value in self.items():
             if isinstance(value, DatetimeWithNanoseconds):
