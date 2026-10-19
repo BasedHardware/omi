@@ -32,9 +32,12 @@ SCREEN_VECTOR_STRIPE_API_KEY:
 The variable carries a non-secret Secret Manager name or
 `projects/<project>/secrets/<name>` reference, never a payload or version suffix.
 `render_backend_runtime_env.py` owns parsing, strict resource grammar, omission
-of empty optional references and structured secret output. Existing literal
-`secret` / `version` bindings stay unchanged. This dynamic form is currently
-desktop-only; the managed Cloud Run services' validator still owns their literal
+of empty optional references and structured secret output. Both literal and
+dynamic resource names pass the same metadata-only grammar and credential-prefix
+rejection before state/workflow output; runtime credential values are never read
+by this renderer. Invalid references fail without echoing their contents. Valid
+existing literal `secret` / `version` bindings retain their output. This dynamic
+form is currently desktop-only; the managed Cloud Run services' validator still owns their literal
 secret bindings. Mixed desktop ladder configuration requires the restricted
 reference before output. With no incoming prices or reference, no new credential
 is required. Explicit references are emitted even if price inputs are omitted.

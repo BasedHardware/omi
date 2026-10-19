@@ -1195,3 +1195,71 @@ def test_desktop_operator_price_realm_is_explicit_and_separate_from_main(monkeyp
             assert resolve_subscription_entitlements(subscription, values)['capabilities']['cloud_screen_vectors'] is (
                 binding['plan_id'] != 'plus'
             )
+
+
+@pytest.mark.parametrize('descriptor', ['literal', 'dynamic'])
+@pytest.mark.parametrize(
+    'candidate',
+    [
+        'sk_live_fixture_not_real',
+        'rk_live_fixture_not_real',
+        'bad\nSTRIPE_API_KEY=fixture',
+        'bad:latest',
+        '../fixture',
+        '{"private_key":"fixture"}',
+    ],
+)
+def test_invalid_resource_never_reaches_cli_state_or_workflow_output(
+    monkeypatch, tmp_path, capsys, descriptor, candidate
+):
+    config = deepcopy(_MANIFEST['environments']['dev'])
+    entry = (
+        {'secret': candidate}
+        if descriptor == 'literal'
+        else {'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET', 'default': ''}
+    )
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', candidate)
+    config['desktop_backend']['secrets']['SCREEN_VECTOR_STRIPE_API_KEY'] = entry
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': config}})
+    output_path = Path(os.environ['GITHUB_OUTPUT'])
+    output_path.write_text('existing_output=retained\n')
+    state_path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state_path)])
+    with pytest.raises(ValueError, match='invalid resource reference') as error:
+        _MODULE['main']()
+    assert candidate not in str(error.value)
+    assert not state_path.exists()
+    assert output_path.read_text() == 'existing_output=retained\n'
+    assert capsys.readouterr() == ('', '')
+
+
+@pytest.mark.parametrize('descriptor', ['literal', 'dynamic'])
+@pytest.mark.parametrize('resource_name', ['fixture-reader', 'projects/fixture-project/secrets/fixture-reader'])
+def test_cli_emits_only_resource_metadata_never_runtime_credential_value(
+    monkeypatch, tmp_path, capsys, descriptor, resource_name
+):
+    config = deepcopy(_MANIFEST['environments']['dev'])
+    entry = (
+        {'secret': resource_name}
+        if descriptor == 'literal'
+        else {'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET', 'default': ''}
+    )
+    config['desktop_backend']['secrets']['SCREEN_VECTOR_STRIPE_API_KEY'] = entry
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': config}})
+    fixture_credential = 'sk_live_fixture_not_real'
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_API_KEY', fixture_credential)
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', resource_name)
+    state_path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state_path)])
+    assert _MODULE['main']() == 0
+    state = json.loads(state_path.read_text())['services']['desktop-backend']
+    assert state['secrets'] == [
+        {
+            'name': 'SCREEN_VECTOR_STRIPE_API_KEY',
+            'valueFrom': {'secretKeyRef': {'name': resource_name, 'key': 'latest'}},
+        }
+    ]
+    output = _read_workflow_outputs()
+    assert f'SCREEN_VECTOR_STRIPE_API_KEY={resource_name}:latest' in output
+    assert fixture_credential not in output + state_path.read_text()
+    assert capsys.readouterr() == ('', '')

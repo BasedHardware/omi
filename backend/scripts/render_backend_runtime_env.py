@@ -189,12 +189,12 @@ def main() -> int:
                 if name.startswith('LADDER_V1_') and name.endswith('_PRICE_ID')
             )
             _emit_output('ladder_price_env_vars', ladder_price_env_vars)
-            stripe_secret = desktop_state['services']['desktop-backend'].get('secrets', [])
+            stripe_resource_refs = desktop_state['services']['desktop-backend'].get('secrets', [])
             _emit_output(
                 'screen_vector_stripe_secret',
                 '\n'.join(
                     f'{entry["name"]}={entry["valueFrom"]["secretKeyRef"]["name"]}:{entry["valueFrom"]["secretKeyRef"]["key"]}'
-                    for entry in stripe_secret
+                    for entry in stripe_resource_refs
                 ),
             )
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
@@ -309,6 +309,22 @@ def _escape_deploy_cloud_run_env_value(value: str) -> str:
     )
 
 
+def _validated_resource_name(binding_name: str, candidate: object) -> str:
+    """Accept Secret Manager resource metadata, never a credential payload.
+
+    Both checked-in literal descriptors and operator-provided references cross
+    this boundary before state or workflow output is written. No secret version
+    is accessed here; the runtime resolves the resulting secretKeyRef itself.
+    """
+    if (
+        not isinstance(candidate, str)
+        or candidate.startswith(('sk_', 'rk_'))
+        or not re.fullmatch(r'(?:projects/[a-z0-9][a-z0-9-]{0,62}/secrets/)?[A-Za-z0-9_-]{1,255}', candidate)
+    ):
+        raise ValueError(f'Cloud Run secret binding {binding_name} has an invalid resource reference')
+    return candidate
+
+
 def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
     rendered: list[ConfigDict] = []
     for name, raw_entry in secret_entries.items():
@@ -316,16 +332,12 @@ def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
         if entry is None:
             raise ValueError(f'Cloud Run secret binding {name} must be a mapping')
         if 'secret' in entry:
-            secret = str(entry['secret'])
+            resource_name = _validated_resource_name(name, entry['secret'])
         elif 'env_var' in entry:
-            # The variable carries a resource reference, never a credential payload.
-            secret = _runtime_value(name, entry)
-            if not secret:
+            resource_name = _runtime_value(name, entry)
+            if not resource_name:
                 continue
-            if secret.startswith(('sk_', 'rk_')) or not re.fullmatch(
-                r'(?:projects/[a-z0-9][a-z0-9-]{0,62}/secrets/)?[A-Za-z0-9_-]{1,255}', secret
-            ):
-                raise ValueError(f'Cloud Run secret binding {name} has an invalid resource reference')
+            resource_name = _validated_resource_name(name, resource_name)
         else:
             raise ValueError(f'Cloud Run secret binding {name} must define secret or env_var')
         version = entry.get('version', 'latest')
@@ -334,7 +346,7 @@ def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
                 'name': str(name),
                 'valueFrom': {
                     'secretKeyRef': {
-                        'name': secret,
+                        'name': resource_name,
                         'key': str(version),
                     }
                 },
