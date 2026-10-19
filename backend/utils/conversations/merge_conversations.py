@@ -358,6 +358,9 @@ def perform_merge_async(
             conversations_db.store_conversation_photos(uid, new_conversation_id, new_conversation.photos)
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
+        # Defer derived effects so webhooks and downstream notifications do not emit
+        # for a merged target that a subsequent transfer conflict can rollback (#22413).
+        deferred_derived_effects: List[Callable[[], None]] = []
         if reprocess:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -366,6 +369,8 @@ def perform_merge_async(
                         new_conversation.language or "en",
                         new_conversation,
                         trigger=ProcessingTrigger.MERGE,
+                        defer_derived_effects=True,
+                        derived_effects_observer=deferred_derived_effects.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -381,6 +386,14 @@ def perform_merge_async(
         if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
+        # Emit deferred derived effects (including conversation_created_webhook) only once
+        # the merge can no longer fail before source deletion / rollback.
+        for emit_effects in deferred_derived_effects:
+            try:
+                emit_effects()
+            except Exception as e:
+                logger.error(f"Error emitting deferred derived effects for merge: {e}")
 
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
