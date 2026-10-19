@@ -10,6 +10,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database.batch_pipeline_policy import load_stage_policy
+from database.jobstore.dual_store import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
@@ -39,6 +40,11 @@ class ProjectionStore:
 
     def ref(self, table: str, key: str):
         return self.client.collection(f'{self.store.namespace}_{table}').document(key)
+
+    def _mirror(self, binding: ProjectionBinding) -> None:
+        # A2 shadow: these transactions write batch docs outside Store.run; no-op unless shadow mode.
+        namespace = getattr(self.store, 'namespace', '')
+        mirror_refresh(namespace, [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')])
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
@@ -75,7 +81,9 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit, policy=policy)
+        receipt = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return receipt
 
     def check(self, session):
         @firestore.transactional
@@ -97,6 +105,7 @@ class ProjectionStore:
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
         self.run(commit, policy=policy)
+        self._mirror(binding)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -163,6 +172,7 @@ class ProjectionStore:
         result = self.run(firestore.transactional(commit), policy=policy)
         if result is not None and result.wake_token:
             outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
     @staticmethod
     def _backfill_dispatch() -> dict[str, str] | None:
@@ -231,7 +241,9 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit, policy=policy)
+        held = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return held
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -408,6 +420,7 @@ class ProjectionStore:
 
         with writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
+        self._mirror(binding)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result

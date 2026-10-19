@@ -23,15 +23,10 @@ pytestmark = pytest.mark.integration
 
 GOLDEN_DIR = Path(__file__).parent.parent / 'unit' / 'fixtures' / 'pipeline_sim_goldens'
 
-# Reads that diverge because a writer bypassed ``Store.run`` and does not yet re-copy its documents through
-# ``mirror_refresh``. Known gaps to close before cutover; anything else is a mirror bug. Purge (and its
-# simulator model) calls the hook, so its deletes no longer leave Postgres copies behind.
-# - the projection apply transaction (``database/batch_pipeline_projection.py``: ``client_status`` /
-#   ``client_result`` and E1's ``policy_parts`` pins on jobs) writes jobs in its own Firestore transaction
-#   ('mismatch'); its hook call waits for lane 9's ack.
-KNOWN_BYPASS = {
-    'duplicate_delivery': {('jobs', 'read', 'mismatch')},
-}
+# Reads that diverge because a writer bypassed ``Store.run`` without re-copying its documents through
+# ``mirror_refresh``. Purge and the projection apply transactions (and their simulator models) call the hook,
+# so none are expected; anything here is a mirror bug or a new bypass writer.
+KNOWN_BYPASS: dict[str, set] = {}
 
 
 @pytest.fixture(scope='module')

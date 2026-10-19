@@ -37,6 +37,7 @@ from unittest.mock import patch
 
 from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
 from config.policy.stages import STAGE_TYPES
+from database.jobstore.dual_store import mirror_refresh
 from database import batch_pipeline_policy as policy_store
 from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
@@ -727,6 +728,10 @@ class Simulation:
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
             )
+            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            mirror_refresh(
+                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
+            )
             record.projected_at = now
             if record.has_words:
                 await self._start_summary(record)
@@ -750,6 +755,7 @@ class Simulation:
                         }
                     ),
                 )
+            mirror_refresh(getattr(self.store, 'namespace', ''), [('jobs', s) for s in record.segment_ids])
         record.summary_dispatches += 1
         record.summary_inflight = True
         mode = self.config.summary_dispatch
