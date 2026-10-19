@@ -334,8 +334,15 @@ to inline recovery with the same token. The task and inline path race through
 the same transactional start fence, so at most one can invoke paid STT. The
 shared fallback metric records this degraded inline execution. A disabled
 handler host or owner cohort returns retryable HTTP 503, never a successful ack.
-A two-minute wake-name generation repairs exhausted tasks without authorizing a
-second provider call. Existing privacy, lease, content ownership and intent-token
+Each prepared intent has at most one outstanding wake task: the sweep leases a
+wake (`recovery_wake`, default 600s, `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`)
+and names the task by intent token and wake sequence, so a backlog no longer
+adds a new task per unit on every sweep. At lease expiry the previous task is
+probed; it keeps its lease while it exists, and only NotFound (or three failed
+probes) mints the next sequence; a delivery of that same wake that leaves the
+intent prepared, or a failed enqueue, re-arms a 120-second wake, and a stale
+delivery never shortens a newer wake. `0` restores the legacy two-minute wake-name
+generation on every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token
 fences apply to every delivery, including duplicates and admission rollback.
 
 Integration declares a 3,600-second Cloud Run request timeout in both manifests,

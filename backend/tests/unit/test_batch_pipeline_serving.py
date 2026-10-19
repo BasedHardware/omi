@@ -14,6 +14,7 @@ import time
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 import pytest
 
 from routers import batch_pipeline as module
@@ -371,7 +372,11 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     from unittest.mock import AsyncMock
 
     service.reconcile_async = AsyncMock()
-    task = asyncio.create_task(routes.recover_quarantine(routes.RedriveRequest(stage='dev', segment_id='synthetic')))
+    task = asyncio.create_task(
+        routes.recover_quarantine(
+            routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
+        )
+    )
     try:
         assert await asyncio.to_thread(entered.wait, 2)
         assert not task.done()  # The request stays active during the provider call.
