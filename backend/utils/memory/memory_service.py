@@ -1512,8 +1512,6 @@ class _HistoricalRawStream:
         try:
             if self._index_window:
                 token = self.scan_keyset.index_window_cursor if self.scan_keyset is not None else None
-                if token is None and start_after is not None:
-                    token = position_cursor(self._uid, self._kind, start_after)
                 raw_slots, stream_exhausted = read_index_window_slots(
                     self._service.history,
                     self._uid,

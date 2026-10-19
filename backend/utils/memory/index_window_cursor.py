@@ -89,9 +89,8 @@ class BookmarkDict(dict):
     """
 
     def __deepcopy__(self, memo):
-        # Values are exactly the ordering key (DatetimeWithNanoseconds, immutable)
-        # and the doc id (str) today; if a mutable value ever lands here it must
-        # be added to the copy branch below, not passed through.
+        # Timestamp values are immutable; the SDK truncates them when deep-copying.
+        # Copy document references and any other values normally.
         out = BookmarkDict()
         for key, value in self.items():
             if isinstance(value, DatetimeWithNanoseconds):

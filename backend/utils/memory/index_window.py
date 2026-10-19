@@ -41,7 +41,9 @@ def position_cursor(uid: str, kind: str, position: tuple) -> str:
 
 def validate_window_cursors(state: Any, uid: str) -> None:
     for keyset, field in ((state.historical_updated_scan, 'updated_at'), (state.historical_created_scan, 'created_at')):
-        if keyset is not None and keyset.index_window_cursor is not None:
+        if keyset is not None:
+            if keyset.index_window_cursor is None:
+                raise ValueError('legacy cursor has no exact index-window position')
             decode_cursor(keyset.index_window_cursor, query_scope({'uid': uid, 'order': field}))
 
 
