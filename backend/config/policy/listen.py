@@ -7,7 +7,7 @@ callers retain their original getter semantics. Secrets never enter this record.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, fields
 import math
@@ -389,16 +389,23 @@ def resolve_listen_policy(
     )
 
 
-def listen_generation_violations(policy_or_values) -> tuple[str, ...]:
+def listen_generation_violations(policy_or_values: ListenSessionPolicy | Mapping[str, Any]) -> tuple[str, ...]:
     """Return impossible resolved listen combinations for policy generation.
 
     Resolver error states remain representable on ``ListenSessionPolicy`` for
     fail-closed runtime handling. This narrower contract describes valid
     generated policies and sits beside the type so its dependencies stay local.
     """
-    get = policy_or_values.get if isinstance(policy_or_values, Mapping) else lambda key: getattr(policy_or_values, key)
-    has = lambda *keys: not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
-    violations = []
+
+    def get(key: str) -> Any:
+        if isinstance(policy_or_values, Mapping):
+            return policy_or_values[key]
+        return getattr(policy_or_values, key)
+
+    def has(*keys: str) -> bool:
+        return not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
+
+    violations: list[str] = []
 
     if (
         has('routing_on_percent', 'routing_percent_valid')

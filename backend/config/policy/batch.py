@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import math
 from collections.abc import Mapping
+from typing import Any
 
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
 
@@ -60,15 +61,22 @@ class BatchUnitPolicy(PolicyPart):
         return super().from_dict(values)
 
 
-def batch_generation_violations(policy_or_values) -> tuple[str, ...]:
+def batch_generation_violations(policy_or_values: BatchUnitPolicy | Mapping[str, Any]) -> tuple[str, ...]:
     """Return impossible admission combinations for generated batch policies.
 
     Keep these relationships beside ``BatchUnitPolicy`` so the pairwise
     generator and its constraints evolve with the immutable policy shape.
     """
-    get = policy_or_values.get if isinstance(policy_or_values, Mapping) else lambda key: getattr(policy_or_values, key)
-    has = lambda *keys: not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
-    violations = []
+
+    def get(key: str) -> Any:
+        if isinstance(policy_or_values, Mapping):
+            return policy_or_values[key]
+        return getattr(policy_or_values, key)
+
+    def has(*keys: str) -> bool:
+        return not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
+
+    violations: list[str] = []
 
     if (
         has('retire_percent', 'batch_percent')

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Hashable
+from collections.abc import Mapping
+from typing import Any, Hashable, cast
 
 from config.policy.batch import BatchUnitPolicy, batch_generation_violations
 from config.policy.covering_array import CoveringArray, pairwise_covering_array
@@ -22,7 +23,7 @@ BATCH_FACTOR_DOMAINS: dict[str, tuple[Hashable, ...]] = {
     'final_pass_authoritative': (False, True),
 }
 
-_DEFAULT_SERVICE_MODELS = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
+_DEFAULT_SERVICE_MODELS: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
 _ROUTING_TARGETS_DEFAULTS = ''
 _ROUTING_TARGETS_SONIOX = '[{"id":"soniox","family":"soniox","cost_per_audio_hour":0.0754,"ramp_percent":50}]'
 
@@ -74,7 +75,7 @@ class GeneratedPolicyCase:
     listen_policy: ListenSessionPolicy
 
 
-def _valid_assignment(values) -> bool:
+def _valid_assignment(values: Mapping[str, Hashable]) -> bool:
     batch = {name: values[f'batch.{name}'] for name in BATCH_FACTOR_DOMAINS if f'batch.{name}' in values}
     listen = {name: values[f'listen.{name}'] for name in LISTEN_FACTOR_DOMAINS if f'listen.{name}' in values}
     return not batch_generation_violations(batch) and not listen_generation_violations(listen)
@@ -126,7 +127,7 @@ def _seed_row(*, active: bool) -> dict[str, Hashable]:
         'demand_admitted': False,
         'demand_dwell_seconds': 15.0,
     }
-    values = {
+    values: dict[str, Hashable] = {
         **{f'batch.{name}': value for name, value in batch_defaults.items()},
         **{f'listen.{name}': value for name, value in listen_defaults.items()},
     }
@@ -185,8 +186,8 @@ def generate_policy_cases(seed: int = 1) -> tuple[GeneratedPolicyCase, ...]:
     for index, row in enumerate(array.rows):
         batch_values = {name: row[f'batch.{name}'] for name in BATCH_FACTOR_DOMAINS}
         listen_values = {name: row[f'listen.{name}'] for name in LISTEN_FACTOR_DOMAINS}
-        batch_policy = BatchUnitPolicy(source_role='admission', **batch_values)
-        listen_policy = ListenSessionPolicy(source_role='listen', **listen_values)
+        batch_policy = BatchUnitPolicy(source_role='admission', **cast(dict[str, Any], batch_values))
+        listen_policy = ListenSessionPolicy(source_role='listen', **cast(dict[str, Any], listen_values))
         batch_violations = batch_generation_violations(batch_policy)
         listen_violations = listen_generation_violations(listen_policy)
         if batch_violations or listen_violations:

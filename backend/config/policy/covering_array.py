@@ -120,6 +120,8 @@ def pairwise_covering_array(
                     row = complete(fixed)
                     if row is not None:
                         candidate_id = add(row)
+                        if candidate_id is None:
+                            raise AssertionError('valid completed row was rejected by the candidate registry')
                         feasible_seen.update(interactions(candidates[candidate_id]))
 
     if not candidates:
