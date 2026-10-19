@@ -46,11 +46,9 @@ shape_flags() {
     *) return 1 ;;
   esac
 }
-# Public API surface takes Firebase-token auth like prod's backend; task targets are IAM-only
-# (staging-tasks-invoker holds run.invoker on *-staging).
-auth_flag() {
-  [[ "$1" == backend ]] && echo --allow-unauthenticated || echo --no-allow-unauthenticated
-}
+# Invoker policy is not set here: the agent cannot set Cloud Run IAM. grant_invokers.sh (human tier,
+# once, after the services exist) grants allUsers on backend-staging (Firebase-token auth like prod's
+# backend) and staging-tasks-invoker on every *-staging service. New services start private.
 
 SHA=""
 SERVICES=("${ALL_SERVICES[@]}")
@@ -251,7 +249,7 @@ for svc in "${SERVICES[@]}"; do
   shape=($(shape_flags "$svc"))
   log "deploy: $name @ $SHORT"
   gcloud run deploy "$name" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-    --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" "$(auth_flag "$svc")" \
+    --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" \
     --no-cpu-throttling --cpu-boost --execution-environment=gen2 \
     --labels="env=staging,release-sha=${SHORT}" --revision-suffix="${SHORT}-$(date -u +%H%M%S)" \
     --quiet >/dev/null
