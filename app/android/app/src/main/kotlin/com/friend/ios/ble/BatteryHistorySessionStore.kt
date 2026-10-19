@@ -43,6 +43,19 @@ internal fun isSessionStartEcho(started: Long, marker: Long): Boolean {
 }
 
 /**
+ * A row timestamp counts only as a JSON number greater than zero.
+ * [JSONObject.optLong] coerces numeric strings, which would invent coverage
+ * or direct evidence from a malformed row. Anything else contributes nothing.
+ */
+internal fun JSONObject.validTimestamp(): Long {
+    if (isNull("timestamp")) return 0L
+    val value = get("timestamp")
+    if (value !is Number) return 0L
+    val timestamp = value.toLong()
+    return if (timestamp > 0L) timestamp else 0L
+}
+
+/**
  * True when a disconnect row records this marker. Rows further than
  * [AUDIO_OUTAGE_MATCH_TOLERANCE_MS] after [marker] are later events.
  */
@@ -51,7 +64,7 @@ internal fun disconnectEvidenceSupportsMarker(history: JSONArray, marker: Long):
     for (i in 0 until history.length()) {
         val item = history.optJSONObject(i) ?: continue
         if (item.optString("eventType") != "disconnect") continue
-        val delta = item.optLong("timestamp", 0L) - marker
+        val delta = item.validTimestamp() - marker
         if (delta >= 0L && delta <= AUDIO_OUTAGE_MATCH_TOLERANCE_MS) return true
     }
     return false
@@ -86,7 +99,7 @@ internal fun dropUnmeasuredAudioRecoveries(history: JSONArray, sessionStartedAt:
     var dropped = false
     for (i in 0 until history.length()) {
         val item = history.optJSONObject(i) ?: continue
-        val timestamp = item.optLong("timestamp")
+        val timestamp = item.validTimestamp()
         if (item.optString("eventType") == "audio_recovered" &&
             isSessionStartEcho(sessionStartedAt, timestamp) &&
             !disconnectEvidenceSupportsMarker(history, timestamp)
@@ -171,7 +184,7 @@ internal fun historyCoversMarker(history: JSONArray, marker: Long): Boolean {
     for (i in 0 until history.length()) {
         val item = history.optJSONObject(i) ?: continue
         if (item.optString("eventType") != "disconnect") continue
-        val timestamp = item.optLong("timestamp", 0L)
+        val timestamp = item.validTimestamp()
         if (timestamp > 0L && timestamp <= latestOlder) return true
     }
     return false

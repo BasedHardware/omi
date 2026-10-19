@@ -275,6 +275,43 @@ class BatteryHistorySessionStoreTest {
         assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
     }
 
+    @Test fun `numeric string timestamp is not coverage or direct evidence and keeps the marker`() {
+        val disk = mutableMapOf<String, String>()
+        val session = JSONObject().put("device", "device").put("started_at", 90000).put("identity_epoch", 7).toString()
+        disk["session_device"] = session
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = "90000"
+        disk["disconnect_history_device"] = JSONArray()
+            .put(JSONObject().put("eventType", "disconnect").put("timestamp", "1"))
+            .toString()
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        val history = parsedDisconnectHistory(disk["disconnect_history_device"])!!
+        assertFalse(historyCoversMarker(history, 90000L))
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, 90000L, true),
+        )
+        assertNull(store.openSince("device"))
+        assertEquals("90000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
+
+        disk["disconnect_history_device"] = JSONArray()
+            .put(JSONObject().put("eventType", "disconnect").put("timestamp", "90000"))
+            .toString()
+        val stringMarker = parsedDisconnectHistory(disk["disconnect_history_device"])!!
+        assertFalse(disconnectEvidenceSupportsMarker(stringMarker, 90000L))
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, 90000L, true),
+        )
+        assertNull(store.openSince("device"))
+        assertEquals("90000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
+    }
+
     @Test fun `ambiguous marker within echo tolerance of the overwritten start is cleared`() {
         val disk = mutableMapOf<String, String>()
         val startedAt = 12_000L
