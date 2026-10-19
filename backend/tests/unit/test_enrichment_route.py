@@ -141,3 +141,17 @@ def test_new_rows_bind_to_the_enrichment_queue_only_when_routed(rows, monkeypatc
     assert reprocess.valid_dispatch_binding(binding)
     monkeypatch.delenv('ENRICHMENT_TASKS_QUEUE')
     assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
+
+
+def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noqa: F811
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
+    reprocess.mark('u', 'c', 'en', now=time.time())  # settles 600s from now
+    state_rows, tasks = state
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.verify_enrichment_task] = lambda: 0
+    token = state_rows[KEY]['task_token']
+    response = TestClient(app).post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200 and response.json() == {'status': 'deferred', 'reason': 'not_due'}
+    assert state_rows[KEY]['task_token'] != token and tasks[-1]['task_token'] == state_rows[KEY]['task_token']
