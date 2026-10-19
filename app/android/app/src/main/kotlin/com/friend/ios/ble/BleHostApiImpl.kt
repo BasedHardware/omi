@@ -225,8 +225,9 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         val sessionStarted = provenSessionStartedAt(prefs.getString("session_$addr", null), epoch)
         val history = parsedHistory?.let { dropUnmeasuredAudioRecoveries(it, sessionStarted) }
         val marker = DeviceHealthPersistence.sessions(context).openSince(addr)
-        callback(Result.success(JSONObject()
-            .put("observed_at", System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val payload = JSONObject()
+            .put("observed_at", now)
             .put("identity_epoch", epoch)
             .put("audio_outage_started_at", marker ?: JSONObject.NULL)
             .put("audio_packet_days", array("packet_days_$addr"))
@@ -237,7 +238,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             .put("lifecycle_events", array("lifecycle"))
             .put("ble_log", array("log_$addr"))
             .put("counters_since", prefs?.getLong("counters_since_$addr", 0L)?.takeIf { it > 0L } ?: JSONObject.NULL)
-            .toString()))
+        putAudioRecoveryStamps(payload, prefs.getString(audioRecoveryProofsKey(addr), null), epoch, now)
+        callback(Result.success(payload.toString()))
     }
 
     // ── CompanionDeviceManager ──

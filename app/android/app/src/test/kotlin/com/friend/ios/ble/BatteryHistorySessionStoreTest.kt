@@ -85,6 +85,50 @@ class BatteryHistorySessionStoreTest {
         assertSame(history, dropUnmeasuredAudioRecoveries(history, null))
         val beforeSession = JSONArray().put(JSONObject().put("eventType", "audio_recovered").put("timestamp", 9000))
         assertSame(beforeSession, dropUnmeasuredAudioRecoveries(beforeSession, 12000))
+        val shortLink = JSONArray().put(
+            JSONObject().put("eventType", "audio_recovered").put("timestamp", 12003).put("lostAudioResolvedAt", 13000))
+        assertSame(shortLink, dropUnmeasuredAudioRecoveries(shortLink, 12000))
+    }
+    @Test fun `stale session keeps a short-link disconnect marker`() {
+        val session = JSONObject().put("device", "device").put("started_at", 12000).put("identity_epoch", 7).toString()
+        val history = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 12003)).toString()
+        val plan = planAudioOutageCleanup(history, session, 7L, 12003L, markerEpochMatches = true)
+        assertFalse(plan.dropMarker)
+        assertNull(plan.rewrittenHistory)
+        // The crash window is after the marker write and before history or session removal.
+        val beforeHistory = planAudioOutageCleanup("[]", session, 7L, 12003L, markerEpochMatches = true)
+        assertFalse(beforeHistory.dropMarker)
+        val disk = mutableMapOf<String, String>()
+        disk["session_device"] = session
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = "12003"
+        disk["disconnect_history_device"] = history
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertEquals(12003L, store.openSince("device"))
+        assertEquals("12003", disk["audio_outage_device"])
+        val echo = planAudioOutageCleanup("[]", session, 7L, 12000L, markerEpochMatches = true)
+        assertTrue(echo.dropMarker)
+        val supported = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 12000)).toString()
+        assertFalse(planAudioOutageCleanup(supported, session, 7L, 12000L, markerEpochMatches = true).dropMarker)
+        val later = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000)).toString()
+        val oldSession = JSONObject().put("started_at", 1000).put("identity_epoch", 7).toString()
+        assertTrue(planAudioOutageCleanup(later, oldSession, 7L, 1000L, markerEpochMatches = true).dropMarker)
+    }
+    @Test fun `recovery proofs keep genuine standalone resolutions`() {
+        val now = 10_000_000L
+        val once = appendAudioRecoveryProof(null, 1000, 5000, 7, now)
+        val twice = appendAudioRecoveryProof(once, 8000, 9000, 7, now)
+        val stamps = audioRecoveryStamps(twice, 7, now)
+        assertEquals(2, stamps.size)
+        assertEquals(1000L, stamps[0].start)
+        assertEquals(9000L, stamps[1].at)
+        val payload = putAudioRecoveryStamps(JSONObject(), twice, 7, now)
+        assertEquals(8000L, payload.getLong("audio_outage_resolved_start"))
+        assertEquals(9000L, payload.getLong("audio_outage_resolved_at"))
+        assertEquals(2, payload.getJSONArray("audio_outage_recovery_proofs").length())
+        assertTrue(audioRecoveryStamps(twice, 8, now).isEmpty())
+        assertTrue(audioRecoveryStamps(twice, 7, now + AUDIO_RECOVERY_PROOF_RETENTION_MS + 1).isEmpty())
     }
     @Test fun `manual teardown writes marker before session cleanup`() {
         val disk = mutableMapOf<String, String>()

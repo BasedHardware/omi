@@ -1071,11 +1071,17 @@ class OmiBleForegroundService : Service() {
                 }
             }
             if (prefs.getLong("audio_outage_$addr", 0L) > 0L) {
-                history.put(JSONObject().put("identity_epoch", DeviceHealthPersistence.epoch(this)).put("timestamp", marker).put("lostAudioResolvedAt", now)
+                val epoch = DeviceHealthPersistence.epoch(this)
+                history.put(JSONObject().put("identity_epoch", epoch).put("timestamp", marker).put("lostAudioResolvedAt", now)
                     .put("reason", "unknown").put("reasonCode", 0).put("isManual", false)
                     .put("eventType", "audio_recovered").put("connectionDurationMs", 0)
                     .put("appState", "unknown").put("timeToReconnectMs", 0))
-                prefs.edit().putString(key, history.toString()).remove("audio_outage_$addr").commit()
+                // The disconnect row is gone. Keep a stamp so Dart can tell this
+                // recovery from a session-start echo after the marker is consumed.
+                val proofsKey = audioRecoveryProofsKey(addr)
+                val proofs = appendAudioRecoveryProof(prefs.getString(proofsKey, null), marker, now, epoch, now)
+                prefs.edit().putString(key, history.toString()).remove("audio_outage_$addr")
+                    .putString(proofsKey, proofs).commit()
             }
         }
     }
@@ -1169,8 +1175,9 @@ class OmiBleForegroundService : Service() {
             val sessionStarted = provenSessionStartedAt(prefs.getString("session_$addr", null), epoch)
             val history = parsedHistory?.let { dropUnmeasuredAudioRecoveries(it, sessionStarted) }
             val marker = healthSessions.openSince(addr)
-            return JSONObject()
-                .put("observed_at", System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            val payload = JSONObject()
+                .put("observed_at", now)
                 .put("identity_epoch", epoch)
                 .put("audio_outage_started_at", marker ?: JSONObject.NULL)
                 .put("audio_packet_days", packetDays[addr] ?: array("packet_days_$addr"))
@@ -1186,7 +1193,8 @@ class OmiBleForegroundService : Service() {
                 .put("lifecycle_events", array("lifecycle"))
                 .put("ble_log", array("log_$addr"))
                 .put("counters_since", prefs.getLong("counters_since_$addr", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
-                .toString()
+            putAudioRecoveryStamps(payload, prefs.getString(audioRecoveryProofsKey(addr), null), epoch, now)
+            return payload.toString()
         }
     }
 
