@@ -43,6 +43,10 @@ for entitlement healing.
   persistence and Stripe SDK objects; assert no new billing side effects on refusal.
 - [x] Cover legacy paid/Basic records, missing customer ID, new accounts, referral
   access, one-time grants, terminal subscriptions, recovery and reactivation errors.
+- [x] Include the separate preview/sync type-check prerequisite without removing
+  runtime guards; the combined branch passes the full pinned backend type check.
+- [x] Recheck the combined branch's checkout-first HTTP regressions and 52-file
+  billing selection; local fixture-backed curl checks preserve all four admission outcomes.
 - [ ] Review and merge the separate protection PR after checks pass.
 - [ ] Separately authorize deployment and verify the serving backend revision.
 - [ ] Verify the affected customer's Stripe/entitlement state before closing #21869.
