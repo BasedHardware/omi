@@ -4,24 +4,22 @@ The async coordinator borrows leaf workers. Audio stays held until transcription
 content persistence and idempotent usage settlement succeed, including silence.
 """
 
-import asyncio
 import logging
 import threading
 import time
 
-from anyio import from_thread
-from typing import Any
+from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage
-from utils.executors import run_blocking, db_executor, sync_executor, storage_executor, start_background_task
+from utils.executors import run_blocking, db_executor, sync_executor, storage_executor
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold, cap_recovery_plan
+from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -34,11 +32,22 @@ from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
 RECONCILIATION_COOLDOWN_SECONDS = 1800
+_backlog_runner: Callable[[str], Awaitable[None]] | None = None
+
+
+def register_backlog_runner(runner: Callable[[str], Awaitable[None]]) -> None:
+    global _backlog_runner
+    _backlog_runner = runner
 
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     # Account deletion already purges this existing owner-scoped chunk prefix.
-    objects = [row, *(row.get('piece_plan') or {}).values()]
+    objects = [
+        row,
+        *({'audio_path': part} for part in row.get('audio_parts') or []),
+        *(row.get('stage_parts') or []),
+        *(row.get('piece_plan') or {}).values(),
+    ]
     for path in {item[key] for item in objects for key in ('audio_path', 'metadata_path') if item.get(key)}:
         if not path.startswith(f'chunks/{uid}/cap-held/'):
             raise ValueError('hold audio owner mismatch')
@@ -46,7 +55,23 @@ def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
             cap_hold.get_private_cloud_sync_bucket().blob(path).delete()
         except NotFound:
             pass
-    snapshot.reference.delete()
+    if row.get('live_custody_version') == 4:
+        # Keep the publication idempotency barrier after source deletion. A lost
+        # writer reply must not recreate/retranscribe a capture already recovered.
+        snapshot.reference.set(
+            {
+                'state': 'purged',
+                'live_custody_version': 4,
+                **(
+                    {'stage_fragment_ids': [part['id'] for part in row['stage_parts']]}
+                    if row.get('stage_parts')
+                    else {}
+                ),
+                'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT,
+            }
+        )
+    else:
+        snapshot.reference.delete()
 
 
 def _stored(value: Any) -> Any:
@@ -132,6 +157,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         processed = set(row.get('processed_paths') or [])
         pending = False
         for name in sorted(set(plan) | set(receipts)):
+            if cap_work_budget.exhausted():
+                pending = True
+                break
             if not await run_blocking(
                 db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
             ):
@@ -141,8 +169,8 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             receipt: dict[str, Any] | None = receipts.get(name)
             if receipt and receipt.get('state') == 'failed_reconciliation':
                 continue
-            attempt = 1
-            if receipt and receipt.get('state') == 'dispatched':
+            attempt = (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1
+            if receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
                 if 'dispatched_at' not in receipt:
                     receipt = {
                         **receipt,
@@ -170,7 +198,8 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 else:
                     attempt = 2
             if receipt is None or receipt.get('state') == 'dispatched':
-                if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+                cached_result = (receipt or {}).get('provider_result')
+                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
                     pending = True
                     continue
                 previous = receipt
@@ -179,8 +208,12 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         uid, name, plan[name], directory, local_paths, contexts
                     )
                     language = prefs.get('language') or ''
-                    service = get_prerecorded_service(
-                        language if prefs.get('single_language_mode') and language else 'multi'
+                    service = (
+                        ((receipt or {})['provider'], None, (receipt or {})['model'])
+                        if cached_result
+                        else get_prerecorded_service(
+                            language if prefs.get('single_language_mode') and language else 'multi'
+                        )
                     )
                 except Exception as error:
                     logger.warning(
@@ -192,6 +225,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     pending = True
                     continue
                 intent: dict[str, Any] = {
+                    **({'provider_result': cached_result} if cached_result else {}),
                     'state': 'dispatched',
                     'provider': service[0],
                     'model': service[2],
@@ -236,6 +270,11 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                             'lease_token': row['lease_token'],
                             'attempt': attempt,
                             'receipt': intent,
+                            **(
+                                {'capture_partition': f"live:{snapshot.id}:channel:{meta.get('channel', 0)}"}
+                                if meta.get('origin') == 'live'
+                                else {}
+                            ),
                         },
                     )
                 except Exception as error:
@@ -256,10 +295,14 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 if attempt == 2:
                     record_reconciliation('redispatched', snapshot.id, name)
                 if errors or outcome.get('cap_held') or outcome.get('recovery_ambiguous'):
+                    refreshed = await run_blocking(db_executor, snapshot.reference.get)
+                    persisted = (refreshed.to_dict() or {}).get('piece_receipts') or {}
+                    receipts.update(persisted)
+                    row['piece_receipts'] = dict(receipts)
                     pending = True
                     continue
                 receipt = {
-                    **intent,
+                    **{k: v for k, v in intent.items() if k != 'provider_result'},
                     'state': 'transcribed',
                     'response': _stored(response),
                     'seconds': intent['seconds'] if ok else 0,
@@ -332,47 +375,28 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
-async def recover(uid: str) -> None:
-    # One cheap distributed cooldown before querying usage or manifests. Failed
-    # Redis means deferred recovery, never duplicate provider dispatch.
-    if not enabled():
-        return
-    acquired = await run_blocking(db_executor, cap_hold.recovery_cooldown, uid)
-    if not acquired:
-        return
-    rows = await run_blocking(db_executor, cap_hold.pending_holds, uid)
-    for snapshot in rows:
-        row = snapshot.to_dict() or {}
-        try:
-            if row.get('state') == 'completed':
-                await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
-                continue
-            row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
-            if row is None:
-                continue
-            try:
-                if await _recover_row(uid, snapshot, row):
-                    # Completed remains retryable if ledger settlement fails.
-                    # Only successful settlement (or terminal failure) retains it.
-                    if not await _save(uid, snapshot, row, {'state': 'completed'}):
-                        continue
-                    await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
-            finally:
-                await run_blocking(db_executor, cap_hold.release, uid, snapshot.reference, row['lease_token'])
-        except Exception as error:
-            logger.warning('event=stt_cap_recovery outcome=deferred exception_type=%s', type(error).__name__)
-
-
-async def _schedule(uid: str) -> None:
-    start_background_task(recover(uid), name='stt_cap_hold_recovery')
-
-
-def kick(uid: str) -> None:
-    if not enabled():
-        return
+async def recover_selected(uid: str, snapshot: Any) -> bool:
+    """One explicitly selected manifest, retaining existing claim/receipt fences."""
+    row = snapshot.to_dict() or {}
+    if row.get('state') == 'completed':
+        await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+        return True
+    row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
+    if row is None:
+        return False
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        from_thread.run(_schedule, uid)
-    else:
-        start_background_task(recover(uid), name='stt_cap_hold_recovery')
+        if not await _recover_row(uid, snapshot, row):
+            return False
+        if not await _save(uid, snapshot, row, {'state': 'completed'}):
+            return False
+        await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+        return True
+    finally:
+        await run_blocking(db_executor, cap_hold.release, uid, snapshot.reference, row['lease_token'])
+
+
+async def recover(uid: str) -> None:
+    # Legacy request/reset/resume hooks may wake an approved run, but never
+    # create consent. Worker is imported lazily to avoid pipeline import cycles.
+    if enabled() and _backlog_runner is not None:
+        await _backlog_runner(uid)

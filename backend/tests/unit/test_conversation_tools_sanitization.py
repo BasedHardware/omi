@@ -137,12 +137,6 @@ _chat_scope_mod = _mod("utils.retrieval.chat_scope")
 _chat_scope_mod.apply_chat_scope_dates = lambda scope, s, e: (s, e, None)
 _chat_scope_mod.chat_scope_from_config = lambda cfg: None
 
-# Stub utils.retrieval.tools.conversation_jit
-_conv_jit_mod = _mod("utils.retrieval.tools.conversation_jit")
-_conv_jit_mod.MAX_JIT_CONVERSATIONS = 10
-_conv_jit_mod.format_active_jit_conversations = MagicMock(return_value="JIT conversations")
-_conv_jit_mod.is_jit_conversation_retrieval_enabled = MagicMock(return_value=False)
-
 
 def _load(module_name, rel_path):
     if module_name in sys.modules:

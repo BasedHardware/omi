@@ -17,15 +17,6 @@ enum DesktopHomeSignedInStartup {
       return
     }
 
-    // Canonical mirror synchronization remains independent of screen proactivity.
-    if let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() {
-      Task {
-        let flags = await JITRolloutClient.shared.jitProactivityFlags(authorizationSnapshot: authorizationSnapshot)
-        guard flags.permitsNewLane else { return }
-        _ = try? await KnowledgeLedgerMirrorCoordinator.shared.sync(authorizationSnapshot: authorizationSnapshot)
-      }
-    }
-
     if !AppBuild.usesLazyDevPermissions
       && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
     {

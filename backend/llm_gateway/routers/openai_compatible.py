@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
 import json
-import re
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -18,10 +17,7 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     UsageStatus,
     cache_requested_for_openai_request,
-    encode_jit_gateway_receipt,
     image_usage,
-    jit_gateway_receipt_for_trace,
-    jit_gateway_receipt_sse_frame,
     openai_usage_from_sse_payload,
 )
 from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
@@ -82,7 +78,6 @@ _THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureCla
 # Keep CRLF atomic: without the atomic group, the regex engine can backtrack
 # from ``\r\n`` to ``\r`` + ``\n`` and split a multi-line SSE event at its
 # first line ending.
-_SSE_FRAME_BOUNDARY = re.compile(br'(?>\r\n|\r|\n){2}')
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -101,11 +96,6 @@ async def create_chat_completion(
     attempt_trace = AttemptTrace()
     try:
         request_body = await _request_json(request)
-        # Explicit legacy JIT requests must never fall through to paid chat.
-        if any(name.lower().startswith('x-omi-jit-') for name in request.headers):
-            return JSONResponse(
-                status_code=410, content={'error': {'code': 'feature_retired'}}, headers={'Cache-Control': 'no-store'}
-            )
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = _resolve_credentials(request, caller)
         credential_source = credentials.source.value
@@ -154,7 +144,6 @@ async def create_chat_completion(
         )
         return JSONResponse(
             content=with_dream_usage(result.response, resolved_route.lane.lane_id, attempt_trace),
-            headers=_jit_receipt_headers(accounting_context, attempt_trace),
         )
     except asyncio.CancelledError:
         if accounting_context is not None:
@@ -514,7 +503,7 @@ async def _prepared_streaming_iterator(
     refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
     for provider_ref in refs:
         if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
-            raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
+            raise GatewayInvalidRequestError('provider attempt budget exhausted')
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -602,16 +591,13 @@ async def _stream_with_terminal_metrics(
     completion_characters = 0
     finish_reason = 'unknown'
     usage_metadata: ProviderResponseMetadata | None = None
-    passthrough_buffer = b''
-    terminal_settlement_ok = True
     output_budget = output_budget or OutputBudgetDecision(source='none', max_completion_tokens=None)
 
-    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> bool:
-        nonlocal terminal_observed, terminal_settlement_ok
+    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
+        nonlocal terminal_observed
         if terminal_observed:
-            return terminal_settlement_ok
+            return
         terminal_observed = True
-        terminal_settlement_ok = True
         usage_for_trace = usage_metadata
         # Per the PR behavioral contract, actual fallback requires a subsequent
         # successful provider/route.  Only stamp the actual-fallback labels when
@@ -674,7 +660,6 @@ async def _stream_with_terminal_metrics(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return True
 
     async def handle_events(frame_events: list[SSEEvent]) -> bool:
         nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
@@ -713,42 +698,9 @@ async def _stream_with_terminal_metrics(
                 finish_reason = observed_finish_reason
         return done_seen
 
-    async def process_jit_frame(raw_frame: bytes, *, force_boundary: bool = False) -> list[bytes]:
-        normalized = raw_frame.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
-        if force_boundary and not normalized.endswith(b'\n\n'):
-            normalized += b'\n\n'
-        done_seen = await handle_events(decoder.feed(normalized))
-        emitted: list[bytes] = []
-        if done_seen and terminal_settlement_ok:
-            receipt = (
-                jit_gateway_receipt_for_trace(accounting_context, trace) if accounting_context is not None else None
-            )
-            if receipt is not None:
-                emitted.append(jit_gateway_receipt_sse_frame(receipt))
-        emitted.append(raw_frame)
-        return emitted
-
     async def inspect_chunk(chunk: bytes) -> list[bytes]:
-        nonlocal passthrough_buffer
-        # Non-JIT callers must receive provider bytes unchanged.  The decoder
-        # observes a copy of each chunk only for metrics and terminal state.
-        if accounting_context is None or accounting_context.jit_run_id is None:
-            await handle_events(decoder.feed(chunk))
-            return [chunk]
-
-        emitted: list[bytes] = []
-        passthrough_buffer += chunk
-        if len(passthrough_buffer) > 1024 * 1024:
-            raise ValueError('SSE frame exceeds bounded decoder buffer')
-        while True:
-            boundary = _SSE_FRAME_BOUNDARY.search(passthrough_buffer)
-            if boundary is None:
-                break
-            end = boundary.end()
-            raw_frame = passthrough_buffer[:end]
-            passthrough_buffer = passthrough_buffer[end:]
-            emitted.extend(await process_jit_frame(raw_frame))
-        return emitted
+        await handle_events(decoder.feed(chunk))
+        return [chunk]
 
     if prepared.first_chunk is None:
         await observe_terminal(outcome='error', error_class='empty_stream_before_output', phase='before_output')
@@ -782,17 +734,7 @@ async def _stream_with_terminal_metrics(
         await observe_terminal(outcome='error', error_class='transport_midstream', phase='midstream')
         raise
     else:
-        if passthrough_buffer:
-            # A provider may close after a valid data line without the usual
-            # blank-line delimiter.  Inspect a synthetic delimiter while
-            # yielding the original residual bytes unchanged.
-            residual = passthrough_buffer
-            passthrough_buffer = b''
-            if accounting_context is not None and accounting_context.jit_run_id is not None:
-                for emitted in await process_jit_frame(residual, force_boundary=True):
-                    yield emitted
-            else:
-                await handle_events(decoder.feed(residual + b'\n\n'))
+        await handle_events(decoder.feed(b'\n\n'))
         if not terminal_marker_seen:
             await observe_terminal(outcome='error', error_class='eof_before_terminal_marker', phase='midstream')
     finally:
@@ -824,14 +766,6 @@ def _accounting_context(
         product_lane=caller.product_lane,
         client_platform=caller.client_platform,
     )
-
-
-def _jit_receipt_headers(context: AccountingContext, trace: AttemptTrace) -> dict[str, str]:
-    """Return a receipt only for the explicit QA capability."""
-    receipt = jit_gateway_receipt_for_trace(context, trace)
-    if receipt is None:
-        return {}
-    return {'x-omi-jit-gateway-receipt': encode_jit_gateway_receipt(receipt)}
 
 
 def _request_stream_usage(request: dict[str, Any], provider: str) -> None:

@@ -14,6 +14,7 @@ class StorefrontPrice(BaseModel):
     subline: str | None = None
     renewal_line: str | None = None
     months_free: int | None = None
+    confirm_lines: list[str] | None = None
     # Present only when this price overrides the tier cta_label (switch to yearly).
     cta_label: str | None = None
 
@@ -22,6 +23,8 @@ class StorefrontPrice(BaseModel):
         data = handler(self)
         if data.get('months_free') is None:
             data.pop('months_free', None)
+        if data.get('confirm_lines') is None:
+            data.pop('confirm_lines', None)
         if data.get('cta_label') is None:
             data.pop('cta_label', None)
         return data
@@ -61,8 +64,46 @@ class StorefrontUsage(BaseModel):
     period_id: str | None = None
     reset_label: str | None = None
     meter_line: str | None = None
+    # Remaining recording hours. Present only from 80% up to, but not including, 100%,
+    # and only when that estimate is positive. Clients that localize the meter use this
+    # with percent and reset_label; English keeps meter_line.
+    hours_left: int | None = None
     nudge_line: str | None = None
+    # Opens the plans sheet (trigger=usage_budget). Only with a usage_budget meter line.
+    more_label: str | None = None
     pro_gates: list[str] = Field(default_factory=list)
+    mcp_cap_reached: bool = False
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_cap(self, handler):
+        data = handler(self)
+        if not self.mcp_cap_reached:
+            data.pop('mcp_cap_reached', None)
+        if data.get('more_label') is None:
+            data.pop('more_label', None)
+        if data.get('hours_left') is None:
+            data.pop('hours_left', None)
+        return data
+
+
+class StorefrontCapChoice(BaseModel):
+    title: str
+    body: str
+    upgrade_label: str
+    on_device_label: str
+    dont_ask_again_label: str
+    on_device_upgrade_line: str
+
+
+class ChatAtCap(BaseModel):
+    state: Literal['paused'] = 'paused'
+    title: str
+    body: str
+    reset_at: int
+    reset_line: str
+    trigger: Literal['usage_budget'] = 'usage_budget'
+    upgrade_plan: str | None = None
+    upgrade_label: str | None = None
 
 
 class StorefrontResponse(BaseModel):
@@ -74,3 +115,14 @@ class StorefrontResponse(BaseModel):
     usage: StorefrontUsage = Field(default_factory=StorefrontUsage)
     tiers: list[StorefrontTier] = Field(default_factory=list)
     yearly_toggle_label: str | None = None
+    at_cap: StorefrontCapChoice | None = None
+    chat_at_cap: ChatAtCap | None = None
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_cap(self, handler):
+        data = handler(self)
+        if self.chat_at_cap is None:
+            data.pop('chat_at_cap', None)
+        if self.at_cap is None:
+            data.pop('at_cap', None)
+        return data

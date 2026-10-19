@@ -495,6 +495,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     let authority = RuntimeOwnerAuthorizationAuthority()
     let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
     let service = EmbeddingService(
+      cloudEmbeddingAllowed: { _ in true },
       acquireAuth: { snapshot in
         XCTAssertEqual(snapshot, original)
         state.append("auth")
@@ -525,6 +526,7 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
         let authority = RuntimeOwnerAuthorizationAuthority()
         let original = try XCTUnwrap(authority.capture(ownerID: "synthetic-a", expectedOwnerID: "synthetic-a"))
         let service = EmbeddingService(
+          cloudEmbeddingAllowed: { _ in true },
           acquireAuth: { snapshot in
             XCTAssertEqual(snapshot, original)
             state.append("auth")

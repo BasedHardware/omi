@@ -1,0 +1,168 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 10,
+  "show_subscription_ui": true,
+  "header": "プランを選択",
+  "current": {
+    "plan_id": "basic",
+    "name": "Free",
+    "price_id": null,
+    "interval": null,
+    "legacy": false,
+    "cancel_at_period_end": false,
+    "line": "現在 Free を利用中です",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "unavailable",
+    "percent": null,
+    "period_id": null,
+    "reset_label": null,
+    "meter_line": null,
+    "nudge_line": null,
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
+  },
+  "tiers": [
+    {
+      "tier_id": "plus:ladder_v1",
+      "plan_id": "plus",
+      "name": "Plus",
+      "recommended": true,
+      "is_current": false,
+      "hours_line": "録音時間は月あたり約 100 時間、1日あたり約 3 時間",
+      "bullets": [
+        "Free の内容すべてに加え、はるかに多い利用枠",
+        "スマートフォンに加えて Mac でも Omi を使えます",
+        "1日 500 件の MCP リクエスト"
+      ],
+      "action": "checkout",
+      "cta_label": "Plus を利用する",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_plus_month",
+          "interval": "month",
+          "amount_minor": 1999,
+          "currency": "usd",
+          "headline": "$19.99/月",
+          "subline": null,
+          "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
+        },
+        {
+          "price_id": "price_plus_year",
+          "interval": "year",
+          "amount_minor": 19990,
+          "currency": "usd",
+          "headline": "$16.66/月",
+          "subline": "年額 $199.90 · 2か月無料",
+          "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "basic:ladder_v1",
+      "plan_id": "basic",
+      "name": "Free",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "録音時間は月あたり約 15 時間",
+      "bullets": [],
+      "action": "current",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
+    },
+    {
+      "tier_id": "operator:ladder_v1",
+      "plan_id": "operator",
+      "name": "Pro",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "録音時間は月あたり約 280 時間、終日身につけて使えます",
+      "bullets": [
+        "Omi が、やると言ったことを思い出させてくれます",
+        "Mac 上で Omi が作業中の内容を把握し、手伝えます",
+        "1日 5,000 件の MCP リクエスト"
+      ],
+      "action": "checkout",
+      "cta_label": "Pro を利用する",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_operator_month",
+          "interval": "month",
+          "amount_minor": 4999,
+          "currency": "usd",
+          "headline": "$49.99/月",
+          "subline": null,
+          "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
+        },
+        {
+          "price_id": "price_operator_year",
+          "interval": "year",
+          "amount_minor": 49990,
+          "currency": "usd",
+          "headline": "$41.66/月",
+          "subline": "年額 $499.90 · 2か月無料",
+          "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "architect:ladder_v1",
+      "plan_id": "architect",
+      "name": "Architect",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "録音時間は月あたり約 1,200 時間、複数のデバイスで終日使えます",
+      "bullets": [
+        "Pro の内容すべてに加え、4倍以上の利用枠",
+        "1日最低 5,000 件の MCP リクエスト"
+      ],
+      "action": "checkout",
+      "cta_label": "Architect を利用する",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_architect_month",
+          "interval": "month",
+          "amount_minor": 19900,
+          "currency": "usd",
+          "headline": "$199/月",
+          "subline": null,
+          "renewal_line": "解約するまで毎月自動更新されます。設定でいつでも解約できます。"
+        },
+        {
+          "price_id": "price_architect_year",
+          "interval": "year",
+          "amount_minor": 199000,
+          "currency": "usd",
+          "headline": "$165.83/月",
+          "subline": "年額 $1,990 · 2か月無料",
+          "renewal_line": "解約するまで毎年自動更新されます。設定でいつでも解約できます。",
+          "months_free": 2
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": "年払い · 2か月無料"
+}

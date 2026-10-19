@@ -35,6 +35,16 @@ DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
+DEFAULT_CANDIDATE_TIMEOUT_SECONDS = 45
+DEFAULT_RETRY_TIMEOUT_SECONDS = 19
+BROWSER_EXIT_GRACE_SECONDS = 5
+SMOKE_RETRY_ATTEMPTS = 3
+SMOKE_RETRY_SLEEP_SECONDS = 5
+MAX_BROWSER_CANDIDATES = 5
+# The requested app values need 22m05s if all five browser names are present,
+# every attempt reaches its subprocess fallback, and retries use their grace.
+# Keep a small, explicit ceiling above that bound.
+MAX_TOTAL_SMOKE_SECONDS = 23 * 60
 MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
     inputs:
       environment:
@@ -66,6 +76,8 @@ class PublicInput:
 class CandidateAcceptance:
     command: tuple[str, ...]
     marker: str
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS
     # environment -> absolute HTTPS URL served by the load balancer in front of
     # the service. Required for any environment whose ingress hides the tagged
     # candidate URL from CI; see acceptance_route().
@@ -142,6 +154,42 @@ def serving_revision(service_document: Mapping[str, Any]) -> str:
     return best_name
 
 
+def stale_candidate_tags(
+    service_document: Mapping[str, Any], *, target: str, keep_latest: int, keep_tags: Sequence[str] = ()
+) -> list[str]:
+    """Return this target's candidate tags that no longer serve a purpose.
+
+    Every promotion adds a `public-<target>-<run>-<attempt>` tag and nothing
+    removed them, so services accumulated ~80 tagged traffic entries. Keep the
+    newest `keep_latest` candidate tags (rollback targets with stable URLs), any
+    tag on a revision that holds traffic, and `keep_tags`; return the rest of
+    the tags owned by this target (`public-<target>-...` or `<target>-...`).
+    Tags owned by anything else are never returned.
+    """
+
+    spec = service_document.get("spec")
+    traffic = spec.get("traffic") if isinstance(spec, Mapping) else None
+    if not traffic:
+        status = service_document.get("status")
+        traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    entries = [e for e in traffic or () if isinstance(e, Mapping) and isinstance(e.get("tag"), str) and e["tag"]]
+    serving = {
+        e.get("revisionName")
+        for e in traffic or ()
+        if isinstance(e, Mapping) and isinstance(e.get("percent"), int) and e["percent"] > 0
+    }
+    candidate = re.compile(rf"public-{re.escape(target)}-(\d+)-(\d+)")
+    owned = [e for e in entries if e["tag"].startswith((f"public-{target}-", f"{target}-"))]
+    numbered = sorted(
+        (e for e in owned if candidate.fullmatch(e["tag"])),
+        key=lambda e: tuple(int(g) for g in candidate.fullmatch(e["tag"]).groups()),
+    )
+    keep = set(keep_tags) | {e["tag"] for e in owned if e.get("revisionName") in serving}
+    if keep_latest > 0:
+        keep |= {e["tag"] for e in numbered[-keep_latest:]}
+    return [e["tag"] for e in owned if e["tag"] not in keep]
+
+
 @dataclass(frozen=True)
 class Deployment:
     region: str
@@ -191,6 +239,33 @@ def _require_string(value: Any, *, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a non-empty string")
     return value
+
+
+def _parse_candidate_timeouts(acceptance: Mapping[str, Any], *, target_name: str) -> tuple[int, int]:
+    timeout = acceptance.get("timeout_seconds", DEFAULT_CANDIDATE_TIMEOUT_SECONDS)
+    retry_timeout = acceptance.get("retry_timeout_seconds", DEFAULT_RETRY_TIMEOUT_SECONDS)
+    for field_name, value in (
+        ("timeout_seconds", timeout),
+        ("retry_timeout_seconds", retry_timeout),
+    ):
+        if type(value) is not int or value <= 0:
+            raise ValueError(
+                f"target {target_name} candidate_acceptance.{field_name} must be a positive integer"
+            )
+    if retry_timeout >= timeout:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance.retry_timeout_seconds must be less than timeout_seconds"
+        )
+    per_browser_seconds = timeout + BROWSER_EXIT_GRACE_SECONDS + (SMOKE_RETRY_ATTEMPTS - 1) * (
+        retry_timeout + BROWSER_EXIT_GRACE_SECONDS + SMOKE_RETRY_SLEEP_SECONDS
+    )
+    worst_case_seconds = MAX_BROWSER_CANDIDATES * per_browser_seconds
+    if worst_case_seconds > MAX_TOTAL_SMOKE_SECONDS:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance timeouts allow a {worst_case_seconds}s worst-case smoke, "
+            f"exceeding the {MAX_TOTAL_SMOKE_SECONDS}s ceiling"
+        )
+    return timeout, retry_timeout
 
 
 def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
@@ -421,6 +496,9 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
         if "{sha}" in command and "--expect-sha" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command uses {{sha}} without --expect-sha")
+        timeout_seconds, retry_timeout_seconds = _parse_candidate_timeouts(
+            acceptance, target_name=target_name
+        )
         gateway_required = raw_target.get("gateway_required", False)
         if not isinstance(gateway_required, bool):
             raise ValueError(f"target {target_name} gateway_required must be boolean")
@@ -440,6 +518,8 @@ def load_contract(path: Path) -> Contract:
             candidate_acceptance=CandidateAcceptance(
                 command=tuple(command),
                 marker=_require_string(acceptance.get("marker"), field="candidate marker"),
+                timeout_seconds=timeout_seconds,
+                retry_timeout_seconds=retry_timeout_seconds,
                 public_urls=_parse_public_urls(
                     acceptance.get("public_urls"), target_name=target_name, environments=environments
                 ),

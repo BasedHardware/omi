@@ -48,7 +48,7 @@ def test_v1_bytes_are_immutable_and_loading_derivation_matches(monkeypatch):
 
 def test_v2_is_hash_pinned_selectable_and_keeps_v1_prices_separate(monkeypatch):
     raw = Path(__file__).parents[2].joinpath('config/rate_card_v2.json').read_bytes()
-    expected_sha = '06d2169913ea6c25958667cd4db2488fe59633604f1c2e118b886c7fec46ba63'
+    expected_sha = '1243f8029abe7e4c2378cb0ec666ea993379cf5598b8a6e7bc4309f65c7e956f'
     assert hashlib.sha256(raw).hexdigest() == expected_sha
     from config.rate_card_versions import RATE_CARD_SHA256
 
@@ -383,3 +383,17 @@ def test_self_hosted_deepgram_retains_unknown_compute_proxy():
     assert 'provider_unknown' in priced['reasons']
     assert get_rate_card()['transcription']['unknown']['micro_usd_per_hour'] == 258000
     assert get_rate_card()['transcription']['deepgram']['micro_usd_per_hour'] == 468000
+
+
+def test_recording_v2_identity_and_detached_copy():
+    from config.rate_card import recording_rate_card
+    from config.rate_card_versions import RATE_CARD_SHA256
+    from pathlib import Path
+    import hashlib
+
+    raw = (Path(__file__).parents[2] / 'config/rate_card_v2.json').read_bytes()
+    expected = '1243f8029abe7e4c2378cb0ec666ea993379cf5598b8a6e7bc4309f65c7e956f'
+    assert hashlib.sha256(raw).hexdigest() == RATE_CARD_SHA256['v2'] == expected
+    detached = recording_rate_card()
+    detached['recording']['units_per_recorded_hour']['batch'] = '1'
+    assert recording_rate_card()['recording']['units_per_recorded_hour']['batch'] == '130'

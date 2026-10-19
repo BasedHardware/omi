@@ -89,6 +89,9 @@ def followup(monkeypatch, owner_claim):
     )
     projector.store.check = Mock(side_effect=ProjectionReplay({'state': 'persisted'}))
     projector.store.store.projection_pending = Mock(return_value=list(jobs))
+    projector.store.store.projection_page = Mock(
+        side_effect=lambda **kw: (projector.store.store.projection_pending(), None)
+    )
     projector.store.ref = Mock(
         side_effect=lambda _, sid: SimpleNamespace(
             get=lambda: SimpleNamespace(to_dict=lambda: {'projection': receipts[sid]})
@@ -376,3 +379,55 @@ async def test_four_stuck_followups_timeout_without_closing_process_drain(follow
     await f.runner.schedule()
     await asyncio.wait_for(drain(), 1)
     assert {call.args[0] for call in f.runner._run.await_args_list} == set(segments)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('after_playback', [False, True])
+async def test_deleted_bridge_keeps_existing_supersession_contract(followup, monkeypatch, after_playback):
+    from dataclasses import replace
+    from utils.sync import bridge
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    f = followup
+    binding = replace(f.binding, native_record=False, private_cloud_sync_enabled=True)
+    receipt = {**f.receipts['head'], 'audio_required': True}
+    failure = SyncAssignmentSuperseded('deleted fixture target')
+    finish = Mock(side_effect=['head', failure] if after_playback else failure)
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
+    f.projector.playback = Mock()
+    with pytest.raises(SyncAssignmentSuperseded):
+        await f.runner.finish_part(WorkItem(**f.jobs['head']), binding, receipt, None)
+    assert f.projector.playback.call_count == int(after_playback)
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_slow_followup_keeps_unlaunched_page_before_advancing(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    release = asyncio.Event()
+    launched = []
+    f.runner.candidates = Mock(side_effect=[['head', 'later'], ['next-page']])
+
+    async def run(sid):
+        launched.append(sid)
+        await release.wait()
+
+    f.runner.run = run
+    await f.runner.schedule()
+    await asyncio.sleep(0)
+    await f.runner.schedule()
+    assert launched == ['head']
+    assert list(f.runner.pending) == ['later']
+    f.runner.candidates.assert_called_once()
+    release.set()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later']
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later', 'next-page']

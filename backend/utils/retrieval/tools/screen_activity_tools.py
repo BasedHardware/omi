@@ -624,6 +624,13 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def _screen_vectors_disabled(uid: str) -> bool:
     """Server-owned account opt-out; absent configuration preserves existing accounts."""
+    from config.ladder_v1 import enabled
+
+    if enabled('LADDER_V1_PRO_GATES_ENABLED'):
+        from utils import ladder_v1
+
+        if ladder_v1.feature_allowed(uid, 'screen_context') is False:
+            return True
     tokens = _parse_csv_tokens(os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS'))
     return uid in tokens or '*' in tokens
 

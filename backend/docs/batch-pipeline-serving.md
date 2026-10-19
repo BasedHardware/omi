@@ -14,6 +14,16 @@ secret and `BUCKET_BATCH_PIPELINE` durable artifact bucket. This bucket must not
 inherit the legacy syncing bucket's one-day lifecycle for pending objects.
 D's completion/deletion outboxes own removal; pending audio must survive backlog.
 
+With several serving instances, the periodic ticks (the supervisor and metrics
+scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
+quarantine discovery, lease recovery and the result-ready drain) on one instance
+per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
+gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+post-recovery drain always run. Every guarded step is already idempotent and
+transaction-fenced, so the lease saves reads and enqueues only. A lease-store
+error fails open to every instance running, and
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` restores that unconditionally.
+
 The GPU worker also needs explicit `BATCH_PIPELINE_API_URL` (HTTPS backend service base)
 and `BATCH_PIPELINE_WORKER_AUDIENCE`. A's Pump composes the Google service-OIDC
 client automatically for production-marked items; missing/unavailable policy
@@ -192,7 +202,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
@@ -511,3 +521,27 @@ lease, external effects can exceed the budget, a crashed advisory claim can
 last 300s, and the existing 100-row sweep page can be saturated. Do not add
 stage p95s or exclude held units. Measure the full cohort for at least one hour
 with phase timings before claiming the target or increasing admission.
+
+### Projection discovery progress
+
+`BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
+`false` restores oldest-100 discovery). Assignment and async follow-ups each
+advance their own bounded 100-row keyset scan across pending, persisted and
+ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
+restart begins at the head without dropping any durable obligations. Follow-ups
+launch the whole bounded page before fetching the next one. Discovery order is
+only a hint: existing transactional predecessor, privacy, all-sibling readiness,
+receipt replay and paid-intent fences remain authoritative.
+
+The query reuses the declared prod/dev results composite index:
+`projection_state ASC, committed_at ASC, __name__ ASC` in
+`database/sync_pipeline_indexes.py` and the generated `firestore.indexes.json`.
+No new index or production index mutation is needed.
+
+With accepted-work serving enabled, committed pending/persisted/ready debt is
+rediscovered automatically after deployment; no one-time kick is needed for the
+page deadlock. `quarantine_held` obligations still require their ordinary fenced
+recovery to succeed; pagination neither retries uncertain paid intents nor
+resolves genuine held quarantines. Monitor falling pending age/count and durable
+content/client completion on the deployed release before expanding admission.

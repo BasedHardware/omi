@@ -13,13 +13,14 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.errors import validate_worker_failure
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
-HEAD_LOOKAHEAD = 64
+HEAD_OWNER_BUDGET = 64
 logger = logging.getLogger(__name__)
 
 
@@ -57,58 +58,60 @@ def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
 
 
 def _prefer_merge_head(
-    tx: Transaction, queue: dict, job: dict, budget: list[int], *, max_seconds: float, shared_gpu: bool
+    tx: Transaction,
+    queue: dict,
+    job: dict,
+    budget: list[int],
+    observations: list,
+    *,
+    now: float,
+    max_seconds: float,
+    shared_gpu: bool,
 ) -> dict:
-    """Splice the ready ordered head, sharing a 64-read budget across this shard.
+    """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
 
-    No new queue class, tombstones or lease takeover: rollback reads an ordinary
-    FIFO. Priorities, DRR charges and pool/privacy checks still apply to the
-    selected job. Quarantine is not merge_pending and is never selected here.
+    The budget bounds owners visited, not positions within an owner's backlog.
+    An ordinary FIFO remains valid with head priority disabled. Compute can run
+    concurrently for an owner; OrderedMerge alone enforces pending predecessors.
     """
     if budget[0] <= 0:
+        observations.append(('budget_exhausted', None))
         return job
     budget[0] -= 1
     head = tx.first_pending(job['owner_key'])
+    if not head:
+        observations.append(('head_not_found', None))
+        return job
+    if head['state'] == 'ready':
+        observations.append(('ready_age', max(0.0, now - head['available_at'])))
     if (
-        not head
-        or head['segment_id'] == job['segment_id']
+        head['segment_id'] == job['segment_id']
         or head['state'] != 'ready'
         or head['priority'] != job['priority']
         or not _pool_allows(head, max_seconds, shared_gpu)
     ):
         return job
-    previous = job
-    while budget[0] > 0:
-        sid = previous.get('next')
-        if not sid:
-            break
-        budget[0] -= 1
-        candidate = tx.get('jobs', sid)
-        if not candidate:
-            break
-        if sid == head['segment_id']:
-            # Both link writes pass the same privacy boundary as leasing.
-            # A fenced predecessor must not poison an otherwise unrelated
-            # owner's pull transaction when buffered writes flush later.
-            try:
-                for linked in (previous, candidate):
-                    tx.check_privacy(
-                        linked['owner_id'],
-                        (linked['conversation_id'],) if linked.get('conversation_id') else (),
-                        linked.get('privacy_generation'),
-                    )
-            except BatchPrivacyBlocked:
-                return job
-            previous['next'] = candidate['next']
-            tx.put('jobs', previous['segment_id'], previous)
-            if queue['tail'] == sid:
-                queue['tail'] = previous['segment_id']
-            candidate['next'] = queue['head']
-            queue['head'] = sid
-            tx.put('jobs', sid, candidate)
-            return candidate
-        previous = candidate
-    return job
+    previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
+    if not previous or previous.get('next') != head['segment_id']:
+        observations.append(('head_not_found', None))
+        return job
+    try:
+        for linked in (previous, head):
+            tx.check_privacy(
+                linked['owner_id'],
+                (linked['conversation_id'],) if linked.get('conversation_id') else (),
+                linked.get('privacy_generation'),
+            )
+    except BatchPrivacyBlocked:
+        return job
+    previous['next'] = head['next']
+    tx.put('jobs', previous['segment_id'], previous)
+    if queue['tail'] == head['segment_id']:
+        queue['tail'] = previous['segment_id']
+    head['next'] = queue['head']
+    queue['head'] = head['segment_id']
+    tx.put('jobs', head['segment_id'], head)
+    return head
 
 
 def owns_lease(job: dict, token: str, now: float) -> bool:
@@ -243,15 +246,16 @@ class Scheduler:
         token = uuid.uuid4().hex
 
         def commit(tx):
+            observations = []
             gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
             gpu = tx.get('gpus', gpu_key) if gpu_key else {}
             if gpu.get('token'):
-                return None, 'reserved'
+                return None, 'reserved', observations
             control = read_control(tx, shard)
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
-            head_budget = [HEAD_LOOKAHEAD]
+            head_budget = [HEAD_OWNER_BUDGET]
             for _ in range(MAX_VISITS):
                 if not ring:
                     break
@@ -265,7 +269,14 @@ class Scheduler:
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     if head_priority_enabled():
                         job = _prefer_merge_head(
-                            tx, queue, job, head_budget, max_seconds=max_seconds, shared_gpu=bool(gpu_key)
+                            tx,
+                            queue,
+                            job,
+                            head_budget,
+                            observations,
+                            now=now,
+                            max_seconds=max_seconds,
+                            shared_gpu=bool(gpu_key),
                         )
                     job.setdefault('unit_kind', 'conversation')
                     try:
@@ -330,14 +341,26 @@ class Scheduler:
                 control[field(int(priority), 'service')] += cost / owner_count
                 tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                return (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']), True
+                return (
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']),
+                    True,
+                    observations,
+                )
             control[field(int(priority), 'active')] = bool(ring)
             if not eligible_queues:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
-            return None, bool(eligible_queues)
+            return None, bool(eligible_queues), observations
 
-        return self.store.run(commit)
+        receipt, eligible, observations = self.store.run(commit)
+        # Only committed attempts emit telemetry; Firestore may retry callbacks.
+        if self.metrics:
+            for event, age in observations:
+                try:
+                    self.metrics.record_head(event, priority, age=age)
+                except Exception:
+                    pass  # Metrics cannot turn an issued lease into a failed pull.
+        return receipt, eligible
 
     def heartbeat(self, segment_id: str, token: str, now: float) -> bool:
         def commit(tx):
@@ -385,7 +408,10 @@ class Scheduler:
         quarantine: bool = False,
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
+        worker_failure: dict | None = None,
     ) -> bool:
+        if worker_failure is not None:
+            validate_worker_failure(worker_failure)
         if padded_retry is None and padded_retry_empty:
             padded_retry = 'empty'
         elif padded_retry == 'empty' and not padded_retry_empty:
@@ -397,7 +423,7 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if quarantine or job['attempt'] >= self.max_attempts:
+            if quarantine or worker_failure is not None or job['attempt'] >= self.max_attempts:
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])
@@ -414,6 +440,8 @@ class Scheduler:
                 )
                 if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
+                if worker_failure is not None:
+                    job['worker_failure'] = dict(worker_failure)
                 job.pop('retry_started_at', None)
                 tx.put('owners', job['owner_key'], owner)
             else:
@@ -437,7 +465,12 @@ class Scheduler:
                     pass
             if state == 'quarantined':
                 try:
-                    logger.error('event=batch_quarantined reason=worker_failed attempt=%d recovery=held', attempt)
+                    logger.error(
+                        'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
+                        attempt,
+                        worker_failure['stage'] if worker_failure else 'unknown',
+                        worker_failure['reason'] if worker_failure else 'unclassified',
+                    )
                     logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:
                     pass

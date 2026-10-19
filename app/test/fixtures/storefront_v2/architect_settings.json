@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 7,
+  "catalog_revision": 10,
   "show_subscription_ui": true,
   "header": "Choose your plan",
   "current": {
@@ -124,6 +124,11 @@
           "subline": "$1,990 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2,
+          "confirm_lines": [
+            "Your monthly plan continues until Nov 1",
+            "Your payment method will be charged $1,990 when your yearly plan starts",
+            "Your yearly plan starts on Nov 1"
+          ],
           "cta_label": "Switch to yearly · save $398"
         }
       ]

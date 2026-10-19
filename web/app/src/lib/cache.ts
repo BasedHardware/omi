@@ -319,8 +319,8 @@ export const cacheKeys = {
 
   conversation: (id: string) => `conversation:${id}`,
 
-  memories: (categories: string[], view = 'default', scope?: MemoryCacheScope) =>
-    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${view}:${
+  memories: (categories: string[], scope?: MemoryCacheScope) =>
+    `memories:${scope ? `${memoryCacheScopeKey(scope)}:` : ''}${
       categories.length === 0 ? 'all' : [...categories].sort().join(',')
     }`,
 

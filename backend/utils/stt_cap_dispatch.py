@@ -2,13 +2,15 @@
 
 import logging
 import os
-from functools import wraps
+import time
+from functools import lru_cache, wraps
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Callable
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import enabled, execution_admission_enabled
+from config.ladder_v1 import budget_enforcement_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
@@ -24,29 +26,69 @@ def customer_funded(provider):
     )
 
 
-def funded_allowance(uid, source=None):
+_UNRESOLVED = object()
+
+
+def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
-    from utils.subscription import resolve_transcription_allowance
+    from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
+    from utils import ladder_v1
 
-    return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True)
+    if not enabled() and execution_admission_enabled():
+        # Ladder-only activation must not activate legacy monthly-seconds
+        # dispatch enforcement. A missing/unreadable budget is never permission
+        # to spend; match the funded resolver's fail-closed behavior.
+        try:
+            budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+            if subscription is not _UNRESOLVED:
+                budget_kwargs['subscription'] = subscription
+            snapshot = ladder_v1.budget_snapshot(uid, **budget_kwargs)
+            if snapshot is None:
+                return TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled', limit_seconds=None)
+            exhausted = snapshot['budget_percent'] >= 100
+            return TranscriptionAllowance(
+                'on_device' if exhausted else 'managed',
+                0 if exhausted else None,
+                'usage_budget_exhausted' if exhausted else 'usage_budget_available',
+                limit_seconds=None,
+                remaining_units=max(0, snapshot['budget_units'] - snapshot['used_units']),
+                budget_units=snapshot['budget_units'],
+            )
+        except Exception:
+            return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
+    kwargs = {'usage_cache': usage_cache} if usage_cache is not None else {}
+    if subscription is not _UNRESOLVED:
+        kwargs['subscription'] = subscription
+    return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
 def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> bool:
-    if not enabled():
+    if not execution_admission_enabled():
         return True
+    from utils import funded_processing
+
+    if not funded_processing.consent_allows(uid):
+        return False
     allowance = funded_allowance(uid)
     if not allowance.managed:
         record_audio('sync', 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
     return allowance.managed
 
 
+@lru_cache(maxsize=16)
+def _units_per_second(provider='deepgram'):
+    from config.rate_card import price_transcription
+
+    return price_transcription(3600, provider=provider, accepted=True)['micro_units'] / 3_600_000_000
+
+
 class LiveAdmission:
     """One balance shared by every channel, replay and replacement in a session.
 
-    Refresh uses the existing usage flush cadence. Accepted packets debit the
-    finite snapshot locally, so no further packet starts after it reaches zero.
-    Provider queues already accepting audio remain free to drain.
+    Accepted packets debit a finite seconds or unit snapshot locally. Ladder
+    snapshots read open buckets near cap, and rescan on invalidation or at 900 seconds;
+    legacy admission keeps main's flush cadence. Provider queues may drain.
     """
 
     def __init__(self, uid, source=None):
@@ -56,10 +98,61 @@ class LiveAdmission:
         self.managed = False
         self.held = []
         self.omi_selected = False
+        self.remaining_units = None
+        self.budget_units = None
+        self.refreshed_at = None
+        self.failures = 0
+        self.usage_cache = None
+        self.capture_observer: Callable[[bytes, int, int, bool], None] | None = None
+        self.active_capture: tuple[bytes, int, list[tuple[int, int]]] | None = None
+        if budget_enforcement_enabled():
+            from database.usage_units_session import UsageUnitsSession
 
-    async def refresh(self):
-        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source)
+            self.usage_cache = UsageUnitsSession()
+
+    def refresh_due(self):
+        if self.refreshed_at is None:
+            return True
+        if self.reason == 'allowance_unavailable' and self.usage_cache is not None:
+            delay = min(900, 60 * 2 ** min(max(self.failures - 1, 0), 4))
+            return time.monotonic() - self.refreshed_at >= delay
+        if (
+            self.usage_cache is not None
+            and self.usage_cache.full_at is not None
+            and time.monotonic() - self.usage_cache.full_at >= 900
+        ):
+            return True
+        if self.remaining_units is None:
+            # A known non-ladder account needs only a long membership refresh
+            # when legacy dispatch is off. Invalidation still forces a read.
+            # Enabled legacy dispatch retains main's per-flush refresh.
+            return self.reason != 'legacy_dispatch_disabled' or time.monotonic() - self.refreshed_at >= 900
+        near = self.remaining_units <= 120 * _units_per_second() or (
+            self.budget_units is not None and self.remaining_units <= self.budget_units * 0.1
+        )
+        return time.monotonic() - self.refreshed_at >= (60 if near else 900)
+
+    async def refresh(self, *, force=True, subscription=_UNRESOLVED):
+        if not force and not self.refresh_due():
+            return
+        kwargs = {}
+        if self.usage_cache is not None:
+            if force:
+                self.usage_cache.invalidate()
+            kwargs['usage_cache'] = self.usage_cache
+            if subscription is not _UNRESOLVED:
+                kwargs['subscription'] = subscription
+        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source, **kwargs)
+        self.failures = min(self.failures + 1, 5) if allowance.reason == 'allowance_unavailable' else 0
         self.remaining, self.reason, self.managed = allowance.remaining_seconds, allowance.reason, allowance.managed
+        self.remaining_units = allowance.remaining_units
+        self.budget_units = allowance.budget_units
+        if self.usage_cache is not None and self.remaining_units is None and self.reason != 'allowance_unavailable':
+            self.usage_cache.invalidate()
+        self.refreshed_at = time.monotonic()
+        if self.remaining_units is not None:
+            # A conservative seconds equivalent for existing client warnings.
+            self.remaining = self.remaining_units / _units_per_second()
         if self.managed:
             for socket in list(self.held):
                 try:
@@ -76,23 +169,55 @@ class LiveAdmission:
     def allowed(self, provider):
         return customer_funded(provider) or self.managed and (self.remaining is None or self.remaining > 0)
 
-    def send(self, raw, data, provider, rate, *args, **kwargs):
+    def packet_allowed(self, data, provider, rate):
         if not self.allowed(provider):
+            return False
+        if self.remaining_units is not None and not customer_funded(provider):
+            debit = len(data) / (2 * rate) * _units_per_second(str(getattr(provider, 'value', provider)))
+            if debit > self.remaining_units:
+                # Suppress before timeline adapters can record an accepted span.
+                # Capture/archive owns these bytes independently of the provider.
+                self.remaining_units, self.remaining = 0, 0
+                self.reason = 'usage_budget_exhausted'
+                return False
+        return True
+
+    def send(self, raw, data, provider, rate, *args, **kwargs):
+        if not self.packet_allowed(data, provider, rate):
             record_audio(
                 'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
             )
+            self.observe_capture(False)
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
             return True
         accepted = raw.send(data, *args, **kwargs)
+        if accepted is not False:
+            self.observe_capture(True)
         if accepted is not False and not customer_funded(provider):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
-            if self.remaining is not None:
+            if self.remaining_units is not None:
+                self.remaining_units = max(
+                    0, self.remaining_units - seconds * _units_per_second(str(getattr(provider, 'value', provider)))
+                )
+                self.remaining = self.remaining_units / _units_per_second()
+                if self.remaining_units == 0:
+                    self.reason = 'usage_budget_exhausted'
+            elif self.remaining is not None:
                 self.remaining = max(0, self.remaining - seconds)
                 if self.remaining == 0:
                     self.reason = 'plan_allowance_exhausted'
         return accepted
+
+    def observe_capture(self, admitted):
+        capture, self.active_capture = self.active_capture, None
+        if capture is not None and self.capture_observer is not None:
+            data, rate, spans = capture
+            offset = 0
+            for start, samples in spans:
+                self.capture_observer(data[offset : offset + samples * 2], rate, start, admitted)
+                offset += samples * 2
 
 
 current_live_admission = ContextVar('stt_cap_live_admission', default=None)
@@ -170,8 +295,13 @@ class CapSocket(STTSocket):
     def death_reason(self):
         return self.raw.death_reason if self.raw is not None else None
 
-    def suppress(self, data):
-        if self.raw is None or not self.admission.allowed(self.provider):
+    def set_cap_capture(self, data, spans):
+        self.admission.active_capture = (data, self.rate, tuple(spans)) if spans else None
+
+    def suppress(self, data, start_sample=None):
+        if start_sample is not None:
+            self.admission.active_capture = (data, self.rate, ((start_sample, len(data) // 2),))
+        if self.raw is None or not self.admission.packet_allowed(data, self.provider, self.rate):
             record_audio(
                 'live',
                 'suppressed',
@@ -179,6 +309,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
+            self.admission.observe_capture(False)
             return True
         return False
 
@@ -191,6 +322,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
+            self.admission.observe_capture(False)
             return True
         return self.admission.send(self.raw, data, self.provider, self.rate, *args, **kwargs)
 
@@ -210,7 +342,7 @@ def live_provider(provider, rate_index):
     def decorate(fn):
         @wraps(fn)
         async def connect(*args, **kwargs):
-            admission = current_live_admission.get() if enabled() else None
+            admission = current_live_admission.get() if execution_admission_enabled() else None
             if admission is None:
                 return await fn(*args, **kwargs)
             rate = kwargs.get('sample_rate') or args[rate_index]
@@ -254,7 +386,12 @@ def session_admission(fn):
     return connect
 
 
-def suppress_socket_audio(socket, data):
+def suppress_socket_audio(socket, data, start_sample=None):
     # Explicit identity avoids treating test doubles or unrelated adapters as
     # cap owners. Suppress before VAD/timeline adapters record provider spans.
-    return getattr(socket, 'cap_dispatch_socket', False) is True and socket.suppress(data)
+    return getattr(socket, 'cap_dispatch_socket', False) is True and socket.suppress(data, start_sample=start_sample)
+
+
+def set_cap_capture(socket, data, spans):
+    if getattr(socket, 'cap_dispatch_socket', False) is True:
+        socket.set_cap_capture(data, spans)

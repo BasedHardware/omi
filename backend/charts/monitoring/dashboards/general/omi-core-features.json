@@ -12,7 +12,7 @@
       "title": "Omi TV \u2014 growth & revenue",
       "tooltip": "MRR, ARR, active subscriptions, trials, new subs/month. Sourced live from Stripe, not Prometheus \u2014 subscription and cancellation data does not exist in this Prometheus.",
       "type": "link",
-      "url": "https://admin.omi.me/grafana/d/omi-tv/omi-tv"
+      "url": "https://admin.omi.me/dashboard"
     }
   ],
   "panels": [
@@ -840,7 +840,7 @@
           },
           "id": 11,
           "options": {
-            "content": "**Rates and deltas, not levels.** This row tracks subscription *events* (created, cancellation requested/reverted, ended, payment failed) as they happen. It does not show absolute MRR/ARR or active-subscription counts \u2014 those levels live on the **[Omi TV](https://admin.omi.me/grafana/d/omi-tv/omi-tv)** board (see the dashboard links menu), sourced live from Stripe. `cancellation_requested` is the leading indicator \u2014 the moment a user decided to leave. `ended` is lagging, up to a month later. `payment_failed` is involuntary churn, operationally distinct from voluntary cancellation. Counts are webhook deliveries, which Stripe may retry \u2014 this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
+            "content": "**Rates and deltas, not levels.** This row tracks subscription *events* (created, cancellation requested/reverted, ended, payment failed) as they happen. It does not show absolute MRR/ARR or active-subscription counts \u2014 those levels live on the **[Omi TV](https://admin.omi.me/dashboard)** board (see the dashboard links menu), sourced live from Stripe. `cancellation_requested` is the leading indicator \u2014 the moment a user decided to leave. `ended` is lagging, up to a month later. `payment_failed` is involuntary churn, operationally distinct from voluntary cancellation. Counts are webhook deliveries, which Stripe may retry \u2014 this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
             "mode": "markdown"
           },
           "title": "",

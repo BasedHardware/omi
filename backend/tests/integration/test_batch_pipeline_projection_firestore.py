@@ -84,10 +84,14 @@ def lane(monkeypatch):
     projector = Projector(store, load, publish=lambda b, r: published.append(r), clock=clock)
     queue, merge = Scheduler(store), OrderedMerge(store)
 
-    def seed(names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0):
+    def seed(
+        names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0, owner_id=None
+    ):
+        owner_id = owner_id or uid
+        client.collection('users').document(owner_id).set({'data_protection_level': 'standard'})
         ids = tuple(f'{name}-{uuid4().hex[:8]}' for name in names)
         binding = ProjectionBinding(
-            uid,
+            owner_id,
             f'job-{uuid4().hex}',
             f'content-{uuid4().hex}',
             ids,
@@ -97,21 +101,21 @@ def lane(monkeypatch):
         items = [
             WorkItem(
                 sid,
-                uid,
+                owner_id,
                 capture_at + i * 30,
                 f'gs://synthetic/{sid}#1',
                 duration_seconds,
                 Priority.DEEP,
-                conversation_id=chunk_identity(uid, 'omi', device, False, capture_at + i * 30),
+                conversation_id=chunk_identity(owner_id, 'omi', device, False, capture_at + i * 30),
                 privacy_generation=0,
             )
             for i, sid in enumerate(ids)
         ]
         assert admit(store, items, binding, 0, namespace=store.namespace)['outcome'] == 'batch'
-        ledger = sync_content_ledger_ref(client, uid, binding.content_id)
+        ledger = sync_content_ledger_ref(client, owner_id, binding.content_id)
         leases = {}
         for _ in range(240):
-            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, len(items))})
+            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, min(32, len(items)))})
             if len(leases) == len(items):
                 break
         assert len(leases) == len(items)
@@ -120,7 +124,7 @@ def lane(monkeypatch):
     def finish(batch, index=0, outcome='success'):
         sid = batch.ids[index]
         assert queue.complete(WorkResult(sid, f'gs://synthetic/results/{sid}#1', outcome), batch.leases[sid].token, 1)
-        return merge.commit_next(uid, 2)
+        return merge.commit_next(batch.binding.owner_id, 2)
 
     value = SimpleNamespace(**locals())
     yield value
@@ -1118,6 +1122,8 @@ def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, mo
 
 
 def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '10')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
     from unittest.mock import Mock
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
     from utils.batch_pipeline import quarantine_recovery as module
@@ -1299,3 +1305,215 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
     assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1
+
+
+def superseded_anchor(lane, item, *, merged=False):
+    """Metadata-only fixture: assignment must reject without decoding content."""
+    anchor = lane.user.collection('conversations').document(item.conversation_id)
+    survivor = lane.user.collection('conversations').document(f'survivor-{item.segment_id}') if merged else anchor
+    survivor.set(
+        {
+            'id': survivor.id,
+            'source': 'omi',
+            'client_device_id': None,
+            'is_locked': False,
+            'sync_content_revision': 1,
+            'sync_live_target': True,
+        }
+    )
+    if merged:
+        anchor.set({'id': anchor.id, 'deleted': True, 'sync_merged_into': survivor.id})
+    return {ref: ref.get().to_dict() for ref in {anchor, survivor}}
+
+
+@pytest.mark.parametrize('merged', [False, True])
+@pytest.mark.parametrize('all_superseded', [False, True])
+def test_superseded_assignment_settles_siblings_without_content_or_usage(lane, merged, all_superseded):
+    batch = lane.seed(('head', 'sibling'))
+    before = superseded_anchor(lane, batch.items[0], merged=merged)
+    if all_superseded:
+        before.update(superseded_anchor(lane, batch.items[1], merged=merged))
+    lane.finish(batch, 0)
+    lane.finish(batch, 1)
+    assert lane.projector.project(batch.ids[0]) is None
+    head = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert head['projection']['disposition'] == 'superseded'
+    assert head['projection']['state'] == 'ready' and head['projection']['speech_seconds'] == 0
+    result = lane.projector.project(batch.ids[1])
+    assert result['failed_segments'] == 0 and result['errors'] == [] and result['outcome'] == 'success'
+    assert result['superseded_segments'] == (2 if all_superseded else 1)
+    assert all(ref.get().to_dict() == row for ref, row in before.items())
+    assert len(lane.tasks) == (0 if all_superseded else 1)
+    ledger = batch.ledger.get().to_dict()
+    assert ledger['status'] == 'completed' and ledger['usage_committed_at']
+    assert set(ledger['processed_segment_ids']) == set(batch.ids)
+    usage = list(lane.user.collection('hourly_usage').stream())
+    assert (not usage) if all_superseded else usage[0].to_dict()['speech_seconds'] == 4
+    loads = list(lane.loads)
+    assert lane.projector.project(batch.ids[0]) == result
+    assert lane.loads == loads
+    assert batch.ledger.get().to_dict()['usage_committed_at'] == ledger['usage_committed_at']
+    assert all(
+        lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
+    )
+
+
+@pytest.mark.parametrize('superseded_index', [0, 1, 2])
+def test_multipart_supersession_excludes_only_rejected_speech_and_replays(lane, superseded_index):
+    from utils.sync.capture import chunk_identity
+
+    batch = multipart(lane, 3)
+    item = replace(
+        batch.items[0], conversation_id=chunk_identity(lane.uid, 'omi', None, False, 1000 + superseded_index * 150)
+    )
+    before = superseded_anchor(lane, item)
+    result = lane.projector.project(batch.ids[0])
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    part = receipt['projection_parts'][str(superseded_index)]
+    assert part['disposition'] == 'superseded' and part['speech_seconds'] == 0
+    assert receipt['projection']['speech_seconds'] == 2
+    assert 'disposition' not in receipt['projection']
+    assert result['superseded_segments'] == 1 and result['total_segments'] == 3
+    assert len(result['new_memories']) == 2 and len(lane.tasks) == 2
+    assert all(ref.get().to_dict() == row for ref, row in before.items())
+    assert list(lane.user.collection('hourly_usage').stream())[0].to_dict()['speech_seconds'] == 2
+    assert lane.projector.project(batch.ids[0]) == result
+    assert len(lane.tasks) == 2
+
+
+@pytest.mark.parametrize('kind', ['account', 'conversation', 'generation', 'ledger'])
+def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, monkeypatch, kind):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
+    from database.batch_pipeline_projection import ProjectionBlocked
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    batch = lane.seed()
+    lane.finish(batch)
+    assign = lane.conversations.assign_sync_conversation
+
+    def fail(*args, **kwargs):
+        try:
+            return assign(*args, **kwargs)
+        except SyncAssignmentSuperseded:
+            if kind == 'account':
+                lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+            elif kind == 'conversation':
+                lane.user.collection('deleted_conversations').document(batch.items[0].conversation_id).set(
+                    {'deleted': True}
+                )
+            elif kind == 'generation':
+                lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set(
+                    {'generation': 1}
+                )
+            else:
+                batch.ledger.update({'job_id': 'other-job'})
+            raise
+
+    superseded_anchor(lane, batch.items[0])
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', fail)
+    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+        lane.projector.project(batch.ids[0])
+    assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert not lane.tasks and not lane.published
+
+
+def test_all_multipart_superseded_lost_settlement_reply_recovers_without_usage(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.sync.capture import chunk_identity
+
+    batch = multipart(lane, 3)
+    for index in range(3):
+        superseded_anchor(
+            lane,
+            replace(batch.items[0], conversation_id=chunk_identity(lane.uid, 'omi', None, False, 1000 + index * 150)),
+        )
+    persist = ProjectionSession.persist_empty
+    lost = []
+
+    def crash(session, **kwargs):
+        result = persist(session, **kwargs)
+        if session.part_index == 1 and not lost:
+            lost.append(True)
+            raise RuntimeError('synthetic lost superseded receipt reply')
+        return result
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', crash)
+    with pytest.raises(RuntimeError, match='lost superseded'):
+        lane.projector.project(batch.ids[0])
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    result = lane.projector.project(batch.ids[0])
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert receipt['projection']['disposition'] == 'superseded' and receipt['projection']['speech_seconds'] == 0
+    assert result['superseded_segments'] == result['total_segments'] == 3
+    assert result['outcome'] == 'success' and not result['new_memories'] and not result['updated_memories']
+    assert not list(lane.user.collection('hourly_usage').stream())
+    assert not lane.tasks
+    assert lane.projector.project(batch.ids[0]) == result
+
+
+def test_recovery_batch_dispatch_duplicate_start_and_ordered_merge(lane, monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import intake, quarantine_recovery as module
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.invalid')
+    batch = lane.seed(names=tuple(f'unit-{i:02}' for i in range(17)))
+    for sid in batch.ids:
+        assert lane.queue.fail(sid, batch.leases[sid].token, 1, quarantine=True)
+    lane.projector.store.ref('intakes', batch.binding.job_id).set(
+        {
+            'owner_id': lane.uid,
+            'content_id': batch.binding.content_id,
+            'segment_ids': list(batch.ids),
+            'total_files': 1,
+            'lane': 'backfill',
+        }
+    )
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['status'] == 'processing'
+    recovery = QuarantineRecovery(lane.store, Mock(), clock=lambda: 100)
+    enqueued = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueued)
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 1}
+    assert enqueued.call_count == 17
+    # Settle in reverse capture order, with racing duplicate deliveries for
+    # each token: only one provider-start winner, then capture-ordered merge.
+    for sid in reversed(batch.ids):
+        job = recovery.protocol.prepare(sid, lane.uid, 100)
+        token = job['recovery']['token']
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            starts = list(pool.map(lambda _: recovery.protocol.start(sid, token, 100), range(2)))
+        assert sorted(starts) == [False, True]
+        assert recovery.protocol.settle(sid, token, 101, f'gs://synthetic/{sid}')
+        assert not recovery.protocol.start(sid, token, 102)
+    entries = [lane.merge.commit_next(lane.uid, 103) for _ in batch.ids]
+    assert [entry['segment_id'] for entry in entries] == list(batch.ids)
+    assert [entry['previous_segment_id'] for entry in entries] == [None, *batch.ids[:-1]]
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['poll_after_ms'] == 3000
+    # Exercise the real HTTP boundary with the emulator's real privacy fence.
+    from database.batch_pipeline_privacy import advance_privacy_generation
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import routers.sync as route
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *args, **kwargs: lane.store)
+    monkeypatch.setattr(route, 'admit_sync_job_poll', lambda uid: True)
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid] = lambda: lane.uid
+    # Public IDs are bp_ prefixed; alias the same durable receipt for the route.
+    public_id = 'bp_recovery_test'
+    lane.projector.store.ref('intakes', public_id).set(
+        lane.projector.store.ref('intakes', batch.binding.job_id).get().to_dict()
+    )
+    with TestClient(app) as client:
+        active = client.get(f'/v2/sync-local-files/{public_id}')
+        assert active.status_code == 200
+        assert active.json()['status'] == 'processing' and active.json()['poll_after_ms'] > 0
+        advance_privacy_generation(lane.client, lane.uid, blocked=True)
+        response = client.get(f'/v2/sync-local-files/{public_id}')
+    assert response.status_code == 409
+    assert response.json()['code'] == 'sync_batch_privacy_blocked'

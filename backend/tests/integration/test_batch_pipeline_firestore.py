@@ -354,3 +354,42 @@ def test_head_priority_does_not_flush_privacy_fenced_link_mutations(store, monke
     assert queue.pull(1)[0].item.segment_id == 'newer'
     assert queue.pull(2) == []
     assert store.run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'
+
+
+def test_projection_cursor_handles_timestamp_ties_deleted_anchor_wrap_and_restart(store):
+    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+
+    collection = store.client.collection(f'{store.namespace}_results')
+    for sid in ('a', 'b', 'c'):
+        collection.document(sid).set({'projection_state': 'ready', 'committed_at': 2.0})
+    scan = ProjectionDiscovery(store)
+    assert scan.next(1) == ['a']
+    collection.document('a').delete()
+    assert scan.next(1) == ['b']
+    assert scan.next(1) == ['c']
+    assert scan.next(1) == []
+    assert scan.next(1) == ['b']
+    assert ProjectionDiscovery(store).next(1) == ['b']
+
+
+def test_indexed_reverse_upload_head_survives_competing_pulls(store, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(store)
+    for n in reversed(range(160)):
+        assert queue.enqueue(work(f'reverse-{n:03}', n), 0)
+    # Two workers may compute for this owner at once. Only one owns the head;
+    # its neighbor uses the ordinary FIFO until that pending head commits.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(queue.pull, 1) for _ in range(2)]
+        leases = [lease for future in futures for lease in future.result()]
+    assert len({lease.item.segment_id for lease in leases}) == 2
+    assert 'reverse-000' in {lease.item.segment_id for lease in leases}
+    assert len([lease for lease in leases if lease.item.segment_id == 'reverse-000']) == 1
+    by_id = {lease.item.segment_id: lease for lease in leases}
+    later = next(lease for lease in leases if lease.item.segment_id != 'reverse-000')
+    assert queue.complete(WorkResult(later.item.segment_id, 'gs://synthetic/later'), later.token, 2)
+    merge = OrderedMerge(store)
+    assert merge.commit_next('synthetic-owner', 2) is None
+    assert queue.complete(WorkResult('reverse-000', 'gs://synthetic/head'), by_id['reverse-000'].token, 3)
+    assert merge.commit_next('synthetic-owner', 3)['segment_id'] == 'reverse-000'
+    assert queue.pull(4)[0].item.segment_id == 'reverse-001'

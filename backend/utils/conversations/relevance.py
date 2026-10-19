@@ -10,9 +10,9 @@ as data instead of as junk in a user's list.
 Discard is always recoverable (Show discarded, restore). A user's restore is
 recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 
-With ``CONVERSATION_RELEVANCE_JEV_ENABLED`` the model tier asks the Jev decision
-model (``relevance_jev.py``) before ``conv_discard`` for transcript-only
-conversations. It discards above the default ``JEV_DISCARD_THRESHOLD`` (#14835),
+The ``CONVERSATION_RELEVANCE_JEV_PERCENT`` cohort asks the Jev decision model
+(``relevance_jev.py``) before ``conv_discard`` for transcript-only conversations.
+It discards above the default ``JEV_DISCARD_THRESHOLD`` (#14835),
 unless the bounded cutoff or inclusive comparison is explicitly configured.
 """
 
@@ -20,14 +20,13 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance, deterministic_tiebreak
-from utils.conversations import relevance_rescue
 
 from utils.observability.fallback import record_fallback
 from utils.metrics import record_relevance_scorer_outcome
@@ -89,10 +88,6 @@ class RelevanceDecision:
     # Jev's P(discard) when the Jev tier ran, including a calendar override of its discard.
     jev_p_discard: Optional[float] = None
     arm: Optional[RelevanceArm] = None
-    # Request-local evidence for shadow admission, never serialized as text.
-    model_tier_reached: bool = field(default=False, compare=False)
-    nano_verdict: Optional[Literal['keep', 'discard']] = field(default=None, compare=False)
-    nano_reason: Optional[str] = field(default=None, compare=False)
     # Snapshot the effective cutoff when Jev decides so later serialization
     # cannot report a different policy if the process environment changes.
     jev_threshold: Optional[float] = None
@@ -185,12 +180,10 @@ def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
                     decision = terminal.decide()
                     assert decision is not None
                     return replace(
-                        decision,
-                        model_tier_reached=True,
-                        reason='circuit_open' if decision.decided_by == 'deterministic' else decision.reason,
+                        decision, reason='circuit_open' if decision.decided_by == 'deterministic' else decision.reason
                     )
         if decision is not None:
-            return replace(decision, model_tier_reached=primary is not None)
+            return decision
         if index + 1 < len(available):
             record_fallback(
                 component='conversation_relevance',
@@ -261,7 +254,7 @@ def decide_relevance(
     model exception advances the chain. The final arm uses only lexicon evidence,
     never duration or raw length to discard. Photos and trusted wake words
     keep when no model can assess their content. Calendar protection applies
-    to every discard. keep_all retains its existing nano counterfactual.
+    to every discard.
     """
 
     def keep(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
@@ -309,45 +302,10 @@ def decide_relevance(
         if verdict == 'keep':
             return keep('rule', rule)
         if verdict == 'discard':
-            decision = discard_unless_calendar('rule', rule)
-            mode = relevance_rescue.rescue_mode()
-            if decision.discard and mode != 'off' and relevance_rescue.should_rescue(texts, rule):
-                rescue = relevance_rescue.score_segments(texts)
-                relevance_rescue.record_rescue(mode=mode, rule=rule, outcome=rescue.outcome)
-                if mode == 'on' and rescue.rescued:
-                    return RelevanceDecision('keep', 'jev', f'rescue_{rule}', trigger, jev_p_discard=rescue.score)
-            return decision
-
-    def model_decision(decision: RelevanceDecision) -> RelevanceDecision:
-        return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
+            return discard_unless_calendar('rule', rule)
 
     if model_discards is None:
         return keep('policy', 'model_withheld')
-
-    if arm == 'keep_all':
-        assert model_discards is not None
-        # Keep regardless, but still ask nano (as the control path would) so the
-        # record carries the verdict nano would have acted on: the counterfactual.
-        failed = False
-
-        def on_keep_all_error(_error: Exception) -> None:
-            nonlocal failed
-            failed = True
-
-        adjacent_kept = neighbor()
-        would_discard = model_discards(on_keep_all_error, adjacent_kept)
-        decision = model_decision(keep('policy', 'keep_all_arm'))
-        if failed:
-            return decision
-        return replace(
-            decision,
-            nano_verdict='discard' if would_discard else 'keep',
-            nano_reason=(
-                'neighbor_fragment'
-                if would_discard and adjacent_kept
-                else 'model_discard' if would_discard else 'model_keep'
-            ),
-        )
 
     jev_failed = False
 
@@ -399,7 +357,7 @@ def decide_relevance(
         decision = discard_unless_calendar('model', reason) if discards else keep('model', reason)
         if discards and adjacent and decision.discard:
             decision = replace(decision, neighbor_id=adjacent.conversation_id)
-        return replace(decision, nano_verdict='discard' if discards else 'keep', nano_reason=nano_reason)
+        return decision
 
     def deterministic_decision() -> RelevanceDecision:
         reason = 'jev_fallback_deterministic' if jev_failed else 'model_fallback_deterministic'

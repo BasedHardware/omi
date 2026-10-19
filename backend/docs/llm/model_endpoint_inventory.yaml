@@ -1,8 +1,11 @@
 # S7 columns (10 §1.6): each row is one user-triggerable surface =
 # (surface, entrypoint, feature, plan_gating, funding_owner, fallback_on_deny).
+# funded_budget_gate identifies the shared cap gate (separate from plan entitlement);
+# new surfaces must name a guarded function. Parent-owned coordinator/HTTP boundaries
+# additionally own pre-write admission and existing chat 402 response contracts.
 # plan_gating reuses S1 DECISION_REASONS, plus unified_chat_quota for realtime.
-# fallback_on_deny=none_unwired means authorize_managed_compute is not at this
-# entrypoint today — recorded, not repaired (cut list).
+# fallback_on_deny=none_unwired describes existing full plan authorization only;
+# the independent funded_budget_gate still prevents capped Omi-funded compute.
 # call_sites is the exact-set pin: a managed get_llm / LLM REST host absent
 # from this list fails CI.
 schema_version: llm_model_endpoint_inventory.v1
@@ -35,8 +38,6 @@ model_config_features:
     - learnings
     - memories
     - memory_category
-    - memory_conflict
-    - memory_conflict_flex
     - memory_l1
     - memory_l2_flex
     - notifications
@@ -86,6 +87,7 @@ model_config_features:
   - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
 - surface: public_shared_conversation_chat
+  funded_budget_gate: routers/public_shared_conversation_chat.py:public_shared_conversation_chat
   code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
   entrypoint: POST public shared-conversation chat BFF
   feature: public_shared_conversation_chat
@@ -100,6 +102,7 @@ surfaces:
   migration_status: gateway_only_trusted_frontend_bff
   test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
 - surface: jev_decisions
+  funded_budget_gate: utils/llm/jev_client.py:ask_jev
   code_path: backend/utils/llm/jev_client.py:ask_jev
   entrypoint: conversation relevance model tier and capture-time memory owner check (flagged, default off)
   feature: jev_decisions
@@ -114,6 +117,7 @@ surfaces:
     safe default
   test_guardrail_coverage: backend/tests/unit/test_jev_client.py and backend/tests/unit/test_llm_gateway_systemone_route.py
 - surface: langchain_feature_routing
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/llm/clients.py:get_llm
   entrypoint: get_llm central feature router
   feature: '*'
@@ -141,8 +145,6 @@ surfaces:
   - utils/llm/trends.py::feature:trends
   - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
   - utils/llm/working_observations.py::feature:memory_l1
-  - utils/memory/belief_backfill.py::feature:<dynamic>
-  - utils/memory/belief_evidence.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation
@@ -159,6 +161,7 @@ surfaces:
   migration_status: gateway_capable_central_flip
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: openai_agentic_chat
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/retrieval/agentic.py:_run_openai_agent_stream
   entrypoint: chat agentic stream
   feature: chat_agent
@@ -177,6 +180,7 @@ surfaces:
     remains for desktop specialist/BYOK callers, not this chat lane.
   test_guardrail_coverage: backend/tests/unit/test_chat_agent_provider_retry.py and backend/tests/unit/test_chat_agent_loop_guard.py
 - surface: perplexity_web_search_tool
+  funded_budget_gate: utils/retrieval/tools/perplexity_tools.py:_post_gateway_chat_completion
   code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
   entrypoint: chat web_search tool
   feature: web_search
@@ -191,6 +195,7 @@ surfaces:
   migration_status: gateway_only_fail_closed
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_perplexity_tool_always_uses_gateway
 - surface: app_icon_generation
+  funded_budget_gate: utils/llm/app_generator.py:generate_app_icon
   code_path: backend/utils/llm/app_generator.py:generate_app_icon
   entrypoint: POST app icon generation
   feature: app_generator
@@ -199,12 +204,13 @@ surfaces:
   fallback_on_deny: gateway_fail_closed
   call_sites:
   - llm_gateway/routers/openai_compatible.py::host:api.openai.com
-  current_provider_model: openai/dall-e-3
+  current_provider_model: openai/gpt-image-1 (medium, 1024x1024)
   request_shape: image generation
   gateway_lane_capability_needed: gateway-owned /v1/images/generations proxy
   migration_status: gateway_only_fail_closed
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
 - surface: file_chat_vision
+  funded_budget_gate: utils/other/chat_file.py:_ask_files_stream
   code_path: backend/utils/other/chat_file.py:_ask_files_stream
   entrypoint: chat file vision
   feature: file_chat_vision
@@ -222,6 +228,7 @@ surfaces:
     file_id namespace is company-owned, so completions stay Omi-paid)
   test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
 - surface: file_chat_completions
+  funded_budget_gate: utils/other/chat_file.py:_ask_files
   code_path: backend/utils/other/chat_file.py:FileChatTool
   entrypoint: chat file documents
   feature: file_chat_documents
@@ -238,6 +245,7 @@ surfaces:
     and carries no lane accounting; BYOK OpenAI is not used (same company-owned file_id namespace as vision)
   test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
 - surface: desktop_gemini_proxy
+  funded_budget_gate: utils/managed_compute.py:_authorize_omi
   code_path: backend/routers/desktop_proxy.py:_proxy_unobserved
   entrypoint: POST /v1/proxy/gemini/{path}
   feature: desktop_vertex
@@ -255,14 +263,16 @@ surfaces:
   gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider;
     OpenAI-shaped /v1/embeddings with task_type pass-through
   migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
-    plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge for generate/stream and both embed
-    actions), redis metering, body limits, and model
+    plan gate (authorize_managed_compute on screen_frame_judge); embed actions instead require the exact
+    X-Omi-Local-Embeddings capability header and catalog cloud_screen_vectors entitlement, with a default-on
+    refusal kill switch and owner-validated Gemini BYOK exemption; redis metering, body limits, and model
     allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
     keeps the legacy direct Vertex path; operator pins (OMI_VERTEX_PT_MODEL, OMI_GEMINI_OVERFLOW_MODEL) are
     validated against vertex_pt_routing.COMPANY_PAID_VERTEX_TEXT_MODELS and Pro/image-output shapes fail closed
     at both the BFF and the gateway provider (SCA-481)
   test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
 - surface: dream_vertex_generation
+  funded_budget_gate: utils/dream_harness_transport.py:model_turn
   code_path: backend/llm_gateway/gateway/vertex_pt_policy.py:VertexPTPolicyMixin._endpoint
   entrypoint: internal gateway omi:auto:dream-reasoning and omi:auto:dream-verify
   feature: dream
@@ -277,9 +287,10 @@ surfaces:
     reasoning tools or verifier JSON schema; this endpoint performs generation, not reservation observation
   gateway_lane_capability_needed: pinned Dream reasoning and verify lanes with no provider fallback
   migration_status: gateway_routed_dream; backend DREAM_AGENT_ENABLED and DREAM_AGENT_ELIGIBILITY own
-    admission (currently allowlist); S1 authorize_managed_compute is not wired at this internal entrypoint
+    admission (currently allowlist); shared funded admission also gates the worker and every model turn
   test_guardrail_coverage: backend/tests/unit/test_dream_provider_isolation.py and backend/tests/unit/test_dream_routing.py
 - surface: openai_embeddings
+  funded_budget_gate: utils/llm/clients.py:embed_documents
   code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy
   entrypoint: OpenAI embeddings proxy
   feature: openai_embeddings
@@ -295,6 +306,7 @@ surfaces:
   migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct LangChain OpenAIEmbeddings kill-switch path
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
 - surface: gemini_screen_activity_query_embedding
+  funded_budget_gate: utils/llm/clients.py:gemini_embed_query
   code_path: backend/utils/llm/clients.py:gemini_embed_query
   entrypoint: gemini_embed_query
   feature: gemini_embeddings
@@ -310,6 +322,7 @@ surfaces:
   migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct AI Studio kill-switch path
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
 - surface: omni_realtime_relay
+  funded_budget_gate: routers/omni_relay.py:_relay_entitled
   code_path: backend/routers/omni_relay.py
   entrypoint: WebSocket omni realtime relay
   feature: omni_relay
@@ -326,6 +339,7 @@ surfaces:
     serving configuration does not permit the exception
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: fair_use_classifier
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
   entrypoint: fair-use classifier
   feature: fair_use
@@ -340,6 +354,7 @@ surfaces:
   migration_status: get_llm_routed
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: production_like_memory_ingestion
+  funded_budget_gate: system_experiment_requires_explicit_uid_under_enforcement
   code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
   entrypoint: memory-ingestion production-like adapter
   feature: memories
@@ -354,6 +369,7 @@ surfaces:
   migration_status: get_llm_routed
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: knowledge_graph_extract
+  funded_budget_gate: routers/knowledge_graph.py:extract_knowledge_graph
   code_path: backend/routers/knowledge_graph.py:extract_knowledge_graph
   entrypoint: POST knowledge-graph extract
   feature: knowledge_graph
@@ -368,6 +384,7 @@ surfaces:
   migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
   test_guardrail_coverage: backend/tests/unit/test_knowledge_graph_extract_route.py
 - surface: memories_extract
+  funded_budget_gate: routers/memories.py:extract_memory_log
   code_path: backend/routers/memories.py:extract_memory_log
   entrypoint: POST memories extract
   feature: memories
@@ -378,13 +395,13 @@ surfaces:
   - utils/llm/memories.py::feature:memories
   - utils/llm/memories.py::feature:learnings
   - utils/llm/memories.py::feature:memory_category
-  - utils/llm/memories.py::feature:memory_conflict
   current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only memory-log JSON (memories + profile)
   gateway_lane_capability_needed: generated omi:auto:memories lane
   migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
   test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
 - surface: connector_synthesis
+  funded_budget_gate: routers/integrations.py:synthesize_connector_data
   code_path: backend/routers/integrations.py:synthesize_connector_data
   entrypoint: POST connector synthesis
   feature: memories
@@ -399,6 +416,7 @@ surfaces:
   migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
   test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
 - surface: conversation_topic
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
   entrypoint: POST /v1/conversations/{id}/topic
   feature: conv_structure
@@ -413,6 +431,7 @@ surfaces:
   migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
   test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
 - surface: ai_user_profile_synthesis
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/routers/users.py:synthesize_ai_profile
   entrypoint: POST users AI profile synthesis
   feature: memories
@@ -427,6 +446,7 @@ surfaces:
   migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
   test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py
 - surface: desktop_realtime_token_mint
+  funded_budget_gate: routers/desktop_realtime.py:mint_session
   code_path: backend/routers/desktop_realtime.py:mint_session
   entrypoint: POST /v2/realtime/session
   feature: desktop_chat_realtime
@@ -442,6 +462,7 @@ surfaces:
   migration_status: allowed_for_all_plans_unified_chat_quota_gated; mint refuses at zero remaining; BYOK does not exempt
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: desktop_realtime_usage
+  funded_budget_gate: no_compute_usage_debit
   code_path: backend/routers/desktop_realtime.py:_record_usage
   entrypoint: POST /v2/realtime/usage
   feature: desktop_chat_realtime
@@ -455,6 +476,7 @@ surfaces:
   migration_status: allowed_for_all_plans_unified_chat_quota_gated; one question per turn_id
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: desktop_tts
+  funded_budget_gate: routers/desktop_tts_updates.py:tts_synthesize
   code_path: backend/utils/tts.py
   entrypoint: POST /v1/tts/synthesize and POST /v2/tts/synthesize read-aloud
   feature: desktop_tts
@@ -473,6 +495,7 @@ surfaces:
   test_guardrail_coverage: backend/tests/unit/test_tts_synthesis.py, backend/tests/unit/test_tts.py, backend/tests/unit/test_desktop_tts_updates.py,
     and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: wrapped_generation
+  funded_budget_gate: routers/wrapped.py:generate_wrapped
   code_path: backend/routers/wrapped.py:generate_wrapped
   entrypoint: POST /v1/wrapped/{year}/generate
   feature: wrapped_analysis
@@ -484,9 +507,10 @@ surfaces:
   current_provider_model: openrouter/gemini-3-flash-preview via get_llm('wrapped_analysis')
   request_shape: multiple plain-chat invokes per generation
   gateway_lane_capability_needed: generated omi:auto:wrapped-analysis lane
-  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  migration_status: budget-only shared funded admission before generation; existing plan policy retained
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: listen_onboarding
+  funded_budget_gate: utils/onboarding.py:_ai_check_answer
   code_path: backend/utils/onboarding.py:_ai_check_answer
   entrypoint: /v4/listen onboarding_mode
   feature: onboarding
@@ -498,9 +522,10 @@ surfaces:
   current_provider_model: gemini-2.5-flash-lite via get_llm('onboarding')
   request_shape: plain chat answer check
   gateway_lane_capability_needed: generated omi:auto:onboarding lane
-  migration_status: get_llm_routed from listen runtime; not authorize_managed_compute-gated (follow-up)
+  migration_status: budget-only background admission; capped answer checks leave onboarding state unchanged
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: session_titles
+  funded_budget_gate: routers/chat_sessions.py:generate_session_title
   code_path: backend/routers/chat_sessions.py:generate_session_title
   entrypoint: POST chat session title
   feature: session_titles
@@ -512,9 +537,10 @@ surfaces:
   current_provider_model: gemini-2.5-flash-lite via get_llm('session_titles')
   request_shape: short plain chat title
   gateway_lane_capability_needed: generated omi:auto:session-titles lane
-  migration_status: get_llm_routed; S1 allowlists the feature; this route does not call authorize_managed_compute
+  migration_status: budget-only structured 402 admission before model call or title update
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: what_matters_now
+  funded_budget_gate: routers/task_recommendations.py:get_what_matters_now
   code_path: backend/routers/task_recommendations.py:_live_judgment
   entrypoint: GET/POST What-Matters-Now
   feature: what_matters_now
@@ -526,9 +552,10 @@ surfaces:
   current_provider_model: openai/gpt-x-luna via get_llm('what_matters_now')
   request_shape: structured live recommendation judgment
   gateway_lane_capability_needed: generated omi:auto:what-matters-now lane
-  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  migration_status: budget-only shared funded admission before generation; existing plan policy retained
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: app_integration
+  funded_budget_gate: routers/apps.py:generate_sample_prompts_endpoint
   code_path: backend/routers/apps.py:generate_sample_prompts_endpoint
   entrypoint: POST app sample-prompts / description
   feature: app_integration
@@ -542,9 +569,10 @@ surfaces:
   current_provider_model: gemini-2.5-flash-lite via get_llm('app_integration')
   request_shape: plain chat
   gateway_lane_capability_needed: generated omi:auto:app-integration lane
-  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  migration_status: budget-only shared funded admission before generation; existing plan policy retained
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: app_generation
+  funded_budget_gate: routers/apps.py:generate_app_endpoint
   code_path: backend/routers/apps.py:generate_app_endpoint
   entrypoint: POST generate app from prompt
   feature: app_generator
@@ -556,9 +584,10 @@ surfaces:
   current_provider_model: openai via get_llm('app_generator')
   request_shape: plain chat app spec
   gateway_lane_capability_needed: generated omi:auto:app-generator lane
-  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  migration_status: budget-only shared funded admission before generation; existing plan policy retained
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: conversation_test_prompt
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/routers/conversations.py:test_prompt
   entrypoint: POST /v1/conversations/{id}/test-prompt
   feature: daily_summary
@@ -572,6 +601,7 @@ surfaces:
   migration_status: get_llm_routed; S1 allowlists daily_summary; this route does not call authorize_managed_compute
   test_guardrail_coverage: backend/tests/unit/test_conversation_test_prompt_provider_failure.py
 - surface: phone_call_processing
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/routers/developer.py:_create_conversation_from_segments
   entrypoint: POST /v1/conversations/from-segments (default source=phone) and listen source=phone_call
   feature: conv_structure
@@ -582,10 +612,11 @@ surfaces:
   current_provider_model: process_conversation coordinator (conv_* features)
   request_shape: conversation processing bundle
   gateway_lane_capability_needed: generated conv_* lanes
-  migration_status: S6 FREE_TIER_LOCAL_PROCESSING gates desktop sources only; phone is non-desktop so process_normally today
+  migration_status: Funded allowance admission defers all sources at cap; client summaries remain display-only backlog projections
     (follow-up)
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: external_integrations
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/llm/external_integrations.py:get_message_structure
   entrypoint: developer create-from-text / external integration structuring
   feature: external_structure
@@ -602,6 +633,7 @@ surfaces:
   migration_status: get_llm_routed; developer create-from-text is non-desktop process_normally (S6); this helper is not authorize_managed_compute-gated
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: sync_limitless
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/sync/pipeline.py:_reprocess_conversation_after_update
   entrypoint: sync / Limitless create+reprocess
   feature: conv_structure
@@ -615,6 +647,7 @@ surfaces:
   migration_status: S6 matrix covers this entry; flag-on basic desktop lands at the minimum; non-desktop sync process_normally
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: conversation_merge
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/utils/conversations/merge_conversations.py:perform_merge_async
   entrypoint: POST /v1/conversations/merge
   feature: conv_structure
@@ -628,6 +661,7 @@ surfaces:
   migration_status: S6 matrix covers this entry; flag-on basic desktop merge lands at the minimum
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: conversation_reprocess
+  funded_budget_gate: utils/llm/clients.py:get_llm
   code_path: backend/routers/conversations.py:reprocess_conversation
   entrypoint: POST /v1/conversations/{id}/reprocess
   feature: conv_structure

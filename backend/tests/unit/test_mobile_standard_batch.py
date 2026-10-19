@@ -1,6 +1,9 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from starlette.datastructures import UploadFile
@@ -13,6 +16,7 @@ from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
 from utils.other import storage
 from routers.listen import runtime as runtime_module
 from routers.listen.runtime import ListenSessionRuntime
+from utils import rollout_cohorts
 
 
 @pytest.mark.parametrize(
@@ -183,6 +187,7 @@ def mobile_sync_router():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -276,3 +281,61 @@ async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking
         assert event.mobile_standard_batch is True
     assert receiver.host.state.realtime_demand.reports == 2
     assert receiver.host.refresh_mobile_batch_admission.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_mobile_renewal_awaits_expired_membership_and_warm_packets_cost_zero_reads(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '0')
+    monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: [])
+    monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(runtime_module, 'user_webhook_status_db', lambda uid, kind: False)
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='owner')
+    runtime.private_cloud_sync_enabled = True
+    runtime.use_custom_stt = False
+
+    async def call(fn, *args):
+        return fn(*args)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    release = threading.Event()
+    reads = []
+    member = [True]
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        return {'prod': {'mobile-standard-batch': member[0]}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for allowed in [True, False]:
+            member[0] = allowed
+            release.clear()
+
+            async def unblock():
+                await asyncio.sleep(0)
+                release.set()
+
+            pulse = asyncio.create_task(unblock())
+            try:
+                await runtime.refresh_mobile_batch_admission()
+            finally:
+                release.set()
+                await pulse
+            assert runtime.mobile_standard_batch is allowed
+            for _ in range(100):
+                await runtime.refresh_mobile_batch_admission()
+                assert runtime.mobile_standard_batch is allowed
+            assert len(reads) == (1 if allowed else 2)
+            cache.entries['owner'].expires = 0
+        monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
+        await runtime.refresh_mobile_batch_admission()
+        assert not runtime.mobile_standard_batch and len(reads) == 2

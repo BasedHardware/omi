@@ -55,8 +55,10 @@ class OmiButtonColors {
 /// ```
 ///
 /// When [onPressed] returns a [Future], the button shows a spinner and ignores taps until it
-/// completes — also when it throws: the error is reported through [FlutterError.reportError] and
+/// completes — also when it throws: the error is reported through [reportOnPressedError] and
 /// the button becomes tappable again. Pass [isLoading] to drive the spinner from outside.
+/// A handler that must not spin for the whole future (a confirm dialog in front of the button)
+/// should stay synchronous and report detached failures with [reportOnPressedError].
 /// A null [onPressed] disables the button.
 ///
 /// Labels are Title Case verbs ("Save", "Try Again", "Delete Conversation").
@@ -180,6 +182,19 @@ class OmiButton extends StatefulWidget {
   /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
   final int maxLines;
 
+  /// Reports [error] the same way a thrown [onPressed] future is reported.
+  ///
+  /// Use this when the handler must not return that future — a confirm dialog would
+  /// otherwise spin the button until it closes — but the failure must not escape the zone.
+  static void reportOnPressedError(Object error, StackTrace stack, {required String label}) {
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'omi ui',
+      context: ErrorDescription('while running OmiButton "$label" onPressed'),
+    ));
+  }
+
   @override
   State<OmiButton> createState() => _OmiButtonState();
 }
@@ -210,12 +225,7 @@ class _OmiButtonState extends State<OmiButton> {
   }
 
   void _report(Object error, StackTrace stack) {
-    FlutterError.reportError(FlutterErrorDetails(
-      exception: error,
-      stack: stack,
-      library: 'omi ui',
-      context: ErrorDescription('while running OmiButton "${widget.label}" onPressed'),
-    ));
+    OmiButton.reportOnPressedError(error, stack, label: widget.label);
   }
 
   ({Color background, Color foreground}) _colors(bool enabled) {

@@ -525,7 +525,7 @@ async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
 async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(monkeypatch, account_failure):
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):

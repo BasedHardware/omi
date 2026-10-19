@@ -102,7 +102,6 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     await hangingEngine?.gate.resumeAll()
     await LocalEmbeddingIndexer.shared.awaitDetachedForTesting()
     hangingEngine = nil
-    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
     restoreSiriIndexingPreference()
   }

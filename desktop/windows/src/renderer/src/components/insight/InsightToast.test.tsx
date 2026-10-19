@@ -6,7 +6,6 @@ import { InsightToast } from './InsightToast'
 
 let onMeetingToast: ((payload: MeetingToastPayload) => void) | null = null
 const meetingAction = vi.fn()
-const rewindFocusFrame = vi.fn()
 const insightDismiss = vi.fn()
 const proactivityNotificationOpen = vi.fn()
 const proactivityNotificationRendered = vi.fn()
@@ -24,7 +23,6 @@ beforeEach(() => {
   onInsightShow = null
   proactivityNotificationOpen.mockReset()
   meetingAction.mockReset()
-  rewindFocusFrame.mockReset()
   insightDismiss.mockReset()
   vi.stubGlobal('window', {
     omi: {
@@ -45,7 +43,6 @@ beforeEach(() => {
       meetingAction,
       insightHoverStart: vi.fn(),
       insightHoverEnd: vi.fn(),
-      rewindFocusFrame,
       insightDismiss
     }
   })

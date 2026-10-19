@@ -1,6 +1,8 @@
 """Private pull/complete RPC enforces identity and stage while admission is off."""
 
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from dataclasses import asdict
 import json
 import logging
@@ -12,6 +14,7 @@ import time
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 import pytest
 
 from routers import batch_pipeline as module
@@ -201,12 +204,22 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status,code', [('busy', 409), ('completed', 200)])
-async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
+@pytest.mark.parametrize('status,code', [('busy', 200), ('completed', 200)])
+@pytest.mark.parametrize('deadline', ['false', 'true'])
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
+    monkeypatch, caplog, status, code, deadline
+):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args):
+        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        return func(*args)
+
+    monkeypatch.setattr(module, 'run_blocking', run)
     monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
     caplog.set_level(logging.INFO, logger=module.__name__)
     response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
@@ -215,6 +228,29 @@ async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_
     if status == 'busy':
         messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
         assert messages == ['event=batch_enrichment_sync_reprocess outcome=busy']
+
+
+@pytest.mark.asyncio
+async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
+    release = threading.Event()
+    # Run the real adapter and executors; a route-level mock hides this wait.
+    with ThreadPoolExecutor(max_workers=1) as transcription:
+        transcription.submit(release.wait)
+        monkeypatch.setattr(module, 'sync_executor', transcription)
+        try:
+            response = await asyncio.wait_for(
+                module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+                timeout=2,
+            )
+            assert response.status_code == 200
+            assert json.loads(response.body) == {'status': 'processed'}
+        finally:
+            release.set()
 
 
 def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):
@@ -312,5 +348,191 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service = Mock(store=store)
     monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
     assert client.get('/v2/batch-pipeline/metrics').status_code == 200
-    service.reconcile.assert_called_once_with()
+    service.reconcile.assert_called_once_with(periodic=True)
     service.metrics.refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
+    import asyncio
+    from routers import batch_pipeline as routes
+
+    _, store = api
+    service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    entered, release = threading.Event(), threading.Event()
+
+    def recover(segment, owner):
+        entered.set()
+        assert release.wait(5)
+        return 'recovered'
+
+    service.recovery = Mock()
+    service.recovery.recover.side_effect = recover
+    from unittest.mock import AsyncMock
+
+    service.reconcile_async = AsyncMock()
+    task = asyncio.create_task(
+        routes.recover_quarantine(
+            routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
+        )
+    )
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        assert not task.done()  # The request stays active during the provider call.
+        service.reconcile_async.assert_not_awaited()
+    finally:
+        release.set()
+    assert await task == {'status': 'recovered'}
+    service.reconcile_async.assert_awaited_once_with()
+    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+
+
+def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
+    client, _ = api
+    path = '/v2/batch-pipeline/recover-quarantine'
+    assert client.post(path, json={'stage': 'prod', 'segment_id': 'synthetic'}).status_code == 409
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    app = FastAPI()
+    app.include_router(module.router)
+    assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    'path,expected', [('/v2/batch-pipeline/recover-quarantine', 'tasks-sa'), ('/v2/batch-pipeline/pull', 'worker-sa')]
+)
+def test_recovery_invoker_cannot_gain_worker_authority(monkeypatch, path, expected):
+    from starlette.requests import Request
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://worker.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://integration.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'worker-sa')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'tasks-sa')
+    verify = Mock(return_value=0)
+    monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
+    module.verify_worker(Request({'type': 'http', 'path': path, 'headers': []}))
+    assert verify.call_args.kwargs['invoker_sa'] == expected
+    assert verify.call_args.kwargs['audience'] == (
+        'https://integration.run.app' if expected == 'tasks-sa' else 'https://worker.run.app'
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_adapter_logs_closed_class_site_without_exception_text(monkeypatch, caplog):
+    from utils.sync import reprocess
+
+    adapter = module
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+
+    async def run(*_):
+        raise reprocess.FirstSummaryCallbackPending('DO-NOT-LOG synthetic payload')
+
+    monkeypatch.setattr(adapter, 'run_blocking', run)
+    caplog.set_level(logging.WARNING, logger=adapter.__name__)
+    response = await adapter.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == [
+        'event=batch_enrichment_sync_reprocess outcome=retry retry_class=callback_pending site=run_enrichment '
+        'exception_type=FirstSummaryCallbackPending'
+    ]
+
+
+def _retry_count(reason):
+    return module.ENRICHMENT_RETRIES.labels(reason)._value.get()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['callback_pending', 'persistence_fenced', 'fenced_subclass', 'unexpected'])
+async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monkeypatch, caplog, kind):
+    from utils.sync import reprocess
+
+    # Importing the real sync pipeline costs seconds; the identity check below
+    # pins its defining module and name instead.
+    SyncConversationPersistenceFenced = type(
+        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
+    )
+
+    class StaleSnapshot(SyncConversationPersistenceFenced):
+        pass
+
+    error, code, reason = {
+        'callback_pending': (reprocess.FirstSummaryCallbackPending('x'), 409, 'callback_pending'),
+        'persistence_fenced': (SyncConversationPersistenceFenced('x'), 409, 'persistence_fenced'),
+        'fenced_subclass': (StaleSnapshot('x'), 409, 'persistence_fenced'),
+        # Same class name from another module is not a deliberate retry.
+        'unexpected': (type('FirstSummaryCallbackPending', (RuntimeError,), {})('x'), 500, 'unexpected'),
+    }[kind]
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+
+    async def run(*_):
+        raise error
+
+    monkeypatch.setattr(module, 'run_blocking', run)
+    before = _retry_count(reason)
+    caplog.set_level(logging.WARNING, logger=module.__name__)
+    response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    # Never 429/503: those throttle the whole Cloud Tasks queue.
+    assert response.status_code == code
+    assert json.loads(response.body)['status'] == 'retry'
+    assert _retry_count(reason) == before + 1
+    [record] = [record for record in caplog.records if record.name == module.__name__]
+    assert f'retry_class={reason} ' in record.getMessage()
+    assert record.levelno == (logging.ERROR if code == 500 else logging.WARNING)
+
+
+def test_expected_retry_classes_are_defined_where_the_router_matches_them():
+    import ast
+    from pathlib import Path
+
+    backend = Path(module.__file__).resolve().parents[1]
+    for (module_name, class_name), _ in module.EXPECTED_RETRIES.items():
+        tree = ast.parse((backend / (module_name.replace('.', '/') + '.py')).read_text())
+        assert class_name in {node.name for node in tree.body if isinstance(node, ast.ClassDef)}
+
+
+def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
+    from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+
+    store = MemoryStore()
+    instances = []
+    for _ in range(2):
+        instance = Serving(
+            store,
+            projector=Mock(),
+            cleanup=Mock(),
+            enrichment_sweep=Mock(),
+            recovery=Mock(),
+            metrics=Mock(),
+            leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
+        )
+        instances.append(instance)
+    for instance in instances:
+        instance.reconcile(recover_quarantine=True, periodic=True)
+    leader, follower = instances
+    for maintenance in ('cleanup', 'enrichment_sweep'):
+        assert getattr(leader, maintenance).call_count == 1
+        assert getattr(follower, maintenance).call_count == 0
+    leader.recovery.sweep.assert_called_once()
+    follower.recovery.sweep.assert_not_called()
+    # Projection throughput and each instance's own gauges are not leader-gated.
+    for instance in instances:
+        instance.projector.sweep.assert_called_once()
+        instance.metrics.refresh.assert_called_once()
+    # Explicit RPC reconcile always runs, lease or not.
+    follower.reconcile(recover_quarantine=True)
+    follower.recovery.sweep.assert_called_once()
+    follower.cleanup.assert_called_once()
+
+
+def test_serving_maintenance_fails_open_when_lease_store_errors():
+    from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+
+    broken = Mock()
+    broken.run.side_effect = RuntimeError('lease store down')
+    store = MemoryStore()
+    service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
+    service.reconcile(periodic=True)
+    service.cleanup.assert_called_once()

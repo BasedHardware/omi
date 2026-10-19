@@ -1,7 +1,7 @@
 """Privacy-safe product telemetry for hosted MCP tool calls and requests.
 
 ``MCP Tool Call`` is the stable PostHog event contract for the hosted
-Streamable HTTP MCP tool boundary, and ``MCP Active`` is the once-per-uid-
+Streamable HTTP MCP tool boundary, and ``MCP Active`` is the once-per-uid/client-
 per-day transport-presence diagnostic. ``MCP Tool Use Succeeded`` is the
 unsampled per-call success stream for dashboard qualification. The per-POST
 envelope is NOT a PostHog event: it is a structured ``mcp_request`` log line emitted for 100%
@@ -47,13 +47,13 @@ MCP_TOOL_CALL_USER_SAMPLE_RATE_DEFAULT = 0.25
 # and instances, so it is keyed by an in-code constant, never an env secret.
 MCP_TOOL_CALL_USER_SAMPLE_SALT = "omi:mcp-tool-call:user-sample:v1:"
 
-# One ``MCP Active`` marker per uid per UTC day, deduped by a Redis NX claim
+# One ``MCP Active`` marker per uid/client per UTC day, deduped by a Redis NX claim
 # with a 48-hour TTL so exact-day boundaries never emit twice.
 MCP_ACTIVE_REDIS_PREFIX = "mcp:active"
 MCP_ACTIVE_TTL_SECONDS = 172800
 
 MCP_ACTIVE_LOCAL_SEEN_MAX = 100_000
-_mcp_active_seen_uids: "OrderedDict[str, None]" = OrderedDict()
+_mcp_active_seen_clients: "OrderedDict[tuple[str, str], None]" = OrderedDict()
 _mcp_active_seen_day: Optional[str] = None
 _mcp_active_seen_lock = threading.Lock()
 
@@ -67,23 +67,23 @@ def _mcp_active_seen_reset_day(now: Optional[datetime] = None) -> str:
     global _mcp_active_seen_day
     day = _utc_day(now)
     if _mcp_active_seen_day != day:
-        _mcp_active_seen_uids.clear()
+        _mcp_active_seen_clients.clear()
         _mcp_active_seen_day = day
     return day
 
 
-def _mcp_active_locally_seen(uid: str, *, now: Optional[datetime] = None) -> bool:
+def _mcp_active_locally_seen(uid: str, client_name: str, *, now: Optional[datetime] = None) -> bool:
     with _mcp_active_seen_lock:
         _mcp_active_seen_reset_day(now)
-        return uid in _mcp_active_seen_uids
+        return (uid, client_name) in _mcp_active_seen_clients
 
 
-def _mcp_active_mark_local(uid: str, *, now: Optional[datetime] = None) -> None:
+def _mcp_active_mark_local(uid: str, client_name: str, *, now: Optional[datetime] = None) -> None:
     with _mcp_active_seen_lock:
         _mcp_active_seen_reset_day(now)
-        _mcp_active_seen_uids[uid] = None
-        while len(_mcp_active_seen_uids) > MCP_ACTIVE_LOCAL_SEEN_MAX:
-            _mcp_active_seen_uids.popitem(last=False)
+        _mcp_active_seen_clients[(uid, client_name)] = None
+        while len(_mcp_active_seen_clients) > MCP_ACTIVE_LOCAL_SEEN_MAX:
+            _mcp_active_seen_clients.popitem(last=False)
 
 
 _CHATGPT_CLIENT_IDS = frozenset(
@@ -303,6 +303,12 @@ def log_mcp_request(
         logger.warning("mcp_request log write failed error=%s", type(exc).__name__)
 
 
+def _active_client_enum(value: Any) -> str:
+    # Transport already normalizes raw clientInfo/User-Agent. Keep this seam
+    # idempotent for enum values, and reject arbitrary/unhashable inputs.
+    return value if isinstance(value, str) and value in _MCP_CLIENT_NAMES else 'unknown'
+
+
 def schedule_mcp_active(
     *,
     uid: Optional[str],
@@ -311,10 +317,11 @@ def schedule_mcp_active(
     protocol_version: Any,
     first_tool: Any = None,
 ) -> None:
-    """Queue the once-per-uid-per-day ``MCP Active`` marker without delaying the response."""
+    """Queue the once-per-uid/client-per-day ``MCP Active`` marker without delaying the response."""
     if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID:
         return
-    if _mcp_active_locally_seen(uid):
+    client_name = _active_client_enum(client_name)
+    if _mcp_active_locally_seen(uid, client_name):
         return
     try:
         submit_with_context(
@@ -330,7 +337,7 @@ def schedule_mcp_active(
         logger.warning("mcp active analytics scheduling failed error=%s", type(exc).__name__)
 
 
-def _claim_daily_active_marker(uid: str, *, now: Optional[datetime] = None) -> Optional[bool]:
+def _claim_daily_active_marker(uid: str, client_name: str, *, now: Optional[datetime] = None) -> Optional[bool]:
     """Redis ``SET NX EX`` dedupe: True only for the first claim of the UTC day.
 
     Returns ``None`` when Redis errored, so callers skip local caching and
@@ -339,7 +346,9 @@ def _claim_daily_active_marker(uid: str, *, now: Optional[datetime] = None) -> O
     """
     day = _utc_day(now)
     try:
-        claimed = redis_db.r.set(f"{MCP_ACTIVE_REDIS_PREFIX}:{day}:{uid}", "1", nx=True, ex=MCP_ACTIVE_TTL_SECONDS)
+        claimed = redis_db.r.set(
+            f"{MCP_ACTIVE_REDIS_PREFIX}:{day}:{uid}:{client_name}", "1", nx=True, ex=MCP_ACTIVE_TTL_SECONDS
+        )
     except Exception as exc:  # noqa: BLE001 - dedupe failures skip the event
         logger.warning("mcp active marker dedupe failed error=%s", type(exc).__name__)
         return None
@@ -354,18 +363,19 @@ def emit_mcp_active(
     protocol_version: Any,
     first_tool: Any = None,
 ) -> None:
-    """Emit the daily active marker; the NX claim caps it at one per uid per UTC day."""
+    """Emit the daily active marker; the NX claim caps it at one per uid/client per UTC day."""
     now = datetime.now(timezone.utc)
-    if _mcp_active_locally_seen(uid, now=now):
+    client_name = _active_client_enum(client_name)
+    if _mcp_active_locally_seen(uid, client_name, now=now):
         return
-    claimed = _claim_daily_active_marker(uid, now=now)
+    claimed = _claim_daily_active_marker(uid, client_name, now=now)
     if claimed is None:
         return
-    _mcp_active_mark_local(uid, now=now)
+    _mcp_active_mark_local(uid, client_name, now=now)
     if not claimed:
         return
     properties = {
-        "client_name": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+        "client_name": client_name,
         "transport": _normalize_transport(transport),
         "protocol_version": mcp_protocol_version_enum(protocol_version),
         "first_tool": mcp_tool_enum(first_tool) if first_tool else "none",

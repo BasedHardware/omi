@@ -7,6 +7,7 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
@@ -23,9 +24,11 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import types
 import unittest
+import unittest.mock
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1346,6 +1349,9 @@ def _load_sync_router_for_fast_path():
     )
     mock_sync_jobs.mark_job_queued_for_retry = MagicMock()
     mock_sync_jobs.try_acquire_job_run_lock = MagicMock(return_value='legacy-lock-token')
+    mock_sync_jobs.RUN_LOCK_TTL_SECONDS = 1800
+    mock_sync_jobs.STALE_THRESHOLD_SECONDS = 600
+    mock_sync_jobs.QUEUED_DISPATCH_STALE_SECONDS = 1800
     sys.modules['database.sync_jobs'] = mock_sync_jobs
 
     sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
@@ -1368,6 +1374,9 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
     sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=True)
     sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
+    # The handler-budget resolver bounds the budget by the real dispatch
+    # deadline; a MagicMock attr would silently lose comparisons inside min().
+    sys.modules['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
     sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
     sys.modules['utils.client_device'].resolve_client_device = MagicMock(
         return_value=types.SimpleNamespace(
@@ -1479,6 +1488,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules.pop('routers.sync', None)
     sys.modules.pop('utils.sync.pipeline', None)
+    sys.modules.pop('utils.sync.ledger_completion', None)
     spec = importlib.util.spec_from_file_location(
         'sync_post_enqueue_cleanup',
         os.path.join(BACKEND_DIR, 'routers', 'sync.py'),
@@ -1635,6 +1645,7 @@ def test_polling_stale_job_releases_retry_claim_through_owned_finalizer():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1678,6 +1689,7 @@ def test_polling_never_dispatched_queued_job_finalizes_as_dispatch_lost():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1731,6 +1743,7 @@ def test_polling_stale_job_lease_loss_preserves_newer_owner_retry_material():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1764,6 +1777,7 @@ def test_polling_never_finalizes_stale_job_while_an_active_run_owns_lease():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1795,6 +1809,7 @@ def test_polling_never_finalizes_a_stale_inline_job():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1860,6 +1875,52 @@ def test_polling_active_terminal_retries_claim_cleanup_before_exposing_result():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('switch', ['on', 'off'])
+async def test_sequenced_task_prepares_only_after_run_lock_and_kill_switch_skips(monkeypatch, switch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(module, pipeline_error=None, latest_job={'status': 'completed'})
+    request.json.return_value.update(lane='backfill', sequencer_epoch=7)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', switch)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    calls = []
+    tasks = []
+
+    def acquire(_job):
+        calls.append('locked')
+        return '1:lock-token'
+
+    def warm(*args):
+        assert calls[0] == 'locked'
+        calls.append(args)
+
+    def start(coro, *, name):
+        task = asyncio.create_task(coro)
+        tasks.append(task)
+        return task
+
+    module.try_acquire_sync_job_run_lock = MagicMock(side_effect=acquire)
+    module.warm_owner = warm
+    module.start_background_task = start
+    try:
+        # Enter the production body with a previously validated sequencer
+        # identity; the public wrapper's lease behavior has separate coverage.
+        response = await module._run_sync_job_body(request, task_retry_count=0)
+        await asyncio.gather(*tasks)
+        assert response.status_code == 200
+        assert calls == (['locked', ('test-uid', 'job-1', 7)] if switch == 'on' else ['locked'])
+        module._run_full_pipeline_background_async.assert_awaited_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1904,6 +1965,7 @@ async def test_sync_task_retry_retains_staged_audio_and_safe_failure_code():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -1941,6 +2003,7 @@ async def test_sync_task_converged_binding_skips_download_and_pipeline():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -1975,6 +2038,7 @@ async def test_sync_task_binding_loss_returns_locked_without_download_or_pipelin
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2029,6 +2093,7 @@ async def test_legacy_sync_task_skips_epoch_binding_and_uses_generic_lock():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2061,6 +2126,7 @@ async def test_standby_sync_task_does_not_parse_or_consume_work():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2133,6 +2199,7 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2167,6 +2234,7 @@ async def test_sync_task_cancellation_preserves_run_lock_and_retry_material():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2205,6 +2273,7 @@ async def test_sync_task_lease_rejection_preserves_claim_and_staged_audio():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2254,6 +2323,7 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2282,6 +2352,7 @@ async def test_expired_task_releases_only_its_matching_claim_for_404_reupload_re
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2321,6 +2392,7 @@ async def test_duplicate_terminal_task_releases_only_retryable_matching_claim(st
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2368,6 +2440,7 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2408,6 +2481,7 @@ async def test_sync_task_final_attempt_ledger_bind_loss_preserves_retry_material
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2453,6 +2527,7 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2495,6 +2570,7 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2534,6 +2610,7 @@ async def test_sync_task_destructive_operation_fence_retries_with_typed_error_co
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2566,6 +2643,7 @@ async def test_sync_task_retryable_failure_still_retries_before_exhaustion():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2614,6 +2692,7 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2662,6 +2741,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2699,6 +2779,7 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2724,6 +2805,7 @@ async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2849,6 +2931,7 @@ async def test_sync_dispatch_enqueue_uncertain_keeps_durable_work_and_never_star
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2877,6 +2960,7 @@ async def test_sync_dispatch_named_enqueue_retry_recovers_an_ambiguous_first_ack
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2926,6 +3010,7 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2976,6 +3061,7 @@ async def test_sync_inline_releases_run_lock_when_ledger_bind_loses_lease():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3020,6 +3106,7 @@ async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3064,6 +3151,7 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3107,6 +3195,7 @@ async def test_backfill_enqueue_failure_never_falls_back_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3148,6 +3237,7 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3184,6 +3274,7 @@ async def test_backfill_registration_error_never_acks_202_or_releases_ambiguous_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3222,6 +3313,7 @@ async def test_known_unregistered_backfill_cleans_up_and_returns_retryable_503()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3275,6 +3367,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(id
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3322,6 +3415,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3351,6 +3445,7 @@ async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3391,11 +3486,128 @@ async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sequenced_request_budget_is_anchored_at_route_entry():
+    """The sequenced wrapper performs fence/begin/prior-read I/O before the
+    attempt body runs; a stall there must be charged against the same single
+    handler budget wall, not grant a fresh full budget afterwards — otherwise
+    the request could still overshoot the Cloud Tasks dispatch deadline this
+    cap exists to stay under. The anchor is captured at route entry and rides
+    the shared attempt-state dict into the budget."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    captured = {}
+
+    async def _capture_body(req, retry_count, attempt_state=None):
+        captured['state'] = attempt_state
+        return module.JSONResponse(status_code=200, content={'status': 'completed_final'})
+
+    module._run_sync_job_body = AsyncMock(side_effect=_capture_body)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        anchor = captured['state'].get('budget_deadline_monotonic')
+        # The anchor is an absolute deadline on the module's own monotonic
+        # clock: captured at route entry, so it sits one full handler budget
+        # ahead of the body's start (the fast preamble consumes only ms of
+        # it). A budget granted fresh inside the body would anchor at body
+        # start — indistinguishable here — but a stall in begin_job or the
+        # prior-job read would push this deadline's remaining headroom below
+        # the full budget, which is exactly the charge-at-route-entry
+        # contract.
+        assert isinstance(anchor, float)
+        now = module.time.monotonic()
+        assert now < anchor
+        assert anchor <= now + module.SYNC_JOB_HANDLER_BUDGET_SECONDS + 5
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sequenced_request_budget_is_anchored_at_middleware_request_start():
+    """A slow verify_cloud_tasks_oidc resolves before the route handler runs,
+    so anchoring the budget at route entry would hand the handler a deadline
+    that can cross HTTP_SYNC_JOBS_RUN_TIMEOUT after an auth stall — the exact
+    lingering-request path this budget exists to prevent. The deadline must
+    derive from the middleware's request-start stamp (the same
+    omi_request_started_monotonic state utils.other.list_budget anchors read
+    budgets on), falling back to route entry only when no stamp exists."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    # Simulate the TimeoutMiddleware stamp written before call_next: the
+    # request started 42s before the handler began resolving dependencies.
+    request.state = types.SimpleNamespace(omi_request_started_monotonic=time.monotonic() - 42.0)
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    captured = {}
+
+    async def _capture_body(req, retry_count, attempt_state=None):
+        captured['state'] = attempt_state
+        return module.JSONResponse(status_code=200, content={'status': 'completed_final'})
+
+    module._run_sync_job_body = AsyncMock(side_effect=_capture_body)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        anchor = captured['state'].get('budget_deadline_monotonic')
+        assert isinstance(anchor, float)
+        # The anchor sits a full handler budget after the middleware's
+        # request start, not after route entry: with a 42s-old stamp the
+        # deadline must already be 42s closer than a freshly granted budget.
+        now = module.time.monotonic()
+        assert anchor <= now + module.SYNC_JOB_HANDLER_BUDGET_SECONDS - 40
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+def test_sync_task_budget_expiry_during_route_preamble_records_preamble_timeout_reason():
+    """The preamble-deadline branches record reason='preamble_timeout'; the
+    fallback vocabulary must contain it or bucket_reason silently exports it
+    as 'other' and operators cannot distinguish route-setup expiry from
+    unrelated fallback failures (backend/AGENTS.md fallback telemetry rule)."""
+
+    from utils.observability.fallback import ALLOWED_REASONS, bucket_reason
+
+    assert 'preamble_timeout' in ALLOWED_REASONS
+    assert bucket_reason('preamble_timeout') == 'preamble_timeout'
 
 
 @pytest.mark.asyncio
@@ -3428,11 +3640,161 @@ async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_transfer():
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            reason='synthetic',
+            trust=module.CaptureTimeTrust.LEGACY,
+            maximum_age_seconds=None,
+        )
+    )
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        with pytest.raises(module.HTTPException) as error:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        assert error.value.status_code == 413
+        module._retrieve_file_paths_v2.assert_not_called()
+        jobs.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        assert all(upload.file.tell() == 0 for upload in uploads)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+def _decision(module, lane, reason='synthetic'):
+    return types.SimpleNamespace(
+        lane=lane,
+        reason=reason,
+        trust=module.CaptureTimeTrust.LEGACY,
+        maximum_age_seconds=None,
+        automatic_recovery_allowed=True,
+    )
+
+
+def _restore_modules(saved_modules):
+    sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
+    for name, original in saved_modules.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('legacy_fresh_admits', [False, True])
+async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_backfill_cap(legacy_fresh_admits):
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    if legacy_fresh_admits:
+        module.classify_sync_lane = MagicMock(
+            return_value=_decision(module, module.SyncLane.BACKFILL, 'recent_legacy_capture')
+        )
+        module.legacy_fresh = types.SimpleNamespace(
+            enabled_for=MagicMock(return_value=True),
+            admit=MagicMock(return_value=_decision(module, module.SyncLane.FRESH, 'recent_legacy_capture')),
+        )
+    else:
+        module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
+    module.validate_backfill_uploads = MagicMock()
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        try:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        except module.HTTPException as error:
+            assert error.status_code != 413
+        except Exception:
+            pass  # Later fresh-lane stubs may stop the call; only the cap matters here.
+        module.validate_backfill_uploads.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413():
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.BACKFILL))
+    module.validate_backfill_uploads = MagicMock()
+    module.resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(device_hash='h', platform='p', app_version='v', client_device_id=None)
+    )
+    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        request = MagicMock()
+        request.headers = {}
+        response = await module.sync_local_files(
+            request=request, response=MagicMock(headers={}), files=uploads, uid='u'
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'backfill_capacity'
+        module.validate_backfill_uploads.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pressure', [False, True])
+async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claims(pressure):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=module.BackfillStoragePressure('synthetic') if pressure else RuntimeError('must not run'),
+        latest_job={'job_id': 'job-1', 'status': 'queued', 'lane': 'backfill'},
+    )
+    payload = await request.json()
+    payload['lane'] = 'backfill'
+    request.json = AsyncMock(return_value=payload)
+    module.uid_sequencer.foreign_delivery = MagicMock(return_value=False)
+    if not pressure:
+        module._download_staged_files.side_effect = module.BackfillInputLimitExceeded('synthetic')
+    try:
+        response = await module.run_sync_job(request, task_retry_count=100)
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.release_sync_content_claim_after_job_retired.assert_not_called()
+        module.release_job_run_lock.assert_called_once()
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 101, 'sync_resource_limit'
+        )
+        if not pressure:
+            module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 if __name__ == '__main__':
@@ -3463,6 +3825,7 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3515,6 +3878,7 @@ async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeyp
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3568,6 +3932,7 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3645,6 +4010,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3684,6 +4050,7 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3724,6 +4091,7 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3757,6 +4125,7 @@ async def test_batch_cohort_upload_never_dispatches_or_claims_legacy(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3780,6 +4149,7 @@ async def test_coalesced_enrichment_task_uses_adapter_before_legacy_job_parsing(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3806,6 +4176,7 @@ async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(m
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3837,6 +4208,135 @@ async def test_legacy_completion_convergence_before_provider_under_lock(monkeypa
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_pipeline_budget_ends_attempt_before_platform_timeout():
+    """A pipeline that outlives the in-request budget must be cancelled and the
+    attempt handed back to Cloud Tasks without releasing ownership. Without the
+    budget, the 504 from TimeoutMiddleware does not cancel the pipeline, the
+    request stays open until the work finishes, and Cloud Run terminates it at
+    the service's maximum request timeout — the platform kill this guards
+    against."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        # Below HTTP_SYNC_JOBS_RUN_TIMEOUT (1500s) and the Cloud Tasks dispatch
+        # deadline, leaving room for the retry response to reach the queue.
+        assert 0 < module.SYNC_JOB_HANDLER_BUDGET_SECONDS < module.SYNC_JOB_ROUTE_TIMEOUT_SECONDS
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        before = time.time()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        # A budget expiry is a lease loss, not a generic retry: an executor
+        # leaf can still be mutating state under this token, so the job stays
+        # owned (no queued-reset, no terminal failure, no staged-blob delete,
+        # no lock release). The preserved lock outlives every queue-level
+        # retry, so instead of a 409 that would burn the task's remaining
+        # attempts against it, the attempt acks and schedules one replacement
+        # named task past the lock's TTL.
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        assert payload['job_id'] == 'job-1'
+        assert (
+            before + module.RUN_LOCK_TTL_SECONDS
+            <= schedule_at
+            <= time.time() + module.SYNC_JOB_BUDGET_REPLACEMENT_DELAY_SECONDS
+        )
+        # The replacement carries the chain count so repeated expiries end at
+        # the queue's attempt contract instead of chaining forever.
+        assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 1
+        # The preserved lock expires before the replacement is due; the job
+        # is marked deferred so a poll in that gap cannot finalize it stale.
+        # The horizon covers queue congestion past schedule_at (the poller's
+        # own queued-dispatch-stale allowance), not just the stale threshold.
+        module.update_sync_job.assert_called_once_with(
+            'job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}
+        )
+        assert fallback_calls == []
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_counts_pre_pipeline_io_from_handler_entry():
+    """The budget must anchor at handler entry, not at the pipeline call: a
+    slow staged-file download consumes the same request clock the middleware
+    measures, so expiry during pre-pipeline I/O must still end the attempt
+    with ownership preserved instead of letting the pipeline start with a
+    budget the platform timeout can outlive."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not start'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    passthrough_run_blocking = module.run_blocking
+
+    async def _download_hangs(_executor, fn, *args, **kwargs):
+        if fn is module._download_staged_files:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _download_hangs
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        module._run_full_pipeline_background_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3862,6 +4362,2346 @@ async def test_missing_job_guard_retains_payload_before_ack_and_keeps_staged_byt
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_expiry_falls_back_to_409_when_replacement_not_schedulable():
+    """The deferred ack must never drop the job: when the replacement task
+    cannot be scheduled, the 409 keeps Cloud Tasks' own retry owning the
+    redelivery exactly as before, preserved lock and all."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=RuntimeError('create_task failed'))
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        module.release_job_run_lock.assert_not_called()
+        # The marker written before the failed enqueue is cleared: it names a
+        # replacement that does not exist, and left in place it would suppress
+        # stale self-heal long past the preserved run lock's TTL while the
+        # 409's queue-owned retries exhaust inside that TTL.
+        assert module.update_sync_job.call_count == 2
+        assert module.update_sync_job.call_args == unittest.mock.call('job-1', {'deferred_until': None})
+        # Switching back to queue-owned retries is a fallback and must not
+        # fail dark: operators see it in the fallback telemetry.
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'budget_replacement',
+                'to_mode': 'queue_retry',
+                'reason': 'enqueue_failed',
+                'outcome': 'degraded',
+            }
+        ]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_marker_clear_failure_keeps_409():
+    """The marker clear after a failed enqueue is best-effort: the same Redis
+    that just failed the enqueue can fail the clear too, and the queue-owned
+    409 must still return — the surviving marker only delays stale self-heal,
+    exactly the pre-clear behavior."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(
+            side_effect=[{'job_id': 'job-1', 'status': 'processing'}, RuntimeError('redis unavailable')]
+        )
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=RuntimeError('create_task failed'))
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert module.update_sync_job.call_count == 2
+        # The failed clear gets its own bounded record before the primary
+        # fallback return: the surviving marker suppresses stale recovery
+        # long after the queue retries exhaust — a materially worse state
+        # than the clean re-arm the primary reason implies.
+        assert [call['reason'] for call in fallback_calls] == ['marker_clear_failed', 'enqueue_failed']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_expiry_keeps_409_when_cloud_tasks_dispatch_disabled():
+    """Inline/local stacks without Cloud Tasks dispatch cannot schedule a
+    replacement, so the budget expiry keeps the pre-deferral 409 semantics."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['dispatch_disabled']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_chain_ends_at_queue_attempt_contract():
+    """Every replacement is a fresh named task whose queue retry count restarts
+    at zero, so the chain must bound itself: once the original delivery plus
+    replacements have spent the queue's attempt contract in whole-budget
+    attempts, no further replacement is scheduled. The 409 ends the task
+    through the queue with the lock still preserved for any live leaf; the
+    stale self-heal finalizes the job once that lock expires."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    max_attempts = module.get_sync_tasks_max_attempts()
+    request.json = AsyncMock(
+        return_value={
+            **(await request.json()),
+            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: max_attempts - 1,
+        }
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # No replacement is coming, so the job must stay eligible for the
+        # stale self-heal once the preserved lock expires.
+        module.update_sync_job.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        assert [(call['reason'], call['outcome']) for call in fallback_calls] == [('deferrals_exhausted', 'exhausted')]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+def test_sync_task_replacement_enqueue_timeout_fits_inside_route_margin():
+    """The replacement enqueue runs after the budget has expired, so its bound
+    must come out of the margin the configured budget actually leaves below the
+    route cap — an explicit override close to the cap must not let the
+    middleware 504 fire before the deferral response."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    resolve = module._resolve_sync_job_replacement_enqueue_timeout
+    try:
+        assert resolve(1500.0, 1380.0) == 60.0
+        assert resolve(30.0, 20.0) == 5.0
+        assert resolve(1500.0, 1490.0) == 5.0
+        # The margin is measured below the earliest attempt wall, not only the
+        # route cap: a route timeout above the 1500s dispatch deadline must not
+        # buy post-budget work another margin the queue ends the attempt first.
+        assert resolve(1800.0, 1380.0) == 60.0
+        assert resolve(1500.0, 1380.0, run_lock_ttl_seconds=1600.0) == 60.0
+        assert (
+            module.SYNC_JOB_HANDLER_BUDGET_SECONDS + module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
+            < min(
+                module.SYNC_JOB_ROUTE_TIMEOUT_SECONDS,
+                module.DISPATCH_DEADLINE_SECONDS,
+                module.RUN_LOCK_TTL_SECONDS,
+            )
+        )
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+def test_deferred_processing_job_is_not_stale_until_its_replacement_is_due():
+    """A budget-deferred job sits processing without a run lock between the
+    preserved lock's expiry and its scheduled replacement; polling must not
+    treat that planned silence as a lost owner, but must resume once the
+    replacement is overdue so a lost replacement still self-heals."""
+
+    sync_jobs, _ = _load_sync_jobs()
+    job = {
+        'status': 'processing',
+        'dispatch_mode': 'cloud_tasks',
+        'updated_at': 1_000.0,
+        'deferred_until': 5_000.0,
+    }
+    silent_past_threshold = 1_000.0 + sync_jobs.STALE_THRESHOLD_SECONDS + 1
+
+    assert sync_jobs.is_sync_job_stale(job, now=silent_past_threshold) is False
+    assert sync_jobs.is_sync_job_stale(job, now=4_999.0) is False
+    assert sync_jobs.is_sync_job_stale(job, now=5_000.0) is True
+    assert sync_jobs.is_sync_job_stale({**job, 'deferred_until': 'later'}, now=silent_past_threshold) is True
+    assert sync_jobs.is_sync_job_stale({**job, 'dispatch_mode': 'sequenced'}, now=6_000.0) is False
+    # Overdue marker on a queued job is the recovery signal even when an
+    # earlier retryable failure left attempt/started_at populated: the
+    # budget-deferral chain already spent the queue's attempts, so no pending
+    # queue retry exists to protect.
+    assert (
+        sync_jobs.is_sync_job_stale({**job, 'status': 'queued', 'attempt': 1, 'started_at': 900.0}, now=6_000.0) is True
+    )
+
+
+def test_deferred_queued_job_is_not_dispatch_lost_before_its_replacement_is_due():
+    """A budget expiry during post-lock setup (staged download, account checks)
+    leaves the job queued with the deferral marker set and no run lock held;
+    the replacement is scheduled past the preserved lock's TTL (~31 minutes),
+    beyond the 30-minute queued-dispatch-stale threshold. The marker must guard
+    that window in the queued state too, then resume dispatch-lost detection
+    once the replacement is overdue so a lost replacement still self-heals."""
+
+    sync_jobs, _ = _load_sync_jobs()
+    job = {
+        'status': 'queued',
+        'dispatch_mode': 'cloud_tasks',
+        'started_at': None,
+        'attempt': None,
+        'updated_at': 1_000.0,
+        'deferred_until': 5_000.0,
+    }
+    past_queued_threshold = 1_000.0 + sync_jobs.QUEUED_DISPATCH_STALE_SECONDS + 1
+
+    assert sync_jobs.is_sync_job_stale(job, now=past_queued_threshold) is False
+    assert sync_jobs.is_sync_job_stale(job, now=4_999.0) is False
+    assert sync_jobs.is_sync_job_stale(job, now=5_000.0) is True
+    # No marker: normal queued dispatch-lost detection is untouched.
+    assert (
+        sync_jobs.is_sync_job_stale({k: v for k, v in job.items() if k != 'deferred_until'}, now=past_queued_threshold)
+        is True
+    )
+    # A marker that is not a number protects nothing.
+    assert sync_jobs.is_sync_job_stale({**job, 'deferred_until': 'later'}, now=past_queued_threshold) is True
+
+
+def test_processing_transition_retires_the_deferral_marker():
+    """The delivery that transitions a job to processing IS the deferred
+    replacement arriving: the marker must be retired by that transition rather
+    than lingering to suppress stale detection for a job that is actively
+    running under a fresh run lock. Both the fenced and legacy transitions
+    clear it."""
+
+    redis_client = fakeredis.FakeRedis()
+    sync_jobs, _ = _load_sync_jobs(redis_client)
+    job_id = 'job-1'
+    deferred_until = time.time() + sync_jobs.QUEUED_DISPATCH_STALE_SECONDS
+    _seed_fenced_job(
+        redis_client,
+        sync_jobs,
+        job_id,
+        {
+            'job_id': job_id,
+            'status': 'queued',
+            'lane': 'backfill',
+            'result': None,
+            'deferred_until': deferred_until,
+        },
+        owner='owner-a',
+    )
+
+    processing = sync_jobs.fenced_mark_job_processing(job_id, 'owner-a', now=100.0)
+
+    assert processing.applied is True
+    assert processing.job['status'] == 'processing'
+    assert processing.job['deferred_until'] is None
+
+    # Legacy (tokenless) path: same retirement on its queued->processing CAS.
+    legacy_job_id = 'job-legacy'
+    redis_client.set(
+        f'{sync_jobs.JOB_KEY_PREFIX}{legacy_job_id}',
+        json.dumps(
+            {
+                'job_id': legacy_job_id,
+                'status': 'queued',
+                'lane': 'backfill',
+                'result': None,
+                'deferred_until': deferred_until,
+            },
+            separators=(',', ':'),
+        ),
+        ex=12_345,
+    )
+    legacy = sync_jobs.mark_job_processing(legacy_job_id)
+    assert legacy is not None
+    assert legacy['status'] == 'processing'
+    assert legacy['deferred_until'] is None
+
+
+@pytest.mark.asyncio
+async def test_sequenced_budget_deferral_acks_without_finishing_sequencer_owner():
+    """A budget-expired sequenced delivery is an ack, not a completion claim:
+    the job is nonterminal and still owned by its epoch, so the wrapper must
+    pass the deferral through instead of converting it into a retry-burning
+    nonterminal_ack 500 or finishing the owner out from under the job."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    module._run_sync_job_body = AsyncMock(
+        return_value=module.JSONResponse(
+            status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        )
+    )
+    try:
+        deferred = await module.run_sync_job(request, task_retry_count=0)
+
+        assert deferred.status_code == 200
+        assert json.loads(deferred.body)['status'] == module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS
+        module.get_sync_job.assert_called_with('job-1')  # prior-attempt read only
+        assert module.get_sync_job.call_count == 1
+        module.sync_backfill_sequencer.finish_job.assert_not_called()
+        module.uid_sequencer.kick.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_delivery_heartbeat_drain_is_bounded():
+    """A heartbeat blocked in its Firestore renewal ignores the stop event, so
+    joining it after the attempt must be bounded: the deferral response has to
+    return inside the middleware/dispatch headroom, cancelling the heartbeat
+    rather than waiting out its executor leaf."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
+    module._run_sync_job_body = AsyncMock(
+        return_value=module.JSONResponse(
+            status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        )
+    )
+    module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.05
+
+    async def _heartbeat_blocked_in_renewal(uid, job_id, epoch, stop, owner):
+        await asyncio.sleep(30)
+
+    module._maintain_uid_sequencer_lease = _heartbeat_blocked_in_renewal
+    created = []
+
+    def _capture_task(coro, *, name):
+        task = asyncio.create_task(coro, name=name)
+        created.append(task)
+        return task
+
+    module.start_background_task = _capture_task
+    try:
+        started = time.monotonic()
+        deferred = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert deferred.status_code == 200
+        assert json.loads(deferred.body)['status'] == module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS
+        # The join gave up on the stuck heartbeat instead of waiting for it:
+        # the response returned near the drain bound and the heartbeat was
+        # cancelled out of its renewal.
+        assert elapsed < 5
+        assert created and created[0].cancelled()
+        module.sync_backfill_sequencer.finish_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_requires_marker_before_ack():
+    """The deferred marker is a prerequisite for the ack, not best-effort: the
+    preserved run lock expires before the replacement is due, so acking after
+    a lost marker write would leave that unlocked poll window unprotected and
+    a status poll could terminally fail the job before its continuation runs.
+    The 409 fallback keeps Cloud Tasks owning the redelivery instead."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        # First call (the marker write) raises; the compensating clear that
+        # the fallback must now run succeeds, removing any marker the EVAL
+        # applied server-side before the response was lost.
+        module.update_sync_job = MagicMock(
+            side_effect=[RuntimeError('redis unavailable'), {'job_id': 'job-1', 'status': 'processing'}]
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        # The replacement must never be scheduled against an unprotected poll
+        # window: losing the marker aborts the deferral before the enqueue.
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        assert module.update_sync_job.call_count == 2
+        assert module.update_sync_job.call_args_list[-1] == unittest.mock.call('job-1', {'deferred_until': None})
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'budget_replacement',
+                'to_mode': 'queue_retry',
+                'reason': 'marker_failed',
+                'outcome': 'degraded',
+            }
+        ]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_treats_missing_marker_update_as_failed():
+    """update_sync_job also fails by returning None — a missing/nonmutable job
+    or a CAS that lost every retry — and that sentinel is as good as a raised
+    error: the marker is not on the job, so acking would leave the unlocked
+    poll window unprotected exactly like a lost write. The deferral must fall
+    back to the queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        # The sentinel-marker write returns None; the compensating clear
+        # succeeds so no marker the EVAL applied survives the fallback.
+        module.update_sync_job = MagicMock(side_effect=[None, {'job_id': 'job-1', 'status': 'processing'}])
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        assert module.update_sync_job.call_count == 2
+        assert module.update_sync_job.call_args_list[-1] == unittest.mock.call('job-1', {'deferred_until': None})
+        assert [call['reason'] for call in fallback_calls] == ['marker_failed']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_expiry_before_run_lock_keeps_queue_owned_retry():
+    """An expiry during the read-only setup before lock admission owns nothing
+    — no preserved lock whose TTL a delayed replacement must outlive, no
+    mutating leaf a redelivery could overlap — so the lock-delay deferral would
+    stall the job for ~31 minutes for no reason and suppress stale recovery for
+    the same interval. The queue-owned 409 retry keeps the pre-deferral
+    semantics instead."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not start'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    passthrough_run_blocking = module.run_blocking
+
+    async def _fence_read_hangs(_executor, fn, *args, **kwargs):
+        # The handler's first read: expiring here cancels the attempt long
+        # before try_acquire_sync_job_run_lock is reached.
+        if fn is module.get_sync_ledger_fence_mode:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _fence_read_hangs
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        # No lock was ever acquired, so nothing is deferred past: no delayed
+        # replacement is scheduled and no marker suppresses stale detection.
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.try_acquire_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        module.update_sync_job.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'budget_replacement',
+                'to_mode': 'queue_retry',
+                'reason': 'pre_lock_expiry',
+                'outcome': 'degraded',
+            }
+        ]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
+    """The pre-lock branch must not fire while the acquire is in flight: the
+    executor thread can still land the lock after the await was cancelled, so a
+    mid-acquire expiry must keep the preserved-lock deferral — marker, delayed
+    replacement and all — never the queue-owned retry that could redeliver into
+    a lock nobody expects. The acquire lands after the expiry here, inside the
+    post-budget drain: the replacement's schedule must be anchored to that
+    confirmed acquisition — the drained completion upper-bounds when Redis
+    started the TTL — not to the earlier expiry instant."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not start'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    passthrough_run_blocking = module.run_blocking
+    acquire_settled_at = {}
+
+    async def _acquire_lands_after_expiry(_executor, fn, *args, **kwargs):
+        if fn is module.try_acquire_sync_job_run_lock:
+            # Past the 0.05s budget, comfortably inside the drain's deadline:
+            # late enough that an expiry-anchored schedule would come due while
+            # this late-acquired lock is still held.
+            await asyncio.sleep(1.5)
+            acquire_settled_at['at'] = time.time()
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 2.0
+        module.run_blocking = _acquire_lands_after_expiry
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        # Anchored to the confirmed acquisition: the whole replacement delay
+        # must outlive the drained settle instant, not the earlier expiry. (The
+        # 1s slack absorbs only int() truncation — an expiry-anchored schedule
+        # sits ~1.45s earlier and cannot pass.)
+        assert schedule_at >= acquire_settled_at['at'] + module.SYNC_JOB_BUDGET_REPLACEMENT_DELAY_SECONDS - 1
+        module.update_sync_job.assert_called_once_with(
+            'job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}
+        )
+        module.release_job_run_lock.assert_not_called()
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_enqueue_failure_clears_deferred_marker():
+    """The marker suppresses stale detection until the instant the replacement
+    would have run; when the enqueue failed there is no replacement, so leaving
+    it set would keep the job nonterminal for ~41 minutes after the queue's
+    retries exhaust — an unnecessary stall. The fallback must clear it before
+    handing the retry back to the queue."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=RuntimeError('create_task failed'))
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args[1]
+        # The marker write from the deferral, then the clear for the failed
+        # enqueue: stale detection resumes instead of waiting out a
+        # replacement that was never scheduled.
+        assert module.update_sync_job.call_args_list == [
+            (('job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}),),
+            (('job-1', {'deferred_until': None}),),
+        ]
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_failed']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_attempt_heartbeat_drain_is_bounded():
+    """A renewal blocked inside its Firestore run_blocking cannot be interrupted
+    by the stop event, and the heartbeat join sits between the attempt's
+    response and its return: unbounded, it holds the request open past every
+    wall the handler budget exists to stay under. The drain must cancel the
+    heartbeat at a bound and return the response."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 0.01
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
+
+    async def _body_returns_after_renewal_started(_request, _task_retry_count, *_args, **_kwargs):
+        # Let the heartbeat reach its first renewal before the response exists.
+        await asyncio.sleep(0.05)
+        return module.JSONResponse(status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
+
+    passthrough_run_blocking = module.run_blocking
+    renewal_reached = False
+
+    async def _renewal_hangs(_executor, fn, *args, **kwargs):
+        nonlocal renewal_reached
+        if fn is module.sync_backfill_sequencer.renew_job:
+            renewal_reached = True
+            await asyncio.sleep(10)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    heartbeat_tasks = []
+
+    def _capture_heartbeat(coro, *, name):
+        task = asyncio.create_task(coro, name=name)
+        heartbeat_tasks.append(task)
+        return task
+
+    try:
+        module._run_sync_job_body = _body_returns_after_renewal_started
+        module.run_blocking = _renewal_hangs
+        module.start_background_task = _capture_heartbeat
+        module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.1
+
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 200
+        assert json.loads(response.body)['status'] == module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS
+        assert renewal_reached
+        # The blocked renewal is cancelled at the drain bound (~0.1s), not
+        # joined for its full 10s: the response returns inside the headroom.
+        assert elapsed < 5
+        assert heartbeat_tasks[0].cancelled()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
+    """The owner-side chain count is a prerequisite, not a post-ack nicety: the
+    sweep's lease-expiry redrive reloads the original payload and restarts the
+    chain at zero, and repeated lost counts would restore an unbounded
+    whole-budget sequence. A write that fails must therefore abort the
+    deferral BEFORE any marker or replacement exists — the queue-owned 409
+    keeps the task and no orphaned schedule survives the lost count."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    base_payload = await request.json()
+    request.json = AsyncMock(
+        return_value={
+            **base_payload,
+            'sequencer_epoch': 3,
+            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 1,
+        }
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    call_order = []
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            return {
+                'job_id': job_id,
+                'status': 'queued' if reads['n'] == 1 else 'processing',
+                'lane': 'fresh',
+                'ledger_fence_mode': 'active',
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        def _track_update(job_id, updates):
+            call_order.append(('marker' if updates.get('deferred_until') is not None else 'update', job_id))
+            return {'job_id': job_id, 'status': 'processing'}
+
+        module.update_sync_job = MagicMock(side_effect=_track_update)  # type: ignore[attr-defined]
+
+        def _track_owner_write(uid, job_id, epoch, deferrals):
+            call_order.append(('owner_write', job_id))
+            raise RuntimeError('firestore unavailable')
+
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(side_effect=_track_owner_write)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        # The queue keeps the task: no replacement, no marker, and the failed
+        # count never acks a schedule it cannot bound.
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert call_order == [('owner_write', 'job-1')]
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'budget_replacement',
+                'to_mode': 'queue_retry',
+                'reason': 'owner_write_failed',
+                'outcome': 'degraded',
+            }
+        ]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_deadline():
+    """The owner-count write, marker, and replacement enqueue share one absolute
+    post-budget deadline: each block getting its own margin-sized timeout would
+    sum to the whole route margin, letting the middleware 504 fire before the
+    deferral response is returned. Here the owner write spends 0.45s of the
+    0.9s shared deadline and the enqueue would still fit a fresh 0.9s timeout —
+    but only the ~0.45s remainder is left, so the whole deferral aborts at the
+    one deadline instead of running to the write's own 1.15s horizon."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    base_payload = await request.json()
+    request.json = AsyncMock(
+        return_value={
+            **base_payload,
+            'sequencer_epoch': 3,
+            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 1,
+        }
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    owner_write_finished = False
+
+    async def _run_blocking(executor, fn, *args, **kwargs):
+        nonlocal owner_write_finished
+        if fn is module.sync_backfill_sequencer.note_budget_deferral:
+            # 0.45s: consumes half the shared 0.9s deadline and settles.
+            await asyncio.sleep(0.45)
+            owner_write_finished = True
+        if fn is module.enqueue_sync_job_budget_replacement:
+            # 0.7s: fits a fresh 0.9s timeout, but not the ~0.45s the shared
+            # deadline still has after the owner write above.
+            await asyncio.sleep(0.7)
+        return fn(*args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.9
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=True)
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+        module.run_blocking = _run_blocking
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            return {
+                'job_id': job_id,
+                'status': 'queued' if reads['n'] == 1 else 'processing',
+                'lane': 'fresh',
+                'ledger_fence_mode': 'active',
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        # The deadline fired during the enqueue (its create may or may not
+        # have landed, so the uncertain class keeps the marker and returns
+        # the queue-owned 409) at the one shared wall: a fresh per-block
+        # timeout would have let the enqueue finish and acked the 200
+        # deferral instead. The coarse stopwatch bound only tolerates CI
+        # scheduling and post-409 cleanup drain; the outcome above is the
+        # contract proof.
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert owner_write_finished is True
+        assert elapsed < 5
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_budget_deferral_persists_chain_count_on_owner():
+    """A sequenced deferral must persist its chain count on the sequencer
+    owner: the sweep's lease-expiry redrive re-dispatches the owner's original
+    ``active_payload`` — which carries no count — so without the owner-side
+    copy the redrive would restart the chain at zero and an over-budget job
+    could defer forever."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    base_payload = await request.json()
+    request.json = AsyncMock(
+        return_value={
+            **base_payload,
+            'sequencer_epoch': 3,
+            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 1,
+        }
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock()
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+        # The sequenced wrapper consumes one extra job read (prior attempt)
+        # before the attempt body; keep the queued→processing sequence without
+        # a bounded side_effect list.
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            return {
+                'job_id': job_id,
+                'status': 'queued' if reads['n'] == 1 else 'processing',
+                'lane': 'fresh',
+                'ledger_fence_mode': 'active',
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        # The replacement carries the incremented count and the owner is
+        # pinned to the same number so a lease-expiry redrive cannot restart
+        # the chain at zero.
+        payload, _schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 2
+        module.sync_backfill_sequencer.note_budget_deferral.assert_called_once_with('test-uid', 'job-1', 3, 2)
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+def test_sync_task_handler_budget_derives_from_route_timeout():
+    """The budget must track the configured route timeout so the middleware
+    deadline can never fire first and reintroduce the lingering 504 path."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    resolve = module._resolve_sync_job_handler_budget
+    try:
+        # Default derives from the configured route cap minus the margin.
+        assert resolve(1500.0, None) == 1380.0
+        assert resolve(1500.0, '') == 1380.0
+        assert resolve(600.0, None) == 480.0
+        # An explicit override still wins for the local stacks (20s under 30s).
+        assert resolve(30.0, '20') == 20.0
+        # The budget is bounded by the earliest attempt wall, not just the
+        # route timeout: a route timeout above the 1500s dispatch deadline (or
+        # the run lock TTL) must not derive or accept a budget past the wall
+        # that Cloud Tasks or a lock-expiring retry ends the attempt at first.
+        assert resolve(1800.0, None) == 1380.0
+        assert resolve(1800.0, '1400') == 1400.0
+        with pytest.raises(ValueError):
+            resolve(1800.0, '1600')
+        assert resolve(1500.0, None, run_lock_ttl_seconds=900.0) == 780.0
+        with pytest.raises(ValueError):
+            resolve(1500.0, '1000', run_lock_ttl_seconds=900.0)
+        with pytest.raises(ValueError):
+            resolve(1500.0, None, dispatch_deadline_seconds=100.0)
+        # Any budget that is not strictly below the route cap fails at startup.
+        with pytest.raises(ValueError):
+            resolve(30.0, '30')
+        with pytest.raises(ValueError):
+            resolve(1500.0, '1600')
+        with pytest.raises(ValueError):
+            resolve(0.0, None)
+        # A route cap smaller than the margin cannot derive a valid budget.
+        with pytest.raises(ValueError):
+            resolve(100.0, None)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_uncertain_enqueue_keeps_deferred_marker():
+    """A transport/deadline failure cannot prove the named replacement was not
+    created: clearing the marker would rearm stale self-heal in the gap before
+    a replacement that may still arrive, so an uncertain enqueue keeps it and
+    records its own fallback reason."""
+
+    from google.api_core.exceptions import ServiceUnavailable
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.enqueue_sync_job_budget_replacement = MagicMock(
+            side_effect=ServiceUnavailable('transport terminated mid-request')
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        # Only the marker write happened: the clear that a definitive failure
+        # performs must not run for an uncertain outcome.
+        assert module.update_sync_job.call_count == 1
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_enqueue():
+    """The shared deadline firing while the marker write itself is awaiting is
+    NOT an uncertain enqueue: the enqueue call never ran, so no replacement can
+    exist and retaining the marker would leave the queue's retries exhausting
+    against the preserved lock with no delayed continuation to resume the job.
+    The fallback must classify it as a marker timeout and clear the
+    late-applied marker — but only after draining the timed-out write: the clear
+    must never run while the write's CAS can still be mid-flight and overwrite
+    it afterwards."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    marker_writes = []
+    marker_events = []
+
+    async def _marker_settles_just_past_deadline(job_id, updates):
+        marker_writes.append(dict(updates))
+        if updates.get('deferred_until') is not None:
+            # Consumes the whole enqueue deadline, then settles just past it —
+            # still inside the cleanup deadline the drain waits on, so the
+            # clear below runs strictly after the late-applied write.
+            await asyncio.sleep(0.15)
+            marker_events.append('marker_settled')
+            return {'job_id': job_id, 'status': 'processing'}
+        marker_events.append('clear_started')
+        return {'job_id': job_id, 'status': 'processing'}
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        # The passthrough run_blocking returns fn(*args) without awaiting it,
+        # which would make the marker coroutine "complete" instantly; the
+        # deadline must expire while the marker write is genuinely awaited.
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.run_blocking = _awaiting_run_blocking
+        # The deadline expires while the marker write awaits: the update is
+        # abandoned before the enqueue is ever attempted.
+        module.update_sync_job = MagicMock(
+            side_effect=lambda job_id, updates: _marker_settles_just_past_deadline(job_id, updates)
+        )
+        module.enqueue_sync_job_budget_replacement = MagicMock(
+            side_effect=AssertionError('enqueue must never run when the marker write timed out')
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # Marker write attempted, then cleared strictly after it settled: no
+        # replacement was scheduled, so the marker must not outlive the
+        # queue-owned retry handback — and the clear must not race the write.
+        assert any(call.get('deferred_until') is not None for call in marker_writes)
+        assert any(call.get('deferred_until') is None for call in marker_writes)
+        assert marker_events == ['marker_settled', 'clear_started']
+        assert [call['reason'] for call in fallback_calls] == ['marker_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_marker_drain_failure_skips_clear():
+    """A marker write still mid-CAS when the cleanup deadline expires cannot be
+    ordered behind the clear: clearing anyway would race the detached executor
+    leaf — a late-applied marker could overwrite the clear and keep stale
+    recovery suppressed with no replacement ever scheduled. The fallback must
+    keep the 409 and leave the marker alone rather than pretend a racy clear
+    settled the state."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    marker_writes = []
+
+    async def _marker_never_settles(job_id, updates):
+        marker_writes.append(dict(updates))
+        if updates.get('deferred_until') is not None:
+            # Still mid-CAS when both the enqueue deadline and the cleanup
+            # deadline have passed: the drain cannot order the clear behind it.
+            await asyncio.sleep(0.3)
+            return {'job_id': job_id, 'status': 'processing'}
+        raise AssertionError('clear must not run while the marker write is unsettled')
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.run_blocking = _awaiting_run_blocking
+        module.update_sync_job = MagicMock(side_effect=lambda job_id, updates: _marker_never_settles(job_id, updates))
+        module.enqueue_sync_job_budget_replacement = MagicMock(
+            side_effect=AssertionError('enqueue must never run when the marker write timed out')
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # Only the marker write ran: the clear is skipped because the write
+        # never settled inside the shared cleanup deadline.
+        assert len(marker_writes) == 1
+        assert marker_writes[0].get('deferred_until') is not None
+        assert [call['reason'] for call in fallback_calls] == ['marker_timeout']
+        # Let the abandoned write settle before the loop closes so its detached
+        # task does not die pending.
+        await asyncio.sleep(0.35)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_unsettleable_acquire_keeps_queue_retry():
+    """A run-lock acquire still mid-flight when the post-budget deadline expires
+    leaves the lock's TTL start unbounded: any replacement schedule could come
+    due while that late-acquired lock is held and exhaust the replacement's
+    short-backoff attempts on 409s. The deferral must refuse to schedule against
+    an unconfirmed acquisition — no marker write, no enqueue, queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not start'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    passthrough_run_blocking = module.run_blocking
+
+    async def _acquire_never_settles(_executor, fn, *args, **kwargs):
+        if fn is module.try_acquire_sync_job_run_lock:
+            await asyncio.sleep(0.3)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module.run_blocking = _acquire_never_settles
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        # Nothing was scheduled against the unconfirmed acquisition.
+        module.update_sync_job.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['acquire_unsettled']
+        # Let the abandoned acquire settle before the loop closes so its
+        # detached task does not die pending.
+        await asyncio.sleep(0.3)
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_marker():
+    """The post-budget deadline firing mid-enqueue is the same uncertainty: the
+    underlying create may have been accepted after the handler stopped
+    waiting, so the marker stays rather than being cleared."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        # The shared post-budget deadline firing mid-enqueue surfaces as
+        # TimeoutError from the timeout_at context: the handler stopped
+        # waiting while the underlying create may still have landed.
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=TimeoutError('post-budget deadline'))
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert module.update_sync_job.call_count == 1
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_retry():
+    """A pipeline that published a terminal result and then hit the budget
+    during cleanup must not defer: update_sync_job rejects terminal jobs, so
+    the marker write would fail and the 409 would burn the queue's retries
+    against the preserved lock while the backfill slot stays held. The
+    established terminal_cleanup_retry 500 redelivers into the cleanup-only
+    terminal branch, and the run lock this attempt held is released because
+    no leaf of this attempt owns it anymore."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            # Two pre-terminal reads (admission + running), then the terminal
+            # transition the pipeline completed before the budget expired.
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        body = json.loads(response.body)
+        assert body['status'] == 'terminal_cleanup_retry'
+        assert body['job_status'] == 'completed'
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # The preserved lock of a terminal job protects nothing: released so
+        # the redelivery's cleanup-only path is not deflected into a 409. The
+        # release is confirmed through the strict compare-and-delete — the
+        # 500's retry-only obligation stands behind it.
+        module.release_job_run_lock_strict.assert_called_once_with('job-1', '1:lock-token')
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_sequenced_cleanup_waits_share_one_deadline():
+    """The marker clear after a definitive enqueue failure and the sequenced
+    heartbeat drain must share one absolute cleanup deadline: a slow enqueue
+    that consumed the post-budget margin cannot buy each cleanup wait a fresh
+    margin-sized timeout whose sum reaches the attempt wall. Here the enqueue
+    fails quickly (definitive), the marker clear spends most of the shared
+    bound, and the heartbeat drain gets only the remainder — not another full
+    cleanup timeout."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(
+        return_value={
+            'job_id': 'job-1',
+            'uid': 'test-uid',
+            'sequencer_epoch': 3,
+            'raw_blob_paths': ['staged/audio.opus'],
+            'source': 'omi',
+            'lane': 'fresh',
+            'content_id': 'content-1',
+            'ledger_fence_mode': 'active',
+            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 1,
+        }
+    )
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+    module.sync_job_uses_ledger_fence = MagicMock(
+        side_effect=lambda job: bool(job and job.get('ledger_fence_mode') == module.SyncLedgerFenceMode.ACTIVE.value)
+    )
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+    module.try_acquire_sync_job_run_lock = MagicMock(return_value='1:lock-token')
+    module.try_acquire_job_run_lock = MagicMock(return_value='legacy-lock-token')
+    module._download_staged_files = MagicMock(return_value=True)
+    reads = {'n': 0}
+
+    def _job_read(job_id):
+        reads['n'] += 1
+        return {
+            'job_id': job_id,
+            'status': 'queued' if reads['n'] == 1 else 'processing',
+            'lane': 'fresh',
+            'ledger_fence_mode': 'active',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        }
+
+    module.get_sync_job = MagicMock(side_effect=_job_read)
+    module.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    async def _heartbeat_blocked_in_renewal(uid, job_id, epoch, stop, owner):
+        await asyncio.sleep(30)
+
+    created = []
+
+    def _capture_task(coro, *, name):
+        task = asyncio.create_task(coro, name=name)
+        created.append(task)
+        return task
+
+    passthrough_run_blocking = module.run_blocking
+    marker_clear_started = threading.Event()
+
+    async def _run_blocking(executor, fn, *args, **kwargs):
+        if fn is module.update_sync_job and args and args[1] == {'deferred_until': None}:
+            marker_clear_started.set()
+            # 0.5s: runs past the post-budget deadline (~0.35s) but inside the
+            # clear's own bound (deadline + 0.3s), so the heartbeat drain is
+            # left only the shared window's remainder.
+            await asyncio.sleep(0.5)
+        if fn is module.enqueue_sync_job_budget_replacement:
+            raise RuntimeError('create_task failed')
+        return await passthrough_run_blocking(executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.3
+        module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.3
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module._maintain_uid_sequencer_lease = _heartbeat_blocked_in_renewal
+        module.start_background_task = _capture_task
+        module.run_blocking = _run_blocking
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert marker_clear_started.is_set()
+        # Shared window: budget expiry (~0.05) + enqueue timeout (0.3) + one
+        # cleanup window (0.3) bounds the whole tail. The pre-fix behavior —
+        # the clear spending its fresh 0.3s to completion (~0.86s) and the
+        # drain adding another 0.3s (~1.16s) — is what this bound excludes.
+        assert elapsed < 0.05 + 0.3 + 0.3 + 0.1
+        assert created and created[0].cancelled()
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_failed']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_begin_job_ends_request_at_the_route_deadline():
+    """Thread: the route-entry budget anchor must be enforced, not just
+    recorded. The sequenced wrapper performs fence read, parse, begin_job and
+    the prior-job read before the attempt body's budget arms; without a
+    timeout around those awaits a stalled begin_job hangs the request open
+    past the Cloud Tasks dispatch deadline and the middleware cap — the exact
+    lingering-request path this PR exists to end. A stall there owns nothing
+    (no run lock), so the request ends through the queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    passthrough_run_blocking = module.run_blocking
+
+    async def _begin_job_stalls(_executor, fn, *args, **kwargs):
+        if fn is module.sync_backfill_sequencer.begin_job:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _begin_job_stalls
+        started = time.monotonic()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert elapsed < 5
+        # The stall owned nothing: no attempt body ever ran, no lock was
+        # acquired, no replacement or marker exists.
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        module.update_sync_job.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_fence_read_ends_request_at_the_route_deadline():
+    """Thread: the very first await — the production-fence read — must be
+    inside the route deadline too. A stalled fence read hangs the request
+    before anything (even payload parsing) runs; the queue-owned 409 ends it
+    inside the budget instead."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.uid_sequencer.production_fence_mode = AsyncMock()  # never reached
+    passthrough_run_blocking = module.run_blocking
+
+    async def _fence_read_stalls(_executor, fn, *args, **kwargs):
+        if fn is module.uid_sequencer.production_fence_mode:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _fence_read_stalls
+        started = time.monotonic()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert elapsed < 5
+        request.json.assert_not_awaited()
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+def _legacy_preamble_module(job_status, stalled_fn_name=None, raises=None):
+    """Direct (epoch-less) backfill delivery with the sequencer on, stubbed so a
+    single preamble await can stall or fail."""
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
+    module.uid_sequencer.foreign_delivery = MagicMock(return_value=False)
+    module.uid_sequencer.production_stage = MagicMock(return_value=True)
+    module.uid_sequencer.enabled = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': job_status})
+    module.update_sync_job = MagicMock(return_value={'job_id': 'job-1'})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.register_job = MagicMock()
+    module.backfill_cutover.refresh_direct_run = MagicMock(side_effect=raises)
+    module.warm_rollout_cohorts = AsyncMock()
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'body'}))
+    module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+    passthrough = module.run_blocking
+
+    async def _stalling(executor, fn, *args, **kwargs):
+        if stalled_fn_name and fn is getattr(module.uid_sequencer, stalled_fn_name, None):
+            await asyncio.sleep(30)
+        if stalled_fn_name == 'refresh_direct_run' and fn is module.backfill_cutover.refresh_direct_run:
+            await asyncio.sleep(30)
+        return await passthrough(executor, fn, *args, **kwargs)
+
+    module.run_blocking = _stalling
+    return module, saved_modules, request, fallback_calls
+
+
+def _restore_sync_modules(saved_modules):
+    sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
+    sys.modules.pop('utils.sync.ledger_completion', None)
+    for name, original in saved_modules.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_legacy_kick_still_acks_the_registered_job():
+    """Registration already committed, so a kick stall ends inside the route
+    deadline with the 200 ack; a 409 would redeliver a payload that no longer
+    needs the queue."""
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued', stalled_fn_name='kick')
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'sequenced_legacy_job'}
+        module.sync_backfill_sequencer.register_job.assert_called_once()
+        module._run_sync_job_body.assert_not_awaited()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_direct_refresh_defers_with_the_queue_owned_409():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module(
+        'processing', stalled_fn_name='refresh_direct_run'
+    )
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_sync_job_body.assert_not_awaited()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_direct_refresh_error_continues_into_the_attempt_body_instead_of_a_fast_500():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module(
+        'processing', raises=RuntimeError('redis down')
+    )
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'body'}
+        module.backfill_cutover.refresh_direct_run.assert_called_once()
+        module._run_sync_job_body.assert_awaited_once()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_cohort_warm_ends_request_at_the_route_deadline():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+
+    async def _warm_stalls(uid):
+        await asyncio.sleep(30)
+
+    module.warm_rollout_cohorts = _warm_stalls
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_sync_job_body.assert_not_awaited()
+        module.update_sync_job.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_cohort_warm_error_is_not_turned_into_a_success_response():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+    module.warm_rollout_cohorts = AsyncMock(side_effect=RuntimeError('cohort read failed'))
+    try:
+        with pytest.raises(RuntimeError):
+            await module.run_sync_job(request, task_retry_count=0)
+        module._run_sync_job_body.assert_not_awaited()
+        module.update_sync_job.assert_not_called()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
+    """Thread: the terminal_cleanup_retry 500 hands the queue a retry-only
+    obligation, so the run-lock release behind it must be confirmed. An
+    unconfirmed release leaves the lock held to its TTL while every
+    short-backoff retry deflects off it as a 409 — the task exhausts without
+    one cleanup retry landing. Here the strict release settles 0 (token
+    mismatch: a racing leaf already replaced it), so the handler must keep
+    the preserved-lock contract instead: ack and schedule one replacement
+    past the lock's TTL, never return the 500."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    strict_calls = []
+
+    def _strict_release(job_id, token):
+        strict_calls.append((job_id, token))
+        return 0  # EVAL: token no longer owns the key
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        assert strict_calls == [('job-1', '1:lock-token')]
+        # The preserved-lock deferral replaced the unconfirmed 500: marker and
+        # delayed replacement exist, and no cleanup-retry obligation was
+        # handed to the queue behind an unreleased lock.
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release():
+    """Thread (companion): with the strict release confirming (EVAL 1), the
+    established behavior stands — the 500 redelivers into the terminal
+    branch's retry-only cleanup against a lock this attempt no longer
+    holds."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(return_value=1)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        body = json.loads(response.body)
+        assert body['status'] == 'terminal_cleanup_retry'
+        assert body['job_status'] == 'completed'
+        module.release_job_run_lock_strict.assert_called_once_with('job-1', '1:lock-token')
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marker():
+    """Thread: after an unconfirmed strict release the terminal-job deferral
+    must not route through the deferred-marker write. update_sync_job refuses
+    terminal states by contract, so the marker path can only ever degrade to
+    the marker_failed 409 — spending every short-backoff queue retry against
+    the surviving lock with no replacement scheduled behind them, sticking a
+    completed direct backfill job's per-UID slot until its ~2-day TTL. The
+    terminal variant schedules the one cleanup replacement directly: no
+    marker write is attempted, the replacement carries the bumped chain
+    count, and the task acks instead of looping 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    strict_calls = []
+
+    def _strict_release(job_id, token):
+        strict_calls.append((job_id, token))
+        return 0  # EVAL: token no longer owns the key — release unconfirmed
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        # Production contract: update_sync_job returns None for terminal
+        # states, so any marker write on the completed job cannot apply.
+        module.update_sync_job = MagicMock(return_value=None)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        assert strict_calls == [('job-1', '1:lock-token')]
+        # The structurally impossible marker write is never attempted…
+        module.update_sync_job.assert_not_called()
+        # …while the promised cleanup replacement is scheduled with the
+        # bumped chain count, past the preserved lock's TTL.
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 1
+        assert schedule_at > 0
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_replacement_survives_the_attempt_cap():
+    """Thread: the attempt-cap guard must not consume the terminal-cleanup
+    deferral. A final-generation direct backfill attempt (deferrals at the
+    cap) whose pipeline completed the job but whose strict run-lock release
+    could not be confirmed still needs its one cleanup-only replacement:
+    the cap bounds whole-budget re-runs, not the terminal branch's
+    retry-only cleanup, and a direct delivery has no sequencer sweep to
+    fail the job later — without the bypass the preserved lock outlives
+    every short-backoff queue retry and the per-UID slot sticks to its
+    TTL."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    # Bump the delivered chain count to the cap (max 3 in this fixture).
+    base_payload = await request.json()
+    request.json = AsyncMock(return_value={**base_payload, module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 2})
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    def _strict_release(job_id, token):
+        return 0  # EVAL: token no longer owns the key — release unconfirmed
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        module.update_sync_job = MagicMock(return_value=None)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        module.update_sync_job.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        payload, _schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 3
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_owner_count_write_timeout_drains_and_rescues_the_deferral():
+    """Thread: the owner-count write timeout cancels only the await — the
+    Firestore transaction can still commit in db_executor. A drained True
+    must rescue the deferral (the sweep will read exactly the count this
+    chain carries, with its marker and replacement behind it); only a write
+    that cannot settle keeps the queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    base_payload = await request.json()
+    request.json = AsyncMock(
+        return_value={**base_payload, 'sequencer_epoch': 1, module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 1}
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    owner_events = []
+
+    async def _owner_count_commits_just_past_deadline(uid, job_id, epoch, count):
+        owner_events.append(('write_started', count))
+        # Consumes the whole deadline, then commits — still inside the
+        # cleanup allowance the drain waits on.
+        await asyncio.sleep(0.15)
+        owner_events.append(('write_committed', count))
+        return True
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.run_blocking = _awaiting_run_blocking
+        module.sync_backfill_sequencer.note_budget_deferral = _owner_count_commits_just_past_deadline
+        # The sequenced wrapper's preamble/heartbeat seams: begin admits the
+        # epoch, the real create_task drives _maintain_uid_sequencer_lease
+        # (HEARTBEAT_SECONDS must be a real number — the fixture's default
+        # MagicMock would break the heartbeat's wait_for), and finish/kick
+        # make the post-response owner handling inert.
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+        module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+        module.uid_sequencer.kick = MagicMock(return_value=True)
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module.enqueue_sync_job_budget_replacement = MagicMock()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        # The late commit was drained and rescued the deferral: the marker
+        # and replacement landed behind the count the sweep will read.
+        assert owner_events == [('write_started', 2), ('write_committed', 2)]
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        assert [call['reason'] for call in fallback_calls] == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
+    """Thread: the terminal-cleanup deferral must reuse the recovery's
+    absolute deadline instead of minting a fresh enqueue allowance —
+    post-budget windows must not stack against the route/dispatch wall. A
+    sequenced terminal attempt whose recovery consumed the deadline gets
+    its enqueue bounded by the inherited wall (timeout -> enqueue_uncertain
+    409 — a timeout cannot prove the named task was not created), never a new
+    SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS window."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    base_payload = await request.json()
+    request.json = AsyncMock(return_value={**base_payload, 'sequencer_epoch': 1})
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    def _strict_release(job_id, token):
+        return 0
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    async def _enqueue_never_settles(payload, schedule_at):
+        # Records entry, then outlives any inherited deadline.
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.2
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        module.update_sync_job = MagicMock(return_value=None)
+        module.run_blocking = _awaiting_run_blocking
+        # Sequenced-wrapper seams: a real heartbeat task needs a numeric
+        # HEARTBEAT_SECONDS and a real create_task driver.
+        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
+        module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+        module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+        module.uid_sequencer.kick = MagicMock(return_value=True)
+        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=_enqueue_never_settles)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            # Sequenced delivery burns one read in the wrapper's prior-job
+            # preamble (n=1), the attempt reads at n=2/n=3 (nonterminal, so
+            # the pipeline runs and the budget expires mid-flight), and only
+            # the recovery's terminal read (n=4) sees the completed job.
+            status = 'completed' if reads['n'] > 3 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
