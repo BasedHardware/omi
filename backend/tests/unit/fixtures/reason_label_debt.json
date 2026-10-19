@@ -345,6 +345,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/external_list_reads.py",
+      "function": "_Entry.event",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "callers pass string literals (stored/version_bypass/...); closed in practice, scanner is intraprocedural."
+    },
+    {
       "path": "utils/llm/gateway_observability.py",
       "function": "record_direct_exception_surface",
       "label": "reason",

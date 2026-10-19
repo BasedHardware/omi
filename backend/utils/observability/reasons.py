@@ -112,6 +112,22 @@ class QuarantineReason(StrEnum):
     WORKER_FAILED = 'worker_failed'
 
 
+class ShadowParityOutcome(StrEnum):
+    """`omi_jobstore_shadow_parity_total{outcome}` (lane 12, Postgres shadow-write parity)."""
+
+    UNKNOWN = 'unknown'
+    MATCH = 'match'
+    MISMATCH = 'mismatch'
+    MISSING = 'missing'
+    EXTRA = 'extra'
+    UNCOMPARABLE = 'uncomparable'
+    MIRRORED = 'mirrored'
+    ERROR = 'error'
+    TIMEOUT = 'timeout'
+    DROPPED = 'dropped'
+    SKIPPED = 'skipped'
+
+
 class ProviderSttReason(StrEnum):
     """Lane 8 owns the member list; the base set is the pre-recorded provider-STT stage vocabulary."""
 
