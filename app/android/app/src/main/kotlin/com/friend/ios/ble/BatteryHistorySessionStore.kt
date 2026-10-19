@@ -153,29 +153,62 @@ internal fun putAudioRecoveryStamps(target: JSONObject, proofsJson: String?, epo
     return target
 }
 
-/**
- * The parsed history when it contains at least one disconnect row.
- * Parse failure, a blank payload, and a history with no disconnect row
- * (including one pruned to `[]`) are unavailable: a session-start timestamp
- * match is then ambiguous and must not drop a marker.
- */
-internal fun readableDisconnectHistory(historyJson: String?): JSONArray? {
-    val history = try {
-        JSONArray(historyJson?.takeIf { it.isNotBlank() } ?: "[]")
-    } catch (_: Exception) {
-        return null
-    }
-    for (i in 0 until history.length()) {
-        if (history.optJSONObject(i)?.optString("eventType") == "disconnect") return history
-    }
-    return null
+/** Parsed history, or null when the payload does not parse. Blank is an empty array. */
+internal fun parsedDisconnectHistory(historyJson: String?): JSONArray? = try {
+    JSONArray(historyJson?.takeIf { it.isNotBlank() } ?: "[]")
+} catch (_: Exception) {
+    null
 }
 
 /**
- * [dropMarker] is true only when [readableDisconnectHistory] is non-null, no
- * disconnect row records [marker], and the session row proves the marker is
- * that session's start. Unavailable history leaves the marker and the history
- * bytes alone, including `audio_recovered` rows.
+ * True when a disconnect row shows history still reaches this marker's period.
+ * The row may be up to [AUDIO_OUTAGE_MATCH_TOLERANCE_MS] before [marker], or any
+ * time after. An older row does not prove the marker's own disconnect was absent.
+ */
+internal fun historyCoversMarker(history: JSONArray, marker: Long): Boolean {
+    if (marker <= 0L) return false
+    val earliest = marker - AUDIO_OUTAGE_MATCH_TOLERANCE_MS
+    for (i in 0 until history.length()) {
+        val item = history.optJSONObject(i) ?: continue
+        if (item.optString("eventType") != "disconnect") continue
+        if (item.optLong("timestamp", 0L) >= earliest) return true
+    }
+    return false
+}
+
+/**
+ * GENUINE is billed. ECHO is a session-start copy with positive proof and is deleted.
+ * AMBIGUOUS cannot be proved either way: do not bill it. [BatteryHistorySessionStore.start]
+ * deletes it. Leaving it across a new session bills the old timestamp once the new
+ * start is no longer within the echo tolerance.
+ *
+ * An unproven delete can drop a real outage of a link shorter than the tolerance
+ * while history is corrupt. That bounded loss is accepted over unbounded overbilling.
+ */
+internal enum class AudioOutageMarkerVerdict { GENUINE, ECHO, AMBIGUOUS }
+
+internal fun judgeAudioOutageMarker(
+    historyJson: String?,
+    sessionJson: String?,
+    epoch: Long,
+    marker: Long,
+    markerEpochMatches: Boolean,
+): AudioOutageMarkerVerdict {
+    if (!markerEpochMatches || marker <= 0L) return AudioOutageMarkerVerdict.AMBIGUOUS
+    val history = parsedDisconnectHistory(historyJson) ?: return AudioOutageMarkerVerdict.AMBIGUOUS
+    if (!historyCoversMarker(history, marker)) return AudioOutageMarkerVerdict.AMBIGUOUS
+    if (disconnectEvidenceSupportsMarker(history, marker)) return AudioOutageMarkerVerdict.GENUINE
+    if (sessionStartMatchingMarker(sessionJson, epoch, marker, history) != null) {
+        return AudioOutageMarkerVerdict.ECHO
+    }
+    return AudioOutageMarkerVerdict.GENUINE
+}
+
+/**
+ * [dropMarker] is true only for [AudioOutageMarkerVerdict.ECHO]: the session row
+ * matches, history covers the marker's period, and no disconnect row records it.
+ * Unreadable history, or history with no disconnect row, is left untouched,
+ * including `audio_recovered` rows.
  * [rewrittenHistory] is null when history must be left untouched.
  */
 internal class AudioOutageCleanup(val dropMarker: Boolean, val rewrittenHistory: JSONArray?)
@@ -187,10 +220,19 @@ internal fun planAudioOutageCleanup(
     marker: Long,
     markerEpochMatches: Boolean,
 ): AudioOutageCleanup {
-    val parsed = readableDisconnectHistory(historyJson)
+    val parsed = parsedDisconnectHistory(historyJson)
         ?: return AudioOutageCleanup(dropMarker = false, rewrittenHistory = null)
+    var hasDisconnect = false
+    for (i in 0 until parsed.length()) {
+        if (parsed.optJSONObject(i)?.optString("eventType") == "disconnect") {
+            hasDisconnect = true
+            break
+        }
+    }
+    if (!hasDisconnect) return AudioOutageCleanup(dropMarker = false, rewrittenHistory = null)
     val sessionStarted = provenSessionStartedAt(sessionJson, epoch)
-    val echo = markerEpochMatches && sessionStartMatchingMarker(sessionJson, epoch, marker, parsed) != null
+    val echo = judgeAudioOutageMarker(historyJson, sessionJson, epoch, marker, markerEpochMatches) ==
+        AudioOutageMarkerVerdict.ECHO
     val kept = dropUnmeasuredAudioRecoveries(parsed, sessionStarted)
     return AudioOutageCleanup(dropMarker = echo, rewrittenHistory = if (kept !== parsed) kept else null)
 }
@@ -204,49 +246,80 @@ internal class BatteryHistorySessionStore(
     private val enabled: () -> Boolean,
 ) {
     private val live = mutableSetOf<String>()
+
+    /** An unproven marker must not survive the session row it was compared against. */
+    private fun discardUnprovenMarker(device: String) {
+        if (read("audio_outage_epoch_$device")?.toLongOrNull() != epoch()) return
+        remove("audio_outage_$device")
+        remove("audio_outage_epoch_$device")
+    }
+
     fun start(device: String, now: Long, build: String) {
         if (!enabled() || device in live) return
-        val old = openSince(device)
-        if (old != null) {
+        val preserved = openSince(device)
+        if (preserved != null) {
             write("audio_outage_epoch_$device", epoch().toString())
-            write("audio_outage_$device", old.toString())
+            write("audio_outage_$device", preserved.toString())
+        } else {
+            discardUnprovenMarker(device)
         }
         write("session_$device", JSONObject().put("device", device).put("started_at", now)
             .put("app_build", build).put("identity_epoch", epoch()).toString())
         live.add(device)
     }
+
     fun openSince(device: String): Long? {
         if (!enabled()) return null
-        // Only a marker written at disconnect is an outage. session.started_at is
-        // when the link came up; after process death it is not lost audio, and
-        // billing from it charges the whole connected interval. Drop that copy
-        // only when readable history has a disconnect and none records the
-        // marker, and the marker equals started_at within 5ms without being
-        // later. Unreadable or empty history shares that timestamp with a real
-        // same-millisecond disconnect, so return nothing and keep the marker.
-        // A marker after started_at is a short link that died before the session
-        // row was removed. Missing session evidence keeps the marker.
-        if (read("audio_outage_epoch_$device")?.toLongOrNull() != epoch()) return null
+        // Only a proven disconnect marker is an outage. session.started_at is when
+        // the link came up; billing from it charges the whole connected interval.
+        // An echo is deleted only when history covers the marker and no disconnect
+        // row records it. Without that coverage the marker is ambiguous: return
+        // nothing and leave it for start() to delete. A marker after started_at,
+        // with a row that records it, is a short link that died before the session
+        // row was removed.
+        val markerEpochMatches = read("audio_outage_epoch_$device")?.toLongOrNull() == epoch()
         val marker = read("audio_outage_$device")?.toLongOrNull() ?: return null
-        val history = readableDisconnectHistory(read("disconnect_history_$device"))
-        if (history == null) {
-            if (sessionStartMatchingMarker(read("session_$device"), epoch(), marker) != null) return null
-            return marker
+        if (!markerEpochMatches) return null
+        return when (judgeAudioOutageMarker(
+            read("disconnect_history_$device"), read("session_$device"), epoch(), marker, true,
+        )) {
+            AudioOutageMarkerVerdict.GENUINE -> marker
+            AudioOutageMarkerVerdict.ECHO -> {
+                remove("audio_outage_$device")
+                remove("audio_outage_epoch_$device")
+                null
+            }
+            AudioOutageMarkerVerdict.AMBIGUOUS -> null
         }
-        if (sessionStartMatchingMarker(read("session_$device"), epoch(), marker, history) != null) {
-            remove("audio_outage_$device")
-            remove("audio_outage_epoch_$device")
-            return null
-        }
-        return marker
     }
-    fun end(device: String, now: Long) {
+
+    /**
+     * Decide the outage start from disk as it is now, before the disconnect row
+     * is appended. A row written first would cover an unproven marker and make
+     * the old timestamp look genuine. Clears that marker when it cannot be proved.
+     * Returns null when recording is disabled.
+     */
+    fun prepareDisconnect(device: String, now: Long): Long? {
+        if (!enabled()) return null
+        val preserved = openSince(device)
+        if (preserved == null) discardUnprovenMarker(device)
+        live.remove(device)
+        return preserved ?: now
+    }
+
+    /** Marker and epoch, then the session row. The history commit has already landed. */
+    fun sealDisconnect(device: String, start: Long) {
         if (!enabled()) return
-        val start = openSince(device) ?: now
         write("audio_outage_epoch_$device", epoch().toString())
         write("audio_outage_$device", start.toString())
         remove("session_$device")
         live.remove(device)
     }
+
+    fun end(device: String, now: Long) {
+        val start = prepareDisconnect(device, now) ?: return
+        sealDisconnect(device, start)
+    }
+
     fun retire() { live.clear() }
 }

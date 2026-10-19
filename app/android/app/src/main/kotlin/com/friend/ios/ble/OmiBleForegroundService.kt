@@ -979,8 +979,8 @@ class OmiBleForegroundService : Service() {
     private fun failToConnectKey(address: String) = "${KEY_FAIL_TO_CONNECT_COUNT}_${address.uppercase()}"
 
     /**
-     * Drop a marker only when the current session row proves it is that session's start.
-     * Missing, pruned, or unreadable disconnect history is not that proof.
+     * Drop a marker only when history covers its period, the session row matches
+     * it, and no disconnect row records it. An older row is not that coverage.
      */
     private fun discardUnmeasuredAudioOutage(address: String) {
         synchronized(DeviceHealthPersistence) {
@@ -1055,9 +1055,8 @@ class OmiBleForegroundService : Service() {
             row.put("expected", row.optLong("expected") + after.second - before.second)
             row.put("last_at", now)
             while (days.length() > 8) days.remove(0)
-            // openSince drops a session-start echo only when readable history has a
-            // disconnect and none records the marker. Unreadable or empty history
-            // keeps the marker and skips this packet.
+            // openSince bills only a proven disconnect. An echo is deleted; an
+            // unproven marker is left for the next start() and is not billed here.
             val marker = healthSessions.openSince(addr) ?: return
             val key = historyKey(addr)
             val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }
@@ -1096,7 +1095,13 @@ class OmiBleForegroundService : Service() {
         synchronized(DeviceHealthPersistence) {
             if (!DeviceHealthPersistence.enabled(this)) return
             val now = System.currentTimeMillis()
-            if (eventType == "disconnect") healthSessions.end(address.uppercase(), now)
+            // Judge the marker before the new row exists. A later commit of that
+            // row must not turn an unproven timestamp into a billable outage.
+            val sealedStart = if (eventType == "disconnect") {
+                healthSessions.prepareDisconnect(address.uppercase(), now)
+            } else {
+                null
+            }
             val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
             val key = historyKey(address)
             val historyJson = prefs.getString(key, "[]") ?: "[]"
@@ -1147,14 +1152,13 @@ class OmiBleForegroundService : Service() {
             ) { it.optLong("timestamp", 0L) }
             val editor = prefs.edit().putString(key, JSONArray(retained).toString())
             packetDays[addr]?.let { editor.putString("packet_days_$addr", it.toString()) }
-            if (eventType == "disconnect") {
-                // end() already kept a real marker. A missing disconnect row is not
-                // a reason to replace it with this event's timestamp.
-                val start = prefs.getLong("audio_outage_$addr", now)
-                pendingAudioRecovery[addr] = start
-                editor.putLong("audio_outage_$addr", start)
+            // History first, marker second. A crash between the commits leaves the
+            // row and no new marker, so nothing is billed. A marker with no row can
+            // then only come from retention pruning an older row.
+            if (editor.commit() && sealedStart != null) {
+                healthSessions.sealDisconnect(addr, sealedStart)
+                pendingAudioRecovery[addr] = sealedStart
             }
-            editor.commit()
             logBle(addr, eventType, event.optString("reason"))
         }
     }
