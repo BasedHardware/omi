@@ -60,6 +60,21 @@ DEFERRED_READS = {
 }
 
 
+# E1b pending: GPU batching / worker series #22368 owns these reads, newly
+# merged while E1 was in flight. Keep each key tied to its exact owning file;
+# neither another key in that file nor the same key elsewhere is exempt.
+E1B_PENDING_READS = {
+    'config/batch_pipeline_providers.py': {
+        'BATCH_PIPELINE_FLIGHT_BATCH_SECONDS': 'GPU batching / worker series #22368',
+        'BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED': 'GPU batching / worker series #22368',
+    },
+    'diarizer/batch_pipeline_flight_qualify.py': {
+        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'GPU batching / worker series #22368',
+        'BATCH_PIPELINE_MODEL_BATCH_SIZE': 'GPU batching / worker series #22368',
+    },
+}
+
+
 def env_reads(source):
     tree = ast.parse(source)
     aliases = {'os': 'os', 'environ': 'os.environ', 'getenv': 'os.getenv'}
@@ -193,7 +208,9 @@ def violations(root: Path):
                 if isinstance(key, str) and (
                     key.startswith('BATCH_PIPELINE_') or key == 'BATCH_LIVE_STT_RETIRE_PERCENT'
                 ):
-                    if key not in DEFERRED_READS.get(relative, set()):
+                    if key not in DEFERRED_READS.get(relative, set()) and key not in E1B_PENDING_READS.get(
+                        relative, {}
+                    ):
                         out.append(f'{relative}: {key} must be resolved in config/policy/')
     return out
 
