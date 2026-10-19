@@ -2321,6 +2321,8 @@ loads a stored owner embedding even when `speech_profile.wav` is absent; audio
 recovery still requires that file. Matching evidence and distance margins are
 unchanged. Text introductions matching the owner's first name (casefolded), or
 English stopwords including "because" and "googling", cannot mint a person.
+A detected name keeps its transcribed casing after the first letter ("McDonald",
+not "Mcdonald"), because live and sync find people by exact name.
 Existing people and stored conversation labels are not backfilled.
 
 People's `voice_readiness` is derived from stored evidence: `ready` requires
