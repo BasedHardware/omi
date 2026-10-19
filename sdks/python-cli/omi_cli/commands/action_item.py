@@ -41,6 +41,11 @@ def list_action_items(
     offset: int = typer.Option(0, "--offset", min=0),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise UsageError(
+            message="--start-date must not be after --end-date",
+            detail=f"Got --start-date {start_date.isoformat()} > --end-date {end_date.isoformat()}.",
+        )
     params: dict[str, object] = {"limit": limit, "offset": offset}
     if completed is not None:
         params["completed"] = completed
