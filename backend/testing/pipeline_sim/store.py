@@ -113,13 +113,21 @@ class SimTransaction:
         return deepcopy({**base, **self.patches.get(address, {})})
 
     def put(self, table: str, key: str, value: dict) -> None:
+        # Same refusals as FirestoreTransaction.put/patch (conformance: tests/integration/test_store_conformance.py).
+        if table == 'conversations':
+            raise ValueError('conversation admission requires a field patch, never a document set')
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
+        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
+            raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return self.store.ready_predecessor(owner_key, priority, segment_id)
 
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier(priority)
@@ -208,6 +216,8 @@ class SimStore:
         return min(values) if values else None
 
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+        if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
+            raise ValueError('bounded priority and pool required')
         prefix = f'p{priority}_'
         best = None
         for key in self._controls:
@@ -250,7 +260,40 @@ class SimStore:
                 best = candidate
         return deepcopy(self.rows[('jobs', best[1])]) if best else None
 
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        """Only a ready row in this owner's priority FIFO can be the live predecessor; two matches fail closed."""
+        matches = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('priority') == priority
+            and row.get('state') == 'ready'
+            and row.get('next') == segment_id
+        )
+        return deepcopy(self.rows[('jobs', matches[0])]) if len(matches) == 1 else None
+
+    def projection_pending(self, limit: int = 100) -> list[str]:
+        return self.projection_page(limit)[0]
+
+    def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+        """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
+        wanted = {'pending', 'persisted', 'ready'}
+        ordered = sorted(
+            (row['committed_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'results' and row.get('projection_state') in wanted and 'committed_at' in row
+        )
+        if after is not None:
+            ordered = [entry for entry in ordered if entry > (after[0], after[1])]
+        size = max(1, min(limit, 100))
+        page = ordered[:size]
+        cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
+        return [key for _, key in page], cursor
+
     def service_frontier(self, priority: int) -> float:
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
         name = f'p{priority}_service'
         values = [self.rows[('control', key)][name] for key in self._controls if name in self.rows[('control', key)]]
         return max(values) if values else 0.0

@@ -112,7 +112,10 @@ normally. If a call may have happened, the piece waits 30 minutes. Then:
 2. Without a proof, current allowance/abuse admission permits **one** additional
    application dispatch, persisted as `attempt=2`. Recovery owns retries; the
    ordinary segment's local empty-result retry is disabled for these checkpointed
-   recovery attempts. Provider-internal SDK retries remain outside this ledger.
+   recovery attempts. Nested URL/provider retries are disabled for held recovery. Nonempty provider
+   results are encrypted and fenced before ingest, so a restart reuses them; the
+   vendor-acceptance-to-checkpoint crash window remains irreducible. See the
+   [durability runbook](runbooks/cap-hold-durability.md) for bounds and rollout.
 3. A second ambiguous attempt gets the same cooldown/proof check, then becomes
    `failed_reconciliation`. Its audio and manifest remain retained. Successful
    siblings still settle usage and finalize independently; their paths checkpoint
@@ -270,104 +273,25 @@ spans. Paid prefixes and replay spans never become holds; the capture observer
 and client WAL behavior are unchanged. Owner, rate, channel, UTC capture month
 and real clock-gap boundaries remain separate. Source timestamps and conversation
 ownership follow the existing recovery/ingestion path. Funded resume publishes
-the final tail before forwarding new audio, then schedules recovery after its
-existing cooldown. Close and cancellation use supervised, shielded publication.
+the final tail before forwarding new audio, then the periodic server sweep re-drives existing processing consent. Close and cancellation use supervised, shielded publication.
 
-A contiguous mono minute now produces **one immutable Ogg Opus object**, at
-16 kbit/s constrained VBR. The existing Docker FFmpeg/libopus dependency encodes
-and decodes it; no dependency was added. CBR fallback enforces a **128 KiB encoded
-ceiling**, plus one 32-byte authenticated encryption frame. Explicit source-frame
-metadata trims padded short tails back to the exact capture clock. Opus is lossy;
-FLAC cannot bound noisy microphone input to this storage footprint. Recovery still
-runs VAD with short segments enabled; silence makes no STT call.
+The default writer now stages at-most-15-second encrypted Opus fragments and
+seals/composes them into **one immutable retained source per contiguous minute**.
+The sample-duration memory bound is 15 seconds; SIGKILL can still lose its current
+unpublished fragment. Expired writer staging is independently sealed by the
+periodic server sweep, including when no processing consent exists. Publication
+and capacity replies are reconciled before consuming slots or refunding capacity;
+privacy/deletion and immutable published-source authority remain unchanged.
 
-Each minute is born sealed in one transaction: two account-deletion/destructive-
-operation authority reads, the existing encrypted owner-prefix upload, one hold
-create and one summary increment. Transaction read locks span the bounded GCS
-upload (`timeout=10`, no automatic GCS retry) and manifest commit. Nested storage
-fences reuse only the exact synchronous uid/client/transaction scope; there is no
-TTL authority cache. A deleter either precedes those reads and blocks publication,
-or serializes after publication and purges the existing prefix/subcollections.
-Recovery retains its existing 30-minute claim/renew/checkpoint lease. Live writers
-never append to a published group, so no stream lease-release write is needed.
-
-Capacity is reserved in idempotent blocks of 64 minute slots (four reads/two
-writes per block, including both authorities). Unused slots are refunded once on
-clean close or month switch (four reads/two writes). An ambiguous acquisition
-retains its identity, and an ambiguous publication retains its consumed slot.
-Crashes conservatively strand unused reservations. The new source ceiling is
-**8 GiB / 100,000 slots per user/capture UTC month**, shared by sessions/channels;
-failed reservations cannot bypass it. Legacy v3 captures retain their old-format
-recovery/reservation handling. Capacity/backpressure failures close with an error,
-never a successful custody receipt. No flag or retention policy changed.
-
-Accepted custody is bounded to 60 seconds across all channels/rates. Async receive
-entry points split a straddling ingress packet at the exact remaining sample,
-await publication, then accept its tail. They preserve full minute objects without
-accepting a 61st second or flushing an unnecessary short object. Synchronous
-capture callbacks retain the strict aggregate guard. The one-second updater
-flushes aged partial buffers; minute rollover starts a new tail timer.
-SIGKILL/pod loss can lose buffered/in-flight accepted audio; only published seconds
-are reported. There is no client acknowledgement protocol.
-
-Each pending source owns a fresh, opaque server UUID publication token. Callers
-cannot provide/reconstruct its identity or reset a `retry=False` flag. The token
-serializes attempts, consumes its fresh grant before IO, and every later attempt
-checks the durable hold before any upload. A failed commit cleans its uncommitted
-object with an exact generation precondition; a lost successful commit reply is
-protected by the durable receipt. Unknown upload replies use an exceptional
-metadata lookup before guarded cleanup. These failure reads do not affect the
-steady count. Pessimistic server transactions also block non-transactional
-writers; cleanup covers unsuccessful/optimistic publication as well.
-
-Successful recovery keeps a compact purged receipt, so a lost writer reply cannot
-recreate a source after deletion/recovery. Its frozen piece plan stores source
-pointer, exact sample offset/count and decoded PCM hash. Retries decode one local
-cached source and reconstruct those slices without rerunning VAD. **Recovery
-uploads no second audio copy for v4**; hash mismatch fails closed. Local decoded
-PCM is bounded to one minute and removed with the recovery directory. Existing
-account deletion removes all generations under `chunks/{uid}/` and recursively
-purges holds, receipts, summary and reservations.
-
-The real loopback Firestore emulator instruments every DocumentReference.get and
-transaction write, with the real nested privacy fence and a deterministic GCS
-adapter. For 64 continuous mono minutes including ready-summary startup and quota
-acquisition: **133 reads / 130 writes / 64 uploads**, or **2.078125 reads /
-2.03125 writes / 1 upload per capped minute**. A 60-minute socket including partial
-block refund is 129 reads / 124 writes / 60 uploads. A one-minute cold socket is
-11 reads / 6 writes / 1 upload; setup cannot be amortized over very short sockets.
-Summary migration, retries/contention and ownership/gap/seal/close/month boundary
-fragments are additional; steady-state figures do not claim otherwise. Existing
-allowance refresh and downstream conversation/usage work are separate.
-
-At illustrative colocated us-central1 Standard rates, capture operations cost
-$0.0004503/capped hour including hourly socket setup/refund. With a full billing
-month of retention, an 8 KiB per-hold document/index allowance plus quota receipts
-adds $0.00006974/hour. GCS source storage adds at most $0.00014652/hour at the
-object ceiling: **$0.00066656/capped hour for capture custody operations and
-storage**, excluding STT and subsequent recovery operations. This is a model,
-not a cloud invoice; no bucket settings or production data were read. Free tiers,
-discounts and network egress are not credited. Regional Standard/flat namespace,
-no cross-region transfer, backup/PITR or noncurrent copies are assumed. Soft-delete
-retention adds proportional byte-days after purge. Repeated retained months and
-compact receipts accumulate; there is no lifetime retention bound.
-
-A 31-day 24/7 mono month has 44,640 uploads and at most **5.45055 GiB** encrypted
-source audio (8 GiB is the conservative reservation ceiling). A local existing
-voice-fixture/silence experiment at the previously documented ~32% speech share
-measured 59,039 encoded bytes/minute: **2.45583 GiB** for 24/7, or **0.81861 GiB**
-for an explicit planning scenario of 8 capped hours/day for 31 days. The respective
-hard bounds are 5.45055 / 1.81685 GiB. This retains quiet audio, so upload counts
-are never multiplied by speech share. Ambient noise can approach the hard bound;
-these fixture bytes are not a measured fleet average. The rate-card evidence's
-32% proxy is incomplete for paths without accepted-speech metering.
-
-Sources: [Firestore pricing](https://cloud.google.com/firestore/pricing),
-[GCS pricing](https://cloud.google.com/storage/pricing),
-[transaction lock semantics](https://docs.cloud.google.com/firestore/native/docs/transaction-data-contention),
-[document/index accounting](https://docs.cloud.google.com/firestore/native/docs/storage-size).
-The workspace evidence/report records the speech-share citations, operation
-counting recipe, recovery overhead and retention sensitivity.
+The existing 8 GiB monthly quota reserves 64 source slots plus one overlap slot
+per writer block. New collection-group indexes and Scheduler reconciliation are
+deployment prerequisites. The [durability runbook](runbooks/cap-hold-durability.md)
+owns exact retry/shutdown behavior, kill switches, unavoidable vendor-spend window,
+measured operation counts and costs. Current 64-minute emulator custody counts are
+1221 reads / 514 writes / 256 fragment PUTs / 64 composes, leaving 64 retained
+sources. This replaces v4's one-PUT/two-write economics: the explicit modeled
+custody increase is roughly $0.00183/capped hour for the smaller volatile window.
+The original 60-second path remains available via the fragment kill switch.
 
 Summary v2 lazily rebuilds older/missing totals under a short initializer lease
 in transactions of at most 400 rows. Each page fences the cursor and listing
