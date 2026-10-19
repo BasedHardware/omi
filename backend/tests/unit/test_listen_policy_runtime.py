@@ -10,8 +10,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 import pytest
 
-from config.policy import resolve_listen_policy
-from config.policy.listen import current_listen_policy
+from config.policy.listen import current_listen_policy, resolve_listen_policy
 from routers.listen.contracts import ListenRequest, ListenSessionState
 from routers.listen import policy as store
 from routers.listen.runtime import ListenSessionRuntime
