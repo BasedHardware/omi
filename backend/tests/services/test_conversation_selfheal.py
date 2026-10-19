@@ -42,4 +42,4 @@ def test_selfheal_uid_allowlist_unset():
 
 def test_selfheal_uid_allowlist_configured():
     with patch.dict(os.environ, {'SELFHEAL_UID_ALLOWLIST': 'uid1, uid2 , uid3'}):
-        assert set(selfheal_uid_allowlist()) == {'uid1', 'uid2', 'uid3'}
+        assert selfheal_uid_allowlist() == frozenset({"uid1", "uid2", "uid3"})
