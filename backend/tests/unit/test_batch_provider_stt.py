@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 from database import batch_pipeline_intake
+from database import sync_ledger  # noqa: F401  # warm legacy_dark's lazy ledger import outside the call budget
+from utils.batch_pipeline.intake import stranded_adopter
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
@@ -424,8 +426,6 @@ def _stranded(store, row):
 
 
 def test_admit_adopts_only_what_the_hook_re_validates(world):
-    from utils.batch_pipeline.intake import stranded_adopter
-
     _, store = world
     stranded = {'status': 'retryable', 'job_id': 'legacy-1'}
     _stranded(store, stranded)
@@ -452,7 +452,6 @@ def test_admit_adopts_only_what_the_hook_re_validates(world):
 
 def test_active_legacy_rows_are_never_adoptable():
     from datetime import datetime, timezone
-    from utils.batch_pipeline.intake import stranded_adopter
 
     active = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': datetime.now(timezone.utc)}
     assert stranded_adopter(active)(active) is False
