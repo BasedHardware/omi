@@ -1031,7 +1031,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_BACKFILL_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
@@ -1062,7 +1062,7 @@ overlay:
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           VAD_CACHE_TTL_SECONDS:
             value: '7200'
@@ -1330,7 +1330,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_BACKFILL_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
@@ -1361,7 +1361,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           VAD_CACHE_TTL_SECONDS:
             value: '7200'
@@ -1461,7 +1461,7 @@ overlay:
             default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL

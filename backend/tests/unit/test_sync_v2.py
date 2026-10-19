@@ -1314,6 +1314,10 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # routers/sync.py resolves its handler budget at import time against the
+        # dispatch deadline; a MagicMock attr cannot be compared inside min().
+        sys.modules['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
+
         # Dispatch tests supply their own cache and do not acquire voiceprints.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -1536,6 +1540,7 @@ class TestAsyncCoordinatorBehavioral:
 
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -1561,6 +1566,7 @@ class TestAsyncCoordinatorBehavioral:
     def _cleanup(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         sys.modules.pop('sync_behavioral', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -3345,6 +3351,10 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # routers/sync.py resolves its handler budget at import time against the
+        # dispatch deadline; a MagicMock attr cannot be compared inside min().
+        sys.modules['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
+
         # Dispatch tests supply their own cache and do not acquire voiceprints.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -3492,6 +3502,11 @@ class TestV2EndpointExecution:
         sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
         sys.modules['database.sync_jobs'] = mock_sync_jobs
+        # Same import-time budget resolution as the first harness: the TTL and
+        # stale threshold must be comparable numbers, not MagicMock attrs.
+        mock_sync_jobs.RUN_LOCK_TTL_SECONDS = 1800
+        mock_sync_jobs.STALE_THRESHOLD_SECONDS = 600
+        mock_sync_jobs.QUEUED_DISPATCH_STALE_SECONDS = 1800
         mock_sync_jobs.is_sync_job_stale = MagicMock(return_value=False)
         mock_sync_jobs.try_acquire_sync_job_run_lock = MagicMock()
         mock_sync_jobs.get_sync_job_run_lock_epoch = MagicMock(return_value=1)
@@ -3534,6 +3549,7 @@ class TestV2EndpointExecution:
     def _cleanup_modules(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)

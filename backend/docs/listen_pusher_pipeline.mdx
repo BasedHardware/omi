@@ -2566,6 +2566,65 @@ Inline coordinators retain their own terminal-write authority. The recovery
 and retained-audio limits are documented in the
 [two-lane sync runbook](runbooks/sync-two-lane.md).
 
+### Sync backfill handler-budget deferral (Cloud Run request timeout)
+
+`backend-sync-backfill` runs each Cloud Tasks sync job inside one
+`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
+cancelling the downstream pipeline, so an over-budget job would hold the ASGI
+request until Cloud Run kills it at the platform's maximum request timeout.
+The handler therefore ends the attempt itself: one budget
+(`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit strictly below
+the route cap, the Cloud Tasks dispatch deadline, and the run lock's TTL minus
+`SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps payload parsing, lock admission,
+staged-file downloads, and the pipeline as a single deadline. For sequenced
+deliveries the deadline is captured before the wrapper's `begin_job` and
+prior-job reads and rides the attempt state into the body's timeout as
+remaining time, so a stalled setup read cannot buy the attempt a fresh full
+budget after it.
+
+On expiry the handler defers instead of failing: it persists the chain count
+on the sequencer owner FIRST (`budget_deferrals` in the task payload,
+`active_budget_deferrals` on the owner) — required before anything schedules
+a replacement, because the sweep's lease-expiry redrive re-dispatches the
+owner's original payload and a write that fails first returns the
+queue-owned 409 (`owner_write_failed`) with no replacement left orphaned —
+then writes a `deferred_until` marker on the Redis job (replacement time +
+`QUEUED_DISPATCH_STALE_SECONDS`), enqueues one delayed replacement task past
+the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), and acks 200
+with status `deferred_handler_budget`. One absolute post-budget deadline
+bounds the owner-count write, run-lock acquire drain, marker write, and
+enqueue together; a mid-flight executor leaf (lock acquire or marker CAS) is
+drained or fenced rather than racing the cleanup clear, and an acquire that
+cannot be settled returns the queue-owned 409 (`acquire_unsettled`) because
+no replacement schedule can be proven past the lock. When the enqueue
+definitively failed, the compensating marker clear is best-effort: a clear
+that also fails or times out records its own fallback (`marker_clear_failed`)
+on top of the enqueue failure, because the surviving marker keeps
+suppressing stale recovery after the queue-owned retries exhaust.
+
+Status polling honors the marker: a deferred job — `processing` or `queued`,
+direct or sequenced-excluded — is not stale until `deferred_until` passes
+(polls must not terminalize the planned silent window). Once the marker is
+overdue the job resumes normal staleness so a lost replacement self-heals
+through the poll's run-lease finalizer; for a queued job the overdue marker
+is itself the recovery signal even when earlier retryable failures left
+`attempt`/`started_at` populated. When the chain spends the whole attempt
+contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
+409, and the UID sequencer's sweep terminalizes the abandoned Redis job
+(reason `sync_budget_chain_exhausted`) before releasing its owner. The
+persisted count denotes a successfully scheduled next attempt, not a
+completed one, and the replacement is deliberately delayed past the lease —
+so a still-future `deferred_until` marker keeps the owner until its horizon
+instead of terminalizing the final paid-for delivery as a stale epoch. A
+fence job whose content ledger durably completed before the terminal write
+converges that result instead of failing (`ledger_converged`). The terminal
+handoff is required before the lane advances, retried on transient Redis
+failures and on a terminalization CAS whose re-read still shows a nonterminal
+job, and fenced by an atomically acquired run lock (an unacquirable lock
+retains the owner — the holder's own terminal write always wins) so the
+finalization never races a live attempt.
+
 ### Conversation playback artifact
 
 At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (&lt;90s) stay silence-filled, inter-part gaps (&gt;90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
@@ -5791,8 +5850,8 @@ serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
 to `SYNC_TASKS_QUEUE` when unset), using `SYNC_TASKS_INVOKER_SA`. Production
 integration declares `batch-quarantine-recovery`; the existing backend deploy
-action provisions it before the integration revision, with four concurrent
-dispatches, four dispatches/second and five attempts. This keeps accepted-work
+action provisions it before the integration revision, with 16 concurrent
+dispatches, eight dispatches/second and five attempts. This keeps accepted-work
 recovery independent of legacy sync queue saturation without changing the paid
 intent or provider budget. Dev retains its existing queue. To roll back queue
 isolation, clear `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` on integration; keep
