@@ -26,6 +26,16 @@ PATH = '/v1/dev/user/action-items'
 NOW = datetime(2026, 10, 19, tzinfo=timezone.utc)
 
 
+class Snapshot:
+    __slots__ = ('id', '_row', '_fields')
+
+    def __init__(self, row, fields):
+        self.id, self._row, self._fields = row['id'], row, fields
+
+    def to_dict(self):
+        return {key: value for key, value in self._row.items() if self._fields is None or key in self._fields}
+
+
 class Query:
     def __init__(self, rows, ledger, filters=(), order=None, fields=None, size=None):
         self.rows, self.ledger = rows, ledger
@@ -42,12 +52,12 @@ class Query:
         return self.copy(order=(name, direction))
 
     def select(self, fields):
-        return self.copy(fields=fields)
+        return self.copy(fields=frozenset(fields))
 
     def limit(self, size):
         return self.copy(size=size)
 
-    def matching(self):
+    def matching(self, *, ordered=True):
         rows = self.rows
         for f in self.filters:
 
@@ -67,8 +77,9 @@ class Query:
         if self.order:
             field, direction = self.order
             rows = [row for row in rows if field in row]
-            rows = sorted(rows, key=lambda row: (row[field], row['id']), reverse=direction == 'DESCENDING')
-        else:
+            if ordered:
+                rows = sorted(rows, key=lambda row: (row[field], row['id']), reverse=direction == 'DESCENDING')
+        elif ordered:
             rows = sorted(rows, key=lambda row: row['id'])
         return rows
 
@@ -79,21 +90,13 @@ class Query:
     def stream(self, **kwargs):
         rows = self.matching()[: self.size]
         self.charge(max(1, len(rows)), 'query')
-        return iter(
-            [
-                SimpleNamespace(
-                    id=row['id'],
-                    to_dict=lambda row=row: dict(
-                        {key: value for key, value in row.items() if self.fields is None or key in self.fields}
-                    ),
-                )
-                for row in rows
-            ]
-        )
+        return (Snapshot(row, self.fields) for row in rows)
 
     def count(self):
         def get(**kwargs):
-            size = len(self.matching())
+            # Counts retain filter/order-field existence semantics, but do not
+            # need the stream's document ordering or projected snapshots.
+            size = len(self.matching(ordered=False))
             self.charge(max(1, (size + 999) // 1000), 'aggregation')
             return [[SimpleNamespace(value=size)]]
 
@@ -331,6 +334,34 @@ def test_modeled_filtered_large_and_offset_misses(endpoint, limit, offset, old_r
     new = read(True)
     assert new == old
     assert read_count(state) == new_reads
+
+
+def test_large_canonical_owner_tiny_filtered_subset_exposes_count_overhead(endpoint):
+    _client, state = endpoint
+    state.rows = [row(i, conversation_id='conversation' if i == 0 else 'other') for i in range(2001)]
+
+    def read(probe):
+        budget = ListReadBudget.for_request(None, route='developer-action-items')
+        result = items.get_action_items(
+            'fixture',
+            limit=100,
+            conversation_id='conversation',
+            budget=budget,
+            probe_filtered_legacy=probe,
+        )
+        assert not budget.truncated
+        return result
+
+    old = read(False)
+    assert [item['id'] for item in old] == ['00000']
+    assert state.ledger == [('query', 1), ('query', 1), ('query', 1)]
+    assert read_count(state) == 3
+    state.ledger.clear()
+    new = read(True)
+    assert new == old
+    # Both proof counts bill all 2,001 owner rows, not the one matching row.
+    assert state.ledger == [('query', 1), ('aggregation', 3), ('aggregation', 3), ('query', 1)]
+    assert read_count(state) == 8
 
 
 def test_deleted_saturated_active_prefix_keeps_canonical_refill(endpoint, monkeypatch):

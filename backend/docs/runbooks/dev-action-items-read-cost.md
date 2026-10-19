@@ -57,7 +57,10 @@ hits still reauthorize and issue no list reads. Unfiltered/explicit-completion
 traffic, legacy-containing accounts and saturated active prefixes have no new
 scan saving. Owner-wide count charges grow with the entire collection, including
 rows outside the requested subset; very large owners with tiny filtered windows
-can pay more counts than the avoided scan. The independent probe switch and
+can pay more counts than the avoided scan. A direct-reader fixture with 2,001
+canonical owner rows and one matching conversation row pins this tradeoff:
+3 list reads before versus 8 after (including two 3-read owner-wide counts),
+with identical results. The independent probe switch and
 component metrics support detecting that case. Large limits, offsets and the retained 32-row slack still cost
 reads. The slack participates in the final product sort; simply removing it
 changes page contents. Determining aggregate savings requires new telemetry and
