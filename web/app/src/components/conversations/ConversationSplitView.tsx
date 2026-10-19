@@ -369,13 +369,16 @@ export function ConversationSplitView() {
     async (id: string, starred: boolean) => {
       try {
         await toggleStarred(id, starred);
-        // Refresh the list to update starred status
-        await refresh();
       } catch (error) {
         console.error('Failed to toggle starred:', error);
+        showToast('Failed to update starred status. Please try again.', 'error');
+        // The tile already shows the change; rethrow so it takes it back
+        throw error;
       }
+      // Refresh the list to update starred status
+      await refresh();
     },
-    [refresh],
+    [refresh, showToast],
   );
 
   // Handle folder selection with loading state
