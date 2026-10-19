@@ -132,8 +132,13 @@ async def accept_upload(
     byok_enabled: bool = False,
     intake_context: dict | None = None,
     record_router=None,
+    decode=None,
 ) -> JSONResponse | None:
-    """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    """None preserves a prior legacy receipt; batch outcomes never fall through.
+
+    ``decode(max_seconds)`` replaces WAL decoding of ``paths`` for server-held audio
+    (the cap-hold adapter); it must yield the same ``AudioUnit`` shape.
+    """
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -256,7 +261,11 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
-        iterator = decode_units(paths, max_seconds=config.max_unit_seconds)
+        iterator = (
+            decode(config.max_unit_seconds)
+            if decode is not None
+            else decode_units(paths, max_seconds=config.max_unit_seconds)
+        )
         items = []
         while unit := await run_blocking(sync_executor, _next_unit, iterator):
             if len(items) >= 128:
