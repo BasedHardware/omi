@@ -2581,6 +2581,18 @@ sequenceDiagram
     Note over Pusher: In LOCAL_DEVELOPMENT mode,<br/>GCS upload fails (no prod creds).<br/>Conversation lifecycle still works.
 ```
 
+### Segment failure-reporting boundary
+
+`utils/sync/pipeline.py:process_segment` owns transcription, persistence and
+finalization ordering. Its generic exception handler delegates classification,
+deferred outcomes and bounded diagnostics to `_record_sync_segment_exception`;
+this phase extraction keeps the coordinator within the type analyzer's
+control-flow limit. Existing retry and repeat-failure policy remains in the
+shared classifiers. Assignment supersession, persistence fencing and destructive
+operation exceptions retain their original handling, and turnstile completion
+stays in the coordinator's `finally` block. Failure reporting neither deletes
+retained audio nor starts another provider call.
+
 ### Offline upload status ownership
 
 `GET /v2/sync-local-files/{job_id}` first applies the per-UID hot-loop ceiling
