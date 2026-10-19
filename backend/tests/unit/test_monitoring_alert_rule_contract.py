@@ -1829,3 +1829,15 @@ def test_retired_loki_alerts_cannot_reenter_canonical_sources():
     assert retired_uids.isdisjoint(holds)
     for export_name, rules in _all_rule_exports().items():
         assert retired_uids.isdisjoint(rules), export_name
+
+
+def test_llm_gateway_lane_failure_ratio_excludes_proactive_admission_refusals():
+    # 2026-10-19: proactive-notification per-user/per-item admission caps
+    # (proactivity_admission.call_limit) refuse before any provider call and
+    # must not count as lane failures; other lanes' pre-provider errors still do.
+    for export_name, rules in _all_rule_exports().items():
+        expr = rules["omi-llm-gateway-lane-failure-ratio"]["data"][1]["model"]["expr"]
+        assert (
+            'lane_id="omi:auto:proactive-notification",error_class="invalid_request",provider="none"' in expr
+        ), export_name
+        assert expr.count('outcome!="success"') == 3, export_name

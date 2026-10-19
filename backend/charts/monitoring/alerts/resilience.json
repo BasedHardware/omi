@@ -1266,7 +1266,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
+          "expr": "(sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) - (sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\",lane_id=\"omi:auto:proactive-notification\",error_class=\"invalid_request\",provider=\"none\"}[1h])) or sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) * 0)) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1345,7 +1345,7 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "13",
       "summary": "One gateway lane is failing more than a quarter of its real requests over an hour",
-      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane",
+      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane. Excludes omi:auto:proactive-notification pre-provider invalid_request refusals (error_class=invalid_request, provider=none: proactivity_admission.call_limit per-user/per-item caps, no provider call, no cost; ~47/h on 2026-10-19).",
       "user_impact": "The Omi capability served by this lane may be unavailable or degraded for the users who reach it.",
       "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
       "verification": "Confirm the failing lane and its provider rejection class in the linked panel before intervention.",
