@@ -9351,9 +9351,7 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ಇನ್ನೂ $count';
-  }
+  String get quoteShowSources => 'ಮೂಲಗಳನ್ನು ತೋರಿಸಿ';
 
   @override
   String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';

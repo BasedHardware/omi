@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Izmēģiniet tiešraides transkribēšanu, jautājuma uzdošanu un divkāršā pieskiciena saīsni.",
     "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
     "quoteJumpToTime": "Pāriet uz {duration}",
-    "quoteMoreTimestamps": "+ vēl {count}",
+    "quoteShowSources": "Rādīt avotus",
     "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
     "latest": "Jaunākais",
     "flashFirmware": "Instalēt aparātprogrammatūru",

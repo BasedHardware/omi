@@ -3043,7 +3043,7 @@
     "deviceOnboardingIntroSubtitle": "Coba transkripsi langsung, mengajukan pertanyaan, dan pintasan ketuk dua kali.",
     "deviceOnboardingIntroDuration": "Sekitar 1 menit",
     "quoteJumpToTime": "Lompat ke {duration}",
-    "quoteMoreTimestamps": "+{count} lainnya",
+    "quoteShowSources": "Tampilkan sumber",
     "jumpToLatestMessage": "Lompat ke pesan terbaru",
     "latest": "Terbaru",
     "flashFirmware": "Flash Firmware",

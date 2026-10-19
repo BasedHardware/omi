@@ -9171,9 +9171,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+另外$count个';
-  }
+  String get quoteShowSources => '显示来源';
 
   @override
   String get jumpToLatestMessage => '跳转到最新消息';

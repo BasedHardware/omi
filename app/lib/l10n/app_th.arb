@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "ลองการถอดเสียงสด การถามคำถาม และทางลัดแตะสองครั้ง",
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
     "quoteJumpToTime": "ข้ามไปที่ {duration}",
-    "quoteMoreTimestamps": "+อีก {count}",
+    "quoteShowSources": "แสดงแหล่งที่มา",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
     "latest": "ล่าสุด",
     "flashFirmware": "แฟลชเฟิร์มแวร์",

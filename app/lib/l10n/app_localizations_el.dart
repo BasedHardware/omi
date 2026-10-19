@@ -9386,9 +9386,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count ακόμη';
-  }
+  String get quoteShowSources => 'Εμφάνιση πηγών';
 
   @override
   String get jumpToLatestMessage => 'Μετάβαση στο πιο πρόσφατο μήνυμα';

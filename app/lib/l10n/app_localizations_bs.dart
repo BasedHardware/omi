@@ -9343,9 +9343,7 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ još $count';
-  }
+  String get quoteShowSources => 'Prikaži izvore';
 
   @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';

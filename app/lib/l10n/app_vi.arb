@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Hãy thử chuyển giọng nói thành văn bản trực tiếp, đặt câu hỏi và phím tắt chạm đúp.",
     "deviceOnboardingIntroDuration": "Khoảng 1 phút",
     "quoteJumpToTime": "Chuyển đến {duration}",
-    "quoteMoreTimestamps": "+{count} nữa",
+    "quoteShowSources": "Hiện nguồn",
     "jumpToLatestMessage": "Đi đến tin nhắn mới nhất",
     "latest": "Mới nhất",
     "flashFirmware": "Nạp firmware",

@@ -9318,9 +9318,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count مورد دیگر';
-  }
+  String get quoteShowSources => 'نمایش منابع';
 
   @override
   String get jumpToLatestMessage => 'پرش به آخرین پیام';

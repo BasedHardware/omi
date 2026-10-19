@@ -9250,9 +9250,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count נוספים';
-  }
+  String get quoteShowSources => 'הצגת מקורות';
 
   @override
   String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';

@@ -9403,9 +9403,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count de plus';
-  }
+  String get quoteShowSources => 'Afficher les sources';
 
   @override
   String get jumpToLatestMessage => 'Aller au dernier message';

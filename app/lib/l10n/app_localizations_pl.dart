@@ -9346,9 +9346,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count więcej';
-  }
+  String get quoteShowSources => 'Pokaż źródła';
 
   @override
   String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';

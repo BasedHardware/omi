@@ -2999,7 +2999,7 @@
     "deviceOnboardingIntroSubtitle": "Vyzkoušejte živý přepis, kladení otázek a zkratku dvojitým klepnutím.",
     "deviceOnboardingIntroDuration": "Přibližně 1 minuta",
     "quoteJumpToTime": "Přejít na {duration}",
-    "quoteMoreTimestamps": "+{count} dalších",
+    "quoteShowSources": "Zobrazit zdroje",
     "jumpToLatestMessage": "Přejít na nejnovější zprávu",
     "latest": "Nejnovější",
     "flashFirmware": "Nahrát firmware",

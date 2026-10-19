@@ -9356,9 +9356,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ ещё $count';
-  }
+  String get quoteShowSources => 'Показать источники';
 
   @override
   String get jumpToLatestMessage => 'Перейти к последнему сообщению';

@@ -2999,7 +2999,7 @@
     "deviceOnboardingIntroSubtitle": "جرّب النسخ المباشر، وطرح سؤال، واختصار النقر المزدوج.",
     "deviceOnboardingIntroDuration": "حوالي دقيقة واحدة",
     "quoteJumpToTime": "انتقل إلى {duration}",
-    "quoteMoreTimestamps": "+{count} أخرى",
+    "quoteShowSources": "عرض المصادر",
     "jumpToLatestMessage": "الانتقال إلى أحدث رسالة",
     "latest": "الأحدث",
     "flashFirmware": "تحديث البرنامج الثابت",

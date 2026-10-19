@@ -9404,9 +9404,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count pa';
-  }
+  String get quoteShowSources => 'Ipakita ang mga pinagmulan';
 
   @override
   String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';

@@ -9314,9 +9314,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ veel $count';
-  }
+  String get quoteShowSources => 'Näita allikaid';
 
   @override
   String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
