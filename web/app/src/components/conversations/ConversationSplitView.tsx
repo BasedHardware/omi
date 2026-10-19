@@ -139,6 +139,7 @@ export function ConversationSplitView() {
       startDate?: Date;
       endDate?: Date;
       folderId?: string;
+      starred?: boolean;
     } = {};
 
     if (filterDate) {
@@ -157,6 +158,12 @@ export function ConversationSplitView() {
       selectedFolderId !== FOLDER_STARRED
     ) {
       params.folderId = selectedFolderId;
+    }
+
+    // Starred conversations come from the server: older ones are not on the
+    // pages already loaded for All.
+    if (selectedFolderId === FOLDER_STARRED) {
+      params.starred = true;
     }
 
     return params;
@@ -271,7 +278,8 @@ export function ConversationSplitView() {
   // Determine if we're showing search results or regular list
   const isSearching = submittedSearchQuery.length > 0;
 
-  // Filter conversations for the starred folder (client-side, like folders' All)
+  // The Starred list is fetched starred-only, but search results (and the previous
+  // tab's page while that fetch is in flight) are not, so keep filtering here.
   const visibleConversations = useMemo(() => {
     const source = isSearching ? searchResults : conversations;
     if (selectedFolderId === FOLDER_STARRED) {
@@ -385,16 +393,8 @@ export function ConversationSplitView() {
   const handleFolderSelect = useCallback(
     (folderId: string) => {
       if (folderId !== selectedFolderId) {
-        // Starred filter is client-side only, no loading needed
-        // Also, switching between All and Starred doesn't need API call
-        const isClientSideSwitch =
-          (folderId === FOLDER_STARRED || selectedFolderId === FOLDER_STARRED) &&
-          (folderId === FOLDER_ALL || folderId === FOLDER_STARRED) &&
-          (selectedFolderId === FOLDER_ALL || selectedFolderId === FOLDER_STARRED);
-
-        if (!isClientSideSwitch) {
-          setFolderSwitching(true);
-        }
+        // Every tab, Starred included, loads its own list from the server
+        setFolderSwitching(true);
         setSelectedFolderId(folderId);
       }
     },
