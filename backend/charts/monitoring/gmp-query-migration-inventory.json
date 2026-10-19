@@ -1207,6 +1207,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_reason_total",
+        "omi_reason_unknown_total"
+      ],
+      "owner_title": "Reason enums - unknown reason ratio elevated",
+      "owner_uid": "omi-reason-unknown-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
       "file": "alerts/transcription-services.json",
       "issues": [
@@ -2931,7 +2945,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 191
+    "query_consumers": 192
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
