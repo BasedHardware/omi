@@ -14430,4 +14430,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿದಿದೆ';
 }

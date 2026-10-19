@@ -14445,4 +14445,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved din $total audio salvat';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi încă înregistrează';
 }

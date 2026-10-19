@@ -14384,4 +14384,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Đã lưu $saved trên $total âm thanh';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi vẫn đang ghi âm';
 }

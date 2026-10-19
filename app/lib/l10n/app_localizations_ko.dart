@@ -14185,4 +14185,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '오디오 $saved 저장됨 (전체 $total)';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi에서 계속 녹음 중';
 }

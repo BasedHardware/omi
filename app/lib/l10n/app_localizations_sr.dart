@@ -14391,4 +14391,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Сачувано $saved од $total аудија';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi i dalje snima';
 }

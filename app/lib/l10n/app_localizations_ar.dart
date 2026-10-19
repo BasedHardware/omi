@@ -14303,4 +14303,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'تم حفظ $saved من $total من الصوت';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'لا يزال التسجيل جاريًا على Omi';
 }

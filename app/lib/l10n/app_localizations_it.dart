@@ -14460,4 +14460,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Salvati $saved di $total di audio';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi continua a registrare';
 }

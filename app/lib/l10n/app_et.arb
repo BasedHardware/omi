@@ -4381,5 +4381,6 @@
     "processingProgress": "Sinu ootel salvestiste töötlemine…",
     "processingDeferred": "Ootab töötlemist",
     "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}",
-    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist"
+    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist",
+    "activityAttentionLinkStalledSubtitle": "Omi salvestab edasi"
 }

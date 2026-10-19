@@ -14419,4 +14419,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved daripada $total audio disimpan';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi masih merakam';
 }

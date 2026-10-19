@@ -14458,4 +14458,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'S\'han desat $saved de $total d\'àudio';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi continua enregistrant';
 }

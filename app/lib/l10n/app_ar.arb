@@ -4381,5 +4381,6 @@
     "processingProgress": "جارٍ معالجة تسجيلاتك المنتظرة…",
     "processingDeferred": "في انتظار المعالجة",
     "processingCount": "{count, plural, =1{محادثة واحدة قيد الانتظار} other{{count} محادثات قيد الانتظار}}",
-    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت"
+    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت",
+    "activityAttentionLinkStalledSubtitle": "لا يزال التسجيل جاريًا على Omi"
 }

@@ -4381,5 +4381,6 @@
     "processingProgress": "Käsitellään odottavia tallenteitasi…",
     "processingDeferred": "Odottaa käsittelyä",
     "processingCount": "{count, plural, =1{1 keskustelu odottaa} other{{count} keskustelua odottaa}}",
-    "playbackPartialAudioSaved": "Ääntä tallennettu {saved} / {total}"
+    "playbackPartialAudioSaved": "Ääntä tallennettu {saved} / {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi tallentaa edelleen"
 }

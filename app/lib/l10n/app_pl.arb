@@ -4416,5 +4416,6 @@
     "processingProgress": "Przetwarzanie oczekujących nagrań…",
     "processingDeferred": "Oczekuje na przetworzenie",
     "processingCount": "{count, plural, =1{1 rozmowa oczekuje} other{{count} rozmów oczekuje}}",
-    "playbackPartialAudioSaved": "Zapisano {saved} z {total} dźwięku"
+    "playbackPartialAudioSaved": "Zapisano {saved} z {total} dźwięku",
+    "activityAttentionLinkStalledSubtitle": "Omi nadal nagrywa"
 }

@@ -11807,5 +11807,6 @@
     "processingProgress": "तुमच्या प्रतीक्षेतील रेकॉर्डिंगवर प्रक्रिया होत आहे…",
     "processingDeferred": "प्रक्रियेच्या प्रतीक्षेत",
     "processingCount": "{count, plural, =1{1 संभाषण प्रतीक्षेत} other{{count} संभाषणे प्रतीक्षेत}}",
-    "playbackPartialAudioSaved": "{saved} ऑडिओ जतन केला, एकूण {total}"
+    "playbackPartialAudioSaved": "{saved} ऑडिओ जतन केला, एकूण {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi वर रेकॉर्डिंग सुरू आहे"
 }

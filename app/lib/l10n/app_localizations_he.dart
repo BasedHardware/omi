@@ -14281,4 +14281,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'נשמרו $saved מתוך $total של אודיו';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi ממשיך להקליט';
 }

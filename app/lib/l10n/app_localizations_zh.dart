@@ -14159,4 +14159,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '已保存 $saved / $total 的音频';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi 仍在录音';
 }

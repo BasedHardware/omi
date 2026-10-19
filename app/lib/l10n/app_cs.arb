@@ -4381,5 +4381,6 @@
     "processingProgress": "Zpracovávání čekajících nahrávek…",
     "processingDeferred": "Čeká na zpracování",
     "processingCount": "{count, plural, =1{1 čekající konverzace} other{{count} čekajících konverzací}}",
-    "playbackPartialAudioSaved": "Uloženo {saved} z {total} zvuku"
+    "playbackPartialAudioSaved": "Uloženo {saved} z {total} zvuku",
+    "activityAttentionLinkStalledSubtitle": "Omi stále nahrává"
 }

@@ -217,6 +217,7 @@ void main() {
       final baseline = pushes.count;
       expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
       expect(find.text("Omi isn't sending audio"), findsOneWidget);
+      expect(find.text('Still recording on your Omi'), findsOneWidget);
       final retriesBefore = bleRetries;
 
       await tester.tap(find.text('Reconnect'));
@@ -227,6 +228,22 @@ void main() {
           reason: 'the row leaves while the retry runs');
       held.complete();
       await tester.pump();
+    });
+
+    testWidgets('an open storage episode does not hide a pendant stall', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor);
+      for (var i = 0; i < 3; i++) {
+        final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+        monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+      }
+      await tester.pump();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(monitor.acuteEpisode?.deviceId, 'dev-a');
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
     });
 
     testWidgets('an exhausted ingress recovery row explains, with no retry and no saved-audio claim', (tester) async {
@@ -248,7 +265,7 @@ void main() {
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
       expect(find.text('Reconnect'), findsNothing, reason: 'a Dart-side retry would no-op');
-      expect(find.textContaining('transcribes when it recovers'), findsNothing);
+      expect(find.text('Still recording on your Omi'), findsNothing, reason: 'INV-CAP-1: no audio-saved claim');
 
       await tester.tap(find.byKey(const Key('activity_attention_capture_link')));
       await tester.pumpAndSettle();

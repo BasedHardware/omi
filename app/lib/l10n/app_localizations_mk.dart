@@ -14449,4 +14449,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Зачувано $saved од $total аудио';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi продолжува да снима';
 }

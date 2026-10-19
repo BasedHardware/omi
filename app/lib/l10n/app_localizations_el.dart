@@ -14478,4 +14478,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Αποθηκεύτηκαν $saved από $total ήχου';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Το Omi συνεχίζει την εγγραφή';
 }

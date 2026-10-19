@@ -11807,5 +11807,6 @@
     "processingProgress": "آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…",
     "processingDeferred": "پروسیسنگ کی منتظر",
     "processingCount": "{count, plural, =1{1 گفتگو منتظر} other{{count} گفتگوئیں منتظر}}",
-    "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}"
+    "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi پر ریکارڈنگ جاری ہے"
 }

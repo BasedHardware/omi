@@ -14379,4 +14379,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved অডিও সংরক্ষিত, মোট $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi-তে এখনও রেকর্ড হচ্ছে';
 }

@@ -14379,4 +14379,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Uložené $saved z $total zvuku';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi stále nahráva';
 }

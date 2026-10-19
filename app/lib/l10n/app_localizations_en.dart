@@ -14368,4 +14368,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved of $total audio saved';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Still recording on your Omi';
 }

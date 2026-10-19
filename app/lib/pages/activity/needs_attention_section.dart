@@ -139,7 +139,7 @@ class NeedsAttentionSection extends StatelessWidget {
                       key: const Key('activity_attention_capture_link'),
                       icon: Icons.bluetooth_disabled,
                       title: ingressFailure ? l.captureIngressNeedsReconnect : l.captureRecoveryBannerTitle,
-                      subtitle: ingressFailure ? '' : l.captureLinkStalledTranscribesLater,
+                      subtitle: ingressFailure ? '' : l.activityAttentionLinkStalledSubtitle,
                       actionLabel: ingressFailure ? null : l.reconnect,
                       onTap: ingressFailure
                           ? () => LiveCaptureCard.showDetails(context,

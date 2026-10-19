@@ -4416,5 +4416,6 @@
     "processingProgress": "Обработка ожидающих записей…",
     "processingDeferred": "Ожидает обработки",
     "processingCount": "{count, plural, =1{1 разговор в ожидании} other{{count} разговоров в ожидании}}",
-    "playbackPartialAudioSaved": "Сохранено {saved} из {total} аудио"
+    "playbackPartialAudioSaved": "Сохранено {saved} из {total} аудио",
+    "activityAttentionLinkStalledSubtitle": "Omi продолжает запись"
 }

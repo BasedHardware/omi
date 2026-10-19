@@ -14397,4 +14397,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Sesin $saved kadarı kaydedildi (toplam $total)';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi kayda devam ediyor';
 }

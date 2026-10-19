@@ -14392,4 +14392,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved av $total ljud sparat';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi spelar fortfarande in';
 }

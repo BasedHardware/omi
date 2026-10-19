@@ -93,7 +93,7 @@ class CaptureRecoveryStatus extends StatelessWidget {
                           ),
                           if (!isIngressFailure)
                             ExcludeSemantics(
-                              child: Text('  ·', style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                              child: Text(' ·', style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                             ),
                         ],
                       ),

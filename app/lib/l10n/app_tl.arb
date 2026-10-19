@@ -11807,5 +11807,6 @@
     "processingProgress": "Pinoproseso ang iyong naghihintay na mga recording…",
     "processingDeferred": "Naghihintay ng pagproseso",
     "processingCount": "{count, plural, =1{1 pag-uusap ang naghihintay} other{{count} pag-uusap ang naghihintay}}",
-    "playbackPartialAudioSaved": "{saved} sa {total} ng audio ang na-save"
+    "playbackPartialAudioSaved": "{saved} sa {total} ng audio ang na-save",
+    "activityAttentionLinkStalledSubtitle": "Patuloy na nagre-record ang Omi"
 }

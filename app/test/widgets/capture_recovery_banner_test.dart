@@ -338,6 +338,26 @@ void main() {
       storage.dispose();
     });
 
+    testWidgets('a pendant stall outranks an open storage episode, and Reconnect retries the link', (tester) async {
+      var bleRetries = 0;
+      var transferRetries = 0;
+      final monitor = makeMonitor(bleRetry: (_) async => bleRetries++, transferRetry: () async => transferRetries++);
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      wedge(monitor);
+
+      await pumpStatus(tester, monitor);
+      final context = tester.element(find.byType(CaptureRecoveryStatus));
+      expect(find.text(AppLocalizations.of(context).captureRecoveryBannerTitle), findsOneWidget);
+      final ble = bleRetries;
+      final transfer = transferRetries;
+
+      await tester.tap(find.byKey(const Key('capture_recovery_status_retry')));
+      await tester.pump();
+      expect(bleRetries, ble + 1, reason: 'Reconnect retries the stalled link');
+      expect(transferRetries, transfer, reason: 'not the storage transfer behind it');
+    });
+
     testWidgets('stays hidden for a phone capture source', (tester) async {
       final monitor = makeMonitor();
       zeroSession(monitor, source: 'phone');

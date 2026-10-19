@@ -4381,5 +4381,6 @@
     "processingProgress": "กำลังประมวลผลบันทึกที่รออยู่…",
     "processingDeferred": "รอประมวลผล",
     "processingCount": "{count, plural, =1{1 การสนทนารออยู่} other{{count} การสนทนารออยู่}}",
-    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}"
+    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi ยังคงบันทึกอยู่"
 }

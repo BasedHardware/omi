@@ -14423,4 +14423,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved van $total audio opgeslagen';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi neemt nog steeds op';
 }

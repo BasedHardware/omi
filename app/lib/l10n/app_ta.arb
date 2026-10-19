@@ -11807,5 +11807,6 @@
     "processingProgress": "உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…",
     "processingDeferred": "செயலாக்கத்திற்குக் காத்திருக்கிறது",
     "processingCount": "{count, plural, =1{1 உரையாடல் காத்திருக்கிறது} other{{count} உரையாடல்கள் காத்திருக்கின்றன}}",
-    "playbackPartialAudioSaved": "{saved} ஆடியோ சேமிக்கப்பட்டது, மொத்தம் {total}"
+    "playbackPartialAudioSaved": "{saved} ஆடியோ சேமிக்கப்பட்டது, மொத்தம் {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi-இல் பதிவு தொடர்கிறது"
 }

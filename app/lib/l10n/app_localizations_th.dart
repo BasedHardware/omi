@@ -14311,4 +14311,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'บันทึกเสียงแล้ว $saved จาก $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi ยังคงบันทึกอยู่';
 }

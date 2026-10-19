@@ -14367,4 +14367,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ऑडियो सहेजा गया, कुल $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi पर रिकॉर्डिंग जारी है';
 }

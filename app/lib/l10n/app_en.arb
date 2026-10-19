@@ -17513,5 +17513,9 @@
                 "type": "String"
             }
         }
+    },
+    "activityAttentionLinkStalledSubtitle": "Still recording on your Omi",
+    "@activityAttentionLinkStalledSubtitle": {
+        "description": "Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage"
     }
 }

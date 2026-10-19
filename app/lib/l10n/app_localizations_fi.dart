@@ -14388,4 +14388,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Ääntä tallennettu $saved / $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi tallentaa edelleen';
 }

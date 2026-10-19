@@ -4381,5 +4381,6 @@
     "processingProgress": "Behandler ventende opptak…",
     "processingDeferred": "Venter på behandling",
     "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
-    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret"
+    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret",
+    "activityAttentionLinkStalledSubtitle": "Omi tar fortsatt opp"
 }

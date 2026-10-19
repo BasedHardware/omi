@@ -4381,5 +4381,6 @@
     "processingProgress": "S'estan processant les gravacions pendents…",
     "processingDeferred": "En espera de processament",
     "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}",
-    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio"
+    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio",
+    "activityAttentionLinkStalledSubtitle": "Omi continua enregistrant"
 }

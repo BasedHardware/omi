@@ -11807,5 +11807,6 @@
     "processingProgress": "Obrada vaših snimaka na čekanju…",
     "processingDeferred": "Čeka obradu",
     "processingCount": "{count, plural, =1{1 razgovor na čekanju} other{{count} razgovora na čekanju}}",
-    "playbackPartialAudioSaved": "Sačuvano {saved} od {total} audija"
+    "playbackPartialAudioSaved": "Sačuvano {saved} od {total} audija",
+    "activityAttentionLinkStalledSubtitle": "Omi i dalje snima"
 }

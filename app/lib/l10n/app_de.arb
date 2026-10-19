@@ -4381,5 +4381,6 @@
     "processingProgress": "Deine wartenden Aufnahmen werden verarbeitet…",
     "processingDeferred": "Wartet auf Verarbeitung",
     "processingCount": "{count, plural, =1{1 Gespräch wartet} other{{count} Gespräche warten}}",
-    "playbackPartialAudioSaved": "{saved} von {total} Audio gespeichert"
+    "playbackPartialAudioSaved": "{saved} von {total} Audio gespeichert",
+    "activityAttentionLinkStalledSubtitle": "Omi nimmt weiter auf"
 }

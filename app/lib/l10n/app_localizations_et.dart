@@ -14376,4 +14376,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Salvestatud $saved / $total helist';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi salvestab edasi';
 }

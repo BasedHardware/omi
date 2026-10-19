@@ -14482,4 +14482,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ஆடியோ சேமிக்கப்பட்டது, மொத்தம் $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi-இல் பதிவு தொடர்கிறது';
 }

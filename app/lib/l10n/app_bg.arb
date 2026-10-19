@@ -4381,5 +4381,6 @@
     "processingProgress": "Обработване на чакащите ви записи…",
     "processingDeferred": "Чака обработка",
     "processingCount": "{count, plural, =1{1 чакащ разговор} other{{count} чакащи разговора}}",
-    "playbackPartialAudioSaved": "Запазени {saved} от {total} аудио"
+    "playbackPartialAudioSaved": "Запазени {saved} от {total} аудио",
+    "activityAttentionLinkStalledSubtitle": "Omi продължава да записва"
 }

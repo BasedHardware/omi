@@ -14407,4 +14407,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Išsaugota $saved iš $total garso';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi vis dar įrašo';
 }

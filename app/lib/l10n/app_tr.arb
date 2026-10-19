@@ -4416,5 +4416,6 @@
     "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
     "processingDeferred": "İşlenmeyi bekliyor",
     "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
-    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})"
+    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})",
+    "activityAttentionLinkStalledSubtitle": "Omi kayda devam ediyor"
 }

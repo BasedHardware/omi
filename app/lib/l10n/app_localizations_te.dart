@@ -14443,4 +14443,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omiలో రికార్డింగ్ కొనసాగుతోంది';
 }

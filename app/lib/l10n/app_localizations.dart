@@ -25478,6 +25478,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{saved} of {total} audio saved'**
   String playbackPartialAudioSaved(String saved, String total);
+
+  /// Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording on your Omi'**
+  String get activityAttentionLinkStalledSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

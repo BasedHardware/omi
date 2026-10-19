@@ -14179,4 +14179,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '音声を $saved 保存済み（全体 $total）';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi で録音を続けています';
 }

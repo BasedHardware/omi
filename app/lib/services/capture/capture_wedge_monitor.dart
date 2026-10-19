@@ -148,8 +148,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// storage episode shares the prompt slot but is slow-burn: it has its own
   /// [storageAtRisk] row, so it is not acute.
   CaptureWedgeEpisode? get acuteEpisode {
-    final episode = visiblePrompt;
-    return episode == null || episode.trigger == triggerStorageAtRisk ? null : episode;
+    // Every device, not just [visiblePrompt]'s first hit: an open storage episode on the local
+    // WAL must not hide a pendant stall behind it.
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.promptVisible && episode.trigger != triggerStorageAtRisk) return episode;
+    }
+    return null;
   }
 
   bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
@@ -647,7 +652,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     }
   }
 
+  /// The episode the reader is asked about. An acute link episode outranks a storage episode:
+  /// it is the one the live page's header and Reconnect speak for, and its retry must not land
+  /// on the storage transfer instead. Map order alone would pick whichever device came first.
   CaptureWedgeEpisode? get visiblePrompt {
+    final acute = acuteEpisode;
+    if (acute != null) return acute;
     for (final state in _devices.values) {
       final episode = state.episode;
       if (episode != null && episode.promptVisible) return episode;

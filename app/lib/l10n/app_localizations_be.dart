@@ -14419,4 +14419,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Захавана $saved з $total аўдыя';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi працягвае запіс';
 }

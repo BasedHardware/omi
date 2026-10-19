@@ -14378,4 +14378,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved از $total صدا ذخیره شد';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi همچنان در حال ضبط است';
 }

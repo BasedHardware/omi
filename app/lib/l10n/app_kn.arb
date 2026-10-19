@@ -11807,5 +11807,6 @@
     "processingProgress": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…",
     "processingDeferred": "ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
     "processingCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಕಾಯುತ್ತಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳು ಕಾಯುತ್ತಿವೆ}}",
-    "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}"
+    "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}",
+    "activityAttentionLinkStalledSubtitle": "Omi ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿದಿದೆ"
 }

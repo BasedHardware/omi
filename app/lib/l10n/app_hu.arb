@@ -4477,5 +4477,6 @@
     "processingProgress": "A várakozó felvételeid feldolgozása…",
     "processingDeferred": "Feldolgozásra vár",
     "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
-    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve"
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve",
+    "activityAttentionLinkStalledSubtitle": "Az Omi tovább rögzít"
 }

@@ -14442,4 +14442,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved / $total hang elmentve';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Az Omi tovább rögzít';
 }

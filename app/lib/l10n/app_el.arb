@@ -4381,5 +4381,6 @@
     "processingProgress": "Γίνεται επεξεργασία των εγγραφών σε αναμονή…",
     "processingDeferred": "Σε αναμονή επεξεργασίας",
     "processingCount": "{count, plural, =1{1 συνομιλία σε αναμονή} other{{count} συνομιλίες σε αναμονή}}",
-    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου"
+    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",
+    "activityAttentionLinkStalledSubtitle": "Το Omi συνεχίζει την εγγραφή"
 }
