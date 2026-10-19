@@ -603,6 +603,64 @@ void main() {
     expect(withoutPackets['unresolved_outage_open'], isTrue);
   });
 
+  test('unbacked audio recovery is not imported and its persisted day is dropped', () async {
+    const id = 'stale-false-recovery';
+    final falseDay = DateTime(2026, 10, 14, 10);
+    final backedDay = DateTime(2026, 10, 15, 12);
+    await DeviceHealthTelemetry.recordOutage(id, at: falseDay);
+    await DeviceHealthTelemetry.recordRecovery(id, at: falseDay.add(const Duration(hours: 2)));
+    await DeviceHealthTelemetry.recordOutage(id, at: backedDay);
+    await DeviceHealthTelemetry.recordRecovery(id, at: backedDay.add(const Duration(seconds: 60)));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-13');
+    final backedStart = backedDay.millisecondsSinceEpoch;
+    final falseStart = falseDay.millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'timestamp': falseStart,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': falseStart + 2 * 3600000,
+                },
+                {
+                  'timestamp': backedStart,
+                  'eventType': 'disconnect',
+                  'lostAudioResolvedAt': backedStart + 60000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.map((e) => e['day']), ['2026-10-15']);
+    expect(events.single['lost_audio_seconds'], 60);
+  });
+
+  test('audio recovery backed by a disconnect is imported', () async {
+    const id = 'backed-audio-recovered';
+    final start = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {'timestamp': start, 'eventType': 'disconnect'},
+                {
+                  'timestamp': start + 1000,
+                  'eventType': 'audio_recovered',
+                  'lostAudioResolvedAt': start + 61000,
+                },
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 60);
+  });
+
   test('sign-out sends native retirement before subsequent recording', () async {
     final policies = <Map>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

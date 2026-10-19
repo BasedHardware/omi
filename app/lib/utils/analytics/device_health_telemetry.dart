@@ -450,6 +450,41 @@ class DeviceHealthTelemetry {
     return evidence;
   }
 
+  /// Android writes a restored session start as `audio_recovered`. That row is
+  /// billable only when some disconnect in [history] is the same moment.
+  static bool _isUnbackedAudioRecovery(Map event, List<Map> history) {
+    if (event['eventType'] != 'audio_recovered') return false;
+    final start = event['timestamp'];
+    if (start is! num || event['lostAudioResolvedAt'] == null) return false;
+    for (final row in history) {
+      if (row['eventType'] != 'disconnect') continue;
+      final ts = row['timestamp'];
+      if (ts is num && (ts - start).abs() <= 5000) return false;
+    }
+    return true;
+  }
+
+  static bool _recoveryOverlapsDay(Map event, int dayStart) {
+    final start = event['timestamp'];
+    final resolved = event['lostAudioResolvedAt'];
+    if (start is! num || resolved is! num) return false;
+    final begin = start <= resolved ? start : resolved;
+    final end = start <= resolved ? resolved : start;
+    return begin < dayStart + 86400000 && end > dayStart;
+  }
+
+  static Future<void> _dropResolvedDaysWithoutRecovery(String id, List<Map> recoveries, DateTime at) =>
+      _writeOutage(id, (record, now) {
+        final days = Map<String, dynamic>.from(record['resolved_days'] as Map? ?? {});
+        if (days.isEmpty) return;
+        days.removeWhere((dayKey, _) {
+          final day = int.tryParse(dayKey);
+          if (day == null) return false;
+          return !recoveries.any((event) => _recoveryOverlapsDay(event, day));
+        });
+        record['resolved_days'] = days;
+      }, at);
+
   static Future<void> maybeEmit(
     BtDevice device, {
     DateTime? now,
@@ -488,16 +523,37 @@ class DeviceHealthTelemetry {
       }
       // Import native starts/recoveries missed while Dart was suspended. Native
       // retains the first start, even across failed reconnects and process death.
-      final recoveries = (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList()
-        ..sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
-      for (final event in recoveries) {
+      // An `audio_recovered` row is billable only when a measured disconnect in
+      // this payload backs it. Sanitized history omits session-start echoes, and
+      // a recovery whose timestamp is not here must not be imported.
+      final historyValue = diagnostics['disconnect_history_v2'];
+      final historyPresent = historyValue is List;
+      final history =
+          (historyValue as List? ?? []).whereType<Map>().map((event) => Map<String, dynamic>.from(event)).toList();
+      final keptHistory = <Map<String, dynamic>>[];
+      final backedRecoveries = <Map<String, dynamic>>[];
+      for (final event in history) {
+        if (_isUnbackedAudioRecovery(event, history)) continue;
+        keptHistory.add(event);
+        if (event['lostAudioResolvedAt'] != null && event['timestamp'] != null) backedRecoveries.add(event);
+      }
+      if (historyPresent) diagnostics['disconnect_history_v2'] = keptHistory;
+      final stampStart = diagnostics['audio_outage_resolved_start'] as num?;
+      final stampAt = diagnostics['audio_outage_resolved_at'] as num?;
+      if (stampStart != null && stampStart > 0 && stampAt != null && stampAt > 0) {
+        backedRecoveries.add({'timestamp': stampStart, 'lostAudioResolvedAt': stampAt});
+      }
+      // A previous build may already have summed a session-start echo into
+      // per-day totals. Drop a day the sanitized history no longer backs.
+      // Days with no native snapshot are left alone.
+      if (historyPresent) await _dropResolvedDaysWithoutRecovery(device.id, backedRecoveries, now);
+      keptHistory.sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
+      for (final event in keptHistory) {
         final recovered = event['lostAudioResolvedAt'] as num?;
         final start = event['timestamp'] as num?;
         if (recovered == null || start == null) continue;
         await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered.toInt()));
       }
-      final stampStart = diagnostics['audio_outage_resolved_start'] as num?;
-      final stampAt = diagnostics['audio_outage_resolved_at'] as num?;
       if (stampStart != null && stampStart > 0 && stampAt != null && stampAt > 0) {
         await _resolveOutage(device.id,
             nativeStart: stampStart.toInt(), at: DateTime.fromMillisecondsSinceEpoch(stampAt.toInt()));

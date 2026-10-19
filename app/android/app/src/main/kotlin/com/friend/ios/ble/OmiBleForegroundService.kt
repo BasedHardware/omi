@@ -192,8 +192,9 @@ class OmiBleForegroundService : Service() {
     fun beginDeviceHealthSessions() {
         for ((addr, managed) in managedDevices) {
             if (managed.currentAttemptEstablished) {
-                healthSessions.start(addr, System.currentTimeMillis(), DeviceHealthPersistence.build(this))
+                // Prove a session-start echo against the row start() is about to replace.
                 discardUnmeasuredAudioOutage(addr)
+                healthSessions.start(addr, System.currentTimeMillis(), DeviceHealthPersistence.build(this))
             }
         }
     }
@@ -223,8 +224,8 @@ class OmiBleForegroundService : Service() {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.pendingReconnect = null
             managed.connectionStartTime = System.currentTimeMillis()
-            healthSessions.start(addr, managed.connectionStartTime!!, DeviceHealthPersistence.build(this@OmiBleForegroundService))
             discardUnmeasuredAudioOutage(addr)
+            healthSessions.start(addr, managed.connectionStartTime!!, DeviceHealthPersistence.build(this@OmiBleForegroundService))
             bleManager.lastRssi.remove(addr)
             bleManager.rssiHistory.remove(addr)
             // The charging flag comes only from firmware diagnostics reads, and
@@ -552,8 +553,8 @@ class OmiBleForegroundService : Service() {
         managed.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
         managed.hasEverConnected = true
         managed.currentAttemptEstablished = true
-        healthSessions.start(addr, System.currentTimeMillis(), DeviceHealthPersistence.build(this))
         discardUnmeasuredAudioOutage(addr)
+        healthSessions.start(addr, System.currentTimeMillis(), DeviceHealthPersistence.build(this))
         updateNotification("Connected to Omi")
         notifyReadyForConnectedGatt(addr)
     }
@@ -977,20 +978,28 @@ class OmiBleForegroundService : Service() {
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
     private fun failToConnectKey(address: String) = "${KEY_FAIL_TO_CONNECT_COUNT}_${address.uppercase()}"
 
-    /** A session start persisted across process death has no disconnect row. Drop it at reconnect. */
+    /**
+     * Drop a marker only when the current session row proves it is that session's start.
+     * Missing, pruned, or unreadable disconnect history is not that proof.
+     */
     private fun discardUnmeasuredAudioOutage(address: String) {
         synchronized(DeviceHealthPersistence) {
             if (!DeviceHealthPersistence.enabled(this)) return
             val addr = address.uppercase()
             val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
             val key = historyKey(addr)
-            val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
-            val marker = prefs.getLong("audio_outage_$addr", 0L)
-            val kept = dropUnmeasuredAudioRecoveries(history)
-            val staleMarker = marker > 0L && !audioOutageMatchesDisconnect(history, marker)
-            if (!staleMarker && kept.length() == history.length()) return
-            val editor = prefs.edit().putString(key, kept.toString())
-            if (staleMarker) editor.remove("audio_outage_$addr").remove("audio_outage_epoch_$addr")
+            val epoch = DeviceHealthPersistence.epoch(this)
+            val plan = planAudioOutageCleanup(
+                prefs.getString(key, "[]"),
+                prefs.getString("session_$addr", null),
+                epoch,
+                prefs.getLong("audio_outage_$addr", 0L),
+                prefs.getLong("audio_outage_epoch_$addr", Long.MIN_VALUE) == epoch,
+            )
+            if (!plan.dropMarker && plan.rewrittenHistory == null) return
+            val editor = prefs.edit()
+            plan.rewrittenHistory?.let { editor.putString(key, it.toString()) }
+            if (plan.dropMarker) editor.remove("audio_outage_$addr").remove("audio_outage_epoch_$addr")
             editor.commit()
         }
     }
@@ -1046,17 +1055,11 @@ class OmiBleForegroundService : Service() {
             row.put("expected", row.optLong("expected") + after.second - before.second)
             row.put("last_at", now)
             while (days.length() > 8) days.remove(0)
+            // openSince drops a marker the current session proves is its own start.
+            // Unreadable history is not that proof: keep the marker and skip this packet.
             val marker = healthSessions.openSince(addr) ?: return
             val key = historyKey(addr)
-            val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
-            // A restored session start has no disconnect row. Discard it instead of
-            // billing now-marker, which is the preceding connected interval.
-            if (!audioOutageMatchesDisconnect(history, marker)) {
-                prefs.edit().putString(key, dropUnmeasuredAudioRecoveries(history).toString())
-                    .remove("audio_outage_$addr").remove("audio_outage_epoch_$addr")
-                    .putString("packet_days_$addr", days.toString()).commit()
-                return
-            }
+            val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }
             for (i in history.length() - 1 downTo 0) {
                 val item = history.optJSONObject(i) ?: continue
                 if (item.optLong("timestamp", 0L) == marker && item.optString("eventType") != "audio_recovered") {
@@ -1138,10 +1141,9 @@ class OmiBleForegroundService : Service() {
             val editor = prefs.edit().putString(key, JSONArray(retained).toString())
             packetDays[addr]?.let { editor.putString("packet_days_$addr", it.toString()) }
             if (eventType == "disconnect") {
-                val stored = prefs.getLong("audio_outage_$addr", 0L)
-                val retainedHistory = JSONArray(retained)
-                // A process-death session start is not the disconnect. Bill from this event.
-                val start = if (stored > 0L && audioOutageMatchesDisconnect(retainedHistory, stored)) stored else now
+                // end() already kept a real marker. A missing disconnect row is not
+                // a reason to replace it with this event's timestamp.
+                val start = prefs.getLong("audio_outage_$addr", now)
                 pendingAudioRecovery[addr] = start
                 editor.putLong("audio_outage_$addr", start)
             }
@@ -1161,14 +1163,18 @@ class OmiBleForegroundService : Service() {
                 deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
             } }
             val counter = audioCounters[addr]?.snapshot()
-            val history = dropUnmeasuredAudioRecoveries(array(historyKey(addr)))
+            val epoch = DeviceHealthPersistence.epoch(this)
+            val historyRaw = prefs.getString(historyKey(addr), "[]")
+            val parsedHistory = try { JSONArray(historyRaw) } catch (_: Exception) { null }
+            val sessionStarted = provenSessionStartedAt(prefs.getString("session_$addr", null), epoch)
+            val history = parsedHistory?.let { dropUnmeasuredAudioRecoveries(it, sessionStarted) }
             val marker = healthSessions.openSince(addr)
             return JSONObject()
                 .put("observed_at", System.currentTimeMillis())
-                .put("identity_epoch", DeviceHealthPersistence.epoch(this))
-                .put("audio_outage_started_at", if (marker != null && audioOutageMatchesDisconnect(history, marker)) marker else JSONObject.NULL)
+                .put("identity_epoch", epoch)
+                .put("audio_outage_started_at", marker ?: JSONObject.NULL)
                 .put("audio_packet_days", packetDays[addr] ?: array("packet_days_$addr"))
-                .put("disconnect_history_v2", history)
+                .put("disconnect_history_v2", history ?: JSONObject.NULL)
                 .put("battery_history_v2", try {
                     JSONArray(getSharedPreferences("battery_history", MODE_PRIVATE).getString("battery_history_$addr", "[]"))
                 } catch (_: Exception) { JSONArray() })
