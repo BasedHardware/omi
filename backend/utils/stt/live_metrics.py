@@ -344,6 +344,7 @@ class SonioxIdleMetrics(NamedTuple):
     latency: Histogram
     failures: Counter
     avoided: Counter
+    no_frames_closes: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
@@ -366,6 +367,10 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
                 Counter(
                     'omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'
+                ),
+                Counter(
+                    'omi_soniox_idle_no_frames_closes_total',
+                    'Planned paid transport closes because the client sent no frames (subset of closes)',
                 ),
             )
     return _soniox_idle_metrics

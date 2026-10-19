@@ -37,7 +37,7 @@ from utils.stt.soniox_capture_axis import (
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
-from utils.observability.demand_cohort import create_wire_meter, telemetry_call
+from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -198,6 +198,8 @@ class SafeSonioxSocket(STTSocket):
         sample_rate: int = 16000,
     ) -> None:
         self._demand_wire = create_wire_meter('soniox', sample_rate)
+        # The websocket is already open and billed from here until _recv_loop ends.
+        self._connected_meter = create_connected_meter()
         self._wire_ledger_enabled = soniox_wire_ledger_enabled()
         self._wire_epoch: Any = None
         self._wire_samples = 0
@@ -411,6 +413,8 @@ class SafeSonioxSocket(STTSocket):
             await self._ws.close()
         except Exception:
             pass
+        # Idempotent: covers a receive task cancelled before it ever started.
+        telemetry_call(self, '_connected_meter', 'flush', close=True)
 
     def disable_capture_axis_diagnostics(self) -> None:
         self._capture_axis = None
@@ -515,6 +519,7 @@ class SafeSonioxSocket(STTSocket):
     async def _send_loop(self) -> None:
         try:
             while not self._closed and not self._dead:
+                telemetry_call(self, '_connected_meter', 'flush')
                 try:
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:
@@ -665,6 +670,7 @@ class SafeSonioxSocket(STTSocket):
                 operation='recv',
             )
         finally:
+            telemetry_call(self, '_connected_meter', 'flush', close=True)
             if self._provider_clock is not None:
                 self._provider_clock.close()
                 self._sync_ordered_clock()
