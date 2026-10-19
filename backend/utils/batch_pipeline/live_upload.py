@@ -15,11 +15,9 @@ import wave
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import (
-    enabled_for,
-    live_record_admission_enabled,
-    live_record_enabled_for,
     record_capture_eligible,
 )
+from config.policy import resolve_batch_policy
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -102,12 +100,14 @@ async def registered_record_response(
     byok_enabled=False,
     recording_session_id=None,
     loaded_conversation=None,
+    policy=None,
 ) -> JSONResponse | RecordUploadRoute | None:
+    policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
         return None
     # No owner-discovery read while dark. Callers can supply ownership from a
     # snapshot their existing provenance/privacy path already needed.
-    if not live_record_admission_enabled() and not (loaded_conversation or {}).get('record_lane_owner'):
+    if not policy.live_admission_enabled and not (loaded_conversation or {}).get('record_lane_owner'):
         return None
     store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
 
@@ -127,7 +127,7 @@ async def registered_record_response(
     else:
         conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
         if snapshot is None or conversation_id is None:
-            return _pending() if live_record_enabled_for(uid) else None
+            return _pending() if policy.live_record_enabled else None
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
@@ -141,13 +141,13 @@ async def registered_record_response(
             not row.get('record_lane_owner')
             and row.get('status') in {'in_progress', 'processing'}
             and not byok_enabled
-            and record_capture_eligible(uid, row)
+            and record_capture_eligible(uid, row, policy=policy)
         )
-        if awaiting_reservation or (snapshot is not None and not snapshot.exists and live_record_enabled_for(uid)):
+        if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
             return _pending()
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher.
-            owner = 'batch_sync_v1' if enabled_for(uid) and not byok_enabled else 'legacy_final_pass_v1'
+            owner = 'batch_sync_v1' if policy.batch_enabled and not byok_enabled else 'legacy_final_pass_v1'
             revision = await run_blocking(
                 db_executor,
                 claim_record_lane_owner,

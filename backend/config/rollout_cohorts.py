@@ -8,8 +8,9 @@ from typing import Any, Callable
 COLLECTION = 'rollout_cohorts'
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
-    'batch-pipeline': lambda: os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', ''),
-    'batch-pipeline-recovery': lambda: os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', ''),
+    # The composition root injects scoped policy env readers with the runtime.
+    'batch-pipeline': lambda: '',
+    'batch-pipeline-recovery': lambda: '',
     'first-summary': lambda: os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', ''),
     'audio-archive': lambda: os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', ''),
     'dream-agent': lambda: os.getenv('DREAM_AGENT_UID_ALLOWLIST', ''),
@@ -47,8 +48,12 @@ def configured() -> bool:
     return _membership_resolver is not None
 
 
-def configure_resolvers(membership, members, load, warm) -> None:
+def configure_resolvers(
+    membership, members, load, warm, *, env_readers: dict[str, Callable[[], str]] | None = None
+) -> None:
     global _membership_resolver, _members_resolver, _load_resolver, _warm_resolver
+    if env_readers is not None:
+        COHORT_ENVS.update(env_readers)
     _membership_resolver, _members_resolver = membership, members
     _load_resolver, _warm_resolver = load, warm
 

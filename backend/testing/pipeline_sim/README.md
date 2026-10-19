@@ -51,9 +51,14 @@ inside `testing.hermetic_network.block_outbound_network`.
 | | Cloud Run revision drain (`models.RevisionModel`) |
 
 These module attributes are patched for the duration of a run and then restored: `pump.time`,
-`pump.run_blocking`, `serving.time`, and three `quarantine_recovery` leaves. Environment flags come
-from `sim.DEFAULT_FLAGS`. That is an explicit flag set *assumed* to be production-like and can be
-overridden per scenario. Empty-ASR disposition stays off because it needs real WAV bytes.
+`pump.run_blocking`, `serving.time`, and three `quarantine_recovery` leaves. `SimConfig.policy` accepts
+an immutable `BatchUnitPolicy`; otherwise admission resolves each owner from `DEFAULT_FLAGS` plus
+`SimConfig.flags`, without installing scoped flags in the environment. The recorded policy follows
+each upload. `SimConfig.policy_parts` supplies recorded stage parts for replay; otherwise each owner
+resolves once from explicit flags at first handling. First-summary grading uses its obligation stamp. Only excluded worker dispositions
+and process/provider settings retain isolated environment injection. Empty-ASR disposition stays off
+because it needs real WAV bytes. Characterization uses the current recovery-dispatch default of 16
+and leaves current main's existing golden files unchanged.
 
 The revision-drain model mirrors the `request_scoped`/`fire_and_forget` vocabulary of
 `tests/unit/fixtures/revision_drain.py` from the unmerged `lane/opus-drain-harness` branch. That
@@ -135,6 +140,12 @@ Some diffs are expected even when behavior is preserved. If a refactor merges tw
 intermediate durable state disappears from the transitions, and other readers could have observed that
 state. Review those diffs rather than normalizing them away.
 
+
+E1's `role_policy` case uses separate sync and integration environments through
+`SimConfig.role_environments` and `stage_roles`. Its trace opts into policy values,
+source roles and stable hashes; changing either projection or recovery to the
+sync role must break the golden. Historical goldens keep their existing trace
+format. Projection's model uses the real stage-part CAS before projecting.
 ### Bounded recovery dispatch golden review (#22321)
 
 The shipping default dispatches up to 16 candidates per pass, including held or

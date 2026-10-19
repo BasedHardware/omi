@@ -3,11 +3,7 @@
 from dataclasses import fields
 import time
 
-from config.batch_pipeline import (
-    recovery_enabled_for,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
-)
+from database.batch_pipeline_policy import load_stage_policy
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import enabled as cap_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -43,7 +39,8 @@ def redrive_one(
     gpu_padded_retry_empty=False
 ):
     """No automatic retry after dispatch, even on uncertain network/process loss."""
-    if not speech_empty_multilingual_enabled() or not recovery_enabled_for(uid):
+    _, policy = load_stage_policy(store, sid, 'recovery')
+    if policy is None or not policy.speech_empty_multilingual or not policy.recovery_enabled:
         return 'disabled'
     protocol = SpeechRedriveStore(store)
     job = protocol.prepare(
@@ -104,7 +101,7 @@ def redrive_one(
             else {'stage': 'provider', 'reason': 'operation_failed'}
         )
         if (
-            terminal_empty_disposition_enabled()
+            policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
             and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)

@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
 
+from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -76,6 +77,7 @@ class RecoveryStore:
         return job, binding
 
     def prepare(self, segment_id, owner_id, now):
+        load_stage_policy(self.store, segment_id, 'recovery')
         # Generated outside the retryable transaction; a lost reply is reconciled
         # by rereading this same intent, never by issuing a second provider call.
         token = uuid4().hex
@@ -304,14 +306,19 @@ class SilenceDispositionStore(RecoveryStore):
     """Explicit operator-only no-provider intent. The spent STT intent stays intact."""
 
     def prepare_silence(self, segment_id, owner_id, plan_digest, now):
-        from config.batch_pipeline import empty_asr_disposition_enabled, recovery_enabled_for
+        from config.batch_pipeline import empty_asr_disposition_enabled
 
-        if not empty_asr_disposition_enabled() or not recovery_enabled_for(owner_id):
+        if not empty_asr_disposition_enabled():
             raise ProjectionBlocked('disposition disabled')
+        candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
+            observations.clear()
             job, binding = self.checked(tx, segment_id, allow_completed_silence=True)
+            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            if not policy.recovery_enabled:
+                raise ProjectionBlocked('disposition disabled')
             existing = tx.get('results', segment_id)
             marker = job.get('silence_disposition') or {}
             if binding.owner_id != owner_id:
@@ -348,7 +355,9 @@ class SilenceDispositionStore(RecoveryStore):
                 tx.put('jobs', segment_id, job)
             return job
 
-        return self.store.run(commit)
+        result = self.store.run(commit)
+        record_policy_observations(observations)
+        return result
 
     def complete_silence(self, segment_id, token, plan_digest, result_uri, now):
         from config.batch_pipeline import empty_asr_disposition_enabled

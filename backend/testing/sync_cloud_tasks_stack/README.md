@@ -116,3 +116,12 @@ capture with once-only compute, capture-order commits and one paid recovery. Pro
 `batch-control/*.json` in the state directory; defaults come from
 `OMI_BATCH_STACK_WORDS_{LATENCY_MS,EMPTY_RATE,FAILURE_RATE}`,
 `OMI_BATCH_STACK_PAID_LATENCY_MS`, and `OMI_BATCH_STACK_CAPACITY`.
+
+Batch admission receives a serialized `BatchUnitPolicy` from the coordinator's
+`batch-control/policy.json`; the admission seam supplies it to the real upload
+route, which records it on each job outside the unchanged strict binding. Scheduler, projection and recovery owners
+then stamp their parts at first handling, using their own role environment. Later
+handling consumes the recorded part across revision or env changes. The gauntlet
+checks actual job parts as well as the admission stamp. Excluded worker, provider,
+process and authentication settings remain process inputs. No cloud
+credentials or live endpoints participate in this replay.

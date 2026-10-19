@@ -73,6 +73,9 @@ _LIMIT_OPT = (None, 'optional page bound; absent does not change filters')
 _OFFSET = (0, 'row window; fixed, not filter-affecting')
 _PAGE = (25, 'scan/page bound; fixed small positive, not filter-affecting')
 _BUDGET = (None, 'request budget; RPC timeout/charge only, no filter effect')
+_CURSOR = (None, 'opaque continuation token; absent keeps the offset contract')
+_PAGE_ENVELOPE = (False, 'response envelope flag; no filter or order effect')
+_CURSOR_PAGE = (None, 'caller-owned next_cursor sink; no filter or order effect')
 _EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter or order effect')
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
@@ -132,6 +135,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': '49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
@@ -879,6 +883,18 @@ _add(
 )
 _add(
     CoveredByEntry(
+        'database.conversations._collect_cursor_conversation_page',
+        covered_by=(
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations_without_photos',
+        ),
+        reason='cursor page collector only runs when the conversation_list_cursor lever is on; drivers run with levers off',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations._collect_cursor_conversation_page'],
+    )
+)
+_add(
+    CoveredByEntry(
         'database.conversation_visibility_counts.count_hidden',
         covered_by=('database.conversations.get_conversations_count',),
         reason='tombstone count query invoked by the count driver on every combo',
@@ -932,7 +948,13 @@ _add(
         'database.conversations.get_conversations',
         base={'uid': UID},
         profiles=PHOTO_PROFILES,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'cursor': _CURSOR,
+            'page_envelope': _PAGE_ENVELOPE,
+            'cursor_page': _CURSOR_PAGE,
+        },
     )
 )
 _add(
@@ -961,7 +983,14 @@ _add(
             ),
         ),
         profiles=WITHOUT_PHOTOS_PROFILES,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'cursor': _CURSOR,
+            'page_envelope': _PAGE_ENVELOPE,
+            'cursor_page': _CURSOR_PAGE,
+        },
     )
 )
 _add(DriverEntry('database.conversations.get_in_progress_conversation', base={'uid': UID}))
