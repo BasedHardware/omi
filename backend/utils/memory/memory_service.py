@@ -115,6 +115,7 @@ from utils.memory.knowledge_ledger import (
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.memory.category_reads import read_category_window
+from utils.memory.compatibility_reads import CompatibilityReadState, memory_sort_key, next_historical_scan_limit
 from utils.memory.read_resilience import (
     MemoryBackingStoreStream,
     MemoryBackingStoreUnavailable,
@@ -776,15 +777,6 @@ class HistoricalMemoryRecord:
     # False when the row is an index stub (id + sort timestamps only). Merge
     # and suppression use stubs; the mixed list hydrates only the emitted page.
     hydrated: bool = True
-
-
-class _CompatibilityReadState:
-    """Reuse metadata and status evidence only within one admitted list read."""
-
-    def __init__(self, uid: str) -> None:
-        self.index = memories_db.MemoryListIndexState(uid)
-        self.statuses: Dict[str, MemoryItemStatus] = {}
-        self.status_ids_read: Set[str] = set()
 
 
 class HistoricalMemoryAdapter:
@@ -2587,16 +2579,7 @@ class MemoryService:
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
-    @staticmethod
-    def _memory_sort_key(memory: MemoryDB) -> tuple[float, str]:
-        value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
-        if value is None:
-            timestamp = float("-inf")
-        else:
-            if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
-            timestamp = value.timestamp()
-        return (-timestamp, memory.id)
+    _memory_sort_key = staticmethod(memory_sort_key)
 
     @classmethod
     def _sort_memories(cls, memories: List[MemoryDB]) -> None:
@@ -2604,17 +2587,11 @@ class MemoryService:
 
     @staticmethod
     def _next_historical_scan_limit(current: int, *, step: int) -> int:
-        """Grow the adaptive historical scan at least geometrically.
-
-        Every expansion round re-reads the whole newest-first prefix from the
-        start, so a linear step makes one page cost O(rounds x prefix): a fully
-        suppressed account at window=500 stepped 500, 1000, ... 5000 and read
-        27,500 documents over 55 queries for a single page. Doubling keeps the
-        light case identical (the first expansion is still ``current + step``)
-        and bounds the heavy case to a logarithmic number of rescans.
-        """
-        grown = max(current + max(1, int(step)), current * 2)
-        return min(HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW, grown)
+        return next_historical_scan_limit(
+            current,
+            step=step,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+        )
 
     @resilient_memory_read
     def read(
@@ -2647,7 +2624,7 @@ class MemoryService:
         if reuse_compatibility_reads:
             # Allocated inside the resilience attempt: a whole-operation retry
             # gets fresh evidence and every call drops it on return.
-            kwargs["read_state"] = _CompatibilityReadState(uid)
+            kwargs["read_state"] = CompatibilityReadState(uid)
         if category_filter is None:
             return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
         # One admission owns all internal windows and their shared budget.
@@ -2675,7 +2652,7 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
-        read_state: Optional[_CompatibilityReadState] = None,
+        read_state: Optional[CompatibilityReadState] = None,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
