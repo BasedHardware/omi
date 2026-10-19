@@ -10,146 +10,11 @@ import {
   deleteActionItem,
   type CreateActionItemParams,
 } from '@/lib/api';
+import { groupActionItems } from '@/lib/actionItemGroups';
 import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
+import { daysUntilDue } from '@/lib/taskDue';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
-
-/**
- * Check if a date is today
- */
-function isToday(date: Date): boolean {
-  const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
-}
-
-/**
- * Check if a date is tomorrow
- */
-function isTomorrow(date: Date): boolean {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return (
-    date.getDate() === tomorrow.getDate() &&
-    date.getMonth() === tomorrow.getMonth() &&
-    date.getFullYear() === tomorrow.getFullYear()
-  );
-}
-
-/**
- * Check if a date is within this week (next 7 days)
- */
-function isThisWeek(date: Date): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekFromNow = new Date(today);
-  weekFromNow.setDate(weekFromNow.getDate() + 7);
-  return date >= today && date <= weekFromNow;
-}
-
-/**
- * Check if a date is overdue (before today)
- */
-function isOverdue(date: Date): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date < today;
-}
-
-/**
- * Group action items by time period
- */
-function groupActionItems(items: ActionItem[]): GroupedActionItems {
-  // Ensure items is an array
-  if (!Array.isArray(items)) {
-    console.warn('groupActionItems: items is not an array', items);
-    return {
-      overdue: [],
-      today: [],
-      tomorrow: [],
-      thisWeek: [],
-      later: [],
-      noDueDate: [],
-      completed: [],
-    };
-  }
-
-  const groups: GroupedActionItems = {
-    overdue: [],
-    today: [],
-    tomorrow: [],
-    thisWeek: [],
-    later: [],
-    noDueDate: [],
-    completed: [],
-  };
-
-  for (const item of items) {
-    if (item.completed) {
-      groups.completed.push(item);
-      continue;
-    }
-
-    if (!item.due_at) {
-      // No due date goes to dedicated group
-      groups.noDueDate.push(item);
-      continue;
-    }
-
-    const dueDate = new Date(item.due_at);
-
-    if (isOverdue(dueDate)) {
-      groups.overdue.push(item);
-    } else if (isToday(dueDate)) {
-      groups.today.push(item);
-    } else if (isTomorrow(dueDate)) {
-      groups.tomorrow.push(item);
-    } else if (isThisWeek(dueDate)) {
-      groups.thisWeek.push(item);
-    } else {
-      groups.later.push(item);
-    }
-  }
-
-  // Sort each group by due date (earliest first), then by created_at
-  const sortByDueDate = (a: ActionItem, b: ActionItem) => {
-    if (a.due_at && b.due_at) {
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    }
-    if (a.due_at) return -1;
-    if (b.due_at) return 1;
-    // Fall back to created_at
-    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return bCreated - aCreated;
-  };
-
-  // Sort by created_at (newest first) for items without due date
-  const sortByCreatedAt = (a: ActionItem, b: ActionItem) => {
-    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return bCreated - aCreated;
-  };
-
-  groups.overdue.sort(sortByDueDate);
-  groups.today.sort(sortByDueDate);
-  groups.tomorrow.sort(sortByDueDate);
-  groups.thisWeek.sort(sortByDueDate);
-  groups.later.sort(sortByDueDate);
-  groups.noDueDate.sort(sortByCreatedAt);
-
-  // Sort completed by completion date (most recent first)
-  groups.completed.sort((a, b) => {
-    const aCompleted = a.completed_at ? new Date(a.completed_at).getTime() : 0;
-    const bCompleted = b.completed_at ? new Date(b.completed_at).getTime() : 0;
-    return bCompleted - aCompleted;
-  });
-
-  return groups;
-}
 
 /**
  * Calculate task counts for a specific date
@@ -287,7 +152,7 @@ export function useActionItems(): UseActionItemsReturn {
     const pending = items.filter((i) => !i.completed).length;
     const overdue = groupedItems.overdue.length;
     const noDueDateCount = groupedItems.noDueDate.length;
-    const todayItems = items.filter((i) => i.due_at && isToday(new Date(i.due_at)));
+    const todayItems = items.filter((i) => i.due_at && daysUntilDue(i.due_at) === 0);
     const todayCompleted = todayItems.filter((i) => i.completed).length;
 
     // Calculate weekly stats (last 7 days)
