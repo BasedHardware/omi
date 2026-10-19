@@ -498,7 +498,13 @@ class PipelineWorker:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(
+                self._io,
+                lambda item: self.timings.call('fetch_decode', self.decode, item),
+                items,
+                self.io_concurrency,
+                PREFETCH_AHEAD_SECONDS,
+            )
             if self._io is not None
             else None
         )
@@ -520,9 +526,10 @@ class PipelineWorker:
                 self.counts['items'] += 1
                 stage = 'fetch_decode'
                 try:
-                    samples = self.timings.call(
-                        'fetch_decode',
-                        lambda: prefetch.take(index) if prefetch is not None else self.decode(item),
+                    samples = (
+                        prefetch.take(index)
+                        if prefetch is not None
+                        else self.timings.call('fetch_decode', self.decode, item)
                     )
                     shapes[item.segment_id]['samples'] = len(samples)
                     duration = len(samples) / SAMPLE_RATE

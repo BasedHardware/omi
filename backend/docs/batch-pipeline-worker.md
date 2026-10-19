@@ -216,7 +216,8 @@ The dedicated runtime exports `omi_batch_pipeline_stage_seconds{stage=...}`
 for pull, maintenance, admission, full worker flight, publication, ordered merge,
 and projection, plus fetch/decode, VAD, window assembly, ASR, padded retry,
 diarization, encrypted result persistence, and final CUDA synchronization.
-Timings include failed operations and executor wait. `pump_cycle` contains the
+Timings include failed operations and executor wait; a prefetched fetch/decode
+is measured where it executes, not at the later consuming wait. `pump_cycle` contains the
 whole pass; `worker_flight` contains worker leaves and CUDA synchronization.
 Do not add parent and child sums. Model leaves measure host-observed wall time,
 not isolated CUDA kernel occupancy. Unattributed worker time includes validation,
