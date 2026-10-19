@@ -25,7 +25,7 @@ from database.sync_jobs import (
     release_job_run_lock,
 )
 from utils.cloud_tasks import enqueue_sync_job
-from utils.sync import backfill_cutover, stage as sync_stage
+from utils.sync import backfill_cutover, legacy_dark, stage as sync_stage
 from utils.sync.backfill_order import newest_first
 
 logger = logging.getLogger(__name__)
@@ -155,6 +155,9 @@ def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
 def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _ClaimProgress | None = None) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
     if not registry.production_stage():
+        return False
+    if not legacy_dark.sequencer_dispatch_allowed():
+        # Legacy-dark: ``dark`` claims and dispatches nothing (contract (h)).
         return False
     remaining, direct_job_id = (
         backfill_cutover.quiet_remaining(uid) if enabled() else backfill_cutover.direct_remaining_for_uid(uid)
@@ -302,6 +305,8 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
     """One bounded Scheduler tick; each UID is independent and transaction-fenced."""
     if not registry.production_stage():
         return {'disabled': 1}
+    if not legacy_dark.sequencer_dispatch_allowed():
+        return {'legacy_dark': 1}
     if sync_redrive.enabled():
         sync_redrive.refresh_metrics()
     now = datetime.now(timezone.utc)
