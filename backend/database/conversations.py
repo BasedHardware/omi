@@ -4154,9 +4154,18 @@ def select_closest_conversation(conversations, start_timestamp: int, end_timesta
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
-    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
-    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
+def get_closest_conversation_to_timestamps(
+    uid: str,
+    start_timestamp: int,
+    end_timestamp: int,
+    *,
+    window_seconds: int = 120,
+    eligible: Optional[Callable[[dict], bool]] = None,
+) -> Optional[dict]:
+    # ``window_seconds``/``eligible`` change bounds and post-filter only; the
+    # query shape and its index are identical. Normal sync keeps the ±2 min hint.
+    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(seconds=window_seconds)
+    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(seconds=window_seconds)
 
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     query = (
@@ -4173,6 +4182,8 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.debug("- %s %s %s", conversation['id'], conversation['started_at'], conversation['finished_at'])
 
+    if eligible is not None:
+        conversations = [conversation for conversation in conversations if eligible(conversation)]
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:
         logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')

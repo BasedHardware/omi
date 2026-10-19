@@ -905,6 +905,10 @@ _add(
     DriverEntry(
         'database.conversations.get_closest_conversation_to_timestamps',
         base={'uid': UID, 'start_timestamp': 1767225600, 'end_timestamp': 1767312000},
+        neutrals={
+            'window_seconds': (600, 'range bound value only; same fields and order'),
+            'eligible': (None, 'in-memory post-filter; not part of the query'),
+        },
     )
 )
 _add(

@@ -153,7 +153,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery
+from utils.sync import empty_recovery, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -1353,8 +1353,10 @@ def process_segment(
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
     cap_recovery_checkpoint: dict | None = None,
+    redrive_mode: str | None = None,
 ):
     conversation_id = None
+    minimal = redrive_mode == minimal_redrive.MINIMAL
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
@@ -1412,6 +1414,10 @@ def process_segment(
             # actual serving too, rather than reselecting after the checkpoint.
             provider, _, model = cap_recovery_service
             recovery_dispatch['selected_service'] = cap_recovery_service
+        elif minimal:
+            # Parakeet only: pinned serving, no vendor fallback (raises retryably).
+            recovery_dispatch['selected_service'] = minimal_redrive.parakeet_service(req_language)
+            provider, _, model = recovery_dispatch['selected_service']
         else:
             provider, _, model = get_prerecorded_service(req_language)
 
@@ -1513,7 +1519,7 @@ def process_segment(
                 return False
             if empty_retried:
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
-                if empty_recovery.enabled():
+                if empty_recovery.enabled() and not minimal:
                     phase = 'provider_call'
                     recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
                     if recovered is not None:
@@ -1549,12 +1555,26 @@ def process_segment(
         segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
         # Target eligibility (including live stubs and tombstones) is resolved
         # inside the same transaction as temporal assignment.
+        attach_id = (
+            minimal_redrive.attach_target(
+                uid,
+                timestamp,
+                segment_end_timestamp,
+                {
+                    'source': getattr(source, 'value', source),
+                    'client_device_id': client_device_id,
+                    'is_locked': is_locked,
+                },
+            )
+            if minimal and not target_conversation_id
+            else None
+        )
         closest_memory = (
             None
-            if target_conversation_id
+            if target_conversation_id or attach_id
             else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         )
-        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
+        candidate_id = target_conversation_id or attach_id or (closest_memory['id'] if closest_memory else None)
         owner_reserved = False
         if candidate_id:
             try:
@@ -1658,7 +1678,7 @@ def process_segment(
             uid,
             incoming,
             candidate_id=closest_memory['id'] if closest_memory else None,
-            target_id=target_conversation_id,
+            target_id=target_conversation_id or attach_id,
             **(
                 {'recovery_checkpoint': cap_recovery_checkpoint}
                 if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None
@@ -2270,6 +2290,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     audio_start_seconds: Optional[float] = None,
     audio_end_seconds: Optional[float] = None,
     raw_capture_paths: Optional[list[str]] = None,
+    redrive_mode: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -2865,7 +2886,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             req_language = (
                 user_language if transcription_prefs.get('single_language_mode', False) and user_language else 'multi'
             )
-            sync_provider, _, sync_model = get_prerecorded_service(req_language)
+            sync_provider, _, sync_model = (
+                minimal_redrive.parakeet_service(req_language)
+                if redrive_mode == minimal_redrive.MINIMAL
+                else get_prerecorded_service(req_language)
+            )
             await run_blocking(
                 db_executor,
                 _update_sync_job_for_run,
@@ -2995,6 +3020,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     source_position_map=segment_source_maps.get(path),
                     **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
                     **({'cap_content_id': content_id} if stt_cap_dispatch_enabled() else {}),
+                    **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
                 if deferred_outcome.get('cap_held'):
                     return  # Durable policy hold, not success/silence/provider failure.
@@ -3168,14 +3194,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 )
                 asyncio.run_coroutine_threadsafe(checkpoint_coro, coordinator_loop).result()
 
-            await run_blocking(
-                sync_executor,
-                _reprocess_merged_conversations,
-                uid,
-                response,
-                on_fenced=_checkpoint_fenced_conversations,
-                **({'user_selected': True} if user_selected_phone_recording else {}),
-            )
+            if redrive_mode == minimal_redrive.MINIMAL:
+                await run_blocking(sync_executor, minimal_redrive.finalize, uid, response)
+            else:
+                await run_blocking(
+                    sync_executor,
+                    _reprocess_merged_conversations,
+                    uid,
+                    response,
+                    on_fenced=_checkpoint_fenced_conversations,
+                    **({'user_selected': True} if user_selected_phone_recording else {}),
+                )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
             # conversations play exactly like realtime ones. Gated on the user's setting.
@@ -3266,6 +3295,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'model': _bounded_sync_model(job_model),
                 'lane': sync_lane,
                 **({'held_audio': True} if cap_holds else {}),
+                **({'redrive_mode': redrive_mode} if redrive_mode else {}),
             }
             repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
                 failed_segments, total_segments, persistence_failure_fingerprints

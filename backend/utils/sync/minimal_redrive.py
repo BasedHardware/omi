@@ -1,0 +1,152 @@
+"""Operator-only minimal redrive of preserved legacy sync audio.
+
+A Cloud Tasks payload carrying ``redrive_mode: 'minimal'`` (written only by
+operator redrive tooling, never parsed from a client request) runs the normal
+sync job with three cost cuts: Parakeet-only STT with no paid recovery, an
+attach-first explicit target, and one cheap title call per newly created row
+instead of full post-processing. The ledger, dedupe and receipts are unchanged.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+from typing import Any, Optional
+
+from config.prerecorded_stt import PrerecordedSTTService, TranscriptionOutcome
+from config.stt_provider_policy import (
+    PARAKEET_PROVIDER,
+    STTServingSurface,
+    normalized_stt_language,
+    parakeet_supports_language,
+    provider_is_enabled,
+)
+from database import conversations as conversations_db
+from utils.conversations import lifecycle as lifecycle_service
+from utils.observability.fallback import record_fallback
+from utils.stt.outcomes import TranscriptionFailure, is_destructive_operation_in_progress
+from utils.sync.live_overlap import compatible_capture
+
+logger = logging.getLogger(__name__)
+
+MINIMAL = 'minimal'
+TITLE_FEATURE = 'sync_redrive_title'
+PROVIDER_UNAVAILABLE = 'sync_minimal_provider_unavailable'
+ATTACH_WINDOW_SECONDS = 600
+_TRANSCRIPT_CHARS = 8000
+_FENCED_IDS = '_fenced_conversation_ids'
+_PROMPT = (
+    'Write a short title (at most 8 words) and a one- or two-sentence overview for this recorded '
+    'conversation, in the language it is spoken in. Reply with JSON only: {"title": "...", "overview": "..."}.'
+    '\n\nTranscript:\n'
+)
+
+
+def parse_mode(payload: Any) -> Optional[str]:
+    """Only the exact value ``'minimal'`` selects this mode; anything else is the normal path."""
+    return MINIMAL if isinstance(payload, dict) and payload.get('redrive_mode') == MINIMAL else None
+
+
+def enabled() -> bool:
+    """Kill switch: unset means on. Off refuses minimal jobs retryably at the task boundary."""
+    return os.getenv('SYNC_MINIMAL_REDRIVE_ENABLED', 'true').strip().lower() not in ('false', '0', 'off', 'no')
+
+
+def parakeet_service(req_language: str) -> tuple[str, str, str]:
+    """Pin Parakeet, or fail retryably. Never select a paid provider.
+
+    Falling back to the owner's paid language provider would be a later,
+    explicit operator opt-in; this mode never makes that choice itself.
+    """
+    language = normalized_stt_language(req_language) or 'en'
+    if provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.PRERECORDED) and parakeet_supports_language(
+        STTServingSurface.PRERECORDED, language
+    ):
+        return PrerecordedSTTService.PARAKEET, language, 'parakeet'
+    failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet', retryable=True)
+    failure.error_code = PROVIDER_UNAVAILABLE
+    raise failure
+
+
+def attach_target(uid: str, start: float, end: float, capture: dict) -> Optional[str]:
+    """Closest same-partition, non-deleted completed row within 10 minutes of the segment.
+
+    A hint only: the assignment transaction re-reads the explicit target and
+    owns deletion and provenance. Reuses the indexed temporal query shape.
+    """
+
+    def eligible(row: dict) -> bool:
+        return (
+            compatible_capture(row, capture)
+            and not row.get('deleted')
+            and not row.get('sync_merged_into')
+            and row.get('status') == 'completed'
+        )
+
+    row = conversations_db.get_closest_conversation_to_timestamps(
+        uid, int(start), int(end), window_seconds=ATTACH_WINDOW_SECONDS, eligible=eligible
+    )
+    return row['id'] if row else None
+
+
+def generate_title(uid: str, transcript: str) -> tuple[str, str]:
+    # Deferred like the pipeline's other leaf imports: stubbed coordinator
+    # harnesses load this module without the LLM client stack.
+    from utils.llm.clients import get_llm
+
+    reply = get_llm('sync_redrive_title', uid=uid).invoke(_PROMPT + transcript[:_TRANSCRIPT_CHARS])
+    text = str(getattr(reply, 'content', reply))
+    parsed = json.loads(text[text.index('{') : text.rindex('}') + 1])
+    title, overview = str(parsed.get('title') or '').strip(), str(parsed.get('overview') or '').strip()
+    if not title or not overview:
+        raise ValueError('incomplete title response')
+    return title[:120], overview[:600]
+
+
+def _title_new_conversation(uid: str, conversation_id: str) -> str:
+    data = conversations_db.get_conversation(uid, conversation_id)
+    if (
+        not data
+        or data.get('deleted')
+        or data.get('discarded')
+        or data.get('sync_relevance') == 'review'
+        or (data.get('structured') or {}).get('overview')
+    ):
+        return 'skipped'  # Gone, filler, or already titled by an earlier attempt.
+    transcript = '\n'.join(str(segment.get('text') or '') for segment in data.get('transcript_segments') or [])
+    try:
+        title, overview = generate_title(uid, transcript)
+    except Exception as error:
+        if is_destructive_operation_in_progress(error):
+            raise
+        # Intake already stored build_deterministic_minimum_structured: zero further LLM.
+        record_fallback(
+            component='sync_dispatch', from_mode='llm', to_mode='deterministic', reason='other', outcome='degraded'
+        )
+        return 'deterministic'
+    payload: dict[str, Any] = {
+        'id': conversation_id,
+        'status': 'completed',
+        'structured': {'title': title, 'overview': overview},
+    }
+    if data.get('sync_content_revision') is not None:
+        payload['sync_content_revision'] = data['sync_content_revision']
+    return 'titled' if lifecycle_service.persist_processed_conversation(uid, payload) else 'fenced'
+
+
+def finalize(uid: str, response: dict) -> None:
+    """Replace post-processing: updated rows keep the intake append; new rows get one cheap title.
+
+    No memories, action items, apps, goals, folders, vectors, webhooks or notifications.
+    """
+    response.pop('_merged', None)
+    created = set(response.get('new_memories') or ()) - set(response.get(_FENCED_IDS) or ())
+    outcomes = [_title_new_conversation(uid, conversation_id) for conversation_id in sorted(created)]
+    logger.info(
+        'event=sync_minimal_redrive_finalize created=%d updated=%d titled=%d deterministic=%d',
+        len(created),
+        len(set(response.get('updated_memories') or ()) - created),
+        outcomes.count('titled'),
+        outcomes.count('deterministic'),
+    )
