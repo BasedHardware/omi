@@ -57,6 +57,8 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['worker']['batchSize'] == 8
     assert values['worker']['workerSilenceDispositionEnabled'] is False
     assert values['worker']['workerValidationDispositionEnabled'] is True
+    assert values['worker']['diarizeSpeechOnlyEnabled'] is True
+    assert values['worker']['shortSpeechSingleEnabled'] is True
     assert values['resources']['requests']['memory'] == '12Gi'
     assert values['resources']['limits']['memory'] == '14Gi'
     result = render()
@@ -89,6 +91,8 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'
     assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'true'
     hpa = manifests['HorizontalPodAutoscaler']['spec']
     assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
     assert {m['external']['metric']['selector']['matchLabels']['priority'] for m in hpa['metrics']} == {
@@ -284,3 +288,18 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
+
+
+def test_gpu_skip_kill_switches_render_false():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'worker.diarizeSpeechOnlyEnabled=false',
+        '--set',
+        'worker.shortSpeechSingleEnabled=false',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'false'

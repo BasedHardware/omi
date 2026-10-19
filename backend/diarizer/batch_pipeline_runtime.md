@@ -197,6 +197,31 @@ The worker never calls an external provider for this silence check. Rollback:
 set the worker validation disposition flag to `false`, restoring bounded GPU
 retries; existing held intents and receipts remain authoritative.
 
+## GPU skips that cannot change the transcript
+
+Diarization was the dominant per-unit GPU cost (pyannote RTF ~0.04 versus
+Parakeet ~0.0025) and ran over the whole unit, silence included, while ASR
+already saw only padded VAD windows. Two ship-on Helm kill switches now decide
+whether and on what audio diarization runs; batching is unchanged.
+
+- `worker.diarizeSpeechOnlyEnabled` (`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`):
+  evidence is unpadded VAD speech plus every emitted word clock (so a word in
+  ASR context outside VAD is never withheld). Each region is padded 1 s,
+  regions under 4 s apart keep their in-between audio, and pieces are joined
+  with 0.5 s of zeros. Turns and overlaps map back to capture clocks; seam audio
+  maps to nothing. Units keeping over 80% of their samples, compacted output
+  with no turns while words exist, and any mapping error diarize the full unit
+  (`omi_fallback_total{component="vad",from="batch_speech_only_diarization"}`).
+  The persisted diarization adds `speech_compaction.diarized_seconds`.
+- `worker.shortSpeechSingleEnabled` (`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED`):
+  one contiguous evidence region (pauses under 0.5 s) of at most 2 s takes the
+  existing `skipped_single` `SPEAKER_00` result with
+  `single_evidence: short_speech`.
+
+ASR inputs and words are identical with either switch on or off. Fixture
+evidence (public AMI, full versus speech-only pyannote) is in the PR. Rollback:
+set either value to `false`.
+
 Quarantine events are cumulative transitions, not current debt. For read-only
 Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==
 quarantined` AND `quarantine_reason == worker_failed`, then partition by

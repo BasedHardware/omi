@@ -5668,6 +5668,22 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Batch worker GPU skips (speech-only diarization, short single speaker)
+
+Two ship-on kill switches decide whether the batch worker runs diarization on
+the whole unit. They never change ASR input, words or speech accounting.
+`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` diarizes the union of unpadded VAD
+speech and every emitted word clock, each padded by 1 s, with nearby regions
+joined and 0.5 s of zeros between retained pieces; turns map back to capture
+clocks. Units that would keep over 80% of their audio, empty compacted output
+for a unit with words, and any mapping error diarize the full unit.
+`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` writes the existing
+`skipped_single` `SPEAKER_00` result (plus `single_evidence: short_speech`) when
+all speech and words form one contiguous region of at most 2 s. Silence units
+(no VAD speech) already skip ASR and diarization. Set
+`worker.diarizeSpeechOnlyEnabled=false` or `worker.shortSpeechSingleEnabled=false`
+to restore the full stage. Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
