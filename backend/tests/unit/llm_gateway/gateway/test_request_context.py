@@ -1,157 +1,69 @@
-import uuid
-import pytest
-from dataclasses import dataclass
+"""Exercise the gateway's current request-ID contract.
 
+The JIT qualification-budget wire contract was retired in #22209. Request-ID
+resolution remains the production boundary; these tests import the real module.
+"""
+
+import uuid
+
+import pytest
 from fastapi import Request
 
-from llm_gateway.gateway.request_context import (
-    JIT_BUDGET_CONTRACT_ENV,
-    JIT_CLOUD_QA_CONTRACT_VERSION,
-    JITBudgetHeaders,
-    jit_budget_forward_headers,
-    jit_budget_headers_for,
-    request_id_for,
-    resolve_request_id,
-    validated_jit_budget_values,
+from llm_gateway.gateway import request_context
+
+
+def build_mock_request(state=None):
+    return Request({"type": "http", "headers": [], "state": state or {}})
+
+
+@pytest.mark.parametrize("request_id", ["test-req-id", str(uuid.UUID(int=1))])
+def test_request_id_for_uses_middleware_state(request_id):
+    assert request_context.request_id_for(build_mock_request({"request_id": request_id})) == request_id
+
+
+@pytest.mark.parametrize(
+    "state", [{}, {"request_id": ""}, {"request_id": None}, {"request_id": 42}, {"request_id": False}]
 )
+def test_request_id_for_missing_or_non_string_state_is_unknown(state):
+    assert request_context.request_id_for(build_mock_request(state)) == "unknown"
 
 
-@pytest.fixture
-def enable_jit_budget(monkeypatch):
-    monkeypatch.setenv(JIT_BUDGET_CONTRACT_ENV, JIT_CLOUD_QA_CONTRACT_VERSION)
+@pytest.mark.parametrize("shape", [str, str.upper, lambda value: f" \t{value}\n"])
+def test_resolve_request_id_preserves_canonical_uuid_and_normalizes_case_and_space(shape, monkeypatch):
+    valid_uuid = "123e4567-e89b-42d3-a456-426614174000"
+
+    def unexpected_generation():
+        pytest.fail("A valid request ID must not be replaced")
+
+    monkeypatch.setattr(request_context.uuid, "uuid4", unexpected_generation)
+    assert request_context.resolve_request_id(shape(valid_uuid)) == valid_uuid
 
 
-def test_validated_jit_budget_values_all_none(enable_jit_budget):
-    assert validated_jit_budget_values(None, None, None, None, None, None) is None
+@pytest.mark.parametrize(
+    "raw_request_id",
+    [
+        None,
+        "",
+        " \t\n",
+        "not-a-uuid",
+        "a" * (request_context.REQUEST_ID_MAX_LENGTH + 1),
+        "123e4567e89b42d3a456426614174000",
+        "{123e4567-e89b-42d3-a456-426614174000}",
+        "urn:uuid:123e4567-e89b-42d3-a456-426614174000",
+        "123e4567-e89b-42d3-a456-426614174000-untrusted-suffix" * 2,
+    ],
+)
+def test_resolve_request_id_replaces_invalid_or_noncanonical_input(raw_request_id, monkeypatch):
+    generated = uuid.UUID("6ba7b810-9dad-41d1-80b4-00c04fd430c8")
+    monkeypatch.setattr(request_context.uuid, "uuid4", lambda: generated)
+
+    assert request_context.resolve_request_id(raw_request_id) == str(generated)
 
 
-def test_validated_jit_budget_values_unavailable(monkeypatch):
-    monkeypatch.setenv(JIT_BUDGET_CONTRACT_ENV, "different-version")
-    with pytest.raises(ValueError, match="JIT budget capability is unavailable"):
-        validated_jit_budget_values("contract", "run_id", "1", "10", "10", "10")
+def test_resolve_request_id_generates_uuid4_without_echoing_untrusted_input():
+    request_id = request_context.resolve_request_id("untrusted-customer-content")
 
-
-def test_validated_jit_budget_values_invalid_contract(enable_jit_budget):
-    with pytest.raises(ValueError, match="invalid JIT budget contract"):
-        validated_jit_budget_values("invalid-contract", "run_id", "1", "10", "10", "10")
-
-
-def test_validated_jit_budget_values_invalid_run_id(enable_jit_budget):
-    with pytest.raises(ValueError, match="invalid JIT budget contract"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "invalid run id!", "1", "10", "10", "10")
-
-    with pytest.raises(ValueError, match="invalid JIT budget contract"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "", "1", "10", "10", "10")
-
-
-def test_validated_jit_budget_values_invalid_int(enable_jit_budget):
-    with pytest.raises(ValueError, match="invalid JIT budget header"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-1", "not-an-int", "10", "10", "10")
-
-
-def test_validated_jit_budget_values_zero_or_negative(enable_jit_budget):
-    with pytest.raises(ValueError, match="invalid JIT budget header"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-1", "0", "10", "10", "10")
-
-    with pytest.raises(ValueError, match="invalid JIT budget header"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-1", "1", "-10", "10", "10")
-
-
-def test_validated_jit_budget_values_exceeds_ceiling(enable_jit_budget):
-    # max_attempts ceiling is 3
-    with pytest.raises(ValueError, match="JIT budget exceeds qualification ceiling"):
-        validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-1", "4", "10", "10", "10")
-
-
-def test_validated_jit_budget_values_valid(enable_jit_budget):
-    result = validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", "2", "1000", "5000", "20000")
-    assert result == (JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", 2, 1000, 5000, 20000)
-
-
-def test_jit_budget_forward_headers_none(enable_jit_budget):
-    assert jit_budget_forward_headers(None, None, None, None, None, None) == {}
-
-
-def test_jit_budget_forward_headers_valid(enable_jit_budget):
-    headers = jit_budget_forward_headers(JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", "2", "1000", "5000", "20000")
-    assert headers == {
-        "X-Omi-Jit-Contract-Version": JIT_CLOUD_QA_CONTRACT_VERSION,
-        "X-Omi-Jit-Run-Id": "run-123",
-        "X-Omi-Jit-Max-Attempts": "2",
-        "X-Omi-Jit-Max-Output-Tokens": "1000",
-        "X-Omi-Jit-Max-Input-Tokens": "5000",
-        "X-Omi-Jit-Max-Spend-Micro-Usd": "20000",
-    }
-
-
-def build_mock_request(headers_dict, state_request_id=None):
-    scope = {
-        "type": "http",
-        "headers": [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in headers_dict.items()],
-        "state": {"request_id": state_request_id} if state_request_id is not None else {},
-    }
-    req = Request(scope)
-
-    return req
-
-
-def test_jit_budget_headers_for_none(enable_jit_budget):
-    req = build_mock_request({})
-    assert jit_budget_headers_for(req) is None
-
-
-def test_jit_budget_headers_for_valid(enable_jit_budget):
-    req = build_mock_request(
-        {
-            "x-omi-jit-contract-version": JIT_CLOUD_QA_CONTRACT_VERSION,
-            "x-omi-jit-run-id": "run-123",
-            "x-omi-jit-max-attempts": "2",
-            "x-omi-jit-max-output-tokens": "1000",
-            "x-omi-jit-max-input-tokens": "5000",
-            "x-omi-jit-max-spend-micro-usd": "20000",
-        }
-    )
-
-    result = jit_budget_headers_for(req, owner_uid="user-123")
-    assert isinstance(result, JITBudgetHeaders)
-    assert result.contract_version == JIT_CLOUD_QA_CONTRACT_VERSION
-    assert result.run_id == "run-123"
-    assert result.max_attempts == 2
-    assert result.max_output_tokens == 1000
-    assert result.max_input_tokens == 5000
-    assert result.max_spend_micro_usd == 20000
-    assert result.owner_uid == "user-123"
-
-
-def test_request_id_for():
-    req = build_mock_request({}, "test-req-id")
-    assert request_id_for(req) == "test-req-id"
-
-    req_empty = build_mock_request({}, "")
-    assert request_id_for(req_empty) == "unknown"
-
-    req_none = build_mock_request({})
-    assert request_id_for(req_none) == "unknown"
-
-
-def test_resolve_request_id():
-    valid_uuid = str(uuid.uuid4())
-    # Should keep valid UUID
-    assert resolve_request_id(valid_uuid) == valid_uuid
-
-    # Should fix case of UUID
-    assert resolve_request_id(valid_uuid.upper()) == valid_uuid
-
-    # Invalid UUID generates new one
-    invalid_res = resolve_request_id("not-a-uuid")
-    assert invalid_res != "not-a-uuid"
-    assert uuid.UUID(invalid_res)  # Should not raise
-
-    # None generates new one
-    none_res = resolve_request_id(None)
-    assert uuid.UUID(none_res)
-
-    # Too long generates new one
-    too_long = "a" * 100
-    long_res = resolve_request_id(too_long)
-    assert uuid.UUID(long_res)
+    assert str(uuid.UUID(request_id)) == request_id
+    assert uuid.UUID(request_id).version == 4
+    assert len(request_id) <= request_context.REQUEST_ID_MAX_LENGTH
+    assert "untrusted-customer-content" not in request_id
