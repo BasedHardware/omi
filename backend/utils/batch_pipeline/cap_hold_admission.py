@@ -79,6 +79,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
     from utils.batch_pipeline import intake
     from utils.executors import run_blocking, storage_executor
     from utils.sync import cap_hold
+    from utils import funded_processing
 
     if not eligible(row):
         raise ValueError('hold already has legacy spend or an unsealed source')
@@ -105,6 +106,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
             client_platform=meta.get('client_platform'),
             intake_context={'origin': 'cap_hold', 'recording_session_id': meta.get('recording_session_id')},
             decode=lambda max_seconds: wav_units(path, capture_at, max_seconds),
+            usage_period=funded_processing.period_id(),
         )
     finally:
         await run_blocking(storage_executor, directory.cleanup)

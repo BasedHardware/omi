@@ -199,3 +199,30 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     result = _deliver(rows, Mock(side_effect=HTTPException(status_code=502)))
     assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
+    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0})
+    assert route.maintain(1000.0) == {
+        'rewoken': 2,
+        'discarded': 1,
+        'sweep_errors': 0,
+        'summary_debt_scanned': 5,
+        'summary_debt_admitted': 3,
+        'summary_debt_errors': 0,
+    }
+
+
+def test_maintenance_counts_a_summary_debt_failure_without_5xx(rows, client, monkeypatch):
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    monkeypatch.setattr(summary_debt_repair, 'tick', Mock(side_effect=RuntimeError('synthetic')))
+    response = client.post('/v2/enrichment/sweep')
+    assert response.status_code == 200
+    assert response.json()['counts']['summary_debt_errors'] == 1

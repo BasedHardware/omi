@@ -40,3 +40,8 @@ def dumps(value: Any) -> str:
 
 def loads(text: str | bytes) -> Any:
     return json.loads(text, object_hook=_hook)
+
+
+def canonical(value: Any) -> str:
+    """Key-order-independent encoding, for comparing a Firestore document with its Postgres copy."""
+    return json.dumps(value, default=_default, sort_keys=True, separators=(',', ':'))

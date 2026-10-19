@@ -156,3 +156,61 @@ def test_diff_summary_prints_names_and_counts_only():
     )
     assert lines[-1] == '1 difference(s) outside STAGING_DIFF_ALLOWLIST'
     assert 'backend/ENCRYPTION_SECRET' in lines[0] and ': 1 (' in lines[0]
+
+
+def _post_render_module():
+    import importlib.util
+
+    path = ROOT / 'backend' / 'deploy' / 'staging' / 'worker_post_render.py'
+    spec = importlib.util.spec_from_file_location('_staging_worker_post_render', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _worker_doc():
+    return {
+        'kind': 'Deployment',
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'name': 'worker',
+                            'command': ['python', '-m', 'diarizer.batch_pipeline_runtime'],
+                            'env': [{'name': 'BUCKET_BATCH_PIPELINE', 'value': 'based-hardware-dev-staging-batch'}],
+                        }
+                    ]
+                }
+            }
+        },
+    }
+
+
+def test_worker_post_render_env_sources_and_probe(tmp_path):
+    render = _post_render_module()
+    env_file = tmp_path / 'worker_env.yaml'
+    env_file.write_text(
+        "JOBSTORE_MODE: shadow\nJOBSTORE_PW:\n  secretKeyRef: {name: staging-jobstore, key: password}\n"
+    )
+    entries = render._env_entries(env_file, ['BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS=8'])
+    (doc,) = render.patch([_worker_doc()], entries, 'staging-asrctx-probe')
+    container = doc['spec']['template']['spec']['containers'][0]
+    env = {e['name']: e for e in container['env']}
+    assert env['OMI_DEPLOYMENT']['value'] == 'staging'
+    assert env['JOBSTORE_PW'] == {
+        'name': 'JOBSTORE_PW',
+        'valueFrom': {'secretKeyRef': {'name': 'staging-jobstore', 'key': 'password'}},
+    }
+    assert env['BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS']['value'] == '8'
+    assert container['command'] == ['python', '/asrctx-probe/asrctx_probe.py']
+
+
+def test_worker_post_render_refuses_redefinition_and_inline_mappings(tmp_path):
+    render = _post_render_module()
+    with pytest.raises(SystemExit):
+        render.patch([_worker_doc()], render._env_entries(None, ['BUCKET_BATCH_PIPELINE=other']))
+    bad = tmp_path / 'worker_env.yaml'
+    bad.write_text("X_PW:\n  value: inline\n")
+    with pytest.raises(SystemExit):
+        render._env_entries(bad, [])
