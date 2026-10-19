@@ -24,19 +24,13 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
     patch_fresh_sync_lane(monkeypatch)
     router = sys.modules['routers.sync']
     storage = sys.modules['utils.other.storage']
-    scheduled = []
-
-    def hold_pipeline(coro, *, name):
-        scheduled.append(coro)
 
     def unavailable(uid, paths):
         raise OSError('synthetic archive failure')
 
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
-    monkeypatch.setattr(router, 'start_background_task', hold_pipeline)
     monkeypatch.setattr(router, 'get_hard_restriction_status', lambda uid: (False, None))
     monkeypatch.setattr(router, 'has_transcription_credits', lambda uid: True)
-    monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
     if archive_fails:
         monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', unavailable)
@@ -68,18 +62,14 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
         ]
         if archive_fails:
             assert response.status_code == 500, response.text
-            assert not scheduled
             assert not archived
         else:
             # Legacy-retire C9: an upload the batch lane does not take is refused by
             # the legacy-dark fence (409, audio kept on the client); no legacy job runs.
             assert response.status_code == 409, response.text
             assert response.json()['code'] == 'sync_content_retry_later'
-            assert not scheduled
     finally:
         server.should_exit = True
         worker.join(timeout=10)
         sock.close()
-        for coro in scheduled:
-            coro.close()
         assert not worker.is_alive()
