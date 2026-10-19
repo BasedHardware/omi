@@ -330,3 +330,82 @@ def store_backend(request) -> Iterator[StoreHarness]:
         yield harness
     finally:
         harness.close()
+
+
+# -- outbox backends (contract (b)) ---------------------------------------------------------------------------
+@dataclass
+class OutboxHarness:
+    """One Outbox implementation plus the controls the conformance suite needs.
+
+    ``wakes`` records every (row_id, wake_token, available_at) the implementation asked to be woken,
+    ``store`` is the backend's batch Store (for the ``tx=`` path) and ``run_tx`` runs ``body(tx)`` in
+    one store transaction whose outbox writes commit or roll back with it.
+    """
+
+    name: str
+    outbox: Any
+    store_harness: StoreHarness
+    wakes: list[tuple[str, str, float]]
+    fail_wakes: list[bool]
+
+    def run_tx(self, body: Callable[[Any], Any]) -> Any:
+        if self.name == 'sim':
+            with self.outbox.transaction():
+                return self.store_harness.store.run(body)
+        return self.store_harness.store.run(body)
+
+
+def _privacy_probe(harness: StoreHarness) -> Callable[[str, Any], bool]:
+    def blocked(owner_id: str, payload: Any) -> bool:
+        conversations = (payload['conversation_id'],) if payload.get('conversation_id') else ()
+        return harness.customer.blocked(owner_id, conversations)
+
+    return blocked
+
+
+def build_outbox_backend(name: str, kind: Any) -> OutboxHarness:
+    """Build an outbox backend or skip/fail per ``OMI_REQUIRE_STORE_BACKENDS`` (same rule as stores)."""
+    wakes: list[tuple[str, str, float]] = []
+    fail_wakes = [False]
+
+    def wake(row_id: str, token: str, available_at: float) -> None:
+        if fail_wakes[0]:
+            raise RuntimeError('task create failed')
+        wakes.append((row_id, token, available_at))
+
+    try:
+        if name == 'emulator':
+            try:
+                from database import outbox_firestore  # lane 9
+            except ImportError as exc:
+                raise BackendUnavailable('database/outbox_firestore.py has not landed (lane 9)') from exc
+            if not hasattr(outbox_firestore, 'FirestoreOutbox'):
+                raise BackendUnavailable('outbox_firestore.FirestoreOutbox constructor not provided (lane 9)')
+            raise BackendUnavailable('emulator customer probe for the Firestore outbox is wired by lane 9')
+        harness = FACTORIES[name]()
+    except BackendUnavailable as exc:
+        if name in required_backends():
+            pytest.fail(f'required outbox backend {name!r} unavailable: {exc}')
+        pytest.skip(f'{name} outbox backend unavailable: {exc}')
+        raise AssertionError('unreachable')
+    probe = _privacy_probe(harness)
+    if name == 'sim':
+        from testing.outbox_sim import SimOutbox
+
+        outbox: Any = SimOutbox(kind, privacy_blocked=probe, create_wake=wake)
+    else:
+        from database.jobstore.outbox_pg import PostgresOutbox
+
+        outbox = PostgresOutbox(kind, harness.store, privacy_blocked=probe, create_wake=wake)
+    return OutboxHarness(name, outbox, harness, wakes, fail_wakes)
+
+
+@pytest.fixture(params=BACKENDS)
+def outbox_backend(request) -> Iterator[OutboxHarness]:
+    from database.outbox import OutboxKind
+
+    harness = build_outbox_backend(request.param, OutboxKind.ENRICHMENT)
+    try:
+        yield harness
+    finally:
+        harness.store_harness.close()
