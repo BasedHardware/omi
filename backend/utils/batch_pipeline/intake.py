@@ -309,7 +309,7 @@ async def accept_upload(
             record_origin=record_origin,
         )
         wakes: dict[str, str] = {}
-        outbox = outbox_for(OutboxKind.PROVIDER_STT) if provider else None
+        outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         outcome = await run_blocking(
             db_executor,
             admit,
