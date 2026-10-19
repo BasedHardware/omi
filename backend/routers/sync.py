@@ -135,6 +135,7 @@ from utils.metrics import (
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
 from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
@@ -1777,6 +1778,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         )
         return with_poll_hint(completed, surface_open=surface_open)
     if not job:
+        retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
+        if retired is not None:
+            return with_poll_hint(retired, surface_open=surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
