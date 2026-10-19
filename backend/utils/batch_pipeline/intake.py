@@ -21,6 +21,7 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.batch_pipeline.provider_stt import resolve_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -204,9 +205,10 @@ async def accept_upload(
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             return None
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        if live_record_enabled_for(uid) and language not in (
-            PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
-        ):
+        route = resolve_route(language, byok=byok_enabled)
+        # legacy_sync 'on' keeps today's fallback exactly, including unknown and
+        # 'multi' languages; the C8 provider route replaces it in draining/dark.
+        if live_record_enabled_for(uid) and (route.stt_route == 'provider' or language in {'', 'multi'}):
             # Keep the supported existing provider route. Never silently send
             # an unsupported language to the record worker's fixed Parakeet.
             record_fallback(
