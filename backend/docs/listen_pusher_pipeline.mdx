@@ -3082,7 +3082,9 @@ speech. Thus the additional flush rate is bounded by one per blip plus at least
 five seconds of capture silence, as well as the existing wall POST pacing.
 `omi_stt_window_stranded_flushes_total{outcome}` counts `performed`,
 `answered_empty`, and `answered_text`; answers describe parsed server output,
-not necessarily emitted text. These three fixed values have no user/session
+not necessarily emitted text. `settled_unplaced` is additive, not a fourth
+exclusive result: it also counts an `answered_text` flush whose text was only
+unplaceable, so do not sum it with the answer outcomes. These fixed values have no user/session
 labels. A failed/cancelled attempt has no answer increment. Retained empty
 history and its context-expiry endpoints remain bounded by the capture horizon.
 

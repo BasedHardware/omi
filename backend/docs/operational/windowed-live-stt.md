@@ -469,9 +469,10 @@ provider health like other session causes.
 A long-silence stranded flush is the last POST a quiet span selects. When its
 answer carries text whose TDT timestamps fall in the silence envelope added to
 the short fragment (dropped as `timestamp_beyond_window`), the leg settles that
-fragment like an answered-empty one: the POST anchor stays, its PCM remains
-context for the next window, and its replay copy ages out only at the natural
-ring horizon. Before 2026-10-19 the anchor waited for a repost that no job
+fragment like an answered-empty one: when nothing was emitted the POST anchor
+stays, its PCM remains context for the next window, and its replay copy ages
+out only at the natural ring horizon. When some text was placed, the existing
+beyond-window anchoring applies and the remainder is accounted the same way. Before 2026-10-19 the anchor waited for a repost that no job
 would select, so ~90 s of near-silence overflowed the ring into failover (prod
 signature `posts_since_anchor=1 empty_posts_since_anchor=0 cut_pending=1
 post_in_flight=0`). `omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`
