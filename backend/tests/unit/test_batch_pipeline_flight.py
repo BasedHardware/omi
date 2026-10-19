@@ -66,18 +66,41 @@ def test_only_allocator_exhaustion_is_recoverable():
     assert not flight.is_out_of_memory(ValueError('bad shape'))
 
 
-def test_flight_knob_defaults_on_with_bounded_budget(monkeypatch):
+def test_flight_knob_is_dark_until_explicitly_true(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_FLIGHT_BATCH_SECONDS', raising=False)
+    assert ProviderConfig().flight_batching is False
     config = provider_config()
-    assert config.flight_batching is True and config.flight_batch_seconds == 1800
-    monkeypatch.setenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false')
+    assert config.flight_batching is False and config.flight_batch_seconds == 1800
+    for value in ('false', '0', 'yes', 'on', ''):
+        monkeypatch.setenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', value)
+        assert provider_config().flight_batching is False
+    monkeypatch.setenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'True')
     monkeypatch.setenv('BATCH_PIPELINE_FLIGHT_BATCH_SECONDS', '600')
     config = provider_config()
-    assert config.flight_batching is False and config.flight_batch_seconds == 600
+    assert config.flight_batching is True and config.flight_batch_seconds == 600
     for invalid in (0, -1, 7201, float('inf')):
         with pytest.raises(ValueError, match='flight batch budget'):
             ProviderConfig(flight_batch_seconds=invalid)
+
+
+def test_mismatched_cached_embeddings_recompute_serially_instead_of_failing():
+    original_calls = []
+    diarizer = SimpleNamespace(
+        _segmentation=SimpleNamespace(),
+        get_segmentations=lambda file, hook=None: 'serial-segmentation',
+        get_embeddings=lambda file, segmentation, exclude_overlap=False, hook=None: original_calls.append(file)
+        or 'serial-embeddings',
+    )
+    flight.FlightPyannote(diarizer, SimpleNamespace(_segmentation=SimpleNamespace()), budget_seconds=1800)
+    binarized = SimpleNamespace(data=np.zeros((4, 10, 3)))
+    matching = {flight.EMBEDDINGS_KEY: np.zeros((4, 3, 256))}
+    assert diarizer.get_embeddings(matching, binarized) is matching[flight.EMBEDDINGS_KEY]
+    mismatched = {flight.EMBEDDINGS_KEY: np.zeros((5, 3, 256))}
+    assert diarizer.get_embeddings(mismatched, binarized) == 'serial-embeddings'
+    assert original_calls == [mismatched]
+    assert diarizer.get_segmentations({}) == 'serial-segmentation'
+    assert diarizer.get_segmentations({flight.SEGMENTATION_KEY: 'cached'}) == 'cached'
 
 
 def test_model_doubles_disable_packing_instead_of_failing_startup():
@@ -300,10 +323,10 @@ def test_packed_segmentation_vad_and_diarization_match_serial_pyannote(pyannote_
 
     for clip, feature in zip(clips, features):
         file = {'waveform': torch.from_numpy(clip).unsqueeze(0), 'sample_rate': RATE}
-        if not packed._speaking(feature.segmentation):
+        if not packed.speaking(feature.segmentation):
             continue
         reference = diarizer.get_embeddings(file, feature.segmentation, exclude_overlap=True)
-        shared = packed._embed_group([file], [feature.segmentation])[0]
+        shared = packed.embed_group([file], [feature.segmentation])[0]
         np.testing.assert_array_equal(np.isnan(shared), np.isnan(reference))
         np.testing.assert_allclose(shared, reference, rtol=0, atol=1e-4, equal_nan=True)
 
@@ -330,7 +353,7 @@ def test_packed_out_of_memory_falls_back_to_serial_pyannote(pyannote_pair, monke
     def exhausted(*args, **kwargs):
         raise OutOfMemoryError('CUDA out of memory. Tried to allocate 2.00 GiB')
 
-    monkeypatch.setattr(packed, '_embed_group', exhausted)
+    monkeypatch.setattr(packed, 'embed_group', exhausted)
     assert packed.diarize_many(list(zip(clips, features))) == serial
     monkeypatch.setattr(packed, '_segment_group', exhausted)
     assert packed.segment(clips) == [None, None]

@@ -210,7 +210,9 @@ class FlightPyannote:
                 return original_embeddings(file, binary_segmentations, exclude_overlap=exclude_overlap, hook=hook)
             chunks, _, speakers = binary_segmentations.data.shape
             if cached.shape[:2] != (chunks, speakers):
-                raise ValueError('precomputed embeddings do not match segmentation')
+                # Never cluster mismatched rows: recompute serially instead.
+                logger.warning('event=batch_flight_fallback stage=embedding reason=shape_mismatch')
+                return original_embeddings(file, binary_segmentations, exclude_overlap=exclude_overlap, hook=hook)
             return cached
 
         # Bypass pyannote's attribute bookkeeping: these are plain callables
@@ -325,7 +327,7 @@ class FlightPyannote:
             ]
             yield waveform, np.stack(used)
 
-    def _embed_group(self, files, binarized_list):
+    def embed_group(self, files, binarized_list):
         embedding = self.diarizer._embedding
         model = embedding.model_
         exclude_overlap = self.diarizer.embedding_exclude_overlap
@@ -348,7 +350,7 @@ class FlightPyannote:
                 outputs[owner].append(pooled[row])
         return [np.stack(rows_out) for rows_out in outputs]
 
-    def _speaking(self, segmentation) -> bool:
+    def speaking(self, segmentation) -> bool:
         count = self.diarizer.speaker_count(segmentation, self.segmentation.model.receptive_field, warm_up=(0.0, 0.0))
         return bool(np.nanmax(count.data) > 0)
 
@@ -367,11 +369,11 @@ class FlightPyannote:
             seconds = [len(samples) / SAMPLE_RATE for samples, _ in entries]
             groups, _ = flight_groups(seconds, self.budget_seconds)
             for group in groups:
-                eligible = [i for i in group if segmentations[i] is not None and self._speaking(segmentations[i])]
+                eligible = [i for i in group if segmentations[i] is not None and self.speaking(segmentations[i])]
                 if not eligible:
                     continue
                 try:
-                    embeddings = self._embed_group([files[i] for i in eligible], [segmentations[i] for i in eligible])
+                    embeddings = self.embed_group([files[i] for i in eligible], [segmentations[i] for i in eligible])
                 except Exception as exc:
                     if not self._recoverable(exc, 'embedding'):
                         raise

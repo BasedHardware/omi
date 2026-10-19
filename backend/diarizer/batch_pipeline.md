@@ -33,20 +33,51 @@ speaker labels never pool across owners. Payloads retain words and turns as
 separate evidence for the downstream projection/assignment layer; this worker
 does not name speakers or write user conversation records.
 
-Flight packing (`BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED`, default on;
-`BATCH_PIPELINE_FLIGHT_BATCH_SECONDS`, default 1800) removes duplicated pyannote
-work inside one locked flight without changing any per-conversation result:
-community-1's segmentation runs once per unit and feeds both VAD (CPU
-aggregation and binarization) and diarization, and the WeSpeaker trunk runs once
-per 10s chunk instead of once per (chunk, local speaker), pooled with the same
-masks. Forwards pack chunks across the flight's units at the pinned model batch
-size, so a forward is never larger than the serial one. Clustering, labels and
-turns stay pyannote's own per-unit `apply`. Units above the budget, unsupported
-model layouts, non-fatal packed failures and CUDA out-of-memory inside the
-packed path take the unchanged serial calls; other fatal CUDA errors still
-quarantine the chain. `tests/unit/test_batch_pipeline_flight.py` compares both
-paths on CPU (exact VAD spans and turns; segmentation within 1e-5, embeddings
-within 1e-4) whenever torch and pyannote are installed.
+Flight packing (`BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED`, **default off**; only
+the exact value `true` enables it; `BATCH_PIPELINE_FLIGHT_BATCH_SECONDS`, default
+1800) removes duplicated pyannote work inside one locked flight. Community-1
+segmentation runs once per unit and feeds both VAD (CPU aggregation and
+binarization) and diarization, and the WeSpeaker trunk runs once per 10s chunk
+instead of once per (chunk, local speaker), pooled with the same masks. Forwards
+pack chunks across the flight's units at the pinned model batch size, so a
+forward is never larger than the serial one. Clustering, labels and turns stay
+pyannote's own per-unit `apply`. Units above the budget, unsupported model
+layouts, non-fatal packed failures, cached-feature shape mismatches and CUDA
+out-of-memory inside the packed path take the unchanged serial calls; other
+fatal CUDA errors still quarantine the chain. `tests/unit/test_batch_pipeline_flight.py`
+compares both paths on CPU with random weights (exact VAD spans and turns;
+segmentation within 1e-5, embeddings within 1e-4) whenever torch and pyannote
+are installed.
+
+**Enablement gate.** CPU equality does not cover the L4: packing moves a unit's
+last chunk out of its own batch-of-one forward into a shared batch, so cuDNN may
+pick a different kernel, and a ~1e-5 embedding move or a powerset frame near 0.5
+can change a VBx assignment. Before setting the flag on anywhere, run the paired
+qualification on one isolated dev L4 with community-1 revision
+`3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` and batch pin 8, on public or consented
+multi-speaker audio (for example AMI far-field meetings, or a pendant clip with two
+voices):
+
+```bash
+PYTHONPATH=. BATCH_PIPELINE_MODEL_BATCH_SIZE=8 python diarizer/batch_pipeline_flight_qualify.py \
+  --audio /public/ami/ES2004a.Array1-01.wav /public/ami/IS1009a.Array1-01.wav \
+  --unit-seconds 23,41,67,95,128,30.5,212 --output /receipts/flight-qualify.json
+```
+
+It cuts the inputs into one flight of mixed-length units (ragged tails share
+packed forwards), runs the serial calls and the packed path on the same
+waveforms, and records per unit: segmentation max abs and active-frame
+disagreements, embedding max abs, VAD span equality, speaker counts and
+time-weighted speaker-assignment agreement after optimal label mapping, plus the
+`ChainMemoryProbe` peaks of both paths. The gate passes (exit 0) only when every
+unit's VAD spans are equal, speaker counts are equal, units where serial finds two
+or more speakers agree on at least 99% of speech time, at least five such
+multi-speaker units exist (otherwise exit 2, insufficient evidence), and the
+packed CUDA working-set peak stays within 1.10x serial. The packed flight must
+also stay inside the chart's host envelope (9.795 GiB receipt, 12 GiB request,
+14 GiB limit). Attach the receipt to the enabling change. #22324's `vad` and
+`diarize` stage timers measure GPU time for this path only once they wrap
+`_flight_segment`/`vad_spans` and `_flight_diarize`.
 
 Pre-STT live reuse additionally defaults off. It requires existing lineage gates
 plus an injected resolver's immutable-audio-bound full-source-coverage and

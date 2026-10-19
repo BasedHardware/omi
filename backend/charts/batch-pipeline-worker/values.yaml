@@ -33,8 +33,8 @@ worker:
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.
-  # Kill switch; per-forward batch stays batchSize, so peak VRAM is unchanged.
-  flightBatchingEnabled: true
+  # Dark until the L4 paired run passes (diarizer/batch_pipeline_flight_qualify.py).
+  flightBatchingEnabled: false
   flightBatchSeconds: 1800
   emptyAsrRecoveryEnabled: false
   emptyAsrDispositionEnabled: false

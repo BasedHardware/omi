@@ -85,7 +85,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
-    assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'

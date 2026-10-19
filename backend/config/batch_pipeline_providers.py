@@ -19,7 +19,9 @@ class ProviderConfig:
     # Batch pyannote segmentation/embeddings across the items of one locked
     # flight. Per-forward model batches keep the pinned batch size, so peak
     # VRAM does not grow; the audio-seconds budget bounds host-side features.
-    flight_batching: bool = True
+    # Off until the L4 paired run on the production checkpoint passes
+    # (diarizer/batch_pipeline_flight_qualify.py).
+    flight_batching: bool = False
     flight_batch_seconds: float = 1800
 
     def __post_init__(self):
@@ -61,7 +63,7 @@ def provider_config() -> ProviderConfig:
         window_seconds=float(os.getenv('BATCH_PIPELINE_WINDOW_SECONDS', '30')),
         context_seconds=float(os.getenv('BATCH_PIPELINE_CONTEXT_SECONDS', '2')),
         reuse_live=os.getenv('BATCH_PIPELINE_REUSE_LIVE_ENABLED', 'false').lower() == 'true',
-        # Kill switch: on unless explicitly set to false.
-        flight_batching=os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'true').lower() != 'false',
+        # Dark until qualified: only an explicit 'true' enables packing.
+        flight_batching=os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false').strip().lower() == 'true',
         flight_batch_seconds=float(os.getenv('BATCH_PIPELINE_FLIGHT_BATCH_SECONDS', '1800')),
     )
