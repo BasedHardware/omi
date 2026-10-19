@@ -32,6 +32,12 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
+from utils.memory.index_window import (
+    MemoryIndexWindowLimit,
+    read_index_window_slots,
+    position_cursor,
+    validate_window_cursors,
+)
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -1470,6 +1476,8 @@ class _HistoricalRawStream:
         self._service = service
         self._uid = uid
         self._kind = kind
+        self._index_window = firestore_read_levers.lever_enabled('memory_list_index_window', uid)
+        self._window_fetched = False
         self.scan_keyset = scan
         self.exhausted = bool(exhausted)
         self._budget = budget or _ScanRowBudget()
@@ -1490,6 +1498,8 @@ class _HistoricalRawStream:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
         self._budget.check()
+        if self._index_window and self._window_fetched:
+            raise MemoryIndexWindowLimit()
         start_after: Optional[Tuple[datetime, str]] = None
         if self.scan_keyset is not None:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
@@ -1499,13 +1509,28 @@ class _HistoricalRawStream:
             else self._service.history.read_created_scan_page
         )
         try:
-            raw_slots, stream_exhausted = reader(
-                self._uid,
-                limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
-                start_after=start_after,
-                device_scope_request=self._device_scope_request,
-                budget=self._rpc_budget,
-            )
+            if self._index_window:
+                token = self.scan_keyset.index_window_cursor if self.scan_keyset is not None else None
+                if token is None and start_after is not None:
+                    token = position_cursor(self._uid, self._kind, start_after)
+                raw_slots, stream_exhausted = read_index_window_slots(
+                    self._service.history,
+                    self._uid,
+                    self._kind,
+                    self._page_limit,
+                    token or '',
+                    self._rpc_budget,
+                    self._device_scope_request,
+                )
+                self._window_fetched = True
+            else:
+                raw_slots, stream_exhausted = reader(
+                    self._uid,
+                    limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    start_after=start_after,
+                    device_scope_request=self._device_scope_request,
+                    budget=self._rpc_budget,
+                )
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
@@ -1513,7 +1538,15 @@ class _HistoricalRawStream:
         self._slots = [
             (
                 record,
-                self._service.scan_cursor_to_stream_keyset(scan_cursor),
+                (
+                    StreamKeyset(
+                        updated_at_us=self._service.scan_cursor_to_stream_keyset(scan_cursor).updated_at_us,
+                        memory_id=scan_cursor[1],
+                        index_window_cursor=position_cursor(self._uid, self._kind, scan_cursor),
+                    )
+                    if self._index_window
+                    else self._service.scan_cursor_to_stream_keyset(scan_cursor)
+                ),
             )
             for record, scan_cursor in raw_slots
         ]
@@ -1640,10 +1673,14 @@ class _HistoricalCursorStream:
 
     @property
     def updated_exhausted(self) -> bool:
+        if self._updated._index_window:
+            return self._updated.exhausted
         return self._updated.exhausted and self._updated.peek() is None
 
     @property
     def created_exhausted(self) -> bool:
+        if self._created._index_window:
+            return self._created.exhausted
         return self._created.exhausted and self._created.peek() is None
 
     @property
@@ -3002,6 +3039,11 @@ class MemoryService:
             except UniversalListCursorError as exc:
                 raise HTTPException(status_code=400, detail=f"invalid_or_stale_cursor:{exc.reason}") from exc
             state = claims.state
+            if firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+                try:
+                    validate_window_cursors(state, uid)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:index_window') from exc
             if temporal_as_of is None and state.as_of:
                 try:
                     temporal_as_of = datetime.fromisoformat(state.as_of)
@@ -3067,6 +3109,7 @@ class MemoryService:
         canonical_kept = 0
         historical_kept = 0
         truncated = False
+        window_limited = False
         canonical_error: Optional[MemoryBackingStoreUnavailable] = None
 
         with batch_canonical_expiry_observations():
@@ -3130,6 +3173,8 @@ class MemoryService:
                     historical.consume()
                     if accepted:
                         historical_kept += 1
+            except MemoryIndexWindowLimit:
+                window_limited = True
             except ListReadBudgetExhausted:
                 # The request budget ended the scan mid-merge. Items already
                 # merged are an honest newest-first prefix, but the cursor
@@ -3156,7 +3201,10 @@ class MemoryService:
         next_cursor = None
         if not truncated:
             try:
-                has_more = canonical.peek() is not None or historical.peek() is not None
+                try:
+                    has_more = window_limited or canonical.peek() is not None or historical.peek() is not None
+                except MemoryIndexWindowLimit:
+                    has_more = True
                 if has_more:
                     next_state = UniversalListCursorState(
                         uid=uid,

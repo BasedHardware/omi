@@ -25,6 +25,8 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]  # firestore transactional decorator is untyped
 
+from utils.memory.index_window_cursor import BookmarkDict, decode_cursor, query_scope
+
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from config import firestore_read_levers
 from database import memory_ledger
@@ -408,7 +410,25 @@ def _stream_memory_list_index_window(
     *,
     budget: Optional[ListReadBudget] = None,
     cursor_snapshot: Any = None,
+    uid: Optional[str] = None,
+    cursor: Optional[str] = None,
+    full_documents: bool = False,
 ) -> List[Any]:
+    if uid is not None and cursor is not None and firestore_read_levers.lever_enabled("memory_list_index_window", uid):
+        try:
+            position = decode_cursor(cursor, query_scope({"uid": uid, "order": order_field})) if cursor else None
+        except ValueError:
+            pass  # Invalid/expired bookmarks keep the released window query.
+        else:
+            query = memories_ref if full_documents else memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS))
+            query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by("__name__")
+            if position is not None:
+                stamp, memory_id = position
+                query = query.start_after(
+                    BookmarkDict({order_field: stamp, "__name__": memories_ref.document(memory_id)})
+                )
+            # The route clamps its requested page to 1..500. No offset or hidden-row slack.
+            return budgeted_stream_list(query.limit(max(1, min(int(candidate_limit), 500))), budget)
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )

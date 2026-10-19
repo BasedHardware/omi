@@ -11,6 +11,7 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
+from config import firestore_read_levers
 import database._client as db_client_module
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
@@ -780,6 +781,33 @@ def get_memories(
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
     cursor = _normalize_memory_list_cursor(cursor)
+    index_cursor_fallback = False
+    if cursor is not None and firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+        try:
+            page = MemoryService(db_client=db_client).read_page(
+                uid,
+                limit=bounded_limit,
+                cursor=cursor,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+                include_archive=include_archive,
+                request_budget=budget,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 400 or not str(exc.detail).startswith('invalid_or_stale_cursor:'):
+                raise
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            cursor = None
+            index_cursor_fallback = True
+        else:
+            return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
@@ -798,7 +826,7 @@ def get_memories(
         )
         return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
 
-    if bounded_offset == 0:
+    if bounded_offset == 0 and not index_cursor_fallback:
         # Prefer the composite cursor on the first page so sync/export can continue
         # past the legacy 5000 offset window without a second request shape.
         try:

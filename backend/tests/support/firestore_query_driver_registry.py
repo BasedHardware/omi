@@ -1636,13 +1636,20 @@ _add(
     )
 )
 _add(
-    CoveredByEntry(
+    DriverEntry(
         'database.memories._stream_memory_list_index_window',
-        covered_by=(
-            'database.memories.get_memories',
-            'database.memories.list_memory_updated_or_created_index',
-        ),
-        reason='candidate window streamer observed inside both listed consumers',
+        base={'memories_ref': ref_collection(f'users/{UID}/memories'), 'uid': UID},
+        domains={
+            'order_field': ['updated_at', 'created_at'],
+            'cursor': [None, '', 'invalid'],
+            'full_documents': [False, True],
+        },
+        neutrals={
+            'candidate_limit': _LIMIT,
+            'budget': _BUDGET,
+            'cursor_snapshot': (None, 'legacy snapshot seeks covered by list consumer'),
+        },
+        patchers=(_stub('config.firestore_read_levers.lever_enabled', True),),
     )
 )
 _add(DriverEntry('database.memories.count_default_visible_memories', base={'uid': UID}))
