@@ -27,6 +27,7 @@ from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import shutdown_executors
@@ -119,13 +120,31 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     return server
 
 
+# Prometheus-adapter drops a sampler series older than 60s
+# (charts/batch-pipeline-worker/prometheus-adapter-rules.yaml); sample well inside it.
+METRICS_SAMPLE_SECONDS = 15
+
+
 async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event) -> None:
     async def tick():
         while True:
             state.ticked_at = time.monotonic()
             await asyncio.sleep(5)
 
-    ticking = asyncio.create_task(tick())
+    async def sample():
+        # Independent of run_once: a replica inside a multi-minute GPU batch
+        # still refreshes its queue gauges, so the HPA never goes blind when
+        # every replica is busy. Failures retain the last sample and freshness.
+        while True:
+            try:
+                await pump.sample_metrics()
+            except Exception as error:
+                logger.warning('event=batch_queue_metrics outcome=retry exception_type=%s', type(error).__name__)
+            await asyncio.sleep(METRICS_SAMPLE_SECONDS)
+
+    tasks = [asyncio.create_task(tick())]
+    if callable(getattr(pump, 'sample_metrics', None)):
+        tasks.append(asyncio.create_task(sample()))
     state.ready = True
     try:
         await pump.run(stop_event)
@@ -133,8 +152,9 @@ async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event) -
             raise RuntimeError('GPU chain quarantined; process restart required')
     finally:
         state.ready = False
-        ticking.cancel()
-        await asyncio.gather(ticking, return_exceptions=True)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, state: RuntimeState) -> None:
@@ -171,6 +191,10 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds
             ),
+            # One replica runs recovery/drain per tick; a holder stuck in a long
+            # GPU batch hands over after the TTL. Fails open on store errors.
+            leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
+            inline_metrics=False,  # supervise() samples on its own task.
         )
         await supervise(pump, state, stop_event)
     finally:
