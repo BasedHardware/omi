@@ -50,6 +50,8 @@ FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 WAKE_CHECK_SECONDS = 300
 LIVE_DEFER_SECONDS = 120
+# Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
+HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 
@@ -125,7 +127,7 @@ def valid_dispatch_binding(dispatch: object) -> TypeGuard[dict[str, str]]:
     return (
         url.scheme == 'https'
         and bool(url.netloc)
-        and url.path.endswith('/v2/sync-jobs/run')
+        and url.path.endswith(HANDLER_PATHS)
         and not url.query
         and not url.fragment
         and dispatch['audience'] == dispatch['handler']
@@ -161,6 +163,22 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
 
 
 def _dispatch_binding() -> dict[str, str] | None:
+    from config import enrichment as enrichment_config
+
+    if enrichment_config.route() == 'enrichment_queue':
+        binding = enrichment_config.dispatch_binding()
+        if valid_dispatch_binding(binding):
+            return binding
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='enrichment_queue',
+            to_mode='sync_handler',
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
     handler = os.getenv('SYNC_TASKS_HANDLER_URL', '')
     binding = {
         'queue': os.getenv('SYNC_TASKS_QUEUE', ''),
@@ -197,7 +215,7 @@ def _enqueue(row: dict[str, Any]) -> None:
     assert isinstance(dispatch, dict)
     handler = dispatch['handler']
     if not (
-        handler.endswith('/v2/sync-jobs/run')
+        handler.endswith(HANDLER_PATHS)
         or row.get('effects_only')
         and handler.endswith('/v1/conversation-finalization-jobs/run')
     ):

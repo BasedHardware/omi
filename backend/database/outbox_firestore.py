@@ -285,6 +285,33 @@ class FirestoreEnrichmentOutbox:
         outbox.wake_row(pending)
         return pending['task_token']
 
+    def repair(self, claim: Claim, retry_revision: int, *, now: float) -> str | None:
+        """Enrichment-only: a repair lost its revision race; re-arm now behind the newer revision's fence."""
+        outbox = _outbox()
+
+        def rearm(old):
+            if not _holds(old, claim):
+                return old, None
+            pending = dict(old)
+            pending.pop('summary_seen_by', None)
+            due = min(now, pending['due_at'])
+            pending.update(
+                summary_repair=True,
+                summary_expected_revision=retry_revision,
+                lease_until=0,
+                owner=None,
+                task_token=uuid.uuid4().hex,
+                task_due_at=due,
+                due_at=due,
+            )
+            return pending, pending
+
+        pending = outbox.mutate_row(claim.row_id, rearm)
+        if pending is None:
+            return None
+        outbox.wake_row(pending)
+        return pending['task_token']
+
     def release(self, claim: Claim, reason: str, *, now: float) -> bool:
         """RETRY: drop the lease and keep the wake token, so the queue's own retry can claim again."""
 
