@@ -108,8 +108,8 @@ fi
         operation = 'update' if inventory in {'present', 'present_short'} else 'create'
         assert calls[1].startswith(f'tasks queues {operation} batch-quarantine-recovery ')
         for option in [
-            '--max-concurrent-dispatches=4',
-            '--max-dispatches-per-second=4',
+            '--max-concurrent-dispatches=16',
+            '--max-dispatches-per-second=8',
             '--max-attempts=5',
             '--min-backoff=5s',
             '--max-backoff=60s',

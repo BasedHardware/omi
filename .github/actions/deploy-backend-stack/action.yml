@@ -871,8 +871,8 @@ runs:
         gcloud tasks queues "$operation" "$queue" \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" \
-          --max-concurrent-dispatches=4 \
-          --max-dispatches-per-second=4 \
+          --max-concurrent-dispatches=16 \
+          --max-dispatches-per-second=8 \
           --max-attempts=5 \
           --min-backoff=5s --max-backoff=60s
 
