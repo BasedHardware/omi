@@ -215,19 +215,31 @@ def test_notes_loop_deadline_covers_the_whole_transport_recovery_budget():
     deadline as run_loop's total deadline, so structuring that outlived one attempt
     died as a bare ``TimeoutError`` instead of letting the client-owned deadline —
     and the direct lane's single retry — govern."""
-    assert processing.notes_mount().budget.deadline_seconds == 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+    assert processing.notes_mount().budget.deadline_seconds == 3 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_notes_loop_deadline_leaves_retry_backoff_headroom():
+    """Two timeout-length attempts are not the whole recovery budget: the SDK sleeps
+    before its retry (0.5s doubling backoff after a timeout, Retry-After up to 60s
+    after a retried status), and the per-attempt deadline buys each HTTP attempt
+    afresh. An exactly-2x deadline cancelled the viable retry in its final stretch
+    — the same bare ``TimeoutError`` this PR exists to prevent — so the loop
+    deadline must exceed two attempts by one inter-attempt delay bound."""
+    assert processing.NOTES_LOOP_DEADLINE_SECONDS > 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 
 
 def test_notes_loop_deadline_is_not_headroom_capped_under_the_sync_route_budget():
     """The route, not the loop, owns the client-visible cut on synchronous
-    create/reprocess: a 2x60s transport recovery plus the auth/db preamble cannot
-    fit the middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at one
-    60s attempt. Capping the loop deadline under that budget to "reserve headroom"
+    create/reprocess: transport recovery plus the auth/db preamble cannot fit the
+    middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at one 60s
+    attempt. Capping the loop deadline under that budget to "reserve headroom"
     would preempt the direct lane's retry again on the durable finalizer's 1500s
     lease — the lane where the whole recovery budget fits — resurrecting this
     error group there. A sync request that outruns the middleware gets a 504 on
-    the response only; the threadpool handler finishes the recovery out-of-band."""
-    assert processing.NOTES_LOOP_DEADLINE_SECONDS >= 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+    the response only; the threadpool handler finishes the recovery out-of-band.
+    The 3x sizing leaves that lane 120s of retry-backoff headroom inside its
+    lease."""
+    assert processing.NOTES_LOOP_DEADLINE_SECONDS >= 3 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 
 
 def test_first_attempt_past_the_per_attempt_deadline_still_summarizes(monkeypatch):

@@ -299,9 +299,16 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # that outruns the middleware gets a 504 on the response only — the handler runs
 # on a threadpool thread and the notes loop on its own asyncio.run loop, so the
 # recovery finishes after the 504 — with the processing_admission_guard orphan
-# sweep as the crash floor. messaging.summarize sizes its mount the same way at
-# 2x its lane's per-attempt deadline.
-NOTES_LOOP_DEADLINE_SECONDS = 2 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+# sweep as the crash floor. messaging.summarize sizes its mount by the same
+# per-attempt multiplier method, at 2x its lane's per-attempt deadline.
+#
+# The recovery budget is strictly more than two attempts: the SDK sleeps before
+# its retry — 0.5s doubling backoff after a timed-out attempt (8s cap), or a
+# server Retry-After of up to 60s after a retried status response — and the
+# per-attempt deadline buys each HTTP attempt afresh. An exactly-2x loop
+# deadline cancelled the viable retry in its final stretch, so the mount sizes
+# at two attempts plus one inter-attempt delay bound (3x).
+NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
