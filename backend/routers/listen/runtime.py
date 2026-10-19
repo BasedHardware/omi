@@ -89,6 +89,8 @@ from utils.stt.live_metrics import (
     provider_family,
 )
 from config.live_stt_registry import routing_on
+from config.policy.listen import current_listen_policy, routing_mode_raw, listen_value
+from routers.listen.policy import initialize_session_policy
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
@@ -396,6 +398,11 @@ class ListenSessionRuntime:
         self._cost_routing_arm: str | None = None
         self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
+            policy = getattr(self.state, 'listen_policy', None)
+            if policy is not None:
+                self._cost_routing_arm = policy.routing_arm
+                self._routing_cohort = RoutingCohort(policy.routing_cohort)
+                return
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
             except (ValueError, TypeError):
@@ -405,7 +412,7 @@ class ListenSessionRuntime:
             arm = (
                 'on'
                 if self._cost_routing_arm == 'on'
-                else 'shadow' if os.getenv('STT_ROUTING_MODE', 'off').lower() == 'shadow' else 'off'
+                else 'shadow' if routing_mode_raw().lower() == 'shadow' else 'off'
             )
             self._routing_cohort = RoutingCohort(arm)
 
@@ -445,7 +452,15 @@ class ListenSessionRuntime:
             record_metric(
                 WINDOW_CANARY_OUTCOME,
                 {
-                    'arm': 'window' if window_allocation(self.request.uid) else 'control',
+                    'arm': (
+                        'window'
+                        if (
+                            self.state.listen_policy.window_allocated
+                            if getattr(self.state, 'listen_policy', None) is not None
+                            else window_allocation(self.request.uid)
+                        )
+                        else 'control'
+                    ),
                     'outcome': outcome,
                     'demand_cohort': host_cohort(self),
                 },
@@ -573,6 +588,9 @@ class ListenSessionRuntime:
                 else None
             )
             self.onboarding_admitted = isinstance(self.onboarding_session_id, str)
+        policy = await initialize_session_policy(self)
+        current_listen_policy.set(policy)
+        current_recovery_enabled.set(policy.failover_recovery_enabled)
         self.user_has_credits = base.user_has_credits
         self.language = normalize_language(request.language)
         single_language_mode = should_force_single_language(
@@ -586,7 +604,7 @@ class ListenSessionRuntime:
         if (
             language_profile_in_scope
             and self.multi_lang_enabled
-            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+            and str(listen_value('learned_language_profile', 'STT_LEARNED_LANGUAGE_PROFILE', 'false')).lower() == 'true'
         ):
             try:
                 learned_sessions = await asyncio.wait_for(
@@ -1091,9 +1109,11 @@ class ListenSessionRuntime:
         token = current_recovery_enabled.set(self.recovery_enabled)
         cohort_token = current_routing_cohort.set(None)
         demand_token = current_demand.set(None)
+        policy_token = current_listen_policy.set(None)
         try:
             await self._run()
         finally:
+            current_listen_policy.reset(policy_token)
             current_demand.reset(demand_token)
             current_routing_cohort.reset(cohort_token)
             current_recovery_enabled.reset(token)

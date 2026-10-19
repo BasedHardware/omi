@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from config.policy.listen import routing_mode_raw
+
 import json
 import hashlib
 import logging
@@ -270,7 +272,7 @@ class CostHealthMixin(ABC):
         uid: str | None = None,
         reason: str | None = None,
     ) -> bool:
-        if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+        if not uid or routing_mode_raw() == 'off':
             return False
         identity = self._check_identity()
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]

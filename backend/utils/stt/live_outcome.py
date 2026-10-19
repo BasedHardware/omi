@@ -7,6 +7,8 @@ There is no health writer in a death getter, send, or transport close.
 
 from __future__ import annotations
 
+from config.policy.listen import routing_mode_raw
+
 import logging
 import os
 from typing import Callable, Any
@@ -75,7 +77,7 @@ class LiveLegOutcome:
             self.reason = 'normal_close' if self.excluded_death else bounded_reason
             if self.excluded_death:
                 try:
-                    if os.getenv('STT_ROUTING_MODE', 'off').strip().lower() != 'off' and any(
+                    if routing_mode_raw().strip().lower() != 'off' and any(
                         entry.id == self.target for entry in registry()
                     ):
                         COST_IGNORED_DEATHS.labels(
@@ -112,7 +114,7 @@ class LiveLegOutcome:
         try:
             if emit_fallback is not None and not self.excluded_death:
                 emit_fallback()
-            if not self.uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+            if not self.uid or routing_mode_raw() == 'off':
                 return True
             if not any(entry.id == self.target for entry in registry()):
                 return True
