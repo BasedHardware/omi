@@ -13,9 +13,7 @@ KEY_ENV = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
 # module import — the fast-unit guard only measures call-phase CPU, so doing it
 # per-test pushed this file over the 1s fail limit under a loaded CI runner.
 _LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
-_MANIFEST = yaml.load(
-    (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_LOADER
-)
+_MANIFEST = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_LOADER)
 _NOTIFICATIONS_WORKFLOW = (BACKEND.parent / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
 
 
