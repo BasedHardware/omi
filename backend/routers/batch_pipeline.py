@@ -158,7 +158,7 @@ async def fail(body: FailRequest):
 
 
 @router.post('/recover-quarantine', include_in_schema=False)
-async def recover_quarantine(body: RedriveRequest):
+async def recover_quarantine(body: RedriveRequest, request: Request):
     """Keep paid STT inside an active request across ordinary revision draining.
 
     Retried/duplicate tasks can reconcile the original intent; start() never
@@ -172,6 +172,17 @@ async def recover_quarantine(body: RedriveRequest):
     if not job:
         return {'status': 'held'}
     outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
+    if outcome == 'held':
+        try:
+            await run_blocking(
+                db_executor,
+                service.recovery.delivered,
+                body.segment_id,
+                outcome,
+                request.headers.get('X-CloudTasks-TaskName'),
+            )
+        except Exception:
+            pass  # The lease still expires; the sweep repairs the wake then.
     if outcome == 'disabled':
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:

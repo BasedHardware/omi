@@ -392,6 +392,25 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
+    # The queue's attempt cap must mirror get_sync_tasks_max_attempts()
+    # (default 5): omitted queue fields keep Google's default of 100, so a
+    # handler-budget deferral chain ended through the 409 would keep retrying
+    # past the preserved run lock and re-run whole-budget pipelines.
+    assert '--max-attempts=5' in action
+    # The fresh lane and the fallback route in _enqueue_sync_job_routed deliver
+    # through the main sync-jobs queue (SYNC_TASKS_QUEUE), so its attempt cap
+    # must be reconciled too — update-only, because the queue's throughput
+    # limits are owned elsewhere. A create branch here would race the owner.
+    assert 'gcloud tasks queues describe sync-jobs' in action
+    assert 'gcloud tasks queues update sync-jobs' in action
+    assert 'gcloud tasks queues create sync-jobs' not in action
+    # The main-queue update must cap attempts without touching throughput
+    # fields another team owns: isolate the update command and assert its
+    # only field is the attempt cap.
+    main_queue_update = action.split('gcloud tasks queues update sync-jobs', 1)[1].split('fi\n', 1)[0]
+    assert '--max-attempts=5' in main_queue_update
+    assert '--max-concurrent-dispatches' not in main_queue_update
+    assert '--max-dispatches-per-second' not in main_queue_update
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert 'firestore_project_id:' in action
