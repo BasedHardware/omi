@@ -409,6 +409,7 @@ def test_ramp_set_cli_refuses_controller_actor_and_wrong_tier(monkeypatch):
         store, 'read_ramp', lambda **kw: store.normalize_ramp_document(db.rows[('rollout_cohorts', '_ramp')])
     )
     common = ['--env', 'prod', '--legacy-sync', 'draining', '--expected-revision', '0', '--reason', 'draining']
+    common += [arg for pid in rc.DRAINING_PRECONDITIONS for arg in ('--precondition-met', pid)]
     assert ramp_set.main(common + ['--actor', 'ramp-controller', '--apply'], client_factory=lambda **kw: db) == 2
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     assert ramp_set.main(common + ['--actor', 'lead', '--apply'], client_factory=lambda **kw: db) == 2
@@ -428,3 +429,19 @@ def test_gate_unavailable_escalates_every_third_consecutive_tick():
     assert rc.gate_unavailable(verdict('FAIL', 'timeout_incomplete'))
     assert not rc.gate_unavailable(verdict('FAIL', 'projection_error'))
     assert not rc.gate_unavailable(verdict('FAIL', 'http_5xx_regression'))
+
+
+def test_leaving_on_requires_every_draining_precondition():
+    assert 'cap_hold_ladder_debit' in rc.DRAINING_PRECONDITIONS
+    parse = ramp_set.build_parser().parse_args
+    on = {'percents': {'batch-pipeline': 100.0}, 'locked_by': None, 'legacy_sync': 'on'}
+    refused = ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'draining']), on)
+    assert refused == 'draining_precondition_unmet:cap_hold_ladder_debit'
+    assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), None).startswith(
+        'draining_precondition'
+    )
+    ok = parse(['--env', 'prod', '--legacy-sync', 'draining', '--precondition-met', 'cap_hold_ladder_debit'])
+    assert ramp_set.plan_change(ok, on)[0] == {'legacy_sync': 'draining'}
+    # Returning to on, and draining -> dark, are never gated (rollback and progression after the gate passed).
+    assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), {**on, 'legacy_sync': 'dark'})[0]
+    assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), {**on, 'legacy_sync': 'draining'})[0]

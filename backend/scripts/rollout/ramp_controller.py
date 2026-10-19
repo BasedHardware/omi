@@ -82,6 +82,15 @@ GATE_EXECUTION_TOKENS = frozenset(
     }
 )
 INCOMPLETE_SAMPLE_TOKENS = frozenset({'timeout_incomplete'})
+# Preconditions for any env leaving legacy_sync='on' (contract (h) entry gate, plus lead/Subscription rulings).
+# The controller never writes legacy_sync; ramp_set refuses `--legacy-sync draining|dark` until every id here is
+# explicitly confirmed by the operator. Add an id when a ruling adds a gate; remove it only when the gate is retired.
+DRAINING_PRECONDITIONS = {
+    'cap_hold_ladder_debit': (
+        'batch-admitted cap-hold units debit the ladder v1 usage budget (Subscription session ruling 10-19; '
+        'lane 6 slice, tracked in swarm/status/lane06.md)'
+    ),
+}
 
 
 class Action(StrEnum):
