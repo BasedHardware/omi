@@ -69,7 +69,11 @@ results = (tbl.search("a memory about work")
 ## Safety
 
 * `..` in the `-o` path is refused.
-* Exclusive `x` create — never overwrites.
+* Exclusive `x` create — never overwrites the output file.
+* `--ingest` creates the table with `mode="overwrite"` — re-running it
+  replaces the whole table rather than appending. Point it at a fresh
+  table name (or drop the old one first) if that is not what you want;
+  the `DB_PATH` argument itself is not path-checked.
 * `--ingest` without `lancedb` installed fails with a clean
   `pip install lancedb` message, not a traceback.
 * Malformed JSON or missing input exits `2`.
