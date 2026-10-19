@@ -980,7 +980,8 @@ class OmiBleForegroundService : Service() {
 
     /**
      * Drop a marker only when history covers its period, the session row matches
-     * it, and no disconnect row records it. An older row is not that coverage.
+     * it, and no disconnect row records it. An older valid disconnect row is that
+     * coverage.
      */
     private fun discardUnmeasuredAudioOutage(address: String) {
         synchronized(DeviceHealthPersistence) {

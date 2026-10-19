@@ -171,7 +171,8 @@ internal fun historyCoversMarker(history: JSONArray, marker: Long): Boolean {
     for (i in 0 until history.length()) {
         val item = history.optJSONObject(i) ?: continue
         if (item.optString("eventType") != "disconnect") continue
-        if (item.optLong("timestamp", 0L) <= latestOlder) return true
+        val timestamp = item.optLong("timestamp", 0L)
+        if (timestamp > 0L && timestamp <= latestOlder) return true
     }
     return false
 }
