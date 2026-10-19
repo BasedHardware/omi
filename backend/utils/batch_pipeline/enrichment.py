@@ -56,7 +56,7 @@ def run_enrichment(
             return
         callback = process
         if callback is None:
-            from utils.sync.pipeline import _reprocess_conversation_after_update  # type: ignore[reportPrivateUsage]
+            from utils.sync.legacy_segment_core import _reprocess_conversation_after_update  # type: ignore[reportPrivateUsage]
 
             callback = _reprocess_conversation_after_update
         return callback(uid, conversation_id, language)

@@ -25,7 +25,7 @@ from utils.sync import cap_hold, cap_recovery_plan
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
-from utils.sync.pipeline import (
+from utils.sync.legacy_segment_core import (
     process_segment,
     build_person_embeddings_cache,
     finalize_recovered_sync_segment,
