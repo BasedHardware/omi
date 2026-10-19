@@ -23,6 +23,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.jobstore import codec
 from database.jobstore.connection import Pool
 
 T = TypeVar('T')
@@ -42,11 +43,11 @@ _SERIALIZATION_FAILURE = '40001'
 _DEADLOCK = '40P01'
 
 
-def _jsonb(value: dict):
+def jsonb(value: dict):
     # psycopg joins the lockfile separately; until then pyright cannot resolve it.
     from psycopg.types.json import Jsonb  # pyright: ignore[reportMissingImports]
 
-    return Jsonb(value)
+    return Jsonb(value, dumps=codec.dumps)
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -280,13 +281,13 @@ class PostgresStore:
             conn.execute(
                 f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
                 'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
-                (self.namespace, key, _jsonb(value)),
+                (self.namespace, key, jsonb(value)),
             )
         else:
             conn.execute(
                 'INSERT INTO docs (namespace, tbl, key, doc) VALUES (%s, %s, %s, %s) '
                 'ON CONFLICT (namespace, tbl, key) DO UPDATE SET doc = EXCLUDED.doc',
-                (self.namespace, table, key, _jsonb(value)),
+                (self.namespace, table, key, jsonb(value)),
             )
 
     def service_frontier_in(self, conn: Any, priority: int) -> float:

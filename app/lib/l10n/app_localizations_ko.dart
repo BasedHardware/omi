@@ -10914,6 +10914,32 @@ class AppLocalizationsKo extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '오디오 저장됨, 나중에 받아쓰기';
 
   @override
+  String get captureBannerTryReconnect => '다시 연결 시도';
+
+  @override
+  String get captureBannerRetrySync => '동기화 재시도';
+
+  @override
+  String get captureBannerWhatsWrong => '무슨 일인가요?';
+
+  @override
+  String get captureBannerDismiss => '닫기';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.';
+
+  @override
+  String get captureLinkStalledTranscribesLater => '오디오 연결이 중단되었습니다 — 복구되면 전사가 계속됩니다';
+
+  @override
+  String get captureIngressNeedsReconnect => '오디오가 앱에 도달하지 못합니다 — Omi를 다시 연결하세요';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      '앱이 더 이상 Omi 기기에서 오디오를 받지 못하며 자동으로 연결을 복구하지 못했습니다. 기기의 연결을 해제한 후 다시 연결하세요 — 기기 설정에서 또는 전원을 껐다 켜서. 기기에 저장된 오디오는 나중에 동기화됩니다.';
+
+  @override
   String get captureStillRecording => '녹음 계속 중';
 
   @override
