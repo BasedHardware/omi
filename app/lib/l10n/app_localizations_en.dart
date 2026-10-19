@@ -9313,9 +9313,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count more';
-  }
+  String get quoteShowSources => 'Show sources';
 
   @override
   String get jumpToLatestMessage => 'Jump to latest message';
@@ -11053,7 +11051,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
-  String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
+  String get captureRecoveryBannerTitle => 'Omi isn\'t sending audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11072,17 +11070,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureBannerRetrySync => 'Retry sync';
 
   @override
-  String get captureBannerWhatsWrong => 'What\'s going on?';
-
-  @override
-  String get captureBannerDismiss => 'Dismiss';
-
-  @override
   String get captureWedgeBleExplanation =>
       'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Audio link stalled — transcribes when it recovers';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio isn\'t reaching the app — reconnect your Omi';
@@ -13668,7 +13657,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityRetryAll => 'Retry all';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Can\'t check storage';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Recordings paused';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Upload stalled';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings waiting',
+      one: '1 recording waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
+
+  @override
+  String get activityAttentionSemantics => 'Activity, needs attention';
 
   @override
   String get connectAgentHeadline => 'Use your Omi memory in ChatGPT and your AI agents';
@@ -14351,4 +14363,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved of $total audio saved';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Still recording on your Omi';
 }

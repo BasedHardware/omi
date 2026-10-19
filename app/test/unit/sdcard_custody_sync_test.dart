@@ -304,4 +304,49 @@ void main() {
     expect(card.cleared, isTrue);
     expect(wal.status, WalStatus.synced);
   });
+
+  test('a recording opened before a reconnect still transfers the relisted recording', () async {
+    const packets = 3;
+    final opened = makeWal(totalBytes: packets * 80, seconds: 1);
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(
+      packets: [
+        for (var i = 0; i < packets; i++) _legacyPacket(10),
+        [100],
+      ],
+    );
+    final sync = syncWith(local, card, opened);
+    // The reconnect's setDevice() lists the same recording again as a new Wal.
+    final relisted = makeWal(totalBytes: packets * 80, seconds: 1);
+    sync.testWals = [relisted];
+
+    await sync.syncWal(wal: opened);
+
+    expect(local.added, hasLength(1));
+    expect(card.cleared, isTrue);
+    expect(relisted.status, WalStatus.synced);
+    expect(relisted.isSyncing, isFalse);
+  });
+
+  test('a recording the sync does not list fails the transfer and leaves the card untouched', () async {
+    final listed = makeWal(totalBytes: 3 * 80, seconds: 1);
+    final local = _FakeLocalSync();
+    final card = _FakeSdCard(
+      packets: [
+        _legacyPacket(10),
+        [100],
+      ],
+    );
+    final sync = syncWith(local, card, listed);
+    final unlisted = makeWal(totalBytes: 3 * 80, seconds: 1)..timerStart = 2000;
+    // The phone copy of the listed recording shares its id.
+    final phoneCopy = makeWal(totalBytes: 3 * 80, seconds: 1)..storage = WalStorage.disk;
+
+    await expectLater(sync.syncWal(wal: unlisted), throwsA(isA<Exception>()));
+    await expectLater(sync.syncWal(wal: phoneCopy), throwsA(isA<Exception>()));
+
+    expect(card.writes, isEmpty);
+    expect(local.added, isEmpty);
+    expect(listed.status, WalStatus.miss);
+  });
 }

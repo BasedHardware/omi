@@ -184,6 +184,9 @@ class FirestoreStore:
     def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
         return projection_page(self.client, self.namespace, limit, after=after)
 
+    def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
+        return projection_successor(self.client, self.namespace, owner_key, previous)
+
 
 def projection_pending(client: Any, namespace: str, limit: int = 100) -> list[str]:
     return projection_page(client, namespace, limit)[0]
@@ -209,6 +212,23 @@ def projection_page(client: Any, namespace: str, limit: int = 100, *, after=None
     # revisited on the next cycle; no durable obligation is skipped or mutated.
     cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
     return [doc.id for doc in docs], cursor
+
+
+def projection_successor(client: Any, namespace: str, owner_key: str, previous: str | None) -> str | None:
+    """The owner's result committed directly after ``previous`` in its log.
+
+    The result log is a per-owner singly linked list; two matches fail closed.
+    A discovery hint only: the transactional predecessor check still decides.
+    """
+    docs = list(
+        client.collection(f'{namespace}_results')
+        .where('owner_key', '==', owner_key)
+        .where('previous_segment_id', '==', previous)
+        .order_by('__name__')
+        .limit(2)
+        .stream()
+    )
+    return docs[0].id if len(docs) == 1 else None
 
 
 def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:

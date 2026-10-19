@@ -122,9 +122,9 @@ try:
         for _provider in ('soniox', 'modulate', 'deepgram'):
             BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort)
             WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
-        for _reason in ('first_text_deadline', 'capacity_full', 'gate_unavailable', 'other'):
+        for _reason in ('first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable', 'other'):
             _subtypes = (
-                ('buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout', 'unknown')
+                ('buffer_cap', 'span_cap', 'admission', 'queue_timeout', 'unknown')
                 if _reason == 'capacity_full'
                 else ('none',)
             )

@@ -9361,9 +9361,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count további';
-  }
+  String get quoteShowSources => 'Források megjelenítése';
 
   @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
@@ -11110,7 +11108,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
-  String get captureRecoveryBanner => 'Az Omi nem küld hangot — koppintson az újracsatlakozáshoz';
+  String get captureRecoveryBannerTitle => 'Az Omi nem küld hangot';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11129,18 +11127,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureBannerRetrySync => 'Szinkronizálás újrapróbálása';
 
   @override
-  String get captureBannerWhatsWrong => 'Mi történik?';
-
-  @override
-  String get captureBannerDismiss => 'Elrejtés';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'A hangkapcsolat megszakadt — a leirat a helyreállás után folytatódik';
 
   @override
   String get captureIngressNeedsReconnect => 'A hang nem ér el az appba — csatlakoztasd újra az Omit';
@@ -13736,7 +13724,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityRetryAll => 'Összes újrapróbálása';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel várakozik',
+      one: '1 felvétel várakozik',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
+
+  @override
+  String get activityAttentionSemantics => 'Tevékenység, figyelmet igényel';
 
   @override
   String get connectAgentHeadline => 'Használd az Omi-memóriádat a ChatGPT-ben és az AI-ügynökeidben';
@@ -14425,4 +14436,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved / $total hang elmentve';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Az Omi tovább rögzít';
 }

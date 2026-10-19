@@ -139,6 +139,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': '49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
+    'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': '73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -160,7 +161,8 @@ BODY_DIGEST = {
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
-    'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
+    # Re-reviewed: the post-commit task-list cache invalidation adds no query.
+    'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. The terminal streams still belong to the two driven callees.
     'database.smart_merge.absorb_conversation': 'fc5e7e64436af99e10e92c08c4e0ecf763d1d9ff2865c756c79f3a4952771fef',
@@ -241,6 +243,7 @@ _add(
     CoveredByEntry(
         'database.action_items._iter_query_pages',
         covered_by=(
+            'database.action_items.create_action_item',
             'database.action_items.get_action_item_ids',
             'database.action_items.get_active_action_item_by_description',
             'database.action_items.get_scores',
@@ -289,7 +292,10 @@ _add(
         'database.action_items.create_action_item',
         base={'uid': UID, 'action_item_data': {'description': 'shape-task'}},
         domains={'idempotency_key': [None, 'shape-key']},
-        neutrals={'document_id': (None, 'optional doc id; absent does not change query')},
+        neutrals={
+            'document_id': (None, 'optional doc id; absent does not change query'),
+            'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+        },
         setup=_seed_action_items_control,
         trials=2,
     )
