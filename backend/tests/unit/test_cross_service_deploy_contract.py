@@ -361,8 +361,15 @@ def _has_commit(ref: str) -> bool:
 
 
 @pytest.mark.skipif(os.environ.get('CROSS_SERVICE_CONTRACT_REPLAY') != '1', reason='opt-in: needs git history')
-@pytest.mark.parametrize('broken,fixed,invariant', REPLAYS)
-def test_pre_fix_commit_fails_and_fix_clears_it(broken: str, fixed: str, invariant: str) -> None:
+def test_pre_fix_commit_fails_and_fix_clears_it(replayed_pair) -> None:
+    invariant, broken, fixed = replayed_pair
+    assert invariant in broken
+    assert invariant not in fixed
+
+
+@pytest.fixture(scope='module', params=REPLAYS)
+def replayed_pair(request):
+    broken, fixed, invariant = request.param
     if not (_has_commit(broken) and _has_commit(fixed)):
         pytest.skip('commit not in this clone')
 
@@ -373,5 +380,4 @@ def test_pre_fix_commit_fails_and_fix_clears_it(broken: str, fixed: str, invaria
         finally:
             source.close()
 
-    assert invariant in invariants_at(broken)
-    assert invariant not in invariants_at(fixed)
+    return invariant, invariants_at(broken), invariants_at(fixed)

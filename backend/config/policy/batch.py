@@ -46,7 +46,9 @@ class BatchUnitPolicy(PolicyPart):
         super().__post_init__()
 
     @classmethod
-    def from_dict(cls, raw: Mapping) -> 'BatchUnitPolicy':
+    def from_dict(cls, raw: object) -> 'BatchUnitPolicy':
+        if not isinstance(raw, Mapping):
+            raise ValueError('serialized admission policy must be a dict')
         values = dict(raw)
         values['batch_percent'] = parse_percent(str(values.get('batch_percent', 0)))
         values['retire_percent'] = min(parse_percent(str(values.get('retire_percent', 0))), values['batch_percent'])

@@ -26,7 +26,7 @@ class PolicyPart:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: Mapping) -> Self:
+    def from_dict(cls, raw: object) -> Self:
         # Missing additive fields use the original code defaults, never env.
         if not isinstance(raw, Mapping):
             raise ValueError('serialized policy part must be a dict')

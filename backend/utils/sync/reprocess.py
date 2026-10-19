@@ -267,7 +267,9 @@ def mark(
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
         if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
             if candidate is None:
-                candidate = resolve_stage_policy(uid, 'first_summary')
+                candidate = resolve_stage_policy(
+                    uid, 'first_summary', obligation=old if old and not old.get('dormant') else None
+                )
             row['first_summary_policy'] = candidate.to_dict()
             row['first_summary_policy_source'] = 'creation' if not old or old.get('dormant') else 'fallback'
             stamp.append((row['first_summary_policy_source'], candidate.policy_id))
@@ -322,7 +324,7 @@ def mark(
         UNBOUND.labels(action='mark').inc()
 
 
-def record_summary_stamps(stamps):
+def record_summary_stamps(stamps: list[tuple[str, str]]) -> None:
     from config.policy.telemetry import record_policy_source
 
     for source, policy_id in stamps:
@@ -391,7 +393,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         row = dict(old)
         if row.get('summary_lane') == 'batch' and row.get('first_summary_policy') is None:
             if candidate is None:
-                candidate = resolve_stage_policy(row['uid'], 'first_summary')
+                candidate = resolve_stage_policy(row['uid'], 'first_summary', obligation=row)
             row['first_summary_policy'] = candidate.to_dict()
             row['first_summary_policy_source'] = 'fallback'
             stamp.append(('fallback', candidate.policy_id))

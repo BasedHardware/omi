@@ -169,3 +169,19 @@ def test_retried_stage_claim_keeps_candidate_and_adopts_a_committed_winner(unit,
     assert store.get('jobs', 'tail')['policy_parts']['projection'] == part.to_dict()
     if competing_writer:
         assert store.get('jobs', 'head')['policy_parts']['scheduler'] == scheduler.to_dict()
+
+
+def test_first_summary_fallback_preserves_an_existing_admitted_deadline():
+    from config.policy import resolve_stage_policy
+
+    part = resolve_stage_policy(
+        'owner',
+        'first_summary',
+        flags={
+            'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
+            'FIRST_SUMMARY_DEADLINE_PERCENT': '0',
+            'FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED': 'true',
+        },
+        obligation={'summary_deadline_at': 120},
+    )
+    assert part.first_summary_enabled

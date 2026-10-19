@@ -1,6 +1,7 @@
 """Role-owned stage policy resolution, called only on the first persisted claim."""
 
 from dataclasses import dataclass
+import math
 from typing import Literal, overload
 
 from config.policy.batch import COHORT_SALTS, parse_percent, cohort_bucket
@@ -62,26 +63,30 @@ STAGE_TYPES = {
 
 
 @overload
-def resolve_stage_policy(uid: str, stage: Literal['projection'], *, flags=None) -> ProjectionPolicy: ...
+def resolve_stage_policy(
+    uid: str, stage: Literal['projection'], *, flags=None, obligation=None
+) -> ProjectionPolicy: ...
 
 
 @overload
-def resolve_stage_policy(uid: str, stage: Literal['scheduler'], *, flags=None) -> SchedulerPolicy: ...
+def resolve_stage_policy(uid: str, stage: Literal['scheduler'], *, flags=None, obligation=None) -> SchedulerPolicy: ...
 
 
 @overload
-def resolve_stage_policy(uid: str, stage: Literal['recovery'], *, flags=None) -> RecoveryPolicy: ...
+def resolve_stage_policy(uid: str, stage: Literal['recovery'], *, flags=None, obligation=None) -> RecoveryPolicy: ...
 
 
 @overload
-def resolve_stage_policy(uid: str, stage: Literal['first_summary'], *, flags=None) -> FirstSummaryPolicy: ...
+def resolve_stage_policy(
+    uid: str, stage: Literal['first_summary'], *, flags=None, obligation=None
+) -> FirstSummaryPolicy: ...
 
 
 @overload
-def resolve_stage_policy(uid: str, stage: str, *, flags=None) -> PolicyPart: ...
+def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -> PolicyPart: ...
 
 
-def resolve_stage_policy(uid: str, stage: str, *, flags=None) -> PolicyPart:
+def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -> PolicyPart:
     env = policy_environment(flags)
     role = source_role(env, stage)
     if stage == 'projection':
@@ -120,11 +125,27 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None) -> PolicyPart:
             terminal_empty_disposition=boolean(env, 'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED'),
         )
     if stage == 'first_summary':
-        enabled = boolean(env, 'FIRST_SUMMARY_DEADLINE_ENABLED') and (
-            member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
-            or bool(uid)
-            and cohort_bucket(uid, COHORT_SALTS['first-summary'])
-            < parse_percent(env.get('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
+        master = boolean(env, 'FIRST_SUMMARY_DEADLINE_ENABLED')
+        existing_deadline = (obligation or {}).get('summary_deadline_at')
+        preserved = bool(
+            master
+            and obligation
+            and not obligation.get('summary_seen')
+            and not obligation.get('effects_only')
+            and isinstance(existing_deadline, (int, float))
+            and not isinstance(existing_deadline, bool)
+            and math.isfinite(existing_deadline)
+            and boolean(env, 'FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED')
+        )
+        enabled = (
+            preserved
+            or master
+            and (
+                member(uid, env, 'first-summary', 'FIRST_SUMMARY_UID_ALLOWLIST', explicit=flags is not None)
+                or bool(uid)
+                and cohort_bucket(uid, COHORT_SALTS['first-summary'])
+                < parse_percent(env.get('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
+            )
         )
         try:
             deadline = int(env.get('FIRST_SUMMARY_DEADLINE_SECONDS', '120'))
