@@ -12,7 +12,12 @@ namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
 replicaCount: 1
 autoscaling:
-  enabled: false
+  enabled: true
+  minReplicas: 1
+  # PLACEHOLDER (default 6) pending accepted sizing and GPU-capacity approval.
+  maxReplicas: 6
+  # TEMP fallback: prod Prometheus Adapter does not yet install the ready-age rule.
+  targetCPUUtilizationPercentage: 80
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
   service: batch-pipeline

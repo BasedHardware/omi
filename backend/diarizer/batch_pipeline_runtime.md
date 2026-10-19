@@ -109,16 +109,26 @@ The worker cannot be installed over the live
 embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 
-HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
-3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
-sampler alive; zero is rejected until an independent sampler exists. Enable
-PodMonitoring only where its CRD is installed (it defaults on). The worker exports
-`worker_release`; a different collector must preserve the same label plus
-namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing
-adapter's external rules. That query excludes samples older than 60s without
-coercing unavailable data to zero. Missing/stale external metrics retain HPA
-capacity; alert on adapter errors and missing sampler freshness. No chart or
-adapter change has been deployed by this PR's implementation lane.
+The HPA template's intended signal is A's **ready** age, separately targeting
+fresh 30s, recent 300s and deep 3600s, with 300s downscale stabilization. The
+chart includes `prometheus-adapter-rules.yaml`, whose query excludes samples
+older than 60s without coercing unavailable data to zero. However, the current
+production adapter values do not install this batch rule. The prod worker values
+therefore select a temporary CPU resource-metric fallback at 80%; this is not a
+backlog signal. Switch to ready-age only after merging the rule into the prod
+adapter and verifying fresh per-priority samples through the external metrics
+API. Minimum one worker keeps the queue sampler alive; zero is rejected until an
+independent sampler exists. Enable PodMonitoring only where its CRD is installed
+(it defaults on). The worker exports `worker_release`; a different collector
+must preserve that label plus namespace and pod. Missing/stale external metrics
+retain HPA capacity; alert on adapter errors and missing sampler freshness.
+
+The prod HPA maximum of 6 is a **PLACEHOLDER** pending accepted sizing and GPU-capacity approval.
+Each replica reserves one L4 on the operator-managed `batch-pipeline-pool`; this
+repository contains no node-pool bounds or regional L4/G2 quota declaration.
+Before ramp expansion, verify actual Ready capacity and confirm the pool maximum
+and regional quotas cover the approved replica count with scale-up headroom.
+The final cap may require both the pool maximum and GPU/instance quotas to rise.
 
 For local synthetic end-to-end work, use loopback Firestore and a version-aware
 GCS emulator (or an injected fake object client). The older filesystem

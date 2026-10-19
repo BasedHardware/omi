@@ -56,6 +56,8 @@ autoscaling:
   maxReplicas: 6
   # External metrics from the supplied Prometheus adapter rules must be installed
   # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
+  # Set this only as an explicit resource-metric fallback while ready-age is unavailable.
+  targetCPUUtilizationPercentage: null
   targets:
     fresh: 30
     recent: 300

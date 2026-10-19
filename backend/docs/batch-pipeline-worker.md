@@ -211,9 +211,23 @@ trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
-labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
-reject stale samples. B's dedicated chart documents the external-metric HPA.
-CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+labels. The target signal is ready-age with fresh/recent/deep targets
+30/300/3600 seconds, rejecting stale samples. The worker chart includes the
+external-metric HPA and a Prometheus Adapter rule fragment, but the current
+production adapter values do not install the `omi_batch_pipeline_ready_age_seconds`
+rule. The production HPA therefore uses an **explicit temporary CPU fallback**
+at 80% of requested CPU; CPU does not track backlog reliably and is not evidence
+that ready-age scaling is active. Switch to ready-age only after the prod adapter
+rule is installed and fresh per-priority metrics are verified through the
+external metrics API.
+
+Production HPA minimum is 1. Its maximum of 6 is a **PLACEHOLDER** pending
+accepted worker sizing and GPU-capacity approval. Each replica requests one L4 GPU from the separately managed
+`batch-pipeline-pool`; this chart does not declare that pool's node bounds or
+regional accelerator quota. Before raising the cap or expanding the record lane,
+verify Ready GPU capacity and set the pool maximum and L4/G2 quota to cover the
+approved replica count plus scale-up headroom. Non-preemptible batch latency
+still needs bounds.
 
 ## Flags, rollout and rollback
 
