@@ -24,6 +24,7 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
 
@@ -79,6 +80,11 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return ready_predecessor(
+            self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
+        )
 
     def service_frontier(self, priority: int) -> float:
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
@@ -216,6 +222,24 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
         .stream(transaction=transaction)
     )
     return docs[0].to_dict() if docs else None
+
+
+def ready_predecessor(
+    client: Any, namespace: str, owner_key: str, priority: int, segment_id: str, *, transaction: Any = None
+) -> dict | None:
+    # Leased/completed rows retain stale next links. Only a ready row in this
+    # owner's priority FIFO can be the live predecessor. Two matches fail closed.
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .where('next', '==', segment_id)
+        .order_by('__name__')
+        .limit(2)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if len(docs) == 1 else None
 
 
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
