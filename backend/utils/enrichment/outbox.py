@@ -33,6 +33,7 @@ from config.summary_guarantee import (
     first_summary_pending,
     preserves_admitted,
 )
+from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
@@ -267,6 +268,7 @@ def mark(
     now: float | None = None,
     mutate: Callable | None = None,
     effects_only: bool = False,
+    snapshot_summary: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -277,6 +279,7 @@ def mark(
     if mutate is not None and not owns_runtime():
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
+    stamps: list[tuple[str, str]] = []
     update = mark_update(
         uid,
         conversation_id,
@@ -286,9 +289,12 @@ def mark(
         coalesce='max',
         effects_only=effects_only,
         batch=mutate is not None,
+        snapshot_summary=snapshot_summary,
+        stamps=stamps,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
+    record_summary_stamps(stamps)
     if coalesced:
         COALESCED.inc()
     if row.get('_wake', not coalesced) and valid_dispatch_binding(row.get('dispatch')):
@@ -309,15 +315,24 @@ def mark_update(
     batch: bool,
     policy_id: str | None = None,
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
+    snapshot_summary: bool = False,
+    stamps: list[tuple[str, str]] | None = None,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
     ``settle_at`` is the requested wake; an open row keeps the later (``max``, settle) or the earlier
     (``min``, deadline) of the two. ``new_dispatch`` may supply a new row's binding (backfill); it is
     called only when no row exists, so a coalesced append never re-resolves it.
+
+    ``snapshot_summary`` (E1) records the first-summary policy on a new or reopened obligation, or on an
+    open one that predates snapshots; ``stamps`` collects ``(source, policy_id)`` for telemetry after commit.
     """
+    candidate: FirstSummaryPolicy | None = None
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
+        nonlocal candidate
+        if stamps is not None:
+            stamps.clear()  # A CAS or transaction retry re-runs this operation.
         if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
             return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
@@ -339,6 +354,15 @@ def mark_update(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
+            if candidate is None:
+                candidate = resolve_stage_policy(
+                    uid, 'first_summary', obligation=old if old and not old.get('dormant') else None
+                )
+            row['first_summary_policy'] = candidate.to_dict()
+            row['first_summary_policy_source'] = 'creation' if not old or old.get('dormant') else 'fallback'
+            if stamps is not None:
+                stamps.append((row['first_summary_policy_source'], candidate.policy_id))
         row['dormant'] = False
         row['summary_repair'] = False
         row['effects_only'] = effects_only
@@ -346,7 +370,7 @@ def mark_update(
         if first_summary_pending(row):
             row['summary_deadline_at'] = min(
                 row.get('summary_deadline_at', float('inf')),
-                row['first_pending_at'] + deadline_seconds(),
+                row['first_pending_at'] + _deadline_seconds(row),
             )
             row['due_at'] = min(row['due_at'], row['summary_deadline_at'])
         from config.demand_processing import enabled
@@ -378,6 +402,40 @@ def mark_update(
         return row, ({**row, '_wake': wake}, old is not None)
 
     return update
+
+
+def _deadline_seconds(row: Row) -> int:
+    snapshot = row.get('first_summary_policy')
+    if snapshot is not None:
+        return FirstSummaryPolicy.from_dict(snapshot).first_summary_deadline_seconds
+    return deadline_seconds()
+
+
+def summary_policy_for(row: Row) -> bool:
+    """E1: a snapshotted obligation decides first summary once; older rows read the live flags."""
+    snapshot = row.get('first_summary_policy')
+    if snapshot is not None:
+        return FirstSummaryPolicy.from_dict(snapshot).first_summary_enabled
+    return summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+
+
+def stamp_claim_policy(row: Row, cache: dict[str, FirstSummaryPolicy], stamps: list[tuple[str, str]]) -> None:
+    """E1: a batch obligation claimed without a snapshot gets a deterministic fallback one."""
+    if row.get('summary_lane') != 'batch' or row.get('first_summary_policy') is not None:
+        return
+    if 'candidate' not in cache:
+        cache['candidate'] = resolve_stage_policy(row['uid'], 'first_summary', obligation=row)
+    candidate = cache['candidate']
+    row['first_summary_policy'] = candidate.to_dict()
+    row['first_summary_policy_source'] = 'fallback'
+    stamps.append(('fallback', candidate.policy_id))
+
+
+def record_summary_stamps(stamps: list[tuple[str, str]]) -> None:
+    from config.policy.telemetry import record_policy_source
+
+    for source, policy_id in stamps:
+        record_policy_source('fallback' if source == 'fallback' else 'stage', policy_id)
 
 
 @contextmanager
@@ -429,13 +487,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     if not admit(document_id, now=current, token=task_token):
         return 'priority_wait'
     owner = uuid.uuid4().hex
+    cache: dict[str, FirstSummaryPolicy] = {}
+    stamps: list[tuple[str, str]] = []
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
+        stamps.clear()
         if old is None or old.get('dormant') or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
             return old, ('busy', None)
         row = dict(old)
+        stamp_claim_policy(row, cache, stamps)
         if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
@@ -446,6 +508,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return row, ('claimed', row)
 
     status, row = _mutate(document_id, claim)
+    record_summary_stamps(stamps)
     if status == 'deferred':
         assert row is not None
         _enqueue(row)
@@ -454,7 +517,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
-    summary_policy = summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
+    summary_policy = summary_policy_for(row)
     summary_seen = False
     superseded = False
     retry_revision = None

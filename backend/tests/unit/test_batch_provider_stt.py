@@ -12,6 +12,7 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline import provider_stt
+from config.policy import BatchUnitPolicy
 from utils.batch_pipeline.provider_stt import (
     ABANDON_SECONDS,
     PENDING,
@@ -29,6 +30,7 @@ OWNER = 'synthetic-owner'
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens_pending'
 PROVIDER_GOLDENS = ('provider_stt_ja', 'provider_stt_unsupported', 'provider_stt_byok')
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
+POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100.0)
 
 
 # --- route decision -----------------------------------------------------------------------------
@@ -193,6 +195,8 @@ def test_provider_unit_is_admitted_outside_the_gpu_ring(world, monkeypatch):
         'provider_service': 'modulate',
         'language': 'ja',
     }
+    # The admission policy snapshot is recorded on provider units exactly as the GPU ring does (E1).
+    assert row['policy_source'] == 'admission' and row['policy']['policy_id']
     assert not [key for key in store.rows if key[0] in {'queues', 'control'}]
     assert Scheduler(store).pull(200.0, limit=4) == []
     assert store.get('owners', owner_key(OWNER))['revision'] == 1
@@ -203,15 +207,15 @@ def test_provider_enqueue_is_idempotent_and_immutable(world):
     _, store = world
     work = item('p1', 10)
     enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
-    assert store.run(lambda tx: enqueue(tx, work, 100.0)) is True
-    assert store.run(lambda tx: enqueue(tx, work, 101.0)) is False
+    assert store.run(lambda tx: enqueue(tx, work, 100.0, policy=POLICY)) is True
+    assert store.run(lambda tx: enqueue(tx, work, 101.0, policy=POLICY)) is False
     other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {})
     with pytest.raises(ValueError):
-        store.run(lambda tx: other(tx, work, 102.0))
+        store.run(lambda tx: other(tx, work, 102.0, policy=POLICY))
     with pytest.raises(ValueError):
-        store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0))
+        store.run(lambda tx: enqueue(tx, item('p2', 11, compute=True), 100.0, policy=POLICY))
     with pytest.raises(ValueError):
-        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'))
+        provider_stt.enqueue_in_transaction(None, work, 100.0, route=resolve_route('en'), policy=POLICY)
 
 
 # --- the stage ----------------------------------------------------------------------------------
@@ -688,7 +692,7 @@ async def test_unsupported_language_takes_the_provider_route_and_wakes_after_com
     def enqueue_hook(route, outbox, wakes):
         seen['route'] = route
         wakes['row-1'] = 'wake-1'  # as if the admission transaction committed one row
-        return lambda *a: True
+        return lambda *a, **k: True
 
     monkeypatch.setattr(intake, 'provider_enqueue', enqueue_hook)
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
