@@ -168,6 +168,22 @@ def _hour_weight(profile: dict[str, Any], spec: PopulationSpec, at_s: float) -> 
     return curve[int(spec.start_utc_hour + at_s // 3600) % 24] / peak
 
 
+def _window_weights(profile: dict[str, Any], spec: PopulationSpec) -> tuple[float, float]:
+    """(level, thinning) over the run window, sampled per minute.
+
+    ``level`` scales the daily-mean rate to the window's hours (curve / daily mean), so backlog
+    and steady uploads share one window total. ``thinning`` is the mean acceptance of the steady
+    Poisson thinning (curve / peak); the steady rate is divided by it so thinning keeps the
+    steady share instead of shrinking it (the 10-19 m1p1 plan had 57% backfill vs 39%)."""
+    curve = (profile.get('uploads') or {}).get('accepted_per_min_by_utc_hour') or []
+    if spec.start_utc_hour is None or len(curve) != 24 or not any(curve):
+        return 1.0, 1.0
+    daily_mean = sum(curve) / 24.0
+    minutes = max(1, int(spec.duration_s // 60))
+    hours = [curve[int(spec.start_utc_hour + (m * 60) // 3600) % 24] for m in range(minutes)]
+    return sum(hours) / minutes / daily_mean, sum(hours) / minutes / max(curve)
+
+
 def total_rate_per_min(spec: PopulationSpec, profile: dict[str, Any]) -> float:
     if spec.rate_per_min is not None:
         return spec.rate_per_min
@@ -317,7 +333,8 @@ def generate(recordings: Sequence[Recording], profile: dict[str, Any], spec: Pop
         return out
 
     steady_owners = [i for i, s in enumerate(shapes) if s == OwnerShape.STEADY.value]
-    rate = total_rate_per_min(spec, profile)
+    level, thinning = _window_weights(profile, spec)
+    rate = total_rate_per_min(spec, profile) * level
     burst_n, other_n = _backlog_sizes(spec, profile, shapes, usable, files_weights, rate)
     backlog_uploads = 0
     plans: list[PlannedUpload] = []
@@ -365,7 +382,7 @@ def generate(recordings: Sequence[Recording], profile: dict[str, Any], spec: Pop
     # Steady owners carry the remaining rate as fresh uploads (thinned Poisson).
     steady_budget = max(0.0, rate * spec.duration_s / 60.0 - backlog_uploads)
     if steady_owners and steady_budget > 0:
-        per_owner_rate = steady_budget / len(steady_owners) / spec.duration_s  # uploads/s
+        per_owner_rate = steady_budget / len(steady_owners) / spec.duration_s / thinning  # uploads/s, pre-thinning
         for index in steady_owners:
             owner = owner_id(spec.run_id, index)
             platform, device = _platform_and_device(rng, profile, owner)

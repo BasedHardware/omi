@@ -18,7 +18,8 @@ import pytest
 
 from diarizer import batch_pipeline as worker_module
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS, describe_diff, dumps, golden_trace
-from utils.batch_pipeline import quarantine_recovery as recovery_module
+from testing.pipeline_sim import sim as sim_module
+from dataclasses import replace
 
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens'
 UPDATE = os.environ.get('PIPELINE_GOLDEN_UPDATE') == '1'
@@ -28,8 +29,12 @@ def _never_fits(samples, max_padded_seconds):
     return False
 
 
-def _terminal_empty_disabled():
-    return False
+_resolve_policy = sim_module.resolve_stage_policy
+
+
+def _terminal_empty_disabled(*args, **kwargs):
+    policy = _resolve_policy(*args, **kwargs)
+    return replace(policy, terminal_empty_disposition=False) if args[1] == 'recovery' else policy
 
 
 # Deliberate behavior changes in REAL product modules; each must change its golden.
@@ -39,8 +44,8 @@ PERTURBATIONS = {
     # Paid recovery that hears nothing no longer settles as terminal empty.
     'no_terminal_empty': (
         'empty_asr_terminal',
-        recovery_module,
-        'terminal_empty_disposition_enabled',
+        sim_module,
+        'resolve_stage_policy',
         _terminal_empty_disabled,
     ),
 }
@@ -113,3 +118,27 @@ def test_a_deliberate_behavior_change_breaks_the_golden(key, traces, perturbed):
         assert 'failed_held' not in baseline['totals']['recovery_states']
     summary = describe_diff(traces[name], perturbed[key], label=name).splitlines()[0]
     assert not summary.startswith('0 changed'), summary
+
+
+@pytest.fixture(scope='module')
+def wrong_role_traces():
+    from testing.pipeline_sim.trace import trace
+
+    out = {}
+    for stage in ('projection', 'recovery'):
+        config = GOLDEN_CONFIGS['role_policy']()
+        config.stage_roles[stage] = 'sync'
+        out[stage] = dumps(trace(config))
+    return out
+
+
+@pytest.mark.parametrize('stage', ['projection', 'recovery'])
+def test_wrong_role_breaks_the_policy_golden(stage, traces, wrong_role_traces):
+    assert wrong_role_traces[stage] != traces['role_policy']
+    baseline = json.loads(traces['role_policy'])
+    changed = json.loads(wrong_role_traces[stage])
+    field = 'authoritative_labels' if stage == 'projection' else 'recovery_enabled'
+    before = [s['final_job']['policy_parts'].get(stage) for s in baseline['segments'].values()]
+    after = [s['final_job']['policy_parts'].get(stage) for s in changed['segments'].values()]
+    assert any(part and part[field] and part['source_role'] == 'integration' for part in before)
+    assert any(part and not part[field] and part['source_role'] == 'sync' for part in after)

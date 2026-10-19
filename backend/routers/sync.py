@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
-from config.batch_pipeline import enabled_for as batch_enabled_for
+from config.policy import resolve_batch_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
@@ -75,7 +75,7 @@ from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
-from utils.sync.admission_responses import sync_content_in_progress_response
+from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -135,6 +135,7 @@ from utils.metrics import (
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
 from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
@@ -205,7 +206,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
@@ -1039,12 +1040,15 @@ async def sync_local_files_v2(
         client_device_context.client_device_id,
         snapshot_out=record_snapshot,
     )
+    legacy_mode = legacy_dark.current_mode()
+    legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        allow_legacy_fresh=legacy_fresh.enabled_for(uid),
+        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
+        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
     )
-    if lane_decision.reason == 'recent_legacy_capture':
+    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
         lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
@@ -1188,6 +1192,7 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
+        batch_policy = resolve_batch_policy(uid)
         record_response = await registered_record_response(
             uid=uid,
             conversation_id=conversation_id if isinstance(conversation_id, str) else None,
@@ -1197,17 +1202,20 @@ async def sync_local_files_v2(
             client_device_id=client_device_context.client_device_id,
             byok_enabled=byok_enabled,
             recording_session_id=recording_session_id,
+            policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
 
+        batch_attempted = False
         if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+            record_response is not RecordUploadRoute.LEGACY and batch_policy.batch_enabled
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
+            batch_attempted = True
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1233,10 +1241,30 @@ async def sync_local_files_v2(
                     'raw_capture_paths': archive_paths,
                 },
                 record_router=registered_record_response,
+                policy=batch_policy,
             )
             if batch_response is not None:
                 return batch_response
             sequencer_registration_started = False
+
+        if not legacy_allowed:
+            # Legacy-dark (contract (h)): never create a legacy job. Content legacy
+            # already owns is answered by the fence; anything else keeps its audio.
+            ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+            decision = legacy_dark.fence_decision(ledger_row, legacy_mode)
+            await run_blocking(sync_executor, _cleanup_files, paths)
+            await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            return (
+                legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
+                or legacy_dark.admission_refused_response()
+            )
+        if record_response is RecordUploadRoute.LEGACY:
+            admission_reason = legacy_dark.LegacyAdmissionReason.LEGACY_RECORD_OWNER
+        elif batch_attempted:
+            admission_reason = legacy_dark.LegacyAdmissionReason.INTAKE_FALLBACK
+        else:
+            admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
+        legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1258,6 +1286,7 @@ async def sync_local_files_v2(
                 if cloud_task_eligible and lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled()
                 else 'cloud_tasks' if cloud_task_eligible else 'inline'
             ),
+            policy=batch_policy,
             ledger_fence_mode=(
                 SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
             ),
@@ -1432,7 +1461,11 @@ async def sync_local_files_v2(
                     SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
                 ),
             }
-            if lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled():
+            if (
+                lane_decision.lane == SyncLane.BACKFILL
+                and uid_sequencer.enabled()
+                and legacy_dark.sequencer_registration_allowed(legacy_mode)
+            ):
                 # The Firestore record, not a Cloud Task acknowledgement, is
                 # the durable 202 boundary. Waiting jobs hold no HTTP worker.
                 # An ambiguous Firestore acknowledgement may already have
@@ -1715,14 +1748,6 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-def _sync_finalization_retrying() -> HTTPException:
-    return HTTPException(
-        status_code=503,
-        detail='Sync recovery finalization is retrying; local audio remains available.',
-        headers={'Retry-After': '10'},
-    )
-
-
 def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
     """Carry a terminal job's strike through racing poll/task claim cleanup."""
     if job.get('status') not in {'failed', 'partial_failure'}:
@@ -1766,7 +1791,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         completed = get_completed_legacy_status(job_id, uid, job)
     except Exception as error:
         logger.error('event=sync_status_reconciliation outcome=retrying exception_type=%s', type(error).__name__)
-        raise _sync_finalization_retrying()
+        raise sync_finalization_retrying()
     if completed is not None:
         record_fallback(
             component='sync_dispatch',
@@ -1777,6 +1802,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         )
         return with_poll_hint(completed, surface_open=surface_open)
     if not job:
+        retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
+        if retired is not None:
+            return with_poll_hint(retired, surface_open=surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -1859,7 +1887,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
@@ -1869,7 +1897,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             dead_letter = sync_dead_letters.get_dead_letter(job_id)
         except Exception as error:
             logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         if dead_letter is None:
             # Every current terminal publisher writes the pending record before
             # Redis turns terminal, so a missing record means the job failed
@@ -1888,14 +1916,14 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                     'event=sync_dead_letter_check outcome=legacy_record_failed exception_type=%s',
                     type(error).__name__,
                 )
-                raise _sync_finalization_retrying()
+                raise sync_finalization_retrying()
             logger.warning('event=sync_dead_letter_check outcome=legacy_recorded')
         if (
             dead_letter.get('job_id') != job_id
             or dead_letter.get('uid') != uid
             or dead_letter.get('status') not in ('pending', 'dead_letter')
         ):
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         try:
             release_backfill_slot(uid, job_id)
         except Exception as error:
@@ -1953,7 +1981,13 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 @read_origin('job:sync_backfill_sequencer')
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    # Legacy-dark: ``dark`` stops claiming/dispatching only. Enrichment repair and
+    # summary-debt repair below keep running until C4 moves them (lead ruling 10-19).
+    if legacy_dark.sequencer_dispatch_allowed():
+        outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    else:
+        legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_DARK)
+        outcomes = {'legacy_dark': 1}
     from utils.sync import reprocess
 
     if reprocess.owns_runtime():
@@ -1984,6 +2018,8 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
+    if not legacy_dark.sequencer_dispatch_allowed():
+        return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
     except Exception as error:
@@ -2052,6 +2088,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
+            and legacy_dark.sequencer_registration_allowed()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):

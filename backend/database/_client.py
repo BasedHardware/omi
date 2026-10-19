@@ -252,12 +252,14 @@ def _build_data_plane_firestore_client() -> Any:
         return get_firestore_client()
 
     data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
-    database = _firestore_database_id(data_plane_project or None)
     if not data_plane_project:
         service = (os.getenv("K_SERVICE") or os.getenv("APP_NAME") or "").strip().casefold()
         if "desktop-backend" in service:
             raise RuntimeError("OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend")
         return get_firestore_client()
+    # Resolved only once a data-plane project is pinned: without one this seam is the default client,
+    # which applies its own (project-aware) named-DB check.
+    database = _firestore_database_id(data_plane_project)
 
     # Bare ADC pinned to another project is not enough: the dev compute
     # service account has no data-plane Firestore IAM (writes came back 403

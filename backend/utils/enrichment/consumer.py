@@ -81,7 +81,7 @@ class EnrichmentConsumer:
         return enrich_conversation
 
     def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
-        from config.summary_guarantee import ADMITTED_OWNER, enabled as summary_enabled, preserves_admitted
+        from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
         from database.summary_processing import record_empty_failure
         from utils.conversations import summary_delivery
@@ -101,7 +101,7 @@ class EnrichmentConsumer:
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
             return Result(Outcome.DONE, ConsumerReason.PROCESSED)
 
-        summary_policy = summary_enabled(uid, include_admitted_context=False) or preserves_admitted(row)
+        summary_policy = rows.summary_policy_for(row)
         context = (
             {'owner': claim.lease_token, 'lease_until': claim.lease_until}
             if summary_policy and not row.get('summary_seen')

@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import pytest
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -97,131 +98,133 @@ def _loaded_notifications() -> Iterator[ModuleType]:
         )
 
 
-def test_stringify_fcm_data_coerces_values_to_strings():
-    with _loaded_notifications() as notifications:
-        out = notifications._stringify_fcm_data({'a': 1, 'b': None, 'c': True, 'd': 'x'})
-        assert out == {'a': '1', 'b': '', 'c': 'True', 'd': 'x'}
+@pytest.fixture
+def notifications():
+    # Fresh module and scoped stubs per test; loading belongs to setup.
+    with _loaded_notifications() as module:
+        yield module
 
 
-def test_client_displayed_message_omits_top_level_notification():
-    with _loaded_notifications() as notifications:
-        data = {
-            'push_type': 'chat_answer',
-            'title': 'omi says',
-            'text': 'Long answer that should expand',
-            'navigate_to': '/chat/omi',
+def test_stringify_fcm_data_coerces_values_to_strings(notifications):
+    out = notifications._stringify_fcm_data({'a': 1, 'b': None, 'c': True, 'd': 'x'})
+    assert out == {'a': '1', 'b': '', 'c': 'True', 'd': 'x'}
+
+
+def test_client_displayed_message_omits_top_level_notification(notifications):
+    data = {
+        'push_type': 'chat_answer',
+        'title': 'omi says',
+        'text': 'Long answer that should expand',
+        'navigate_to': '/chat/omi',
+        'notification_type': 'plugin',
+    }
+    msg = notifications._build_message(
+        token='token-1',
+        tag='tag-1',
+        notification=None,
+        data=data,
+        priority='high',
+        client_displayed=True,
+        display_title='omi says',
+        display_body='Long answer that should expand',
+    )
+    assert msg.notification is None
+    assert msg.data['navigate_to'] == '/chat/omi'
+    assert msg.data['push_type'] == 'chat_answer'
+    assert msg.data['text'] == 'Long answer that should expand'
+    assert 'body' not in msg.data
+    assert msg.android is not None
+    assert getattr(msg.android, 'notification', None) is None
+    assert msg.apns is not None
+    assert msg.apns.payload.aps.alert.title == 'omi says'
+    assert msg.apns.payload.aps.alert.body == 'Long answer that should expand'
+
+
+def test_send_client_displayed_notification_sets_push_type(notifications):
+    captured: dict[str, Any] = {}
+
+    def fake_send_each(messages):
+        captured['messages'] = messages
+        return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
+
+    notifications.messaging.send_each = fake_send_each
+    notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
+
+    notifications.send_client_displayed_notification(
+        'uid-1',
+        'omi says',
+        'Answer body',
+        {
             'notification_type': 'plugin',
-        }
-        msg = notifications._build_message(
-            token='token-1',
-            tag='tag-1',
-            notification=None,
-            data=data,
-            priority='high',
-            client_displayed=True,
-            display_title='omi says',
-            display_body='Long answer that should expand',
-        )
-        assert msg.notification is None
-        assert msg.data['navigate_to'] == '/chat/omi'
-        assert msg.data['push_type'] == 'chat_answer'
-        assert msg.data['text'] == 'Long answer that should expand'
-        assert 'body' not in msg.data
-        assert msg.android is not None
-        assert getattr(msg.android, 'notification', None) is None
-        assert msg.apns is not None
-        assert msg.apns.payload.aps.alert.title == 'omi says'
-        assert msg.apns.payload.aps.alert.body == 'Long answer that should expand'
+            'navigate_to': '/chat/omi',
+            'id': 'msg-1',
+            'text': 'Answer body',
+        },
+    )
+
+    assert len(captured['messages']) == 1
+    msg = captured['messages'][0]
+    assert msg.notification is None
+    assert msg.data['push_type'] == 'chat_answer'
+    assert msg.data['title'] == 'omi says'
+    assert msg.data['text'] == 'Answer body'
+    assert 'body' not in msg.data
+    assert msg.data['navigate_to'] == '/chat/omi'
+    assert msg.apns.payload.aps.alert.body == 'Answer body'
 
 
-def test_send_client_displayed_notification_sets_push_type():
-    with _loaded_notifications() as notifications:
-        captured: dict[str, Any] = {}
+def test_send_client_displayed_notification_async_matches_sync_shape(notifications):
+    assert inspect.iscoroutinefunction(notifications.send_client_displayed_notification_async)
+    captured: dict[str, Any] = {}
 
-        def fake_send_each(messages):
-            captured['messages'] = messages
-            return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
+    def fake_send_each(messages):
+        captured['messages'] = messages
+        return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
 
-        notifications.messaging.send_each = fake_send_each
-        notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
+    notifications.messaging.send_each = fake_send_each
+    notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
 
-        notifications.send_client_displayed_notification(
+    asyncio.run(
+        notifications.send_client_displayed_notification_async(
             'uid-1',
             'omi says',
-            'Answer body',
+            'Async answer body',
             {
                 'notification_type': 'plugin',
                 'navigate_to': '/chat/omi',
-                'id': 'msg-1',
-                'text': 'Answer body',
+                'id': 'msg-2',
+                'text': 'Async answer body',
             },
         )
+    )
 
-        assert len(captured['messages']) == 1
-        msg = captured['messages'][0]
-        assert msg.notification is None
-        assert msg.data['push_type'] == 'chat_answer'
-        assert msg.data['title'] == 'omi says'
-        assert msg.data['text'] == 'Answer body'
-        assert 'body' not in msg.data
-        assert msg.data['navigate_to'] == '/chat/omi'
-        assert msg.apns.payload.aps.alert.body == 'Answer body'
-
-
-def test_send_client_displayed_notification_async_matches_sync_shape():
-    with _loaded_notifications() as notifications:
-        assert inspect.iscoroutinefunction(notifications.send_client_displayed_notification_async)
-        captured: dict[str, Any] = {}
-
-        def fake_send_each(messages):
-            captured['messages'] = messages
-            return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
-
-        notifications.messaging.send_each = fake_send_each
-        notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
-
-        asyncio.run(
-            notifications.send_client_displayed_notification_async(
-                'uid-1',
-                'omi says',
-                'Async answer body',
-                {
-                    'notification_type': 'plugin',
-                    'navigate_to': '/chat/omi',
-                    'id': 'msg-2',
-                    'text': 'Async answer body',
-                },
-            )
-        )
-
-        assert len(captured['messages']) == 1
-        msg = captured['messages'][0]
-        assert msg.notification is None
-        assert msg.data['push_type'] == 'chat_answer'
-        assert msg.data['text'] == 'Async answer body'
-        assert 'body' not in msg.data
-        assert msg.data['navigate_to'] == '/chat/omi'
-        assert msg.apns.payload.aps.alert.body == 'Async answer body'
+    assert len(captured['messages']) == 1
+    msg = captured['messages'][0]
+    assert msg.notification is None
+    assert msg.data['push_type'] == 'chat_answer'
+    assert msg.data['text'] == 'Async answer body'
+    assert 'body' not in msg.data
+    assert msg.data['navigate_to'] == '/chat/omi'
+    assert msg.apns.payload.aps.alert.body == 'Async answer body'
 
 
-def test_send_client_displayed_notification_fills_text_when_missing():
-    with _loaded_notifications() as notifications:
-        captured: dict[str, Any] = {}
+def test_send_client_displayed_notification_fills_text_when_missing(notifications):
+    captured: dict[str, Any] = {}
 
-        def fake_send_each(messages):
-            captured['messages'] = messages
-            return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
+    def fake_send_each(messages):
+        captured['messages'] = messages
+        return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None)])
 
-        notifications.messaging.send_each = fake_send_each
-        notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
+    notifications.messaging.send_each = fake_send_each
+    notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
 
-        notifications.send_client_displayed_notification(
-            'uid-1',
-            'omi says',
-            'Only in body arg',
-            {'notification_type': 'plugin', 'navigate_to': '/chat/omi', 'id': 'msg-3'},
-        )
+    notifications.send_client_displayed_notification(
+        'uid-1',
+        'omi says',
+        'Only in body arg',
+        {'notification_type': 'plugin', 'navigate_to': '/chat/omi', 'id': 'msg-3'},
+    )
 
-        msg = captured['messages'][0]
-        assert msg.data['text'] == 'Only in body arg'
-        assert 'body' not in msg.data
+    msg = captured['messages'][0]
+    assert msg.data['text'] == 'Only in body arg'
+    assert 'body' not in msg.data

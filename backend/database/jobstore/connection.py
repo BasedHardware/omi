@@ -25,6 +25,16 @@ def _psycopg():
     return psycopg
 
 
+def configure(conn: Any) -> Any:
+    """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
+    from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]
+
+    from database.jobstore import codec
+
+    set_json_loads(codec.loads, conn)
+    return conn
+
+
 def dial(dsn: str) -> Any:
     psycopg = _psycopg()
     # autocommit: transaction boundaries are explicit (BEGIN ... COMMIT) in PostgresStore.
@@ -58,7 +68,8 @@ class Pool:
     def __init__(self, dsn: str, *, size: int = MAX_POOL_SIZE, connect: Callable[[], Any] | None = None):
         if not 1 <= size <= MAX_POOL_SIZE:
             raise ValueError(f'pool size must be 1..{MAX_POOL_SIZE}')
-        self._connect = connect or (lambda: dial(dsn))
+        raw = connect or (lambda: dial(dsn))
+        self._connect = lambda: configure(raw())
         self._idle: queue.LifoQueue = queue.LifoQueue()
         self._slots = threading.BoundedSemaphore(size)
         self._closed = False

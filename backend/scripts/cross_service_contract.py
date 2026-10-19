@@ -44,6 +44,7 @@ if str(BACKEND) not in sys.path:
 
 from scripts import render_backend_runtime_env as cloud_run_renderer  # noqa: E402
 from scripts import render_gke_backend_config as gke_renderer  # noqa: E402
+from scripts.policy_env_reads import policy_env_reads  # noqa: E402
 
 ConfigDict = dict[str, Any]
 ENVS = ('dev', 'prod')
@@ -90,11 +91,10 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         route='/v2/batch-pipeline/recover-quarantine',
         dispatch_when={
             'BATCH_PIPELINE_SERVING_ENABLED': 'true',
-            'BATCH_PIPELINE_RECOVERY_MODE': 'on',
             'BATCH_PIPELINE_RECOVERY_TASKS_ENABLED': 'true',
         },
         target_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
-        handler_requires={'BATCH_PIPELINE_RECOVERY_MODE': 'on'},
+        # Eligibility is the job's recorded recovery part, not the receiving host's env.
         dispatch_audience_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
         verify_audience_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
         deadline_seconds=1500,  # utils/cloud_tasks.DISPATCH_DEADLINE_SECONDS
@@ -777,6 +777,13 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
         for name, members in index.collections.items():
             shared_collections.setdefault(name, members)  # named sets (_TRUTHY et al.) resolve by name too
     reads: dict[str, EnvRead] = {}
+    for rel, key, default, boolean in policy_env_reads(source, module_paths):
+        read = reads.setdefault(key, EnvRead())
+        read.modules.add(rel)
+        read.defaults.add(default)
+        if boolean:
+            read.truthy.add('true')
+            read.compared.add('true')
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
         collections = {**shared_collections, **index.collections}

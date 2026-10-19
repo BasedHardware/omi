@@ -1,11 +1,11 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from config.batch_pipeline import enabled_for
-from database.batch_pipeline_store import Store, Transaction
+from config.policy import BatchUnitPolicy, resolve_batch_policy
+from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -28,13 +28,15 @@ def admit(
     namespace: str,
     intake: dict | None = None,
     require_artifacts: bool = False,
-    enqueue: Callable[[Transaction, WorkItem, float], bool] | None = None,
+    policy: BatchUnitPolicy | None = None,
+    enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
-    ``enqueue`` replaces the GPU-ring enqueue for every item (the C8 provider-STT
-    stage writes its units outside the ring). ``adopt`` lets a caller take over a
+    ``enqueue(tx, item, now, *, policy)`` replaces the GPU-ring enqueue for every
+    item (the C8 provider-STT stage writes its units outside the ring) and must
+    record the admission ``policy`` on the job as the ring does. ``adopt`` lets a caller take over a
     non-batch ledger row it has re-validated inside this transaction (a legacy
     row legacy can no longer finish); the batch ledger write below replaces it.
     With both unset, behaviour is unchanged.
@@ -46,6 +48,7 @@ def admit(
         item.owner_id != binding.owner_id or item.privacy_generation != binding.privacy_generation for item in items
     ):
         raise ValueError('work identity must match projection binding')
+    policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
 
     def commit(tx):
@@ -65,8 +68,18 @@ def admit(
             and pending.get('conversation_id') == binding.target_conversation_id
             and pending.get('record_content_id') == binding.content_id
         )
-        if not reserved_recording and not enabled_for(binding.owner_id):
-            raise AdmissionDisabled('cohort no longer enabled')
+        admission = policy
+        if reserved_recording:
+            raw = pending.get('policy')
+            # Main already accepts a reserved native capture after rollback.
+            # A pre-E1 reservation is the durable receipt of that admission.
+            admission = (
+                BatchUnitPolicy.from_dict(raw)
+                if raw is not None
+                else replace(policy, batch_enabled=True, live_admission_enabled=True, live_record_enabled=True)
+            )
+        if not admission.batch_enabled:
+            raise AdmissionDisabled('recorded admission policy does not enable batch')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
             row = tx.get('conversations', key)
@@ -91,7 +104,7 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = enqueue_item(tx, item, now)
+            created = enqueue_item(tx, item, now, policy=admission)
             job = tx.get('jobs', item.segment_id)
             if not created and job.get('projection_binding') != asdict(binding):
                 raise ValueError('existing segment cannot change its immutable intake binding')
@@ -120,12 +133,17 @@ def admit(
         return {
             'outcome': 'batch',
             'job_id': binding.job_id,
+            '_policy_id': admission.policy_id,
             '_admitted_seconds': sum(i.duration_seconds for i in items),
         }
 
     outcome = store.run(commit)
+    policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:
+        from config.policy.telemetry import record_policy_source
+
+        record_policy_source('admission', policy_id)
         record_correctness('admitted', seconds=float(seconds))
     return outcome
 

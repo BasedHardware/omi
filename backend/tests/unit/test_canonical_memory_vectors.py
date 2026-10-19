@@ -297,8 +297,13 @@ def test_parse_memory_search_vector_hit_rejects_legacy_memory_tier_metadata():
     assert parsed.decision == SearchDecision.stale_vector
 
 
-def test_upsert_canonical_memory_vector_writes_user_scoped_id_and_metadata(monkeypatch):
-    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+@pytest.fixture
+def recording_vector_db(monkeypatch, _vector_db_stub_isolation):
+    return _install_recording_vector_db(monkeypatch)
+
+
+def test_upsert_canonical_memory_vector_writes_user_scoped_id_and_metadata(recording_vector_db):
+    vector_db, fake_index = recording_vector_db
 
     item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term)
     vector_db.upsert_canonical_memory_vector(item)
