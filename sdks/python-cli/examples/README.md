@@ -45,6 +45,7 @@
 * [`conversations_tsv.md`](conversations_tsv.md) — convert a conversation JSON
   export to TSV for command-line text processing (`cut`, `awk`, `grep`).
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`memories_pipeline.md`](memories_pipeline.md) — stream, deduplicate, and convert memories to JSONL for LLM fine-tuning or CSV for spreadsheets.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
