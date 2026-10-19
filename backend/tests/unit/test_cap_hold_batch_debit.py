@@ -177,14 +177,32 @@ def test_known_batch_outcomes_release_the_reservation(reservation_db, outcome):
     assert entries(reservation_db) == {}
 
 
-def test_pending_counts_and_ttl_releases_with_an_error(reservation_db, caplog):
+def test_slow_pending_reservations_keep_counting_and_alert_once(reservation_db, caplog):
+    # Pending past the alert threshold is slow, not lost (lost jobs read as 'abandoned'): releasing it
+    # would let the worker over-admit while batch still owes the debit.
     reservations.reserve(UID, 'hold-1', units=40, period=PERIOD, batch_job_id='bp_1', now=100)
     pending = lambda uid, job: 'pending'  # noqa: E731
-    assert reservations.open_units(UID, PERIOD, status_reader=pending, now=100 + reservations.TTL_SECONDS - 1) == 40
-    before = reservations.CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='expired')._value.get()
-    assert reservations.open_units(UID, PERIOD, status_reader=pending, now=100 + reservations.TTL_SECONDS) == 0
-    assert reservations.CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='expired')._value.get() == before + 1
-    assert 'outcome=expired' in caplog.text and entries(reservation_db) == {}
+    stale = reservations.CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='stale')
+    before = stale._value.get()
+    assert reservations.open_units(UID, PERIOD, status_reader=pending, now=100 + reservations.STALE_SECONDS - 1) == 40
+    assert stale._value.get() == before and 'outcome=stale' not in caplog.text
+    for later in (0, 3600, 30 * 86400):
+        now = 100 + reservations.STALE_SECONDS + later
+        assert reservations.open_units(UID, PERIOD, status_reader=pending, now=now) == 40
+    assert stale._value.get() == before + 1  # marked and alerted once, never released
+    assert caplog.text.count('outcome=stale') == 1
+    assert entries(reservation_db)['hold-1']['stale_at'] == 100 + reservations.STALE_SECONDS
+    assert reservations.open_units(UID, PERIOD, status_reader=lambda uid, job: 'projected', now=10**9) == 0
+    assert entries(reservation_db) == {}
+
+
+def test_other_period_entries_are_pruned_after_a_week(reservation_db):
+    reservations.reserve(UID, 'old', units=40, period='2026-09', batch_job_id='bp_old', now=100)
+    pending = lambda uid, job: 'pending'  # noqa: E731
+    assert reservations.open_units(UID, PERIOD, status_reader=pending, now=100 + reservations.PRUNE_SECONDS - 1) == 0
+    assert 'old' in entries(reservation_db)
+    assert reservations.open_units(UID, PERIOD, status_reader=pending, now=100 + reservations.PRUNE_SECONDS) == 0
+    assert entries(reservation_db) == {}
 
 
 def test_previous_period_reservations_never_shrink_the_new_month(reservation_db):

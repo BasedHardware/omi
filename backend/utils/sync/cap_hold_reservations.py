@@ -9,8 +9,8 @@ worker's own ``_candidate`` units) until the batch outcome is known:
   reservation is dropped. The usage is already visible before the reservation goes, so the two briefly
   both count (conservative, never over-admits); there is never a moment where neither counts;
 - failed (every unit terminally quarantined) or abandoned (no intake): released, nothing was debited;
-- still pending after ``TTL_SECONDS``: released with an error log and a metric, so a lost job never
-  eats capacity forever.
+- still pending after ``STALE_SECONDS``: kept and still counted (slow is not lost; a lost job reads as
+  abandoned), marked stale once with an error log and ``outcome=stale`` so it is alerted on.
 
 Only reservations made in the current funded period reduce capacity: a previous month's reservation never
 shrinks the new month. One document per owner holds a small map; the backlog job lease serializes its
@@ -34,14 +34,16 @@ from utils.sync.stage import current_stage
 
 COLLECTION = 'stt_cap_hold_reservations'
 DOCUMENT = 'current'
-TTL_SECONDS = 6 * 3600
+STALE_SECONDS = 6 * 3600  # alert threshold only; a pending reservation is never released by age
+PRUNE_SECONDS = 7 * 24 * 3600  # other-period entries no longer count; drop them after a week
 MAX_OPEN = 200  # far above a backlog page; a bound, not a quota
-OUTCOMES = ('projected', 'failed', 'abandoned', 'expired')
+OUTCOMES = ('projected', 'failed', 'abandoned', 'pruned', 'stale')
 
 logger = logging.getLogger(__name__)
 CAP_HOLD_RESERVATIONS_RELEASED = Counter(
     'omi_cap_hold_reservations_released_total',
-    'Cap-hold funded-capacity reservations released, by outcome (expired should stay at zero).',
+    'Cap-hold funded-capacity reservation events by outcome: projected/failed/abandoned/pruned release one; '
+    'stale marks one still pending past STALE_SECONDS (kept and counted; should stay at zero).',
     ['outcome'],
 )
 
@@ -73,7 +75,7 @@ def reserve(
     now: float | None = None,
     firestore_client: Any = None,
 ) -> None:
-    """Idempotent per hold: a retried hand-off keeps the first reservation (and its TTL clock)."""
+    """Idempotent per hold: a retried hand-off keeps the first reservation (and its age clock)."""
     units = _valid_units(units)
     client = firestore_client or get_firestore_client()
     ref = _ref(uid, client)
@@ -102,7 +104,13 @@ def open_units(
     now: float | None = None,
     firestore_client: Any = None,
 ) -> float:
-    """Units still reserved in ``period`` after settling every reservation whose batch outcome is known."""
+    """Units still reserved in ``period`` after settling every reservation whose batch outcome is known.
+
+    Only a terminal batch outcome releases a reservation. A job still pending past ``STALE_SECONDS`` is
+    slow, not lost (lost jobs read as 'abandoned'), so it keeps counting; it is marked stale once, with an
+    error log and ``outcome=stale``. Entries from another period stop counting immediately and are pruned
+    after ``PRUNE_SECONDS``.
+    """
     client = firestore_client or get_firestore_client()
     ref = _ref(uid, client)
     snapshot = ref.get()
@@ -111,14 +119,19 @@ def open_units(
         return 0.0
     stamp = time.time() if now is None else now
     settled: dict[str, str] = {}
+    stale: list[str] = []
     for hold_id, entry in entries.items():
+        age = stamp - float(entry.get('reserved_at') or 0)
+        if entry.get('period') != period and age >= PRUNE_SECONDS:
+            settled[hold_id] = 'pruned'
+            continue
         outcome = status_reader(uid, str(entry.get('batch_job_id') or ''))
         if outcome in ('projected', 'failed', 'abandoned'):
             settled[hold_id] = outcome
-        elif stamp - float(entry.get('reserved_at') or 0) >= TTL_SECONDS:
-            settled[hold_id] = 'expired'
-    if settled:
-        _settle(uid, settled, client)
+        elif age >= STALE_SECONDS and not entry.get('stale_at'):
+            stale.append(hold_id)
+    if settled or stale:
+        _settle(uid, settled, stale, stamp, client)
     return sum(
         float(entry.get('units') or 0)
         for hold_id, entry in entries.items()
@@ -126,7 +139,7 @@ def open_units(
     )
 
 
-def _settle(uid: str, settled: dict[str, str], client: Any) -> None:
+def _settle(uid: str, settled: dict[str, str], stale: list[str], stamp: float, client: Any) -> None:
     ref = _ref(uid, client)
 
     @firestore.transactional
@@ -135,15 +148,19 @@ def _settle(uid: str, settled: dict[str, str], client: Any) -> None:
         entries = _entries(snapshot.to_dict() if snapshot.exists else None)
         for hold_id in settled:
             entries.pop(hold_id, None)
+        for hold_id in stale:
+            if hold_id in entries:
+                entries[hold_id] = {**entries[hold_id], 'stale_at': stamp}
         transaction.set(ref, {'entries': entries})
 
     with external_write_fence(uid, firestore_client=client):
         commit(client.transaction())
     for outcome in settled.values():
         CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome=outcome).inc()
-        if outcome == 'expired':
-            # Alertable: the batch job never reached a terminal state within the TTL.
-            logger.error('event=cap_hold_reservation outcome=expired ttl_seconds=%d', TTL_SECONDS)
+    for _ in stale:
+        # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
+        CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='stale').inc()
+        logger.error('event=cap_hold_reservation outcome=stale stale_seconds=%d', STALE_SECONDS)
 
 
 def batch_status(uid: str, batch_job_id: str) -> str:
