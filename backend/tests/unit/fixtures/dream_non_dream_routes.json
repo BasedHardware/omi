@@ -51,6 +51,7 @@
   "route.screen_frame_judge.model_config.001": "a4cbdcccf561cd772cf17cba9f13d722d3e8e9c19b4b1f8fd7a7e400f0957201",
   "route.session_titles.model_config.001": "b01cf2788d1ef3f2cded961b2cdf71f6668ec2fabd2b8a081fd8eb29974db2e4",
   "route.smart_glasses.model_config.001": "25e15008f7ecd66a3f7adbee713bacee80ab06a3e79c33e4b54393aff5269fc6",
+  "route.sync_redrive_title.model_config.001": "327bc09c500c7dcbc6e7913196126927e8414e17888a38b9dfd16e5d1c9f279b",
   "route.translation.model_config.001": "56115e02ffbb642691cd37406d14fefa580a226a5b4d8b10bf812e1b4b69cefa",
   "route.trends.model_config.001": "dfcc5e4c3a19dd6f9ce14a3fdc369b6f88b3d776cad7674e7e9c59e27c6b1a94",
   "route.wake_word_adjudication.model_config.001": "585f51400a1dc17cca5cc21da5689f51da23b6b92256cd5dedac483720e2e48d",

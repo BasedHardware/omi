@@ -6107,3 +6107,7 @@ The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt b
 retained uncertainty, kill switches, three new group indexes, deployment order,
 15-second SIGKILL residual window and measured cost increase. Enforcement flags
 remain off; this source change does not activate the cap cohort.
+
+## Operator minimal sync redrive
+
+Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
