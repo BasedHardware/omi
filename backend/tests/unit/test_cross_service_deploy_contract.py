@@ -256,9 +256,10 @@ def test_recovery_task_without_audience_fails_like_22149(results: Results) -> No
     ), found
 
 
-def test_recovery_task_to_host_with_recovery_off_fails_like_22149(results: Results) -> None:
+def test_recovery_task_to_host_without_recovery_audience_fails_like_22149(results: Results) -> None:
     messages = [v.message for v in results.mutations['recovery_to_sync'] if v.invariant == 'task-edge']
-    assert any('BATCH_PIPELINE_RECOVERY_MODE' in m and 'cloud_run/backend-sync' in m for m in messages), messages
+    # A recorded on-policy drains even after the receiver's mode changes. The
+    # receiving route still must verify the dispatcher's audience and identity.
     assert any('verifies BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE' in m for m in messages), messages
 
 
@@ -360,8 +361,15 @@ def _has_commit(ref: str) -> bool:
 
 
 @pytest.mark.skipif(os.environ.get('CROSS_SERVICE_CONTRACT_REPLAY') != '1', reason='opt-in: needs git history')
-@pytest.mark.parametrize('broken,fixed,invariant', REPLAYS)
-def test_pre_fix_commit_fails_and_fix_clears_it(broken: str, fixed: str, invariant: str) -> None:
+def test_pre_fix_commit_fails_and_fix_clears_it(replayed_pair) -> None:
+    invariant, broken, fixed = replayed_pair
+    assert invariant in broken
+    assert invariant not in fixed
+
+
+@pytest.fixture(scope='module', params=REPLAYS)
+def replayed_pair(request):
+    broken, fixed, invariant = request.param
     if not (_has_commit(broken) and _has_commit(fixed)):
         pytest.skip('commit not in this clone')
 
@@ -372,5 +380,4 @@ def test_pre_fix_commit_fails_and_fix_clears_it(broken: str, fixed: str, invaria
         finally:
             source.close()
 
-    assert invariant in invariants_at(broken)
-    assert invariant not in invariants_at(fixed)
+    return invariant, invariants_at(broken), invariants_at(fixed)

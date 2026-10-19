@@ -121,6 +121,12 @@ def _build_fakes() -> dict:
     ]:
         fakes[f'database.{_sub}'] = MagicMock()
 
+    # routers/sync.py resolves its handler budget at import time against these
+    # constants; MagicMock attrs cannot be compared inside min().
+    fakes['database.sync_jobs'].RUN_LOCK_TTL_SECONDS = 1800
+    fakes['database.sync_jobs'].STALE_THRESHOLD_SECONDS = 600
+    fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
+
     # firebase_admin
     fb = MagicMock()
     fb.__path__ = ['firebase_admin']
@@ -191,6 +197,8 @@ def _build_fakes() -> dict:
     cloud_tasks.enqueue_audio_merge_job = MagicMock()
     cloud_tasks.enqueue_audio_merge_job_deferred = MagicMock()
     cloud_tasks.enqueue_sync_job = MagicMock()
+    cloud_tasks.enqueue_sync_job_budget_replacement = MagicMock()
+    cloud_tasks.DISPATCH_DEADLINE_SECONDS = 1500
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)

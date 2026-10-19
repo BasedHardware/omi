@@ -73,6 +73,9 @@ _LIMIT_OPT = (None, 'optional page bound; absent does not change filters')
 _OFFSET = (0, 'row window; fixed, not filter-affecting')
 _PAGE = (25, 'scan/page bound; fixed small positive, not filter-affecting')
 _BUDGET = (None, 'request budget; RPC timeout/charge only, no filter effect')
+_CURSOR = (None, 'opaque continuation token; absent keeps the offset contract')
+_PAGE_ENVELOPE = (False, 'response envelope flag; no filter or order effect')
+_CURSOR_PAGE = (None, 'caller-owned next_cursor sink; no filter or order effect')
 _EXTRA_FIELDS = (('provenance',), 'widens the select projection only; no filter or order effect')
 _DAYS = (30, 'window length; fixed, not filter-affecting')
 _NOW = (None, 'defaults to frozen clock; none/set produce identical filters')
@@ -132,6 +135,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': '49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
@@ -150,7 +154,7 @@ BODY_DIGEST = {
     'database.proactivity.cohort_query': 'b14c1c6f3a2f47db38dd468da1bf6b51054d27e6418d813a614cc5b9e1a7a698',
     'database.proactivity.feed_query': '9426ea3253186857c638371d1bcebb7007b92a9430aaad1db5e49e96465ddb84',
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
-    'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
+    'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
@@ -307,6 +311,7 @@ _add(
             'end_date': [None, T1],
             'due_start_date': [None, T0],
             'due_end_date': [None, T1],
+            'probe_filtered_legacy': [False, True],
         },
         neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET, 'extra_fields': _EXTRA_FIELDS},
     )
@@ -878,6 +883,18 @@ _add(
 )
 _add(
     CoveredByEntry(
+        'database.conversations._collect_cursor_conversation_page',
+        covered_by=(
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations_without_photos',
+        ),
+        reason='cursor page collector only runs when the conversation_list_cursor lever is on; drivers run with levers off',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations._collect_cursor_conversation_page'],
+    )
+)
+_add(
+    CoveredByEntry(
         'database.conversation_visibility_counts.count_hidden',
         covered_by=('database.conversations.get_conversations_count',),
         reason='tombstone count query invoked by the count driver on every combo',
@@ -927,7 +944,13 @@ _add(
         'database.conversations.get_conversations',
         base={'uid': UID},
         profiles=PHOTO_PROFILES,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'cursor': _CURSOR,
+            'page_envelope': _PAGE_ENVELOPE,
+            'cursor_page': _CURSOR_PAGE,
+        },
     )
 )
 _add(
@@ -956,7 +979,14 @@ _add(
             ),
         ),
         profiles=WITHOUT_PHOTOS_PROFILES,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'cursor': _CURSOR,
+            'page_envelope': _PAGE_ENVELOPE,
+            'cursor_page': _CURSOR_PAGE,
+        },
     )
 )
 _add(DriverEntry('database.conversations.get_in_progress_conversation', base={'uid': UID}))
@@ -2258,6 +2288,18 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.finish_expired_job',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'budget_chain_exhausted'},
+        domains={'now': [None, T0]},
+        setup=_seed(
+            f'sync_backfill_sequencer/{UID}',
+            {'active_job_id': 'shape-job', 'active_epoch': 1, 'lease_expires_at': T0},
+        ),
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.retire_expired',
         base={'uid': UID, 'job_id': 'shape-job'},
         domains={'now': [None, T0], 'epoch': [None, 1], 'allow_active_owner': [False, True]},
@@ -3168,6 +3210,30 @@ _add(
         },
     )
 )
+
+
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+_provider_stt_outbox = FirestoreProviderSttOutbox(
+    privacy_blocked=lambda row_id: False,
+    create_wake=lambda row: None,
+    collection='batch_pipeline_prod_provider_stt_outbox',
+)
+for _method in ('claim', 'sweep'):
+    _add(
+        DriverEntry(
+            f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',
+            base={'self': _provider_stt_outbox},
+            neutrals={
+                'now': (T0.timestamp(), 'operand clock only; due/lease checks run per row after the query'),
+                **(
+                    {'n': (4, 'claim count; bounds the page only'), 'lease_seconds': (1800, 'lease length only')}
+                    if _method == 'claim'
+                    else {'limit': _LIMIT}
+                ),
+            },
+        )
+    )
 
 
 _add(

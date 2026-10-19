@@ -50,6 +50,12 @@ def real_sync(world, monkeypatch):
     from utils import task_sync
 
     calls = []
+    # The provider leaf is fake; do not build real TLS/proxy pools for it.
+    real_client = task_sync.httpx.AsyncClient
+    transport = task_sync.httpx.MockTransport(lambda request: pytest.fail('provider HTTP forbidden'))
+    monkeypatch.setattr(
+        task_sync.httpx, 'AsyncClient', lambda **kwargs: real_client(transport=transport, trust_env=False, **kwargs)
+    )
 
     async def blocking(executor, fn, *args):
         return fn(*args)

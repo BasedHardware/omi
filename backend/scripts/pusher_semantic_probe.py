@@ -83,6 +83,40 @@ class ProbeError(RuntimeError):
         self.stage = stage
 
 
+def _verify_producer_environment(args: argparse.Namespace) -> None:
+    """Dev identity comes from its authenticated Kubernetes tunnel, not its public hostname.
+
+    The dev workflow owns the port-forward process to
+    dev-omi-backend/service/dev-omi-backend-listen. Its public API hostname
+    intentionally forwards Beta clients to production. Keep the existing
+    isolated production-canary path independent of this dev-only contract.
+    """
+    project, namespace = getattr(args, 'project', None), getattr(args, 'namespace', None)
+    if project != 'based-hardware-dev' and namespace != 'dev-omi-backend':
+        return
+    try:
+        parsed = urllib.parse.urlparse(args.api_url)
+        if not (
+            project == 'based-hardware-dev'
+            and namespace == 'dev-omi-backend'
+            and args.allow_local_http
+            and parsed.scheme == 'http'
+            and parsed.hostname == '127.0.0.1'
+            and parsed.port is not None
+            and 0 < parsed.port <= 65535
+            and parsed.path in ('', '/')
+            and not (parsed.username or parsed.password or parsed.query or parsed.fragment)
+        ):
+            raise ProbeError('producer_environment_mismatch')
+        context = subprocess.run(
+            ['kubectl', 'config', 'current-context'], check=False, capture_output=True, text=True, timeout=10
+        )
+        if context.returncode != 0 or not context.stdout.strip().startswith('gke_based-hardware-dev_'):
+            raise ProbeError('producer_environment_mismatch')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ProbeError('producer_environment_mismatch') from error
+
+
 @dataclass(frozen=True)
 class Fixture:
     pcm: bytes
@@ -562,7 +596,6 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     live_word_count: int | None = None
     expected_word_count: int | None = None
     try:
-        token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
@@ -576,6 +609,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         )
         if base != "https://api.omiapi.com" and not local_test:
             raise ProbeError("dev_api_url")
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
         status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
         enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
         if status != 200:
@@ -971,8 +1006,6 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     expected_word_count: int | None = None
     consumer_readback_passed = False
     try:
-        token = _read_token(args.bearer_token_file)
-        fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict):
             raise ProbeError("deployment_receipt")
@@ -982,6 +1015,9 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 json.dumps(deployment_receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
         )
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
+        fixture = load_fixture()
         conversation_id = str(uuid.uuid4())
         probe_socket_hold = asyncio.Event()
         listen_progress = _ListenProgress()

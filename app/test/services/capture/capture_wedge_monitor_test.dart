@@ -100,15 +100,16 @@ void main() {
       final monitor = await declare();
       void health({String phase = 'flowing', bool subscribed = true, bool fresh = true}) {
         monitor.observeIngressHealth(
-            'dev-a',
-            CaptureIngressHealth(
-              phase: phase,
-              generation: 'recovered',
-              reason: 'audio',
-              validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
-              subscriptionConfirmed: subscribed,
-              unverifiedSinceMs: 0,
-            ));
+          'dev-a',
+          CaptureIngressHealth(
+            phase: phase,
+            generation: 'recovered',
+            reason: 'audio',
+            validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
+            subscriptionConfirmed: subscribed,
+            unverifiedSinceMs: 0,
+          ),
+        );
       }
 
       health(subscribed: false);
@@ -199,15 +200,16 @@ void main() {
       monitor.onBleIngressBytes(CaptureWedgeMonitor.localWalDeviceId, 80);
     }
     monitor.observeIngressHealth(
-        CaptureWedgeMonitor.localWalDeviceId,
-        CaptureIngressHealth(
-          phase: 'flowing',
-          generation: 'native-1',
-          reason: 'audio',
-          validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
-          subscriptionConfirmed: true,
-          unverifiedSinceMs: 0,
-        ));
+      CaptureWedgeMonitor.localWalDeviceId,
+      CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'native-1',
+        reason: 'audio',
+        validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      ),
+    );
     expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
     expect(forEvent('Capture Recovery Resolved'), isEmpty);
   });
@@ -268,13 +270,13 @@ void main() {
     addTearDown(monitor.dispose);
     monitor.setNativeIngressOwner('dev-a', true);
     CaptureIngressHealth health(String phase) => CaptureIngressHealth(
-          phase: phase,
-          generation: 'epoch-1',
-          reason: phase,
-          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
-          subscriptionConfirmed: phase == 'quiet',
-          unverifiedSinceMs: 1234,
-        );
+      phase: phase,
+      generation: 'epoch-1',
+      reason: phase,
+      validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+      subscriptionConfirmed: phase == 'quiet',
+      unverifiedSinceMs: 1234,
+    );
     for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
       monitor.observeIngressHealth('dev-a', health(phase));
       zeroSession(monitor);
@@ -1071,6 +1073,72 @@ void main() {
       expect(monitor.visiblePrompt, isNotNull);
       monitor.dismissDeviceEpisode('dev-a');
       expect(monitor.visiblePrompt, isNull);
+    });
+
+    test('dismissVisibleEpisode keeps the telemetry-only episode for the same device', () async {
+      // The tested combination: a visible storage-risk prompt and an unrelated
+      // telemetry-only upload-silence operation, both on the local WAL state.
+      final monitor = makeMonitor(withRetry: true, transferRetry: () async {});
+      monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
+      await pumpEventQueue();
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNotNull);
+      expect(
+        forEvent('Capture Wedge Detected').map((e) => e['trigger']),
+        containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
+      );
+
+      monitor.dismissVisibleEpisode(CaptureWedgeMonitor.localWalDeviceId);
+
+      expect(monitor.visiblePrompt, isNull, reason: 'the dismissed prompt is gone');
+      // The telemetry operation survives: a later upload completion still
+      // resolves it instead of it having been erased as if it never existed.
+      expect(
+        forEvent('Capture Recovery Resolved').map((e) => e['trigger']),
+        isNot(contains(CaptureWedgeMonitor.triggerUploadSilence)),
+        reason: 'the telemetry episode was not silently resolved by the dismissal',
+      );
+      monitor.onUploadCompleted();
+      await pumpEventQueue();
+      expect(
+        forEvent('Capture Recovery Resolved').map((e) => e['trigger']),
+        contains(CaptureWedgeMonitor.triggerUploadSilence),
+        reason: 'the surviving telemetry episode resolves when the upload lands',
+      );
+    });
+
+    test('a dismissed ingress episode stays dismissed across native re-ticks of the same incident', () async {
+      CaptureIngressHealth snapshot(String generation) => CaptureIngressHealth(
+        phase: 'actionRequired',
+        generation: generation,
+        reason: 'subscription_timeout',
+        validUntilMs: 0,
+        subscriptionConfirmed: false,
+        unverifiedSinceMs: 60000,
+      );
+      final monitor = makeMonitor(withRetry: true);
+      monitor.observeIngressHealth('dev-a', snapshot('g1'));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+
+      monitor.dismissVisibleEpisode('dev-a');
+      expect(monitor.visiblePrompt, isNull, reason: 'the reader dismissed the incident');
+
+      // iOS republishes the same actionable snapshot every ~5s: the dismissal
+      // must hold for an unchanged incident instead of resurrecting the banner.
+      monitor.observeIngressHealth('dev-a', snapshot('g1'));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull, reason: 'same generation re-tick does not resurrect the banner');
+
+      // A new incident (new connection generation) alerts again.
+      monitor.observeIngressHealth('dev-a', snapshot('g2'));
+      await pumpEventQueue();
+      expect(
+        monitor.visiblePrompt?.trigger,
+        CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+        reason: 'a genuinely new incident is a new alert',
+      );
     });
 
     test('a positive session during retry resolves without a prompt', () async {

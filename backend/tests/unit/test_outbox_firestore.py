@@ -188,10 +188,10 @@ def test_sweep_discards_privacy_fenced_rows_instead_of_rewaking(rows, monkeypatc
     assert counts.discarded == 1 and counts.rewoken == 0
 
 
-def test_selector_serves_only_the_enrichment_kind():
+def test_selector_serves_only_the_built_kinds():
     assert firestore_outbox(OutboxKind.ENRICHMENT) is outbox
     with pytest.raises(NotImplementedError):
-        firestore_outbox(OutboxKind.PROVIDER_STT)
+        firestore_outbox(OutboxKind.CAP_HOLD_REDRIVE)  # reserved; provider_stt is lane 8's
 
 
 def test_pull_claims_due_rows_by_their_stored_wake(rows, monkeypatch):
@@ -229,4 +229,24 @@ def test_conformance_factory_uses_the_injected_privacy_check_and_wake(rows, monk
     blocked.add(KEY)
     assert injected.claim_key(KEY, result.wake_token, 120, now=10) is Outcome.DISCARDED
     with pytest.raises(NotImplementedError):
-        FirestoreOutbox(OutboxKind.PROVIDER_STT)
+        FirestoreOutbox(OutboxKind.CAP_HOLD_REDRIVE)
+
+
+def test_enqueue_snapshots_the_first_summary_policy_once(rows):
+    state_rows, _tasks = rows
+    _enqueue(600.0, snapshot_summary=True)
+    snapshot = state_rows[KEY]['first_summary_policy']
+    assert snapshot is not None and state_rows[KEY]['first_summary_policy_source'] == 'creation'
+    _enqueue(900.0, snapshot_summary=True)  # a coalesced append keeps the admitted decision
+    assert state_rows[KEY]['first_summary_policy'] == snapshot
+    assert state_rows[KEY]['first_summary_policy_source'] == 'creation'
+
+
+def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
+    state_rows, _tasks = rows
+    _enqueue(1.0)
+    state_rows[KEY]['summary_lane'] = 'batch'
+    state_rows[KEY].pop('first_summary_policy', None)
+    claim = _claim(rows, now=10)
+    assert state_rows[KEY]['first_summary_policy_source'] == 'fallback'
+    assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']

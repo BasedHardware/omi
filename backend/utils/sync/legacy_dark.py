@@ -33,8 +33,6 @@ from typing import Any, Mapping, Optional
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge
 
-from utils.rollout import runtime_percent
-
 logger = logging.getLogger(__name__)
 
 # The four live legacy queues (h, Grounding). ``sync-backfill-fresh`` is the
@@ -151,6 +149,12 @@ def _fallback(source: str) -> LegacySyncMode:
 def current_mode() -> LegacySyncMode:
     """The served mode. Never raises; every failure serves ``on``."""
     try:
+        # Imported per call (a cached module lookup): router test harnesses replace
+        # ``utils`` wholesale, and a missing reader must serve ``on``, not fail import.
+        from utils.rollout import runtime_percent
+    except Exception:  # ImportError, or a harness's stub package without __spec__
+        return _fallback('absent')
+    try:
         raw: object = runtime_percent.legacy_sync_mode()
     except NotImplementedError:
         # The (f) stub before lane 6's implementation: the switch does not exist yet.
@@ -257,6 +261,17 @@ def classify_ledger_row(
         return LegacyOwnership.ACTIVE
     # Unknown or partial rows: legacy would replace them on the next claim.
     return LegacyOwnership.STRANDED
+
+
+def read_ledger_row(uid: str, content_id: str) -> Optional[Mapping[str, Any]]:
+    """The content's ``sync_content_ledger`` row, or None. Blocking: call from the db executor."""
+    from database._client import get_firestore_client
+    from database.sync_ledger import sync_content_ledger_ref
+
+    snapshot = sync_content_ledger_ref(get_firestore_client(), uid, content_id).get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    return snapshot.to_dict() or {}
 
 
 @dataclass(frozen=True)

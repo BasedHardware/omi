@@ -9,7 +9,8 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for, live_record_enabled_for
+from config.batch_pipeline import priority_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
@@ -132,8 +133,15 @@ async def accept_upload(
     byok_enabled: bool = False,
     intake_context: dict | None = None,
     record_router=None,
+    decode=None,
+    policy: BatchUnitPolicy | None = None,
 ) -> JSONResponse | None:
-    """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    """None preserves a prior legacy receipt; batch outcomes never fall through.
+
+    ``decode(max_seconds)`` replaces WAL decoding of ``paths`` for server-held audio
+    (the cap-hold adapter); it must yield the same ``AudioUnit`` shape.
+    """
+    policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -210,6 +218,7 @@ async def accept_upload(
                 client_device_id=client_device_id,
                 byok_enabled=byok_enabled,
                 loaded_conversation=target,
+                policy=policy,
             )
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
@@ -233,7 +242,7 @@ async def accept_upload(
         # 'multi' languages.
         if (
             mode is LegacySyncMode.ON
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and (route.stt_route == 'provider' or language in {'', 'multi'})
         ):
             # Keep the supported existing provider route. Never silently send
@@ -246,7 +255,7 @@ async def accept_upload(
             not provider
             and target
             and source == 'desktop'
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and not target.get('uses_custom_stt')
             and user.get('private_cloud_sync_enabled', True)
             and normalized_stt_language(target.get('language'))
@@ -256,7 +265,11 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
-        iterator = decode_units(paths, max_seconds=config.max_unit_seconds)
+        iterator = (
+            decode(config.max_unit_seconds)
+            if decode is not None
+            else decode_units(paths, max_seconds=config.max_unit_seconds)
+        )
         items = []
         while unit := await run_blocking(sync_executor, _next_unit, iterator):
             if len(items) >= 128:
@@ -318,6 +331,7 @@ async def accept_upload(
             binding,
             time.time(),
             namespace=store.namespace,
+            policy=policy,
             require_artifacts=True,
             intake={
                 'owner_id': uid,

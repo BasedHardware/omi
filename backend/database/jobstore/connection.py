@@ -25,17 +25,51 @@ def _psycopg():
     return psycopg
 
 
+def configure(conn: Any) -> Any:
+    """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
+    from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]
+
+    from database.jobstore import codec
+
+    set_json_loads(codec.loads, conn)
+    return conn
+
+
 def dial(dsn: str) -> Any:
     psycopg = _psycopg()
     # autocommit: transaction boundaries are explicit (BEGIN ... COMMIT) in PostgresStore.
     return psycopg.connect(dsn, autocommit=True)
 
 
+def iam_connector(host: str, database: str, user: str, *, port: int = 5432) -> Callable[[], Any]:
+    """Connect to Cloud SQL over its private IP with IAM database auth, no connector library.
+
+    The password is a short-lived OAuth token with the ``sqlservice.login`` scope, minted per connection
+    from application default credentials (the service account running the job); TLS is required.
+    ``user`` is the IAM database user, e.g. ``staging-runtime@based-hardware-dev.iam`` (the service
+    account email without ``.gserviceaccount.com``).
+    """
+
+    def connect() -> Any:
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
+        credentials.refresh(Request())
+        return _psycopg().connect(
+            host=host, port=port, dbname=database, user=user, password=credentials.token, sslmode='require',
+            autocommit=True, connect_timeout=10,
+        )  # fmt: skip
+
+    return connect
+
+
 class Pool:
     def __init__(self, dsn: str, *, size: int = MAX_POOL_SIZE, connect: Callable[[], Any] | None = None):
         if not 1 <= size <= MAX_POOL_SIZE:
             raise ValueError(f'pool size must be 1..{MAX_POOL_SIZE}')
-        self._connect = connect or (lambda: dial(dsn))
+        raw = connect or (lambda: dial(dsn))
+        self._connect = lambda: configure(raw())
         self._idle: queue.LifoQueue = queue.LifoQueue()
         self._slots = threading.BoundedSemaphore(size)
         self._closed = False
