@@ -35,7 +35,7 @@ from config.conversation_smart_merge import (
     STRETCH_LINK_SECONDS,
     smart_merge_flatten_enabled,
 )
-from utils.conversations.smart_merge_state import Fragment
+from utils.conversations.smart_merge_state import Fragment, _coerce_utc_datetime
 from utils.conversations.wake_word import find_wake_word_matches
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
@@ -136,7 +136,8 @@ def word_count(segments: Iterable[Mapping[str, Any]]) -> int:
 
 
 def _epoch(value: Any) -> Optional[float]:
-    return value.timestamp() if isinstance(value, datetime) else None
+    parsed = _coerce_utc_datetime(value)
+    return parsed.timestamp() if parsed is not None else None
 
 
 def speech_bounds(row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]]) -> Optional[tuple[float, float]]:
@@ -150,8 +151,9 @@ def speech_bounds(row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]])
 
 
 def fragment_of(row: Mapping[str, Any]) -> Optional[Fragment]:
-    started, finished = row.get('started_at'), row.get('finished_at')
-    if not isinstance(started, datetime) or not isinstance(finished, datetime) or not row.get('id'):
+    started = _coerce_utc_datetime(row.get('started_at'))
+    finished = _coerce_utc_datetime(row.get('finished_at'))
+    if started is None or finished is None or not row.get('id'):
         return None
     stored = row.get('structured')
     structured: Mapping[str, Any] = stored if isinstance(stored, Mapping) else {}
@@ -231,9 +233,9 @@ def fragment_segments(
 ) -> list[Mapping[str, Any]]:
     """The survivor's segments that belong to one fragment (by absolute start time)."""
     origin = _epoch(row.get('started_at'))
-    if origin is None:
+    floor = _epoch(fragment.started_at)
+    if origin is None or floor is None:
         return list(segments)
-    floor = fragment.started_at.timestamp()
     return [s for s in segments if isinstance(s.get('start'), (int, float)) and origin + float(s['start']) >= floor]
 
 
@@ -350,10 +352,11 @@ def _check_pair_legacy(
 ) -> PairCheck:
     survivor_speech = speech_bounds(survivor, survivor_segments)
     new_speech = speech_bounds(new, new_segments)
-    survivor_end, new_start = survivor.get('finished_at'), new.get('started_at')
-    if survivor_speech is None or new_speech is None or not isinstance(survivor_end, datetime):
+    survivor_end = _coerce_utc_datetime(survivor.get('finished_at'))
+    new_start = _coerce_utc_datetime(new.get('started_at'))
+    if survivor_speech is None or new_speech is None or survivor_end is None:
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
-    if not isinstance(new_start, datetime):
+    if new_start is None:
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
     gap = (new_start - survivor_end).total_seconds()
     speech_gap = new_speech[0] - survivor_speech[1]
@@ -375,8 +378,9 @@ def _check_pair_legacy(
 
 
 def _wall_times(row: Mapping[str, Any]) -> Optional[tuple[datetime, datetime]]:
-    created, finished = row.get('created_at'), row.get('finished_at')
-    if not isinstance(created, datetime) or not isinstance(finished, datetime) or finished < created:
+    created = _coerce_utc_datetime(row.get('created_at'))
+    finished = _coerce_utc_datetime(row.get('finished_at'))
+    if created is None or finished is None or finished < created:
         return None
     return created, finished
 
@@ -470,7 +474,9 @@ def rebase_donor_segments(
     refresh's speaker resolution may later unify genuinely equal voices.
     Segment ids are kept, so an undo can remove exactly the donor's segments.
     """
-    offset = donor['started_at'].timestamp() - survivor['started_at'].timestamp()
+    donor_start = _epoch(donor.get('started_at'))
+    survivor_start = _epoch(survivor.get('started_at'))
+    offset = (donor_start - survivor_start) if (donor_start is not None and survivor_start is not None) else 0.0
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(survivor_segments)
     merged = [dict(segment) for segment in deepcopy(list(survivor_segments))]
@@ -511,9 +517,15 @@ def absorb_payloads(
         }
     )
     state.pop('refresh_lease', None)
+    survivor_finished = _coerce_utc_datetime(survivor.get('finished_at'))
+    donor_finished = _coerce_utc_datetime(donor.get('finished_at'))
+    if survivor_finished is not None and donor_finished is not None:
+        finished_at: Any = max(survivor_finished, donor_finished)
+    else:
+        finished_at = donor_finished if donor_finished is not None else survivor.get('finished_at')
     survivor_update: dict[str, Any] = {
         'transcript_segments': rebase_donor_segments(survivor, survivor_segments, donor, donor_segments),
-        'finished_at': max(survivor['finished_at'], donor['finished_at']),
+        'finished_at': finished_at,
         'has_content': True,
         'private_cloud_sync_enabled': bool(
             survivor.get('private_cloud_sync_enabled') or donor.get('private_cloud_sync_enabled')
