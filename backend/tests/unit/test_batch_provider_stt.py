@@ -384,3 +384,13 @@ def test_provider_golden_matches_simulation(name):
 
     assert name in GOLDEN_CONFIGS
     assert dumps(golden_trace(name)) == (GOLDEN_DIR / f'{name}.json').read_text()
+
+
+@pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
+@pytest.mark.parametrize('byok', [False, True])
+def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language, byok):
+    from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+
+    before = language not in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+    after = resolve_route(language, byok=byok).stt_route == 'provider' or language in {'', 'multi'}
+    assert before == after
