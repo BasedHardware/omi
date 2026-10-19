@@ -16,6 +16,11 @@ import unicodedata
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+try:
+    import jiwer  # type: ignore[import-untyped]
+except ImportError:  # pragma: no cover - jiwer is in the backend and batch-image locks
+    jiwer = None
+
 _PUNCT = re.compile(r"[^\w\s']", re.UNICODE)
 _SPACE = re.compile(r'\s+')
 # Fillers that both pipelines may or may not emit; neither should be charged.
@@ -40,16 +45,14 @@ def word_errors(reference: str, hypothesis: str) -> tuple[int, int]:
     hyp = normalize_text(hypothesis).split()
     if not ref:
         return len(hyp), 0
-    try:
-        import jiwer  # type: ignore[import-untyped]
-
-        out = jiwer.process_words(' '.join(ref), ' '.join(hyp) if hyp else '')
-        return int(out.substitutions + out.deletions + out.insertions), len(ref)
-    except ImportError:  # pragma: no cover - jiwer is in the backend lock
+    if jiwer is None:  # pragma: no cover
         return _levenshtein(ref, hyp), len(ref)
+    try:
+        out = jiwer.process_words(' '.join(ref), ' '.join(hyp) if hyp else '')
     except ValueError:
         # jiwer rejects an empty hypothesis on some versions: every reference word is a deletion.
         return len(ref), len(ref)
+    return int(out.substitutions + out.deletions + out.insertions), len(ref)
 
 
 def _levenshtein(ref: Sequence[str], hyp: Sequence[str]) -> int:

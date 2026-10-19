@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pytest
 
+from scripts.parity import scorers  # noqa: F401  (loads scipy/jiwer at collection, not in a timed call)
 from testing.quality_corpus import corpus, paired_flight_batching as flight, paired_short_speech as short
 from testing.quality_corpus.audio import (
     Turn,
