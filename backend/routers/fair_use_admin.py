@@ -237,7 +237,7 @@ def get_public_case_status(case_ref: str):
 
         stage = 'none'
         if uid:
-            state = fair_use_db.get_fair_use_state(uid)
+            state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
             stage = state.get('stage', 'none')
 
         created_at = data.get('created_at')
