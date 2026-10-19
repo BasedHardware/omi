@@ -27,7 +27,9 @@ A reserved excluded source yields to selected work only after the worker/store
 transaction proves no dispatch ever started, rechecks choice ownership and the
 current month, and atomically refunds its chosen estimate once. Unlimited choices
 stay unlimited. Source rows remain queued; cursor rewind preserves widening.
-Any audio receipt/ingest, nonzero lease or lease token, text claim history, unknown
+Any audio receipt/ingest, nonzero lease, presence of a `lease_token` or
+`piece_plan` key (including empty/null), missing/nonzero `next_attempt_at`, text
+claim history, unknown
 origin, missing source/legacy lease proof or failed read retains the reservation;
 these narrower ambiguous cases can still block the choice. No usage-ledger refund
 or automatic provider repeat is introduced. See the dispatch contract for the

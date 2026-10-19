@@ -263,7 +263,9 @@ def release_undispatched_reservation(
                     held != audio_manifest
                     or held.get('state') != 'held'
                     or held.get('lease_until') != 0
-                    or held.get('lease_token')
+                    or 'lease_token' in held
+                    or 'piece_plan' in held
+                    or held.get('next_attempt_at') != 0
                     or any(
                         held.get(key)
                         for key in (

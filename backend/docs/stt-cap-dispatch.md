@@ -29,6 +29,10 @@ to `batch`, so a live-only rollout does not enable its budget denial paths.
 Owner-facing summaries, consent and worker entrypoints require membership in at
 least one selected lane, then each paid audio dispatch checks the original lane.
 
+Listen checks the raw admission switches and custom-STT bypass before reading
+request identity. Active non-custom admission still requires the authenticated
+UID and live-lane scope; there is no missing-UID fallback.
+
 Managed compute uses the same batch selection before treating shared admission
 as a completed ladder budget check. An excluded UID, empty cohort or live-only
 scope falls through the existing paid-plan/free-feature policy without reading
@@ -52,8 +56,12 @@ lanes for selected work and rewinds its cursors before stopping, retaining the
 choice for widening. A reserved excluded item can yield to later selected work
 only when a transaction proves it never started: the active choice token/lease,
 current month and exact debit must match; an audio manifest must still match the
-decrypted provenance and have `state=held`, zero lease and no dispatch receipts,
-ingest proofs or completion markers. Text must have no claim history. The same
+decrypted provenance and have `state=held`, zero lease, `next_attempt_at=0`,
+and no `lease_token` or `piece_plan` key at all. Key presence records claim/plan
+history even when its value is empty or null; the real release writer leaves an
+empty token and retry timestamp. Missing/nonzero retry timestamps also retain
+the reservation. There must be no dispatch receipts, ingest proofs or completion
+markers. Text must have no claim history. The same
 transaction refunds the chosen estimate once (preserving unlimited remaining),
 clears the reservation and records `scope_skipped`. It does not refund metered
 usage or remove the source; cursor rewind keeps excluded work discoverable.

@@ -42,7 +42,10 @@ are disabled. Missing legacy hold origin maps to sync, explicit unknown origins
 stay paused. A reserved excluded backlog source can yield to a later live hold
 only after an ownership/month-fenced transaction proves it never dispatched and
 refunds its chosen estimate once; receipts, leases, text claims and uncertain
-reads retain the reservation. See [cohort, provenance and ramp](stt-cap-dispatch.md#cohort-and-lane-rollout-david-2026-10-18)
+reads retain the reservation. Even empty/null lease-token or piece-plan keys
+and missing/nonzero retry timestamps retain claim history. Flag-off and custom
+STT bypass admission before request identity is read; active non-custom calls
+still require the authenticated UID and live scope. See [cohort, provenance and ramp](stt-cap-dispatch.md#cohort-and-lane-rollout-david-2026-10-18)
 for the dazheng-owned rollout, three-hour 5% soak, rollback and #22352 dependency.
 
 ## Ladder budget refresh and execution admission (default off)

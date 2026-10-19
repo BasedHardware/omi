@@ -41,15 +41,7 @@ def reservation(monkeypatch):
             'cutoff': NOW,
         }
         source = (
-            {
-                'state': 'held',
-                'lease_until': 0,
-                'metadata': 'encrypted-sync',
-                'name': 'excluded',
-                'seconds': 3,
-                'listed_at': 20,
-                'created_at': NOW - 10,
-            }
+            worker.cap_hold.hold_manifest({'metadata': 'encrypted-sync', 'name': 'excluded'}, 3, NOW - 10, 20)
             if kind == 'audio'
             else {'units': 3, 'started_at': 20, 'queued_at': NOW - 10}
         )
@@ -148,6 +140,14 @@ def test_missing_source_or_owner_never_refunds(reservation, kind):
         {'retain_audio': True},
         {'lease_until': NOW + 1, 'lease_token': 'active'},
         {'lease_until': 0, 'lease_token': 'expired-unknown'},
+        {'lease_token': ''},
+        {'lease_token': None},
+        {'lease_token': '', 'piece_plan': {}},
+        {'piece_plan': {}},
+        {'piece_plan': None},
+        {'piece_plan': {'piece': {'seconds': 3}}},
+        {'next_attempt_at': NOW},
+        {'next_attempt_at': None},
         {'state': 'completed'},
         {'state': 'staging'},
         {'state': 'sealing'},
@@ -162,9 +162,10 @@ def test_audio_intents_receipts_or_claim_history_retain_even_with_matching_proof
     assert result is None and h.choice['remaining'] == 7 and h.choice['reserved'] == h.reserved
 
 
-def test_legacy_audio_without_lease_proof_retains(reservation):
+@pytest.mark.parametrize('field', ['lease_until', 'next_attempt_at'])
+def test_legacy_audio_without_lease_proof_retains(reservation, field):
     h = reservation()
-    h.source.pop('lease_until')
+    h.source.pop(field)
     assert (
         store.release_undispatched_reservation(
             UID, 'choice', 'owner', PERIOD, h.reserved, audio_manifest=deepcopy(h.source)
@@ -250,15 +251,7 @@ def worker_reservation(reservation, monkeypatch):
     def build(kind='audio', remaining=7):
         h = reservation(kind, remaining)
         h.choice['lease_until'] = 0
-        live = {
-            'state': 'held',
-            'lease_until': 0,
-            'metadata': 'encrypted-live',
-            'name': 'live',
-            'seconds': 2,
-            'listed_at': 10,
-            'created_at': NOW - 10,
-        }
+        live = worker.cap_hold.hold_manifest({'metadata': 'encrypted-live', 'name': 'live'}, 2, NOW - 10, 10)
         h.client.rows[source_path('audio', 'live')] = live
         monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
         monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
@@ -435,15 +428,9 @@ def test_scope_skip_cannot_consume_wrong_month_upgrade(reservation, monkeypatch,
 
 
 def add_new_live_hold(h):
-    h.client.rows[source_path('audio', 'new-live')] = {
-        'state': 'held',
-        'lease_until': 0,
-        'metadata': 'encrypted-live',
-        'name': 'new-live',
-        'seconds': 2,
-        'listed_at': 30,
-        'created_at': NOW + 10,
-    }
+    h.client.rows[source_path('audio', 'new-live')] = worker.cap_hold.hold_manifest(
+        {'metadata': 'encrypted-live', 'name': 'new-live'}, 2, NOW + 10, 30
+    )
 
 
 def refund_count(h):
@@ -518,3 +505,31 @@ async def test_actual_paid_or_claimed_reservation_blocks_pending_upgrade(worker_
     await worker.run(UID, continuation=True)
     assert h.choice['token'] == 'choice' and h.choice['remaining'] == 7 and h.choice['reserved'] == h.reserved
     assert h.choice['pending_upgrade']['remaining'] == 50 and not h.pages and h.provider.await_count == 0
+
+
+@pytest.mark.parametrize('planned', [False, True])
+def test_real_claim_checkpoint_release_history_never_refunds(reservation, monkeypatch, planned):
+    h = reservation()
+    hold = worker.cap_hold
+    monkeypatch.setattr(hold, 'get_firestore_client', lambda: h.client)
+    monkeypatch.setattr(
+        hold, 'external_write_fence', lambda uid: store.external_write_fence(uid, firestore_client=h.client)
+    )
+    monkeypatch.setattr(hold, 'ensure_summary', lambda uid: {})
+    monkeypatch.setattr(hold, 'forget_request_reads', lambda uid: None)
+    ref = h.client.collection('users').document(UID).collection('stt_cap_holds').document('excluded')
+    claimed = hold.claim(UID, ref, NOW)
+    assert claimed is not None
+    if planned:
+        assert hold.checkpoint(UID, ref, claimed['lease_token'], {'piece_plan': {}})
+    hold.release(UID, ref, claimed['lease_token'])
+    released = deepcopy(h.source)
+    assert released['lease_token'] == '' and released['lease_until'] == 0 and released['next_attempt_at'] == NOW
+    assert ('piece_plan' in released) is planned
+    assert (
+        store.release_undispatched_reservation(UID, 'choice', 'owner', PERIOD, h.reserved, audio_manifest=released)
+        is None
+    )
+    assert h.choice['remaining'] == 7 and h.choice['reserved'] == h.reserved
+    assert h.source == released and not h.client.transactions[-1].updates
+    assert not any('usage' in '/'.join(path) for path in h.client.rows)

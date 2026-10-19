@@ -470,3 +470,64 @@ def test_downstream_sync_boundary_has_no_allowance_reads_outside_scope(monkeypat
 def test_unknown_downstream_lane_cannot_authorize_spend(monkeypatch):
     with pytest.raises(ValueError, match='unknown cap dispatch lane'):
         cap.sync_allowed('synthetic', lane='typo')
+
+
+def _identity_trap_host(shape, custom):
+    class RequestTrap(SimpleNamespace):
+        @property
+        def request(self):
+            raise AssertionError('cap bypass touched request')
+
+    class UIDTrap:
+        @property
+        def uid(self):
+            raise AssertionError('cap bypass touched uid')
+
+    if shape == 'request_raises':
+        return RequestTrap(is_multi_channel=True, use_custom_stt=custom, state=SimpleNamespace())
+    host = SimpleNamespace(is_multi_channel=True, use_custom_stt=custom, state=SimpleNamespace())
+    if shape == 'uid_missing':
+        host.request = SimpleNamespace(source='omi')
+    elif shape == 'uid_raises':
+        host.request = UIDTrap()
+    return host
+
+
+@pytest.mark.parametrize('shape', ['request_missing', 'request_raises', 'uid_missing', 'uid_raises'])
+def test_actual_receiver_flags_off_short_circuits_before_identity(monkeypatch, shape):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    scoped = Mock(side_effect=AssertionError('flag-off consulted scoped admission'))
+    monkeypatch.setattr(receiver, 'stt_cap_dispatch_enabled', scoped)
+    value = receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
+    assert value.cap_admission is None and value.live_hold is None
+    scoped.assert_not_called()
+
+
+@pytest.mark.parametrize('legacy,ladder', [(True, False), (False, True), (True, True)])
+@pytest.mark.parametrize('shape', ['request_missing', 'request_raises', 'uid_missing', 'uid_raises'])
+def test_actual_receiver_custom_stt_short_circuits_before_identity(monkeypatch, legacy, ladder, shape):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(legacy).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    scoped = Mock(side_effect=AssertionError('custom STT consulted scoped admission'))
+    monkeypatch.setattr(receiver, 'stt_cap_dispatch_enabled', scoped)
+    value = receiver.ListenReceiver(_identity_trap_host(shape, True), [], {})
+    assert value.cap_admission is None and value.live_hold is None
+    scoped.assert_not_called()
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('shape,error', [('uid_missing', AttributeError), ('uid_raises', AssertionError)])
+def test_actual_receiver_active_admission_requires_identity_without_fallback(monkeypatch, ladder, shape, error):
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    with pytest.raises(error):
+        receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
