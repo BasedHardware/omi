@@ -550,6 +550,32 @@ def list_memory_updated_or_created_index(
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
 
 
+def scan_memory_list_index_window(
+    uid: str,
+    *,
+    order_field: str,
+    limit: int,
+    cursor: Optional[str] = None,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[list[dict[str, Any]], list[tuple[datetime, str]], bool]:
+    """Public storage seam for one raw cursor window, preserving exact timestamps."""
+    bounded_limit = max(1, min(int(limit), 500))
+    database = _get_db(firestore_client)
+    collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    docs = _stream_memory_list_index_window(
+        collection, order_field, bounded_limit, uid=uid, cursor=cursor, full_documents=True, budget=budget
+    )
+    payloads = []
+    positions = []
+    for doc in docs:
+        raw = _typed_doc(doc)
+        raw['id'] = doc.id
+        payloads.append(raw)
+        positions.append((raw[order_field], doc.id))
+    return payloads, positions, len(docs) < bounded_limit
+
+
 def _fetch_memory_docs_by_ids(
     uid: str, memory_ids: List[str], *, firestore_client: Any = None, budget: Optional[ListReadBudget] = None
 ) -> Dict[str, Dict[str, Any]]:

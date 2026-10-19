@@ -253,3 +253,17 @@ def test_all_modern_deep_account_emits_full_pages_without_exhausting_created_str
     second = service.read_page(UID, limit=7, cursor=first.next_cursor)
     assert [memory.id for memory in second.memories] == [f'm-{i:05}' for i in range(7, 14)]
     assert db.physical == 28
+
+
+def test_public_window_seam_clamps_route_max_without_claiming_exhaustion(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    db = KeysetStore(rows(1000))
+    payloads, positions, exhausted = memories.scan_memory_list_index_window(
+        UID,
+        order_field='updated_at',
+        limit=1000,
+        cursor='',
+        firestore_client=db,
+    )
+    assert len(payloads) == len(positions) == db.physical == 500
+    assert not exhausted

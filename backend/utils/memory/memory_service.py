@@ -34,7 +34,6 @@ import database.memories as memories_db
 import database.vector_db as vector_db
 from utils.memory.index_window import (
     MemoryIndexWindowLimit,
-    read_index_window_slots,
     position_cursor,
     validate_window_cursors,
     window_sort_key,
@@ -1121,6 +1120,36 @@ class HistoricalMemoryAdapter:
                 slots.append((record, scan_cursor))
         return slots
 
+    def read_index_window_scan_page(
+        self,
+        uid: str,
+        *,
+        kind: str,
+        limit: int,
+        cursor: str,
+        budget: Optional[ListReadBudget],
+        device_scope_request: Optional[DeviceScopeRequest],
+    ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
+        payloads, cursors, exhausted = memory_store_read(
+            memories_db.scan_memory_list_index_window,
+            uid,
+            order_field='updated_at' if kind == 'updated' else 'created_at',
+            limit=limit,
+            cursor=cursor,
+            budget=budget,
+            **self._firestore_kwargs(),
+        )
+        return (
+            self._adapt_scan_payloads(
+                uid,
+                payloads,
+                cursors,
+                device_scope_request=device_scope_request,
+                drop_updated_at_present=kind == 'created',
+            ),
+            exhausted,
+        )
+
     def read_updated_scan_page(
         self,
         uid: str,
@@ -1478,7 +1507,8 @@ class _HistoricalRawStream:
         self._service = service
         self._uid = uid
         self._kind = kind
-        self._index_window = firestore_read_levers.lever_enabled('memory_list_index_window', uid)
+        self.window_scope = {'uid': uid, 'order': 'updated_at' if kind == 'updated' else 'created_at'}
+        self.index_window_enabled = firestore_read_levers.lever_enabled('memory_list_index_window', uid)
         self._window_fetched = False
         self.scan_keyset = scan
         self.exhausted = bool(exhausted)
@@ -1500,7 +1530,7 @@ class _HistoricalRawStream:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
         self._budget.check()
-        if self._index_window and self._window_fetched:
+        if self.index_window_enabled and self._window_fetched:
             raise MemoryIndexWindowLimit()
         start_after: Optional[Tuple[datetime, str]] = None
         if self.scan_keyset is not None:
@@ -1511,16 +1541,15 @@ class _HistoricalRawStream:
             else self._service.history.read_created_scan_page
         )
         try:
-            if self._index_window:
+            if self.index_window_enabled:
                 token = self.scan_keyset.index_window_cursor if self.scan_keyset is not None else None
-                raw_slots, stream_exhausted = read_index_window_slots(
-                    self._service.history,
+                raw_slots, stream_exhausted = self._service.history.read_index_window_scan_page(
                     self._uid,
-                    self._kind,
-                    self._page_limit,
-                    token or '',
-                    self._rpc_budget,
-                    self._device_scope_request,
+                    kind=self._kind,
+                    limit=self._page_limit,
+                    cursor=token or '',
+                    budget=self._rpc_budget,
+                    device_scope_request=self._device_scope_request,
                 )
                 self._window_fetched = True
             else:
@@ -1544,7 +1573,7 @@ class _HistoricalRawStream:
                         memory_id=scan_cursor[1],
                         index_window_cursor=position_cursor(self._uid, self._kind, scan_cursor),
                     )
-                    if self._index_window
+                    if self.index_window_enabled
                     else self._service.scan_cursor_to_stream_keyset(scan_cursor)
                 ),
             )
@@ -1673,13 +1702,13 @@ class _HistoricalCursorStream:
 
     @property
     def updated_exhausted(self) -> bool:
-        if self._updated._index_window:
+        if self._updated.index_window_enabled:
             return self._updated.exhausted
         return self._updated.exhausted and self._updated.peek() is None
 
     @property
     def created_exhausted(self) -> bool:
-        if self._created._index_window:
+        if self._created.index_window_enabled:
             return self._created.exhausted
         return self._created.exhausted and self._created.peek() is None
 
@@ -1696,7 +1725,7 @@ class _HistoricalCursorStream:
         return self._updated.state_suppressed + self._created.state_suppressed
 
     def peek(self) -> Optional[MemoryDB]:
-        if self._updated._index_window:
+        if self._updated.index_window_enabled:
             updated_memory, updated_bound = peek_index_window(self._updated)
             created_memory, created_bound = peek_index_window(self._created)
             if updated_bound is not None and (
@@ -1713,7 +1742,7 @@ class _HistoricalCursorStream:
         if updated_memory is None and created_memory is None:
             self._peek_source = None
             return None
-        sort_key = window_sort_key if self._updated._index_window else self._service.memory_cursor_sort_key
+        sort_key = window_sort_key if self._updated.index_window_enabled else self._service.memory_cursor_sort_key
         take_updated = created_memory is None or (
             updated_memory is not None and sort_key(updated_memory) <= sort_key(created_memory)
         )

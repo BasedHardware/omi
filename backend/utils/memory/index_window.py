@@ -3,35 +3,11 @@
 from typing import Any
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
-from database import memories
-from database._client import get_firestore_client
 from utils.memory.index_window_cursor import decode_cursor, encode_cursor, query_scope
 
 
 class MemoryIndexWindowLimit(Exception):
     """A resumable raw window ended before the visible page filled."""
-
-
-def read_index_window_slots(
-    history: Any, uid: str, kind: str, limit: int, cursor: str, budget: Any, device_scope_request: Any
-):
-    database = history._db_client if history._db_client is not None else get_firestore_client()
-    collection = database.collection('users').document(uid).collection('memories')
-    field = 'updated_at' if kind == 'updated' else 'created_at'
-    docs = memories._stream_memory_list_index_window(
-        collection, field, limit, uid=uid, cursor=cursor, full_documents=True, budget=budget
-    )
-    payloads = []
-    positions = []
-    for doc in docs:
-        raw = memories._typed_doc(doc)
-        raw['id'] = doc.id
-        payloads.append(raw)
-        positions.append((raw[field], doc.id))
-    slots = history._adapt_scan_payloads(
-        uid, payloads, positions, device_scope_request=device_scope_request, drop_updated_at_present=kind == 'created'
-    )
-    return slots, len(docs) < limit
 
 
 def position_cursor(uid: str, kind: str, position: tuple) -> str:
@@ -69,8 +45,5 @@ def peek_index_window(stream: Any):
     try:
         return stream.peek(), None
     except MemoryIndexWindowLimit:
-        field = 'updated_at' if stream._kind == 'updated' else 'created_at'
-        stamp, memory_id = decode_cursor(
-            stream.scan_keyset.index_window_cursor, query_scope({'uid': stream._uid, 'order': field})
-        )
+        stamp, memory_id = decode_cursor(stream.scan_keyset.index_window_cursor, query_scope(stream.window_scope))
         return None, _position_sort_key(stamp, memory_id)
