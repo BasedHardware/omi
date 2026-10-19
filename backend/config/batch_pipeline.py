@@ -194,6 +194,15 @@ def recovery_tasks_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'
 
 
+def recovery_dispatch_batch_size() -> int:
+    """Bound each serving pass; 1 restores the former all-admitted dispatch rate."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '16'))
+    except ValueError:
+        return 16
+    return value if 1 <= value <= 64 else 16
+
+
 def projection_pagination_enabled() -> bool:
     """Ship-on fair discovery; false restores the legacy oldest-page scan."""
     return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'

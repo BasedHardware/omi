@@ -900,6 +900,37 @@
       ]
     },
     {
+      "id": "batch_pipeline_characterization_goldens",
+      "risk": "high",
+      "sources": [
+        "backend/diarizer/batch_pipeline.py",
+        "backend/utils/batch_pipeline/contracts.py",
+        "backend/utils/batch_pipeline/correctness_metrics.py",
+        "backend/utils/batch_pipeline/merge.py",
+        "backend/utils/batch_pipeline/pump.py",
+        "backend/utils/batch_pipeline/quarantine_recovery.py",
+        "backend/utils/batch_pipeline/recovery_disposition.py",
+        "backend/utils/batch_pipeline/scheduler.py",
+        "backend/utils/batch_pipeline/serving.py",
+        "backend/utils/batch_pipeline/worker_silence.py",
+        "backend/database/batch_pipeline_intake.py",
+        "backend/database/batch_pipeline_privacy.py",
+        "backend/database/batch_pipeline_projection_protocol.py",
+        "backend/database/batch_pipeline_quarantine_recovery.py",
+        "backend/database/batch_pipeline_staging.py",
+        "backend/testing/pipeline_sim/**",
+        "backend/tests/unit/fixtures/pipeline_sim_goldens/**"
+      ],
+      "tests": [
+        "tests/unit/test_pipeline_characterization.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the externally visible batch-pipeline trace (durable transitions, intake and recovery-task responses, paid calls, projected results) of each seeded golden configuration is unchanged unless the PR regenerates and reviews its golden",
+        "the trace is deterministic for a seed and changes when real pipeline behavior changes"
+      ]
+    },
+    {
       "id": "cross_service_deploy_wiring",
       "risk": "high",
       "sources": [
