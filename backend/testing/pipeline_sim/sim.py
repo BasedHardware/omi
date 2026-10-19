@@ -166,6 +166,9 @@ class SimConfig:
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
     policy: BatchUnitPolicy | None = None
+    role_environments: dict[str, dict[str, str]] = field(default_factory=dict)
+    stage_roles: dict[str, str] = field(default_factory=dict)
+    trace_policy: bool = False
     policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
 
@@ -348,12 +351,16 @@ class Simulation:
         source = upload.duplicate_of or upload.upload_id
         return 'sim-conv-' + hashlib.sha256(source.encode()).hexdigest()[:24]
 
+    def _policy_flags(self, stage):
+        role = self.config.stage_roles.get(stage, stage)
+        return {**DEFAULT_FLAGS, **self.config.flags, **self.config.role_environments.get(role, {})}
+
     def _stage_policy(self, uid, stage):
         raw = self.config.policy_parts.get(stage)
         return (
             STAGE_TYPES[stage].from_dict(raw)
             if raw is not None
-            else resolve_stage_policy(uid, stage, flags={**DEFAULT_FLAGS, **self.config.flags})
+            else resolve_stage_policy(uid, stage, flags=self._policy_flags(stage))
         )
 
     # --------------------------------------------------------------- patching
@@ -573,9 +580,7 @@ class Simulation:
     def _accept_batch(self, record: UploadRecord) -> None:
         """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
         upload = record.spec
-        record.policy = self.config.policy or resolve_batch_policy(
-            upload.owner, flags={**DEFAULT_FLAGS, **self.config.flags}
-        )
+        record.policy = self.config.policy or resolve_batch_policy(upload.owner, flags=self._policy_flags('admission'))
         if not record.policy.batch_enabled:
             record.status = 'rejected_other'
             return
@@ -591,7 +596,6 @@ class Simulation:
                 target_conversation_id=target,
                 privacy_generation=generation,
                 language='en',
-                policy=record.policy,
             )
             outcome = batch_pipeline_intake.admit(
                 self.store,
@@ -599,6 +603,7 @@ class Simulation:
                 binding,
                 self.clock.now,
                 namespace=self.store.namespace,
+                policy=record.policy,
                 intake={
                     'owner_id': upload.owner,
                     'content_id': upload.content_id,
@@ -682,6 +687,7 @@ class Simulation:
                     break  # partially committed binding holds the cursor
 
     async def _project(self, record: UploadRecord) -> None:
+        policy_store.load_stage_policy(self.store, record.segment_ids[0], 'projection')
         try:
             audio = sum(self.truth[sid]['duration'] for sid in record.segment_ids)
             await self.sync_exec.run('projection', self.config.projection_seconds + 0.001 * audio)

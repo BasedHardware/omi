@@ -41,7 +41,7 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
-    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), policy=resolve_batch_policy('owner'))
+    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'))
     projector.store.read = Mock(
         return_value=(
             {'policy_parts': {'projection': resolve_stage_policy('owner', 'projection').to_dict()}},
@@ -73,9 +73,7 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
 @pytest.fixture
 def followup(monkeypatch, owner_claim):
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
-    binding = ProjectionBinding(
-        'owner', 'job', 'content', ('head', 'later'), native_record=True, policy=BatchUnitPolicy()
-    )
+    binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), native_record=True)
     jobs = {
         sid: {
             **asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP)),

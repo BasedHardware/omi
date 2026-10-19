@@ -484,9 +484,7 @@ def test_all_admitted_gate_drains_non_allowlisted_obligations_without_admission_
 def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(monkeypatch, legacy_dependencies):
     _, _, _, build_incoming, *_ = legacy_dependencies
     monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
-    binding = ProjectionBinding(
-        'synthetic-owner', 'job', 'content', ('unit',), policy=resolve_batch_policy('synthetic-owner')
-    )
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
     item = WorkItem('part', binding.owner_id, 100, 'gs://synthetic/audio', 5, Priority.FRESH)
     payload = {
         'audio_seconds': 5,
@@ -705,11 +703,11 @@ def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monk
     from utils.batch_pipeline.serving import Serving
 
     client, store, binding, artifacts, stt, recovery = setup
-    recovery.protocol.prepare('bad', binding.owner_id, 100)
     if disabled == 'host':
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'off')
     elif disabled == 'cohort':
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
     service = Serving(store, recovery=None if disabled == 'missing_recovery' else recovery)
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
     app = FastAPI()
@@ -835,3 +833,14 @@ def test_sweep_bounds_held_errors_and_advances_global_cursor(setup, monkeypatch)
     assert recovery.sweep() == {'held': 2}
     assert recovery.sweep() == {'queued': 1}
     assert query.call_args_list[1].kwargs['after_id'] == 'b'
+
+
+def test_prepared_recovery_uses_its_owner_stamp_after_env_rollback(setup, monkeypatch):
+    client, store, binding, artifacts, stt, recovery = setup
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
+    recorded = row(client)['policy_parts']['recovery']
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'off')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['policy_parts']['recovery'] == recorded
+    stt.assert_called_once()

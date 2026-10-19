@@ -437,11 +437,8 @@ def _upload(
     for segment in upload.segment_ids:
         job = stack.doc('jobs', segment)
         expected_policy = json.loads((stack.control_dir / 'policy.json').read_text())
-        if (
-            job.get('policy') != expected_policy
-            or (job.get('projection_binding') or {}).get('policy') != expected_policy
-        ):
-            raise StackFailure('batch job and binding did not retain the admission policy')
+        if job.get('policy') != expected_policy:
+            raise StackFailure('batch job did not retain the admission policy')
         if not job.get('requires_compute_admission') or not str(job.get('audio_uri', '')).startswith('gs://'):
             raise StackFailure('batch job row lacks compute admission or a staged encrypted artifact')
     _record_job_event(

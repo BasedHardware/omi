@@ -84,7 +84,7 @@ class ProjectionSession:
         self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
         if (
             not self.job.get('projection_binding')
-            or normalized_binding(self.job['projection_binding'], policy=self.binding.policy) != self.binding
+            or normalized_binding(self.job['projection_binding']) != self.binding
             or self.segment_id not in self.binding.segment_ids
             or self.job.get('owner_id') != self.binding.owner_id
             or self.entry.get('owner_key') != owner_key(self.binding.owner_id)

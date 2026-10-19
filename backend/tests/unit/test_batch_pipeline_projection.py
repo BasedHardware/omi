@@ -16,7 +16,7 @@ from utils.sync import bridge
 
 @pytest.fixture
 def binding():
-    return ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',), policy=BatchUnitPolicy())
+    return ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',))
 
 
 @pytest.mark.parametrize(

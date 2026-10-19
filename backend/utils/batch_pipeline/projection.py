@@ -150,7 +150,6 @@ def publish_client_completion(binding, result: dict) -> None:
     """
     from database.sync_jobs import (
         get_sync_job,
-        load_sync_job_policy,
         try_acquire_sync_job_run_lock,
         release_job_run_lock,
         fenced_finalize_sync_job_from_durable_ledger,
@@ -169,7 +168,6 @@ def publish_client_completion(binding, result: dict) -> None:
     if token is None:
         raise ProjectionBlocked('client job publication lease busy')
     try:
-        load_sync_job_policy(binding.job_id, policy=binding.policy)
         mutation = fenced_finalize_sync_job_from_durable_ledger(binding.job_id, token, result)
         if not mutation.applied:
             raise ProjectionBlocked('client job publication fenced')

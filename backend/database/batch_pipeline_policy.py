@@ -1,6 +1,7 @@
 """Persist a unit's first fallback through a canonical sibling fence."""
 
 import logging
+from dataclasses import replace
 from typing import Any, Literal, overload
 from collections.abc import Iterable
 
@@ -21,23 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 def recorded_policy(job: dict) -> dict | None:
-    binding = job.get('projection_binding') or {}
-    raw = binding.get('policy')
-    if raw is None:
-        raw = job.get('policy')
+    raw = job.get('policy')
     if raw is not None and not isinstance(raw, dict):
         raise ValueError('serialized batch policy must be a dict')
     return raw
 
 
 def policy_in_transaction(tx, job: dict, *, observations=None, candidates=None) -> BatchUnitPolicy:
-    binding = job.get('projection_binding') or {}
     raw = recorded_policy(job)
     if raw is not None:
         policy = BatchUnitPolicy.from_dict(raw)
-        if binding and binding.get('policy') is None:
-            job['projection_binding'] = {**binding, 'policy': policy.to_dict()}
-            tx.put('jobs', job['segment_id'], job)
         return policy
     # All siblings serialize through the first extant sibling. Do not rewrite
     # 128 siblings per queue visited: a pull can visit 128 owners and must stay
@@ -51,7 +45,7 @@ def policy_in_transaction(tx, job: dict, *, observations=None, candidates=None) 
         else candidate_once(
             candidates,
             (anchor['segment_id'], 'admission'),
-            lambda: resolve_batch_policy(job['owner_id'], source='fallback'),
+            lambda: admission_fallback(job),
         )
     )
     if observations is not None:
@@ -59,11 +53,18 @@ def policy_in_transaction(tx, job: dict, *, observations=None, candidates=None) 
     for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
         sibling['policy'] = policy.to_dict()
         sibling['policy_source'] = 'fallback'
-        if sibling.get('projection_binding'):
-            sibling['projection_binding'] = {**sibling['projection_binding'], 'policy': policy.to_dict()}
         tx.put('jobs', sibling['segment_id'], sibling)
     # The row is the durable event receipt. Emit outside the retriable callback
     # via load_job_policy; transactional stage callers also retain policy_source.
+    return policy
+
+
+def admission_fallback(job):
+    """Called only by an admitting role, never a scheduler/projection role."""
+    policy = resolve_batch_policy(job['owner_id'], source='fallback')
+    if job.get('state') == 'record_pending':
+        # Pre-E1 main's live-owner reservation already accepted this capture.
+        policy = replace(policy, batch_enabled=True, live_admission_enabled=True, live_record_enabled=True)
     return policy
 
 
@@ -73,6 +74,25 @@ def candidate_once(candidates, key, resolve):
     if key not in candidates:
         candidates[key] = resolve()
     return candidates[key]
+
+
+def check_unit_privacy(tx, job):
+    binding = job.get('projection_binding') or {}
+    ids = set(job.get('conversation_ids') or ())
+    ids.update(value for value in (job.get('conversation_id'), binding.get('target_conversation_id')) if value)
+    if binding and 'capture_at' in job:
+        from utils.sync.capture import chunk_identity
+
+        ids.add(
+            chunk_identity(
+                job['owner_id'],
+                binding.get('source', 'omi'),
+                binding.get('client_device_id'),
+                binding.get('is_locked', False),
+                job['capture_at'],
+            )
+        )
+    tx.check_privacy(job['owner_id'], ids, job.get('privacy_generation', binding.get('privacy_generation')))
 
 
 def unit_anchor(tx, job):
@@ -85,11 +105,7 @@ def unit_anchor(tx, job):
                 raise ValueError('policy sibling owner mismatch')
             if candidate['segment_id'] != job['segment_id']:
                 try:
-                    tx.check_privacy(
-                        candidate['owner_id'],
-                        (candidate['conversation_id'],) if candidate.get('conversation_id') else (),
-                        candidate.get('privacy_generation'),
-                    )
+                    check_unit_privacy(tx, candidate)
                 except BatchPrivacyBlocked:
                     continue
             anchor = candidate
@@ -131,13 +147,13 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None):
     An absent part is expected on new work. No other role's values are filled
     here. Once present, even a partial dict uses code defaults without env.
     """
-    policy_in_transaction(tx, job, observations=observations, candidates=candidates)
     raw = (job.get('policy_parts') or {}).get(stage)
     cls = STAGE_TYPES[stage]
     if raw is not None:
         if not isinstance(raw, dict):
             raise ValueError('serialized stage policy must be a dict')
         return cls.from_dict(raw)
+    check_unit_privacy(tx, job)
     anchor = unit_anchor(tx, job)
     raw = (anchor.get('policy_parts') or {}).get(stage)
     policy = (
@@ -150,9 +166,11 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None):
     for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
         # Copy only this part; retain every concurrent/previous owner's receipt.
         sibling['policy_parts'] = {**(sibling.get('policy_parts') or {}), stage: policy.to_dict()}
+        if recorded_policy(sibling) is None:
+            sibling['policy_part_sources'] = {**(sibling.get('policy_part_sources') or {}), stage: 'fallback'}
         tx.put('jobs', sibling['segment_id'], sibling)
     if observations is not None:
-        observations.append(('policy_stage', policy.policy_id))
+        observations.append(('policy_fallback' if recorded_policy(job) is None else 'policy_stage', policy.policy_id))
     return policy
 
 

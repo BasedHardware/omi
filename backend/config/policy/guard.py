@@ -103,14 +103,21 @@ def env_reads(source):
             yield constants[key.id]
 
 
-STAGE_PATHS = {
-    'utils/batch_pipeline/projection.py',
-    'utils/batch_pipeline/projection_followup.py',
-    'utils/batch_pipeline/scheduler.py',
-    'utils/batch_pipeline/quarantine_recovery.py',
-    'database/batch_pipeline_projection.py',
-    'database/batch_pipeline_projection_session.py',
-    'routers/batch_pipeline.py',
+# Positive resolution edges: admission or a CAS owner may resolve; every other
+# imported resolver/getter call is rejected, regardless of its directory.
+RESOLUTION_EDGES = {
+    'config/batch_pipeline.py': {'*'},  # Legacy/E1b facade; in-tree unit callers use parts.
+    'config/batch_live_preview.py': {'*'},  # E2 pre-unit routing.
+    'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction'},
+    'database/batch_pipeline_intake.py': {'admit'},
+    'database/sync_jobs.py': {'create_sync_job', '_pin_legacy_job_policy'},
+    'utils/batch_pipeline/intake.py': {'accept_upload'},
+    'utils/batch_pipeline/live.py': {'register_recording'},
+    'utils/batch_pipeline/live_upload.py': {'registered_record_response'},
+    'utils/batch_pipeline/scheduler.py': {'enqueue_in_transaction'},
+    'utils/conversations/transcription_shadow.py': {'_run_shadow', '_claim_shadow_owner'},
+    'utils/sync/reprocess.py': {'update', 'claim'},  # First-summary outbox CAS callbacks.
+    'routers/sync.py': {'sync_local_files_v2'},
 }
 SNAPSHOT_GETTERS = {
     'enabled_for',
@@ -131,40 +138,51 @@ SNAPSHOT_GETTERS = {
 
 
 def stage_policy_reads(source, relative):
-    if relative not in STAGE_PATHS:
-        return []
     tree = ast.parse(source)
     aliases = {}
     functions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (
-            node.module == 'config.batch_pipeline' or (node.module or '').startswith('config.policy')
-        ):
-            aliases.update({item.asname or item.name: item.name for item in node.names})
+        if isinstance(node, ast.ImportFrom):
+            if node.module == 'config.batch_pipeline' or (node.module or '').startswith('config.policy'):
+                aliases.update({item.asname or item.name: f'{node.module}.{item.name}' for item in node.names})
+            elif node.module == 'config':
+                aliases.update({item.asname or item.name: f'config.{item.name}' for item in node.names})
+        elif isinstance(node, ast.Import):
+            for item in node.names:
+                if item.asname:
+                    aliases[item.asname] = item.name
+
+    def qualified(node):
+        if isinstance(node, ast.Name):
+            return aliases.get(node.id, node.id)
+        if isinstance(node, ast.Attribute):
+            return qualified(node.value) + '.' + node.attr
+        return ''
+
     out = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        called = (
-            aliases.get(node.func.id, node.func.id)
-            if isinstance(node.func, ast.Name)
-            else (node.func.attr if isinstance(node.func, ast.Attribute) else '')
-        )
-        if called == 'resolve_batch_policy' and relative == 'utils/batch_pipeline/scheduler.py':
-            if any(
-                f.name == 'enqueue_in_transaction' and f.lineno <= node.lineno <= (f.end_lineno or f.lineno)
-                for f in functions
-            ):
-                continue  # Standalone queue admission is an explicit resolver edge.
-        if called in SNAPSHOT_GETTERS or called in {'resolve_batch_policy', 'resolve_stage_policy'}:
+        target = qualified(node.func)
+        called = target.rsplit('.', 1)[-1]
+        if target.startswith('config.batch_pipeline.') and called in SNAPSHOT_GETTERS:
+            if relative == 'utils/conversations/lifecycle.py' and called == 'live_record_enabled_for':
+                continue  # E2's pre-unit live/listen route admission.
             out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')
+            continue
+        if called in {'resolve_batch_policy', 'resolve_stage_policy'} and target.startswith('config.policy'):
+            allowed = RESOLUTION_EDGES.get(relative, set())
+            owners = [f for f in functions if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)]
+            owner = min(owners, key=lambda f: (f.end_lineno or f.lineno) - f.lineno) if owners else None
+            if '*' not in allowed and (owner is None or owner.name not in allowed):
+                out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')
     return out
 
 
 def violations(root: Path):
     out = []
     backend = root / 'backend'
-    for directory in ('config', 'database', 'utils', 'routers', 'diarizer'):
+    for directory in ('config', 'database', 'utils', 'routers', 'diarizer', 'scripts'):
         for path in (backend / directory).rglob('*.py'):
             relative = path.relative_to(backend).as_posix()
             if relative.startswith('config/policy/'):

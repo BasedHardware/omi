@@ -280,7 +280,6 @@ async def accept_upload(
             privacy_generation=context.generation,
             language=target.get('language'),
             record_origin=record_origin,
-            policy=policy,
         )
         outcome = await run_blocking(
             db_executor,
@@ -290,6 +289,7 @@ async def accept_upload(
             binding,
             time.time(),
             namespace=store.namespace,
+            policy=policy,
             require_artifacts=True,
             intake={
                 'owner_id': uid,

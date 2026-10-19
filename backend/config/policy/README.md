@@ -9,7 +9,7 @@ fields are ignored; missing fields use original code defaults, never current env
 
 | Part | Owner / first stamp | Durable record |
 | --- | --- | --- |
-| `BatchUnitPolicy` | Sync or native-record admission: batch/cohort, live-record admission, nested retire, local final-pass decision | `ProjectionBinding.policy`, batch job `policy`, Redis sync job beside `ledger_fence_mode` |
+| `BatchUnitPolicy` | Sync or native-record admission: batch/cohort, live-record admission, nested retire, local final-pass decision | Batch job `policy`, Redis sync job beside `ledger_fence_mode` |
 | `ProjectionPolicy` | Projection's first handling: contention, async, labels, live target, timing | Batch job `policy_parts.projection` |
 | `SchedulerPolicy` | Scheduler's first pull/failure: head priority, shared live, max attempts | Batch job `policy_parts.scheduler` |
 | `RecoveryPolicy` | Quarantine owner's first handling: mode/cohort, multilingual and terminal-empty decisions | Batch job `policy_parts.recovery` |
@@ -24,12 +24,14 @@ transactions below Firestore's write ceiling. Adding one part preserves all
 other parts. First-summary coalescing retains the original obligation's stamp;
 a new obligation gets a new stamp at creation.
 
-Pre-E1 admission rows acquire a durable fallback and `policy_source=fallback`,
+Only an admitting role may resolve and persist admission fallback on pre-E1 rows (`policy_source=fallback`),
 with bounded telemetry. Redis repair preserves TTL and concurrent progress;
-status reads remain pure. Batch publication pins the existing admission part
-after acquiring its publication lease, through `load_sync_job_policy`. Old
-Firestore bindings adopt the recorded admission policy during comparison while
-retaining all other identity checks. Missing stage parts are resolved by their
+status, scheduler and projection reads remain pure. `load_sync_job_policy` is
+an admission-only CAS repair helper; consuming roles never backfill admission. Policy never enters `projection_binding`; its pre-E1 strict constructor and
+immutable identity comparisons remain unchanged. Scheduler, projection and
+recovery handling leave missing admission fields unset. Legacy stage repair records
+`policy_part_sources.<stage>=fallback` and emits fallback telemetry without
+resolving or writing admission decisions. Missing stage parts are resolved by their
 owner on first use; a partial recorded dict is already a stamp and uses defaults.
 Privacy/deletion and paid-intent checks always remain live.
 
@@ -37,7 +39,7 @@ Privacy/deletion and paid-intent checks always remain live.
 
 | Before | After |
 | --- | --- |
-| Route, intake and admission transaction independently read cohorts | Admission snapshot flows through the binding; transaction compares its batch decision |
+| Route, intake and admission transaction independently read cohorts | Admission snapshot is passed separately and recorded on jobs; transaction uses its batch decision |
 | Projection and follow-ups re-read five knobs | First projection owner persists a part, then passes it through assignment and completion |
 | Scheduler pulls/failures re-read knobs | First scheduler handling records a part; attempts and eligibility use it |
 | Recovery checks current owner/mode before and after download / at delivery | Recovery owner records a part; dispatch and delivery retain it |
@@ -75,16 +77,16 @@ owner isolation, first-writer persistence, partial dicts, fallback and the 10-18
 policy window. Sim accepts admission plus recorded owner parts, or resolves each
 part from explicit flags on first use. Existing goldens stay byte-identical to
 current main; the policy-window golden grades creation at percent zero against
-that stamp. The emulator persists admission and stage parts on actual job rows.
+that stamp. The `role_policy` golden includes policy fields, source roles and
+content hashes from two role environments; separate mutations of projection and
+recovery ownership must each break it. Historical traces keep their existing
+format and byte-identical golden files. The emulator persists admission and stage parts on actual job rows.
 
 When workstream B supplies a canonical stage profile, these parts can move to
 admission without changing their consumers. E1 adds no RPC or env/config/IAM
-mutation. The train must upgrade policy-consuming readers before enabling the
-new admission writers, because the predecessor binding decoder is strict.
-Rollback reverts decision wiring while retaining the additive policy
-value type, `ProjectionBinding.policy` and binding decoder until E1 jobs drain.
-The predecessor's strict `ProjectionBinding(**raw)` cannot read a new binding
-without that reader compatibility; an unmodified predecessor artifact is safe
-only after E1 bindings have drained. E1 readers handle pre-E1 rows through the
-recorded fallback path. No durable policy fields are deleted for rollback.
-Deployment belongs to the lead's two-lane train.
+mutation. Revert the snapshot wiring for rollback; policy metadata stays on job
+rows, outside the strict pre-E1 binding constructor. The frozen constructor
+fixture from main 0d8e1258 accepts E1's written bindings. Old rows use admission
+fallback only when an admitting role handles them; stage owners stamp only their
+own part. No durable policy fields need deletion. Deployment belongs to the
+lead's two-lane train.

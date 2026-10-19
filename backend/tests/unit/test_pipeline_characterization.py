@@ -118,3 +118,27 @@ def test_a_deliberate_behavior_change_breaks_the_golden(key, traces, perturbed):
         assert 'failed_held' not in baseline['totals']['recovery_states']
     summary = describe_diff(traces[name], perturbed[key], label=name).splitlines()[0]
     assert not summary.startswith('0 changed'), summary
+
+
+@pytest.fixture(scope='module')
+def wrong_role_traces():
+    from testing.pipeline_sim.trace import trace
+
+    out = {}
+    for stage in ('projection', 'recovery'):
+        config = GOLDEN_CONFIGS['role_policy']()
+        config.stage_roles[stage] = 'sync'
+        out[stage] = dumps(trace(config))
+    return out
+
+
+@pytest.mark.parametrize('stage', ['projection', 'recovery'])
+def test_wrong_role_breaks_the_policy_golden(stage, traces, wrong_role_traces):
+    assert wrong_role_traces[stage] != traces['role_policy']
+    baseline = json.loads(traces['role_policy'])
+    changed = json.loads(wrong_role_traces[stage])
+    field = 'authoritative_labels' if stage == 'projection' else 'recovery_enabled'
+    before = [s['final_job']['policy_parts'].get(stage) for s in baseline['segments'].values()]
+    after = [s['final_job']['policy_parts'].get(stage) for s in changed['segments'].values()]
+    assert any(part and part[field] and part['source_role'] == 'integration' for part in before)
+    assert any(part and not part[field] and part['source_role'] == 'sync' for part in after)

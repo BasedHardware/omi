@@ -116,7 +116,7 @@ three-capture single-owner burst. Provider behavior per owner comes from
 
 Batch admission receives a serialized `BatchUnitPolicy` from the coordinator's
 `batch-control/policy.json`; the admission seam supplies it to the real upload
-route, which records it on each binding/job. Scheduler, projection and recovery owners
+route, which records it on each job outside the unchanged strict binding. Scheduler, projection and recovery owners
 then stamp their parts at first handling, using their own role environment. Later
 handling consumes the recorded part across revision or env changes. The gauntlet
 checks actual job parts as well as the admission stamp. Excluded worker, provider,

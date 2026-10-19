@@ -548,7 +548,7 @@ content/client completion on the deployed release before expanding admission.
 
 ## Per-unit policy snapshots
 
-E1 records admission decisions on the immutable binding and job. Projection,
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
 scheduler and recovery owners each stamp their own part on first handling,
 using a first-writer-wins transaction. The enrichment owner stamps first-summary
 policy when creating the obligation. Each part carries its source role and hash;

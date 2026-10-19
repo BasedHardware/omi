@@ -66,7 +66,11 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
     store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
-    policy = resolve_batch_policy(uid)
+    # The immutable native owner is main's earlier admission receipt. A later
+    # cohort rollback cannot cancel it before finalization registers the unit.
+    policy = replace(
+        resolve_batch_policy(uid), batch_enabled=True, live_admission_enabled=True, live_record_enabled=True
+    )
     snapshot = {
         key: conversation.get(key)
         for key in (
@@ -265,7 +269,6 @@ async def admit_recording(store, pending, *, now=None):
         data_protection_level=protection.level,
         record_origin=True,
         native_record=True,
-        policy=policy,
     )
     staged = []
     for item, (_, _, refs) in zip(items, units):
@@ -300,6 +303,7 @@ async def admit_recording(store, pending, *, now=None):
         binding,
         now,
         namespace=store.namespace,
+        policy=policy,
         require_artifacts=True,
         intake={
             'owner_id': uid,

@@ -74,17 +74,24 @@ def arrival_order(seed):
     return order
 
 
-@pytest.mark.parametrize('seed', range(12))
-def test_capture_partition_and_content_are_permutation_invariant(seed):
+@pytest.fixture(scope='module')
+def canonical_capture_partition():
     expected = StrictFirestore()
-    actual = StrictFirestore()
     rows = [capture(i) for i in range(45)]
     for row in rows:
         intake(expected, row)
+    return rows, signature(expected)
+
+
+@pytest.mark.parametrize('seed', range(12))
+def test_capture_partition_and_content_are_permutation_invariant(seed, canonical_capture_partition):
+    template, expected_signature = canonical_capture_partition
+    rows = deepcopy(template)
+    actual = StrictFirestore()
     order = arrival_order(seed)
     for i in order:
         intake(actual, rows[i])
-    assert signature(actual) == signature(expected)
+    assert signature(actual) == expected_signature
     assert len(conversations(actual)) == 1
     assert len(conversations(actual)[0]['transcript_segments']) == 45
     before = signature(actual)

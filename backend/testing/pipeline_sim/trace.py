@@ -82,7 +82,8 @@ def _dropped(key: str) -> bool:
 class _Aliases:
     """Synthetic ID -> stable alias, assigned by first appearance."""
 
-    def __init__(self):
+    def __init__(self, *, include_policy=False):
+        self.include_policy = include_policy
         self.names: dict[str, str] = {}
         self.counts: dict[str, int] = {}
 
@@ -97,7 +98,11 @@ class _Aliases:
     def scrub(self, value: Any) -> Any:
         """Recursively drop volatile fields, rename known IDs and round floats."""
         if isinstance(value, dict):
-            return {key: self.scrub(item) for key, item in value.items() if not _dropped(key)}
+            return {
+                key: (item if key == 'policy_id' and self.include_policy else self.scrub(item))
+                for key, item in value.items()
+                if not _dropped(key) or self.include_policy and key in {'policy', 'policy_source', 'policy_parts'}
+            }
         if isinstance(value, (list, tuple)):
             return [self.scrub(item) for item in value]
         if isinstance(value, float):
@@ -211,7 +216,7 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
     result = sim.run()
     store = result.store
 
-    aliases = _Aliases()
+    aliases = _Aliases(include_policy=config.trace_policy)
     by_upload = {record.spec.upload_id: record for record in result.records}
     for upload in result.workload.uploads:
         aliases.add(upload.owner, 'owner')
@@ -395,6 +400,31 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.
     'healthy': lambda: _config('healthy'),
+    # Explicit serving-revision split: only the integration owner chooses stage knobs.
+    'role_policy': lambda: _config(
+        'role_policy',
+        trace_policy=True,
+        workload={'owners': 1, 'arrival_seconds': 400.0, 'uploads_per_owner_per_hour': 18.0},
+        stt=STTProfile(min_replicas=2, max_replicas=2, exhaustion=(ExhaustionWindow(0.0, 1500.0, 'error'),)),
+        role_environments={
+            'sync': {
+                'K_SERVICE': 'sync',
+                'BATCH_PIPELINE_RECOVERY_MODE': 'off',
+                'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED': 'false',
+            },
+            'integration': {
+                'K_SERVICE': 'integration',
+                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
+                'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED': 'true',
+            },
+        },
+        stage_roles={
+            'admission': 'sync',
+            'recovery': 'integration',
+            'projection': 'integration',
+            'first_summary': 'integration',
+        },
+    ),
     # 10-18: creation at percent zero must not acquire a 120s obligation after a ramp.
     'policy_window': lambda: _config(
         'policy_window',

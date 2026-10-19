@@ -120,11 +120,11 @@ def test_admission_policy_survives_env_change(monkeypatch):
     customer = CustomerData()
     customer.add_user('owner')
     store = SimStore(customer)
-    binding = ProjectionBinding('owner', 'job', 'content', ('seg',), policy=policy)
+    binding = ProjectionBinding('owner', 'job', 'content', ('seg',))
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '20')
     item = WorkItem('seg', 'owner', 1, 'sim://audio', 1, Priority.FRESH, privacy_generation=0)
-    assert admit(store, [item], binding, 1, namespace=store.namespace)['outcome'] == 'batch'
+    assert admit(store, [item], binding, 1, namespace=store.namespace, policy=policy)['outcome'] == 'batch'
     queue = Scheduler(store)
     lease = queue.pull(2)[0]
     assert queue.fail('seg', lease.token, 3)
@@ -146,7 +146,8 @@ def test_legacy_fallback_persists_across_stages(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '19')
     _, second = load_stage_policy(store, 'b', 'scheduler')
     assert first == second and second.max_attempts == 2
-    assert job['policy_source'] == store.get('jobs', 'b')['policy_source'] == 'fallback'
+    assert 'policy' not in job and 'policy' not in store.get('jobs', 'b')
+    assert all('policy' not in row['projection_binding'] for row in store.jobs())
 
 
 def test_summary_obligation_uses_creation_policy_after_ramp(monkeypatch):
@@ -411,3 +412,24 @@ def test_sim_accepts_an_explicit_policy_without_installing_scoped_env(explicit_s
     assert all(job['policy'] == policy.to_dict() for job in result.store.jobs())
     if not policy.batch_enabled:
         assert result.stt.stats.requests == 0
+
+
+def test_getter_guard_covers_new_directories_and_import_aliases():
+    from config.policy.guard import stage_policy_reads
+
+    assert stage_policy_reads(
+        "from config.batch_pipeline import recovery_enabled_for as allowed\nallowed('owner')",
+        'database/a_new_recovery_owner.py',
+    )
+    assert stage_policy_reads(
+        "from config import batch_pipeline as flags\nflags.terminal_empty_disposition_enabled()",
+        'utils/a_new_artifact_writer.py',
+    )
+    assert stage_policy_reads(
+        "from config.policy.stages import resolve_stage_policy as resolve\nresolve('owner', 'recovery')",
+        'utils/a_new_unit_handler.py',
+    )
+    assert not stage_policy_reads(
+        "from utils.sync import legacy_fresh\nlegacy_fresh.enabled_for('owner')",
+        'routers/sync.py',
+    )

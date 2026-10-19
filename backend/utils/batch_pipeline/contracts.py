@@ -6,7 +6,6 @@ from typing import Protocol, Sequence
 
 
 from config.batch_pipeline import Priority
-from config.policy import BatchUnitPolicy
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 from utils.batch_pipeline.errors import validate_worker_failure
 
@@ -184,11 +183,8 @@ class ProjectionBinding:
     language: str | None = None
     record_origin: bool = False
     native_record: bool = False
-    policy: BatchUnitPolicy | None = None
 
     def __post_init__(self):
-        if isinstance(self.policy, dict):
-            object.__setattr__(self, 'policy', BatchUnitPolicy.from_dict(self.policy))
         # Firestore caps transaction writes at 500; completion reads all siblings.
         if not self.owner_id or not self.job_id or not self.content_id:
             raise ValueError('projection requires owner, job and content identities')

@@ -17,7 +17,7 @@ def unit():
     customer.add_user('owner')
     store = SimStore(customer)
     admission = resolve_batch_policy('owner', flags={'BATCH_PIPELINE_ENABLED': 'true', 'BATCH_PIPELINE_PERCENT': '100'})
-    binding = asdict(ProjectionBinding('owner', 'job', 'content', ('head', 'tail'), policy=admission))
+    binding = asdict(ProjectionBinding('owner', 'job', 'content', ('head', 'tail')))
     for sid in ('head', 'tail'):
         store.rows[('jobs', sid)] = {
             'segment_id': sid,
@@ -56,7 +56,7 @@ def test_stage_owner_stamps_serving_values_once_without_changing_admission(unit,
     for sid in ('head', 'tail'):
         job = store.get('jobs', sid)
         assert job['policy'] == admission.to_dict()
-        assert job['projection_binding']['policy'] == admission.to_dict()
+        assert 'policy' not in job['projection_binding']
         assert job['policy_parts']['projection'] == first.to_dict()
         assert job['policy_parts']['recovery'] == recovery.to_dict()
 
@@ -72,19 +72,17 @@ def test_partial_stage_stamp_uses_defaults_without_env(unit, monkeypatch, stage)
     assert replace(part, source_role='other-owner').policy_id != part.policy_id
 
 
-def test_old_admission_and_new_stage_repair_share_the_unit_fence(unit, monkeypatch):
+def test_old_stage_repair_leaves_admission_unset(unit, monkeypatch):
     store, _ = unit
     for sid in ('head', 'tail'):
         row = store.rows[('jobs', sid)]
         row.pop('policy')
-        row['projection_binding'] = {**row['projection_binding'], 'policy': None}
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
     _, first = policies.load_stage_policy(store, 'tail', 'scheduler')
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '19')
     _, second = policies.load_stage_policy(store, 'head', 'scheduler')
     assert first == second and first.max_attempts == 2
-    assert store.get('jobs', 'head')['policy_source'] == 'fallback'
-    assert store.get('jobs', 'tail')['policy_source'] == 'fallback'
+    assert all('policy' not in store.get('jobs', sid) for sid in ('head', 'tail'))
 
 
 @pytest.fixture(scope='module')
@@ -187,7 +185,7 @@ def test_first_summary_fallback_preserves_an_existing_admitted_deadline():
     assert part.first_summary_enabled
 
 
-def test_first_scheduler_failure_stamps_legacy_lease_and_emits_committed_fallback(monkeypatch):
+def test_first_scheduler_failure_stamps_only_its_owner_part(monkeypatch):
     from config.policy import telemetry
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.scheduler import Scheduler
@@ -201,13 +199,16 @@ def test_first_scheduler_failure_stamps_legacy_lease_and_emits_committed_fallbac
     row = store.rows[('jobs', 'old')]
     row.pop('policy')
     row.pop('policy_parts')
+    row.pop('policy_source', None)
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
     events = []
     monkeypatch.setattr(telemetry, 'record_policy_source', lambda source, *_: events.append(source))
     assert queue.fail('old', lease.token, 3, quarantine=True)
     row = store.get('jobs', 'old')
     assert row['policy_parts']['scheduler']['max_attempts'] == 2
-    assert row['policy_source'] == 'fallback' and events == ['fallback', 'stage']
+    assert 'policy' not in row and 'policy_source' not in row
+    assert row['policy_part_sources']['scheduler'] == 'fallback'
+    assert events == ['fallback']
 
 
 def test_disabled_recovery_does_not_read_the_cohort(monkeypatch):
@@ -218,3 +219,56 @@ def test_disabled_recovery_does_not_read_the_cohort(monkeypatch):
 
     monkeypatch.setattr(stages, 'member', unexpected)
     assert not stages.resolve_stage_policy('owner', 'recovery', flags={}).recovery_enabled
+
+
+@pytest.fixture(scope='module')
+def role_policy_trace():
+    from testing.pipeline_sim.trace import GOLDEN_CONFIGS, trace
+
+    config = GOLDEN_CONFIGS['role_policy']()
+    correct = trace(config)
+    config.stage_roles.update(projection='sync', recovery='sync')
+    wrong = trace(config)
+    return correct, wrong
+
+
+def test_two_serving_environments_leave_visible_owner_stamps(role_policy_trace):
+    correct, wrong = role_policy_trace
+    jobs = [segment['final_job'] for segment in correct['segments'].values() if segment['final_job']]
+    assert jobs and any(job.get('policy_parts', {}).get('recovery') for job in jobs)
+    for job in jobs:
+        assert job['policy']['source_role'] == 'sync'
+        for stage, field in [('projection', 'authoritative_labels'), ('recovery', 'recovery_enabled')]:
+            part = job.get('policy_parts', {}).get(stage)
+            if part:
+                assert part['source_role'] == 'integration'
+                assert part[field] is True
+                assert len(part['policy_id']) == 64
+    assert correct != wrong, 'swapping stage ownership must break the policy golden'
+
+
+def test_pre_e1_constructor_accepts_every_binding_written_by_e1(replay_result):
+    from tests.unit.fixtures.pre_e1_projection_binding import PreE1ProjectionBinding
+
+    result, *_ = replay_result
+    bindings = [job['projection_binding'] for job in result.store.jobs()]
+    assert bindings
+    for binding in bindings:
+        assert 'policy' not in binding
+        assert PreE1ProjectionBinding(**binding).job_id == binding['job_id']
+
+
+@pytest.mark.parametrize('stage', ['scheduler', 'projection', 'recovery'])
+def test_stage_role_never_writes_an_admission_fallback(unit, monkeypatch, stage):
+    store, _ = unit
+    for job in store.rows.values():
+        job.pop('policy', None)
+    monkeypatch.setattr(policies, 'resolve_batch_policy', lambda *a, **k: pytest.fail('stage resolved admission'))
+    monkeypatch.setenv('K_SERVICE', 'gpu-worker')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    _, part = policies.load_stage_policy(store, 'tail', stage)
+    assert part.source_role == 'gpu-worker'
+    assert all('policy' not in row for row in store.jobs())
+    assert all(row['policy_part_sources'][stage] == 'fallback' for row in store.jobs())
+    assert all('policy' not in row['projection_binding'] for row in store.jobs())

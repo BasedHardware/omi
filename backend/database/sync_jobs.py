@@ -272,10 +272,10 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 def load_sync_job_policy(job_id: str, *, policy=None) -> Optional[Dict[str, Any]]:
-    """Mutating policy read for a unit owner; status/lease probes stay pure.
+    """Admission-only policy repair; status, worker and projection reads stay pure.
 
-    Batch publication supplies the admission policy already pinned on its
-    binding. Legacy standalone callers may resolve once here instead.
+    An admitting caller may supply an already recorded admission part or
+    resolve once here. Non-admission roles do not call this mutating helper.
     """
     data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
     if not data:

@@ -139,3 +139,10 @@ git diff tests/unit/fixtures/pipeline_sim_goldens/
 Some diffs are expected even when behavior is preserved. If a refactor merges two transactions, an
 intermediate durable state disappears from the transitions, and other readers could have observed that
 state. Review those diffs rather than normalizing them away.
+
+
+E1's `role_policy` case uses separate sync and integration environments through
+`SimConfig.role_environments` and `stage_roles`. Its trace opts into policy values,
+source roles and stable hashes; changing either projection or recovery to the
+sync role must break the golden. Historical goldens keep their existing trace
+format. Projection's model uses the real stage-part CAS before projecting.
