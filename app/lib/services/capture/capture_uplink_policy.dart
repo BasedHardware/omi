@@ -33,8 +33,7 @@ extension _CaptureUplinkPolicy on CaptureController {
     final device = _recordingDevice;
     if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
     final stagedPhase = _capture.stagedReadModel.phase;
-    final attestedIdle =
-        testingProbe &&
+    final attestedIdle = testingProbe &&
         stagedPhase == CapturePhase.idle &&
         !_capture.stagedReadModel.callActive &&
         _pendantSuspension == null;
@@ -202,8 +201,7 @@ extension _CaptureUplinkPolicy on CaptureController {
 
   bool get _shouldReconnectTranscriptionSocket {
     final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !isPaused;
-    final activePhoneOrSystemCapture =
-        recordingState == RecordingState.record ||
+    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
     return activeDeviceCapture || activePhoneOrSystemCapture;

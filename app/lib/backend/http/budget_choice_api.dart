@@ -12,10 +12,10 @@ class BudgetChoiceApi {
   static const capability = {'X-Omi-Held-Content': '1'};
 
   Future<ApiResult<GeneratedBudgetChoiceResponse>> load() => executeApi(
-    request: ApiRequest(url: '${baseUrl}v1/users/budget-choice', method: 'GET', headers: capability),
-    decode: (body) => GeneratedBudgetChoiceResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
-    send: send,
-  );
+        request: ApiRequest(url: '${baseUrl}v1/users/budget-choice', method: 'GET', headers: capability),
+        decode: (body) => GeneratedBudgetChoiceResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+        send: send,
+      );
 
   Future<ApiResult<GeneratedBudgetChoiceWriteResponse>> save(String period, String choice, bool dontAskAgain) =>
       executeApi(

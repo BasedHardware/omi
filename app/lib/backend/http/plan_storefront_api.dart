@@ -14,13 +14,17 @@ class PlanStorefrontApi {
     required String source,
     String trigger = '',
     required String locale,
-  }) => executeApi(
-    request: ApiRequest(
-      url:
-          '${baseUrl}v2/payments/plans?${Uri(queryParameters: {'source': source, if (trigger.isNotEmpty) 'trigger': trigger, 'locale': locale}).query}',
-      method: 'GET',
-    ),
-    decode: (body) => PlanStorefront.fromJson(jsonDecode(body) as Map<String, dynamic>),
-    send: send,
-  ).timeout(const Duration(seconds: 15), onTimeout: () => const ApiFailure(ApiProblem(ApiProblemKind.transport)));
+  }) =>
+      executeApi(
+        request: ApiRequest(
+          url: '${baseUrl}v2/payments/plans?${Uri(queryParameters: {
+                'source': source,
+                if (trigger.isNotEmpty) 'trigger': trigger,
+                'locale': locale,
+              }).query}',
+          method: 'GET',
+        ),
+        decode: (body) => PlanStorefront.fromJson(jsonDecode(body) as Map<String, dynamic>),
+        send: send,
+      ).timeout(const Duration(seconds: 15), onTimeout: () => const ApiFailure(ApiProblem(ApiProblemKind.transport)));
 }

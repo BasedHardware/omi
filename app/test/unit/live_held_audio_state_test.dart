@@ -10,11 +10,11 @@ void main() {
   test('server persistence receipts own the count and resume state', () {
     final state = LiveHeldAudioState();
     SttCapLiveHeldEvent receipt(int seconds, bool paused) => SttCapLiveHeldEvent.fromJson({
-      'session_id': 'socket-1',
-      'held_seconds': seconds,
-      'reset_at': 1793491200,
-      'paused': paused,
-    });
+          'session_id': 'socket-1',
+          'held_seconds': seconds,
+          'reset_at': 1793491200,
+          'paused': paused,
+        });
     expect(state.apply(receipt(0, true)), isTrue);
     expect(state.paused, isTrue);
     expect(state.heldSeconds, 0);

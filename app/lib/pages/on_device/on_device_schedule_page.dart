@@ -41,17 +41,17 @@ class OnDeviceSchedulePage extends StatelessWidget {
           builder: (context, _) {
             final settings = controller.settings;
             Widget option(OnDeviceSchedule schedule, String body, String? meta) => Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
-              child: OnDeviceChoiceCard(
-                key: Key('on_device_schedule_${schedule.storageId}'),
-                title: onDeviceScheduleLabel(l10n, schedule),
-                badge: schedule == OnDeviceSchedule.whileCharging ? l10n.paywallRecommended : null,
-                body: body,
-                meta: meta,
-                selected: settings.schedule == schedule,
-                onSelected: () => controller.updateSettings(settings.copyWith(schedule: schedule)),
-              ),
-            );
+                  padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+                  child: OnDeviceChoiceCard(
+                    key: Key('on_device_schedule_${schedule.storageId}'),
+                    title: onDeviceScheduleLabel(l10n, schedule),
+                    badge: schedule == OnDeviceSchedule.whileCharging ? l10n.paywallRecommended : null,
+                    body: body,
+                    meta: meta,
+                    selected: settings.schedule == schedule,
+                    onSelected: () => controller.updateSettings(settings.copyWith(schedule: schedule)),
+                  ),
+                );
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -65,10 +65,8 @@ class OnDeviceSchedulePage extends StatelessWidget {
                       ],
                       Semantics(header: true, child: Text(l10n.onDeviceScheduleHeadline, style: OmiType.title1)),
                       const SizedBox(height: OmiSpacing.xs),
-                      Text(
-                        l10n.onDeviceScheduleBody,
-                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                      ),
+                      Text(l10n.onDeviceScheduleBody,
+                          style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
                       const SizedBox(height: OmiSpacing.xl),
                       option(OnDeviceSchedule.whileCharging, l10n.onDeviceScheduleChargingBody, null),
                       option(OnDeviceSchedule.everyFewHours, l10n.onDeviceScheduleHoursBody, l10n.onDeviceUsesBattery),

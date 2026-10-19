@@ -138,12 +138,10 @@ Future<FirebaseApp> _ensureFirebaseApp() {
 
 /// WorkManager's retained entry point uses exactly the UI Firebase profile.
 @pragma('vm:entry-point')
-Future<void> onDeviceOverflowBackground() => runOnDeviceBackground(
-  initialize: () async {
-    await _ensureFirebaseApp();
-    initOpus(await opus_flutter.load());
-  },
-);
+Future<void> onDeviceOverflowBackground() => runOnDeviceBackground(initialize: () async {
+      await _ensureFirebaseApp();
+      initOpus(await opus_flutter.load());
+    });
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -356,9 +354,8 @@ Future _init() async {
     OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
-      authMethod: firebaseUser == null || firebaseUser.providerData.isEmpty
-          ? null
-          : firebaseUser.providerData.first.providerId,
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
       userCreatedAt: firebaseUser?.metadata.creationTime,
     );
     // Restore onboarding state from server if not already set locally
@@ -677,13 +674,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<
-          ConversationProvider,
-          MessageProvider,
-          PeopleProvider,
-          UsageProvider,
-          CaptureProvider
-        >(
+        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            CaptureProvider>(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

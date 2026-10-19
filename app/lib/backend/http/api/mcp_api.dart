@@ -8,7 +8,12 @@ class McpApi {
   static String get _baseUrl => '${Env.apiBaseUrl}v1/mcp';
 
   /// Default read-only scopes for newly minted MCP API keys (`backend/config/mcp_scopes.py`).
-  static const List<String> readOnlyScopes = ['memories.read', 'conversations.read', 'action_items.read', 'goals.read'];
+  static const List<String> readOnlyScopes = [
+    'memories.read',
+    'conversations.read',
+    'action_items.read',
+    'goals.read',
+  ];
 
   static Future<List<McpApiKey>> getMcpApiKeys() async {
     final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: '{}', method: 'GET');
@@ -21,7 +26,10 @@ class McpApi {
     }
   }
 
-  static Future<McpApiKeyCreated> createMcpApiKey(String name, {List<String> scopes = readOnlyScopes}) async {
+  static Future<McpApiKeyCreated> createMcpApiKey(
+    String name, {
+    List<String> scopes = readOnlyScopes,
+  }) async {
     final response = await makeApiCall(
       url: '$_baseUrl/keys',
       headers: {},
@@ -52,7 +60,7 @@ class McpApi {
       if (grants is! List) return const [];
       return [
         for (final grant in grants)
-          if (grant is Map<String, dynamic>) grant,
+          if (grant is Map<String, dynamic>) grant
       ];
     } else {
       throw Exception('Failed to load OAuth grants: ${response?.statusCode}');

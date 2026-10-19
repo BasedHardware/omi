@@ -16,16 +16,16 @@ import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/utils/constants.dart';
 
 TranscriptSegment seg(int speakerId, {bool isUser = false, String? personId, String text = 'hi'}) => TranscriptSegment(
-  id: '$speakerId-$text',
-  text: text,
-  speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-  speakerId: speakerId,
-  isUser: isUser,
-  personId: personId,
-  start: 0,
-  end: 1,
-  translations: const [],
-);
+      id: '$speakerId-$text',
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: 0,
+      end: 1,
+      translations: const [],
+    );
 
 Person person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
@@ -37,10 +37,8 @@ void main() {
   test('on-device engines carry no speaker label in UI or transcript exports', () {
     final segment = seg(0, text: 'Synthetic speech.')..sttProvider = 'on_device:parakeet_v2';
     expect(SpeakerNames.forSegments([segment], l10n: en).forSegment(segment), '');
-    expect(
-      TranscriptSegment.segmentsAsString([segment], l10n: en, people: const [], ownerName: 'Test'),
-      'Synthetic speech.',
-    );
+    expect(TranscriptSegment.segmentsAsString([segment], l10n: en, people: const [], ownerName: 'Test'),
+        'Synthetic speech.');
   });
 
   test('anonymous speakers are numbered densely in order of first appearance', () {

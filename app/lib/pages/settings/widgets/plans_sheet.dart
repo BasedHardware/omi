@@ -117,11 +117,8 @@ class _PlansSheetState extends State<PlansSheet> {
       _storefrontFailed = false;
       _storefront = null;
     });
-    final result = await (widget.storefrontApi ?? PlanStorefrontApi()).load(
-      source: widget.analyticsSource,
-      trigger: widget.storefrontTrigger,
-      locale: context.l10n.localeName,
-    );
+    final result = await (widget.storefrontApi ?? PlanStorefrontApi())
+        .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
     if (!mounted) return;
     setState(() {
       _storefrontLoading = false;
@@ -408,12 +405,9 @@ class _PlansSheetState extends State<PlansSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (storefrontPrice?.confirmLines.isNotEmpty == true)
-                  ...storefrontPrice!.confirmLines.map(
-                    (line) => Padding(
+                  ...storefrontPrice!.confirmLines.map((line) => Padding(
                       padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
-                      child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary)),
-                    ),
-                  )
+                      child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary))))
                 else ...[
                   Text(
                     l10n.importantBillingInfo,
@@ -437,12 +431,11 @@ class _PlansSheetState extends State<PlansSheet> {
           actions: [
             OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
             OmiDialogAction(
-              label: storefrontPrice?.confirmLines.isNotEmpty == true
-                  ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
-                  : l10n.confirmUpgrade,
-              isDefault: true,
-              onPressed: () => Navigator.of(ctx).pop(true),
-            ),
+                label: storefrontPrice?.confirmLines.isNotEmpty == true
+                    ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
+                    : l10n.confirmUpgrade,
+                isDefault: true,
+                onPressed: () => Navigator.of(ctx).pop(true)),
           ],
         ),
       );
@@ -493,8 +486,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final currentSub = provider.subscription!.subscription;
-    final resubscribing =
-        cancelPendingPurchase(
+    final resubscribing = cancelPendingPurchase(
           cancelAtPeriodEnd: currentSub.cancelAtPeriodEnd,
           currentPriceId: currentSub.currentPriceId,
           priceId: priceId,
@@ -576,12 +568,10 @@ class _PlansSheetState extends State<PlansSheet> {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
             final planName = currentPlanDisplayName(context, provider.subscription);
-            final date =
-                billingDateLabel(context, sessionData['next_billing_date']) ??
+            final date = billingDateLabel(context, sessionData['next_billing_date']) ??
                 billingDateLabel(context, currentSub.currentPeriodEnd);
-            final message = date == null
-                ? l10n.subscriptionReactivatedDefault
-                : l10n.yourPlanWillRenewOn(planName, date);
+            final message =
+                date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
             if (mounted) {
               setState(() {
                 _renewalConfirmation = message;
@@ -655,7 +645,11 @@ class _PlansSheetState extends State<PlansSheet> {
     }
     selectedTierId = sub.plan.wireName;
     selectedPlan = interval == 'year' ? 'yearly' : 'monthly';
-    await _handleUpgrade(priceId, targetPlan: sub.plan.wireName, billingInterval: interval);
+    await _handleUpgrade(
+      priceId,
+      targetPlan: sub.plan.wireName,
+      billingInterval: interval,
+    );
   }
 
   void _keepCurrentPriceSelected(List<Map<String, dynamic>> plans) {
@@ -675,11 +669,11 @@ class _PlansSheetState extends State<PlansSheet> {
     if (raw is! List) return false;
     final interval = selectedPlan == 'yearly' ? 'year' : 'month';
     return raw.whereType<Map>().any(
-      (plan) =>
-          plan['id'] == currentId &&
-          plan['interval'] == interval &&
-          (selectedTierId == null || plan['plan_id'] == selectedTierId),
-    );
+          (plan) =>
+              plan['id'] == currentId &&
+              plan['interval'] == interval &&
+              (selectedTierId == null || plan['plan_id'] == selectedTierId),
+        );
   }
 
   Future<void> _openPaymentPortal() async {
@@ -784,9 +778,8 @@ class _PlansSheetState extends State<PlansSheet> {
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
-        final DateTime? periodEndAt = periodEnd != null && periodEnd > 0
-            ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000)
-            : null;
+        final DateTime? periodEndAt =
+            periodEnd != null && periodEnd > 0 ? DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000) : null;
         if (periodEndAt != null) {
           renewalDate = OmiDateFormat.of(context).date(periodEndAt);
         }
@@ -840,11 +833,9 @@ class _PlansSheetState extends State<PlansSheet> {
                               (periodEnded
                                   ? l10n.planEndedOn(renewalDate)
                                   : knownFutureEnd
-                                  ? l10n.yourPlanEndsOn(
-                                      currentPlanDisplayName(context, provider.subscription),
-                                      renewalDate,
-                                    )
-                                  : l10n.subscriptionSetToCancel),
+                                      ? l10n.yourPlanEndsOn(
+                                          currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                      : l10n.subscriptionSetToCancel),
                           key: const ValueKey('plans_sheet_cancel_status'),
                           textAlign: TextAlign.center,
                           style: OmiType.subhead.copyWith(
@@ -1053,9 +1044,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Widget _buildPromoCodeField() {
     OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: OmiRadius.mdAll,
-      borderSide: BorderSide(color: color),
-    );
+          borderRadius: OmiRadius.mdAll,
+          borderSide: BorderSide(color: color),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

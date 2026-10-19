@@ -13,7 +13,7 @@ String onDeviceTranscriptHash(List<TranscriptSegment> segments) {
       '${segment.speakerId}',
       segment.isUser ? 'Y' : 'N',
       segment.personId?.trim() ?? '',
-      segment.text.trim(),
+      segment.text.trim()
     ]) {
       final encoded = utf8.encode(value);
       bytes.add(utf8.encode('${encoded.length}\n'));

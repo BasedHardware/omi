@@ -10,12 +10,11 @@ void main() {
     test('storefront sends only declared context: $trigger', () async {
       ApiRequest? seen;
       final api = PlanStorefrontApi(
-        baseUrl: 'http://localhost/',
-        send: (request) async {
-          seen = request;
-          return http.Response(File('test/fixtures/storefront_v2/pro_budget80.json').readAsStringSync(), 200);
-        },
-      );
+          baseUrl: 'http://localhost/',
+          send: (request) async {
+            seen = request;
+            return http.Response(File('test/fixtures/storefront_v2/pro_budget80.json').readAsStringSync(), 200);
+          });
       expect(await api.load(source: 'budget_80', trigger: trigger, locale: 'en'), isA<ApiSuccess<PlanStorefront>>());
       final parameters = Uri.parse(seen!.url).queryParameters;
       expect(parameters['trigger'], trigger.isEmpty ? null : trigger);

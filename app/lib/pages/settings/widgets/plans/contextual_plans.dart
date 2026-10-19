@@ -26,16 +26,13 @@ Future<bool> openContextualPlans(
   if (!context.mounted || !provider.showSubscriptionUI) return false;
   if (trigger.isEmpty && await PaywallRouter.openVariant(context, source: source)) return true;
   if (!context.mounted) return false;
-  PlatformManager.instance.analytics.paywallOpened(
-    source,
-    currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown',
-  );
+  PlatformManager.instance.analytics
+      .paywallOpened(source, currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown');
   await showOmiSheet(
-    context: context,
-    padding: EdgeInsets.zero,
-    title: context.l10n.paywallPlans,
-    builder: (_) => _ContextualPlansHost(source: source, trigger: trigger, storefront: storefront),
-  );
+      context: context,
+      padding: EdgeInsets.zero,
+      title: context.l10n.paywallPlans,
+      builder: (_) => _ContextualPlansHost(source: source, trigger: trigger, storefront: storefront));
   return true;
 }
 
@@ -62,14 +59,13 @@ class _ContextualPlansHostState extends State<_ContextualPlansHost> with TickerP
 
   @override
   Widget build(BuildContext context) => PlansSheet(
-    waveController: _wave,
-    notesController: _notes,
-    arrowController: _arrow,
-    arrowAnimation: _arrow,
-    analyticsSource: widget.source,
-    storefrontTrigger: widget.trigger,
-    initialStorefront: widget.storefront,
-  );
+      waveController: _wave,
+      notesController: _notes,
+      arrowController: _arrow,
+      arrowAnimation: _arrow,
+      analyticsSource: widget.source,
+      storefrontTrigger: widget.trigger,
+      initialStorefront: widget.storefront);
 }
 
 /// Returns true only when the server explicitly gates this action and a sheet was shown.
@@ -131,11 +127,8 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
       return;
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;
-    final result = await PlanStorefrontApi().load(
-      source: 'budget_80',
-      trigger: 'usage_budget',
-      locale: context.l10n.localeName,
-    );
+    final result =
+        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'usage_budget', locale: context.l10n.localeName);
     if (mounted && generation == _generation && result is ApiSuccess<PlanStorefront>) {
       setState(() => _data = result.data);
     }
@@ -151,40 +144,33 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
     final showMeter = meterLine != null && meterLine.isNotEmpty;
     final showNudge = !dismissed && data.showBudgetNudge;
     if (!showMeter && !showNudge) return const SizedBox.shrink();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (showMeter) StorefrontUsageMeter(usage: data.usage!),
-        if (showNudge)
-          BudgetUpsellCard(
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (showMeter) StorefrontUsageMeter(usage: data.usage!),
+      if (showNudge)
+        BudgetUpsellCard(
             data: data,
             onDismiss: () => BudgetNudgeDismissal.dismiss(period),
             onOpen: () async {
               await openContextualPlans(context, source: 'budget_80', trigger: 'usage_budget', storefront: data);
-            },
-          ),
-      ],
-    );
+            }),
+    ]);
   }
 }
 
 /// Keeps a CJK segment together so the meter wraps at the `·` separators.
 String meterLineForLayout(String line) {
   const separator = ' · ';
-  return line
-      .split(separator)
-      .map((part) {
-        if (!_containsCjk(part)) return part;
-        final buffer = StringBuffer();
-        var first = true;
-        for (final rune in part.runes) {
-          if (!first) buffer.write('\u2060');
-          buffer.writeCharCode(rune);
-          first = false;
-        }
-        return buffer.toString();
-      })
-      .join(separator);
+  return line.split(separator).map((part) {
+    if (!_containsCjk(part)) return part;
+    final buffer = StringBuffer();
+    var first = true;
+    for (final rune in part.runes) {
+      if (!first) buffer.write('\u2060');
+      buffer.writeCharCode(rune);
+      first = false;
+    }
+    return buffer.toString();
+  }).join(separator);
 }
 
 bool _containsCjk(String text) => text.runes.any(_isCjk);
@@ -213,30 +199,23 @@ class StorefrontUsageMeter extends StatelessWidget {
     final line = usage.meterLine;
     if (line == null || line.isEmpty) return const SizedBox.shrink();
     final percent = usage.percent;
-    final body = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(meterLineForLayout(line), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        if (percent != null) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          LinearProgressIndicator(
-            key: const Key('storefront_usage_meter_bar'),
-            value: (percent / 100).clamp(0.0, 1.0),
-            minHeight: 4,
-            color: OmiColors.accent,
-            backgroundColor: OmiColors.surface3,
-            borderRadius: OmiRadius.pillAll,
-          ),
-        ],
+    final body = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(meterLineForLayout(line), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      if (percent != null) ...[
+        const SizedBox(height: OmiSpacing.xs),
+        LinearProgressIndicator(
+          key: const Key('storefront_usage_meter_bar'),
+          value: (percent / 100).clamp(0.0, 1.0),
+          minHeight: 4,
+          color: OmiColors.accent,
+          backgroundColor: OmiColors.surface3,
+          borderRadius: OmiRadius.pillAll,
+        ),
       ],
-    );
+    ]);
     if (embedded) {
       return Padding(
-        key: const Key('storefront_usage_meter'),
-        padding: const EdgeInsets.all(OmiSpacing.md),
-        child: body,
-      );
+          key: const Key('storefront_usage_meter'), padding: const EdgeInsets.all(OmiSpacing.md), child: body);
     }
     return Container(
       key: const Key('storefront_usage_meter'),
@@ -283,35 +262,28 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(nudge, style: OmiType.subhead),
-          const SizedBox(height: OmiSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: OmiButton(
-                  key: const Key('budget_nudge_compare'),
-                  label: context.l10n.paywallComparePlans,
-                  size: OmiButtonSize.compact,
-                  onPressed: widget.onOpen,
-                ),
-              ),
-              OmiButton.tertiary(
-                key: const Key('budget_nudge_dismiss'),
-                label: context.l10n.paywallNotNow,
-                size: OmiButtonSize.compact,
-                onPressed: () async {
-                  setState(() => _dismissed = true);
-                  await widget.onDismiss?.call();
-                },
-              ),
-            ],
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(nudge, style: OmiType.subhead),
+        const SizedBox(height: OmiSpacing.xs),
+        Row(children: [
+          Expanded(
+              child: OmiButton(
+            key: const Key('budget_nudge_compare'),
+            label: context.l10n.paywallComparePlans,
+            size: OmiButtonSize.compact,
+            onPressed: widget.onOpen,
+          )),
+          OmiButton.tertiary(
+            key: const Key('budget_nudge_dismiss'),
+            label: context.l10n.paywallNotNow,
+            size: OmiButtonSize.compact,
+            onPressed: () async {
+              setState(() => _dismissed = true);
+              await widget.onDismiss?.call();
+            },
           ),
-        ],
-      ),
+        ]),
+      ]),
     );
   }
 }
@@ -338,11 +310,8 @@ class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
       return;
     }
     if (!mounted) return;
-    final result = await PlanStorefrontApi().load(
-      source: 'mobile_mcp_cap',
-      trigger: 'mcp_daily_cap',
-      locale: context.l10n.localeName,
-    );
+    final result = await PlanStorefrontApi()
+        .load(source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', locale: context.l10n.localeName);
     if (mounted && result is ApiSuccess<PlanStorefront>) setState(() => _data = result.data);
   }
 
@@ -355,16 +324,12 @@ class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
         data.usage?.mcpCapReached != true) {
       return const SizedBox.shrink();
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(data.header, style: OmiType.subhead),
-        OmiButton.secondary(
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(data.header, style: OmiType.subhead),
+      OmiButton.secondary(
           label: context.l10n.paywallComparePlans,
           onPressed: () =>
-              openContextualPlans(context, source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', storefront: data),
-        ),
-      ],
-    );
+              openContextualPlans(context, source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', storefront: data)),
+    ]);
   }
 }

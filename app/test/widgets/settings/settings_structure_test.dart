@@ -101,9 +101,9 @@ const _pagesOfRows = {
 };
 
 String? _keyOf(Widget widget) => switch (widget.key) {
-  ValueKey<String>(:final value) => value,
-  _ => null,
-};
+      ValueKey<String>(:final value) => value,
+      _ => null,
+    };
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();
@@ -159,51 +159,52 @@ void main() {
   }
 
   testWidgets(
-    'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
-    (tester) async {
-      await pumpSheet(tester);
-      final rows = _rowsOnScreen(tester);
-      expect(rows.map(_keyOf).toList(), [
-        'settings_account',
-        'settings_row_planAndUsage',
-        'settings_row_referral',
-        'settings_group_device',
-        'settings_group_recording',
-        'settings_group_voice',
-        'settings_group_notifications',
-        'settings_group_integrations',
-        'settings_row_connect_agent',
-        'settings_group_privacy',
-        'settings_row_memories',
-        'settings_row_goals',
-        'settings_group_help',
-        'settings_row_feedback', // where Intercom is supported (the host test is)
-        'settings_group_developer',
-      ]);
-      // Account shows who is signed in.
-      expect(rows.first.title, 'Ada');
-      expect(rows.first.subtitle, 'ada@example.com');
-      expect(rows.skip(1).map((r) => r.title).toList(), [
-        en.planAndUsage,
-        en.referralProgram,
-        en.device,
-        en.recordingAndTranscription,
-        en.assistantVoiceSettingsTitle,
-        en.notificationsAndDisplay,
-        en.integrations,
-        en.connectAnAgent,
-        en.dataAndPrivacy,
-        en.memories,
-        en.goals,
-        en.helpAndAbout,
-        en.feedbackBug,
-        en.developerSettings,
-      ]);
-      // The search field and close button stay in the header.
-      expect(find.byType(OmiCloseButton), findsOneWidget);
-      expect(find.bySemanticsLabel(en.search), findsOneWidget);
-    },
-  );
+      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+    final rows = _rowsOnScreen(tester);
+    expect(rows.map(_keyOf).toList(), [
+      'settings_account',
+      'settings_row_planAndUsage',
+      'settings_row_referral',
+      'settings_group_device',
+      'settings_group_recording',
+      'settings_group_voice',
+      'settings_group_notifications',
+      'settings_group_integrations',
+      'settings_row_connect_agent',
+      'settings_group_privacy',
+      'settings_row_memories',
+      'settings_row_goals',
+      'settings_group_help',
+      'settings_row_feedback', // where Intercom is supported (the host test is)
+      'settings_group_developer',
+    ]);
+    // Account shows who is signed in.
+    expect(rows.first.title, 'Ada');
+    expect(rows.first.subtitle, 'ada@example.com');
+    expect(rows.skip(1).map((r) => r.title).toList(), [
+      en.planAndUsage,
+      en.referralProgram,
+      en.device,
+      en.recordingAndTranscription,
+      en.assistantVoiceSettingsTitle,
+      en.notificationsAndDisplay,
+      en.integrations,
+      en.connectAnAgent,
+      en.dataAndPrivacy,
+      en.memories,
+      en.goals,
+      en.helpAndAbout,
+      en.feedbackBug,
+      en.developerSettings,
+    ]);
+    // The search field and close button stay in the header.
+    expect(find.byType(OmiCloseButton), findsOneWidget);
+    expect(find.bySemanticsLabel(en.search), findsOneWidget);
+  });
 
   testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (
     tester,

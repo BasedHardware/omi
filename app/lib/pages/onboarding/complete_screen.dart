@@ -58,8 +58,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
   void _choose(OnboardingFirstCaptureChoiceSelectedChoice choice) {
     _property('capture_choice', choice.wireName);
     // Pairing evidence owns the device property; a selected route is only intent.
-    final hasOmi =
-        _pairedOmi ||
+    final hasOmi = _pairedOmi ||
         SharedPreferencesUtil().btDevices.any((device) => device.id.isNotEmpty && device.type == DeviceType.omi);
     _property('has_omi_device', hasOmi);
     _emit(OnboardingFirstCaptureChoiceSelected(choice: choice));
@@ -88,14 +87,13 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
     if (widget.pairDevice != null) {
       paired = await widget.pairDevice!(context);
     } else {
-      final connected = await Navigator.of(context).push<bool>(
-        omiPageRoute(
-          builder: (routeContext) => ConnectDevicePage(onConnected: () => Navigator.of(routeContext).pop(true)),
+      final connected = await Navigator.of(context).push<bool>(omiPageRoute(
+        builder: (routeContext) => ConnectDevicePage(
+          onConnected: () => Navigator.of(routeContext).pop(true),
         ),
-      );
+      ));
       if (!mounted) return;
-      paired =
-          connected == true &&
+      paired = connected == true &&
           context.read<OnboardingProvider>().isConnected &&
           context.read<OnboardingProvider>().deviceType == DeviceType.omi;
     }
@@ -112,22 +110,18 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
   Future<void> _shop() async {
     if (_routing) return;
     setState(() => _routing = true);
-    await (widget.openShop ?? (BuildContext context) => openOmiShop(context, source: 'onboarding_first_capture'))(
-      context,
-    );
+    await (widget.openShop ??
+        (BuildContext context) => openOmiShop(context, source: 'onboarding_first_capture'))(context);
     if (mounted) setState(() => _routing = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final labelStyle = OmiType.callout.copyWith(
-      fontWeight: FontWeight.w600,
-      fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily,
-    );
+    final labelStyle = OmiType.callout
+        .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily);
     return ColoredBox(
-      color: OmiColors.surface0,
-      child: FirstCaptureLayout(
-        content: [
+        color: OmiColors.surface0,
+        child: FirstCaptureLayout(content: [
           Assets.images.omiWithRopeNoPadding.image(
             height: 180,
             fit: BoxFit.contain,
@@ -136,41 +130,32 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.firstCaptureConnectTitle, style: OmiType.title1, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.md),
-          Text(
-            context.l10n.firstCaptureConnectDescription,
-            style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-            textAlign: TextAlign.center,
-          ),
+          Text(context.l10n.firstCaptureConnectDescription,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xxl),
-        ],
-        actions: [
+        ], actions: [
           OmiButton(
-            labelStyle: labelStyle,
-            key: const Key('first_capture_omi'),
-            label: context.l10n.firstCaptureConnect,
-            icon: Icons.bluetooth,
-            expand: true,
-            onPressed: _routing ? null : _omi,
-          ),
+              labelStyle: labelStyle,
+              key: const Key('first_capture_omi'),
+              label: context.l10n.firstCaptureConnect,
+              icon: Icons.bluetooth,
+              expand: true,
+              onPressed: _routing ? null : _omi),
           const SizedBox(height: OmiSpacing.md),
           OmiButton(
-            variant: OmiButtonVariant.secondary,
-            labelStyle: labelStyle,
-            key: const Key('first_capture_shop'),
-            label: context.l10n.firstCaptureNoDevice,
-            expand: true,
-            onPressed: _routing ? null : _shop,
-          ),
+              variant: OmiButtonVariant.secondary,
+              labelStyle: labelStyle,
+              key: const Key('first_capture_shop'),
+              label: context.l10n.firstCaptureNoDevice,
+              expand: true,
+              onPressed: _routing ? null : _shop),
           const SizedBox(height: OmiSpacing.lg),
           OmiButton(
-            variant: OmiButtonVariant.tertiary,
-            labelStyle: labelStyle,
-            key: const Key('onboarding_complete_start'),
-            label: context.l10n.firstCaptureSkip,
-            onPressed: _routing ? null : _skip,
-          ),
-        ],
-      ),
-    );
+              variant: OmiButtonVariant.tertiary,
+              labelStyle: labelStyle,
+              key: const Key('onboarding_complete_start'),
+              label: context.l10n.firstCaptureSkip,
+              onPressed: _routing ? null : _skip),
+        ]));
   }
 }

@@ -35,13 +35,12 @@ class FakeVad implements MobileBatchVad {
 
 class RecordingWedgeMonitor extends CaptureWedgeMonitor {
   RecordingWedgeMonitor()
-    : super(
-        featureGate: () async => true,
-        track: (_, __) {},
-        bleRetry: (_) async {},
-        appBuild: () => 'test',
-        platform: () => 'test',
-      );
+      : super(
+            featureGate: () async => true,
+            track: (_, __) {},
+            bleRetry: (_) async {},
+            appBuild: () => 'test',
+            platform: () => 'test');
   int connected = 0;
   final List<bool> endedIntentionally = [];
   final List<bool> transcriptExpected = [];
@@ -87,13 +86,12 @@ void main() {
     uid = 'owner';
     state.resetForTest();
     lane = MobileStandardBatch(
-      buffer: buffer,
-      loadVad: () async => vad,
-      freeDiskBytes: () async => 1 << 40,
-      visibility: state,
-      ownerUid: () => uid,
-      now: () => clock,
-    );
+        buffer: buffer,
+        loadVad: () async => vad,
+        freeDiskBytes: () async => 1 << 40,
+        visibility: state,
+        ownerUid: () => uid,
+        now: () => clock);
   });
   tearDown(() async {
     await lane.close();
@@ -132,7 +130,7 @@ void main() {
       [0],
       [2],
       [0],
-      [4],
+      [4]
     ]);
     expect(streamed, [3]);
     expect(saved.expand((frame) => frame).where((v) => streamed.contains(v)), isEmpty);
@@ -166,7 +164,7 @@ void main() {
     expect(route(8), false);
     await buffer.pending;
     expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
-      [7],
+      [7]
     ]);
   });
 
@@ -179,10 +177,8 @@ void main() {
     await buffer.pending;
     expect(published.single.totalFrames, 6000);
     expect(published.single.seconds, 60);
-    expect(
-      File('${directory.path}/${published.single.filePath}').readAsBytesSync(),
-      encodeWalFrames(List.generate(6000, (_) => [0])),
-    );
+    expect(File('${directory.path}/${published.single.filePath}').readAsBytesSync(),
+        encodeWalFrames(List.generate(6000, (_) => [0])));
   });
 
   test('VAD hangover prioritizes speech at two seconds without discarding padding', () async {
@@ -197,7 +193,7 @@ void main() {
     await buffer.pending;
     expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
       [1],
-      [0],
+      [0]
     ]);
   });
 
@@ -208,7 +204,7 @@ void main() {
     expect(tiny.append([2], uid: uid, codec: BleAudioCodec.opus, now: clock), false);
     await tiny.close();
     expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
-      [1],
+      [1]
     ]);
   });
 
@@ -220,7 +216,7 @@ void main() {
     await tiny.close();
     expect(published.single.recordingSessionId, 'first');
     expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
-      [1],
+      [1]
     ]);
   });
 
@@ -249,20 +245,18 @@ void main() {
 
   test('batch files preserve recording origin and cannot disable stream repair evidence', () async {
     final batch = Wal(
-      timerStart: 1001,
-      codec: BleAudioCodec.opus,
-      seconds: 1,
-      totalFrames: 50,
-      recordingSessionId: 'origin',
-      filePath: 'audio_omimobilebatch001_opus_16000_1_fs160_1001.75.bin',
-    );
+        timerStart: 1001,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 50,
+        recordingSessionId: 'origin',
+        filePath: 'audio_omimobilebatch001_opus_16000_1_fs160_1001.75.bin');
     final live = Wal(
-      timerStart: 1000,
-      codec: BleAudioCodec.opus,
-      seconds: 1,
-      recordingSessionId: 'origin',
-      filePath: 'audio_omi_opus_16000_1_fs160_1000.bin',
-    );
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        recordingSessionId: 'origin',
+        filePath: 'audio_omi_opus_16000_1_fs160_1000.bin');
     expect(nextSyncUploadBatch([live, batch], 1002), [batch]);
     expect(nextSyncUploadBatch([live], 1002), [live]);
     final bounds = syncUploadAudioBounds([batch]);
@@ -287,16 +281,15 @@ void main() {
   test('unknown free space refuses batching before model load', () async {
     var loads = 0;
     final unavailable = MobileStandardBatch(
-      buffer: buffer,
-      loadVad: () async {
-        loads++;
-        return vad;
-      },
-      freeDiskBytes: () async => null,
-      visibility: state,
-      ownerUid: () => uid,
-      now: () => clock,
-    );
+        buffer: buffer,
+        loadVad: () async {
+          loads++;
+          return vad;
+        },
+        freeDiskBytes: () async => null,
+        visibility: state,
+        ownerUid: () => uid,
+        now: () => clock);
     unavailable.authorize(true);
     await unavailable.pendingInitialization;
     expect(unavailable.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false), false);
@@ -312,24 +305,22 @@ void main() {
     expect(broken.failed, true);
     final recovered = await MobileBatchBuffer.recover(directory, []);
     expect(readFrames(File('${directory.path}/${recovered.single.filePath}')), [
-      [9],
+      [9]
     ]);
   });
 
   test('real pendant controller selects exactly one WAL / socket owner per packet', () async {
     final monitor = RecordingWedgeMonitor();
     final world = await CaptureReplayWorld.boot(
-      tempDir: directory,
-      pendantCodec: BleAudioCodec.opus,
-      initialPrefs: {'uid': 'owner'},
-      captureWedgeMonitor: monitor,
-    );
+        tempDir: directory,
+        pendantCodec: BleAudioCodec.opus,
+        initialPrefs: {'uid': 'owner'},
+        captureWedgeMonitor: monitor);
     world.deviceConnection = ScriptedDeviceConnection();
     world.controller.installMobileStandardBatch(lane);
     try {
-      await world.controller.streamDeviceRecording(
-        device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40),
-      );
+      await world.controller
+          .streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
       await world.settle();
       world.socket!.emitServerMessage('{"type":"service_status","status":"ready","mobile_standard_batch":true}');
       await lane.pendingInitialization;
@@ -364,16 +355,12 @@ void main() {
     onPhone.updateEntitlement(atCap: true, paid: true);
     OnDeviceTranscriptionController.instance = onPhone;
     final world = await CaptureReplayWorld.boot(
-      tempDir: directory,
-      pendantCodec: BleAudioCodec.opus,
-      initialPrefs: {'uid': 'owner'},
-    );
+        tempDir: directory, pendantCodec: BleAudioCodec.opus, initialPrefs: {'uid': 'owner'});
     world.deviceConnection = ScriptedDeviceConnection();
     world.controller.installMobileStandardBatch(lane);
     try {
-      await world.controller.streamDeviceRecording(
-        device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40),
-      );
+      await world.controller
+          .streamDeviceRecording(device: BtDevice(id: 'omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
       await world.settle();
       world.socket!.emitServerMessage('{"type":"service_status","status":"ready","mobile_standard_batch":true}');
       await lane.pendingInitialization;

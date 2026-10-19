@@ -36,31 +36,21 @@ void main() {
       if (active) controller.debugActivate();
       OnDeviceTranscriptionController.instance = controller;
       final usage = UsageProvider()
-        ..debugSetSubscription(
-          UserSubscriptionResponse(
+        ..debugSetSubscription(UserSubscriptionResponse(
             subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
             transcriptionSecondsUsed: 3600,
             transcriptionSecondsLimit: 3600,
             wordsTranscribedUsed: 0,
             wordsTranscribedLimit: 0,
             insightsGainedUsed: 0,
-            insightsGainedLimit: 0,
-          ),
-        );
+            insightsGainedLimit: 0));
       late BuildContext context;
-      await tester.pumpWidget(
-        ChangeNotifierProvider.value(
+      await tester.pumpWidget(ChangeNotifierProvider.value(
           value: usage,
-          child: MaterialApp(
-            home: Builder(
-              builder: (value) {
-                context = value;
-                return const SizedBox();
-              },
-            ),
-          ),
-        ),
-      );
+          child: MaterialApp(home: Builder(builder: (value) {
+            context = value;
+            return const SizedBox();
+          }))));
       final queue = PromptQueue(contextProvider: () => context)..blocked = () => true;
       final handler = FreemiumSwitchHandler(queue: queue);
       final capture = _Capture();

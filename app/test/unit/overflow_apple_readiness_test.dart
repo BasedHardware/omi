@@ -10,31 +10,27 @@ void main() {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   for (final engine in ['sfspeech', 'parakeet_v2']) {
-    test(
-      'overflow readiness probes the selected $engine engine and configured language',
-      () async {
-        final legacyCalls = <MethodCall>[];
-        messenger.setMockMethodCallHandler(batch, (call) async {
-          expect(call.arguments['language'], 'fr');
-          return {'engine': engine, 'phase': 'installed'};
-        });
-        messenger.setMockMethodCallHandler(speech, (call) async {
-          legacyCalls.add(call);
-          expect(call.arguments['language'], 'fr');
-          expect(call.arguments['useSpeechAnalyzer'], isFalse);
-          return {'engine': 'sfspeech', 'status': 'ready'};
-        });
-        try {
-          final state = await OnDeviceAppleProvider.readiness('fr');
-          expect(state.ready, isTrue);
-          expect(state.engine, engine);
-          expect(legacyCalls.length, engine == 'sfspeech' ? 1 : 0);
-        } finally {
-          messenger.setMockMethodCallHandler(batch, null);
-          messenger.setMockMethodCallHandler(speech, null);
-        }
-      },
-      skip: !OnDeviceOverflowGate.debugOverrideActive,
-    );
+    test('overflow readiness probes the selected $engine engine and configured language', () async {
+      final legacyCalls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(batch, (call) async {
+        expect(call.arguments['language'], 'fr');
+        return {'engine': engine, 'phase': 'installed'};
+      });
+      messenger.setMockMethodCallHandler(speech, (call) async {
+        legacyCalls.add(call);
+        expect(call.arguments['language'], 'fr');
+        expect(call.arguments['useSpeechAnalyzer'], isFalse);
+        return {'engine': 'sfspeech', 'status': 'ready'};
+      });
+      try {
+        final state = await OnDeviceAppleProvider.readiness('fr');
+        expect(state.ready, isTrue);
+        expect(state.engine, engine);
+        expect(legacyCalls.length, engine == 'sfspeech' ? 1 : 0);
+      } finally {
+        messenger.setMockMethodCallHandler(batch, null);
+        messenger.setMockMethodCallHandler(speech, null);
+      }
+    }, skip: !OnDeviceOverflowGate.debugOverrideActive);
   }
 }

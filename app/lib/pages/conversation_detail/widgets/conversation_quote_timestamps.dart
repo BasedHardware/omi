@@ -53,57 +53,45 @@ class _ConversationQuoteTimestampsState extends State<ConversationQuoteTimestamp
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     Widget action(String label, String semantics, String key, VoidCallback onPressed) => Semantics(
-      label: semantics,
-      button: true,
-      onTap: onPressed,
-      excludeSemantics: true,
-      child: TextButton(
-        key: ValueKey(key),
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: OmiColors.textTertiary,
-          minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-          textStyle: style,
-        ),
-        child: Text(label, style: style),
-      ),
-    );
+          label: semantics,
+          button: true,
+          onTap: onPressed,
+          excludeSemantics: true,
+          child: TextButton(
+            key: ValueKey(key),
+            onPressed: onPressed,
+            style: TextButton.styleFrom(
+              foregroundColor: OmiColors.textTertiary,
+              minimumSize: const Size(44, 44),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+              textStyle: style,
+            ),
+            child: Text(label, style: style),
+          ),
+        );
     return Align(
       alignment: AlignmentDirectional.centerStart,
       child: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           for (var index = 0; index < visible.length; index++)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ExcludeSemantics(
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              ExcludeSemantics(
                   child: index == 0
                       ? Icon(Icons.play_arrow_rounded, size: 12, color: OmiColors.textTertiary)
-                      : Text('·', style: style),
-                ),
-                action(
-                  OmiDuration.offset(segments[visible[index]]!.start),
-                  _spokenTime(segments[visible[index]]!.start),
-                  'quote-time-${visible[index]}',
-                  () => widget.onOpenSource(visible[index]),
-                ),
-              ],
-            ),
+                      : Text('·', style: style)),
+              action(OmiDuration.offset(segments[visible[index]]!.start), _spokenTime(segments[visible[index]]!.start),
+                  'quote-time-${visible[index]}', () => widget.onOpenSource(visible[index])),
+            ]),
           if (!_expanded && sources.length > 3)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ExcludeSemantics(child: Text('·', style: style)),
-                action(
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              ExcludeSemantics(child: Text('·', style: style)),
+              action(
                   context.l10n.quoteMoreTimestamps(sources.length - 3),
                   context.l10n.quoteMoreTimestamps(sources.length - 3),
                   'quote-times-more',
-                  () => setState(() => _expanded = true),
-                ),
-              ],
-            ),
+                  () => setState(() => _expanded = true)),
+            ]),
         ],
       ),
     );

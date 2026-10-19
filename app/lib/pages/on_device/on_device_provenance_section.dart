@@ -34,10 +34,8 @@ class OnDeviceProvenanceChip extends StatelessWidget {
           padding: const EdgeInsets.only(top: OmiSpacing.xs),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
-            child: OnDeviceStatusChip(
-              icon: onDevicePhoneIcon,
-              label: onDeviceTranscriptOriginLabel(context, provenance),
-            ),
+            child:
+                OnDeviceStatusChip(icon: onDevicePhoneIcon, label: onDeviceTranscriptOriginLabel(context, provenance)),
           ),
         );
       },

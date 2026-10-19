@@ -7,12 +7,8 @@ import 'package:path_provider/path_provider.dart';
 /// Native capability, including language support, wins over OS version alone.
 enum OnDeviceEngine { speechAnalyzer, parakeetV2, sfSpeech, whisperTiny }
 
-OnDeviceEngine selectOnDeviceEngine({
-  required bool ios,
-  required int iosMajor,
-  required bool appleLocaleSupported,
-  required bool english,
-}) {
+OnDeviceEngine selectOnDeviceEngine(
+    {required bool ios, required int iosMajor, required bool appleLocaleSupported, required bool english}) {
   if (!ios) return OnDeviceEngine.whisperTiny;
   if (iosMajor >= 26 && appleLocaleSupported) return OnDeviceEngine.speechAnalyzer;
   if (iosMajor >= 17 && english) return OnDeviceEngine.parakeetV2;
@@ -40,10 +36,8 @@ class AppleBatchEngine {
     final file = File('${dir.path}/omi_local_${DateTime.now().microsecondsSinceEpoch}.wav');
     try {
       await file.writeAsBytes(wav, flush: true);
-      final result = await channel.invokeMapMethod<String, dynamic>('transcribe', {
-        'filePath': file.path,
-        'language': language,
-      });
+      final result =
+          await channel.invokeMapMethod<String, dynamic>('transcribe', {'filePath': file.path, 'language': language});
       if (result == null) throw StateError('Missing native transcription');
       final words = (result['words'] as List? ?? []).map((item) {
         final w = Map<String, dynamic>.from(item as Map);

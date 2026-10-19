@@ -151,10 +151,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
       offset += audioDurationSeconds(chunk);
     }
     return SttTranscriptionResult(
-      segments: segments,
-      rawText: text.join(' '),
-      audioEndSeconds: audioOffsetSeconds + normalized.duration,
-    );
+        segments: segments, rawText: text.join(' '), audioEndSeconds: audioOffsetSeconds + normalized.duration);
   }
 
   @visibleForTesting
@@ -188,7 +185,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
         final duration = audioDurationSeconds(audioData);
-        final filteredText = _qualityGate.filter(cleanText, audioData: audioData);
+        final filteredText = _qualityGate.filter(
+          cleanText,
+          audioData: audioData,
+        );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');
           return null;
@@ -205,21 +205,19 @@ class OnDeviceWhisperProvider implements ISttProvider {
               ? [
                   for (final segment in res.segments!)
                     SttSegment(
-                      text: segment.text,
-                      start: audioOffsetSeconds + segment.fromTs.inMilliseconds / 1000,
-                      end: audioOffsetSeconds + segment.toTs.inMilliseconds / 1000,
-                      speakerId: 0,
-                      sttProvider: 'on_device:whisper_cpp',
-                    ),
+                        text: segment.text,
+                        start: audioOffsetSeconds + segment.fromTs.inMilliseconds / 1000,
+                        end: audioOffsetSeconds + segment.toTs.inMilliseconds / 1000,
+                        speakerId: 0,
+                        sttProvider: 'on_device:whisper_cpp'),
                 ]
               : [
                   SttSegment(
-                    text: filteredText,
-                    start: audioOffsetSeconds,
-                    end: audioOffsetSeconds + duration,
-                    speakerId: 0,
-                    sttProvider: enhanced ? 'on_device:whisper_cpp' : null,
-                  ),
+                      text: filteredText,
+                      start: audioOffsetSeconds,
+                      end: audioOffsetSeconds + duration,
+                      speakerId: 0,
+                      sttProvider: enhanced ? 'on_device:whisper_cpp' : null),
                 ],
           rawText: filteredText,
         );

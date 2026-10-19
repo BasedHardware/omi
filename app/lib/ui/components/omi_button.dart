@@ -89,12 +89,12 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
-  }) : variant = OmiButtonVariant.secondary,
-       colors = null,
-       width = null,
-       height = null,
-       labelStyle = null,
-       maxLines = 1;
+  })  : variant = OmiButtonVariant.secondary,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.destructive({
     super.key,
@@ -105,12 +105,12 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
-  }) : variant = OmiButtonVariant.destructive,
-       colors = null,
-       width = null,
-       height = null,
-       labelStyle = null,
-       maxLines = 1;
+  })  : variant = OmiButtonVariant.destructive,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.tertiary({
     super.key,
@@ -121,12 +121,12 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
-  }) : variant = OmiButtonVariant.tertiary,
-       colors = null,
-       width = null,
-       height = null,
-       labelStyle = null,
-       maxLines = 1;
+  })  : variant = OmiButtonVariant.tertiary,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null,
+        maxLines = 1;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -138,12 +138,12 @@ class OmiButton extends StatefulWidget {
     this.leading,
     this.isLoading = false,
     this.expand = false,
-  }) : variant = OmiButtonVariant.toolbar,
-       colors = null,
-       width = null,
-       height = null,
-       labelStyle = null,
-       maxLines = 1;
+  })  : variant = OmiButtonVariant.toolbar,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null,
+        maxLines = 1;
 
   final String label;
 
@@ -187,14 +187,12 @@ class OmiButton extends StatefulWidget {
   /// Use this when the handler must not return that future — a confirm dialog would
   /// otherwise spin the button until it closes — but the failure must not escape the zone.
   static void reportOnPressedError(Object error, StackTrace stack, {required String label}) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        library: 'omi ui',
-        context: ErrorDescription('while running OmiButton "$label" onPressed'),
-      ),
-    );
+    FlutterError.reportError(FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'omi ui',
+      context: ErrorDescription('while running OmiButton "$label" onPressed'),
+    ));
   }
 
   @override

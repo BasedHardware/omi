@@ -7,15 +7,15 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
 
 UserSubscriptionResponse subscription({ProcessingBacklog? backlog}) => UserSubscriptionResponse(
-  subscription: Subscription(plan: PlanType.plus, status: SubscriptionStatus.active),
-  transcriptionSecondsUsed: 0,
-  transcriptionSecondsLimit: 3600,
-  wordsTranscribedUsed: 0,
-  wordsTranscribedLimit: 0,
-  insightsGainedUsed: 0,
-  insightsGainedLimit: 0,
-  processingBacklog: backlog,
-);
+      subscription: Subscription(plan: PlanType.plus, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 3600,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      processingBacklog: backlog,
+    );
 
 void main() {
   test('flags-off responses preserve absence; backlog survives cache round trip', () {
@@ -46,7 +46,7 @@ void main() {
       'remaining_units': null,
       'held_audio_seconds': 120,
       'estimated_hours': 10,
-      'exceeds_remaining': false,
+      'exceeds_remaining': false
     });
     expect(backlog.remainingUnits, isNull);
     expect(backlog.toJson()['remaining_units'], isNull);
@@ -57,14 +57,12 @@ void main() {
 
   test('uncertain retries reuse UUID until definite success, then the next action gets a new UUID', () async {
     final keys = <String>[];
-    final usage = UsageProvider(
-      processBacklogRequest: ({required idempotencyKey}) async {
-        keys.add(idempotencyKey);
-        if (keys.length == 1) throw StateError('lost reply');
-        if (keys.length == 2) return null;
-        return const ProcessingBacklog(state: 'waiting_choice');
-      },
-    );
+    final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
+      keys.add(idempotencyKey);
+      if (keys.length == 1) throw StateError('lost reply');
+      if (keys.length == 2) return null;
+      return const ProcessingBacklog(state: 'waiting_choice');
+    });
     addTearDown(usage.dispose);
     final waiting = subscription(backlog: const ProcessingBacklog(state: 'waiting_choice'));
     usage.debugSetSubscription(waiting);
@@ -80,12 +78,10 @@ void main() {
 
   test('cancel/new decision and auth session reset each end an uncertain retry identity', () async {
     final keys = <String>[];
-    final usage = UsageProvider(
-      processBacklogRequest: ({required idempotencyKey}) async {
-        keys.add(idempotencyKey);
-        return null;
-      },
-    );
+    final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
+      keys.add(idempotencyKey);
+      return null;
+    });
     addTearDown(usage.dispose);
     final waiting = subscription(backlog: const ProcessingBacklog(state: 'waiting_choice'));
     usage.debugSetSubscription(waiting);
@@ -101,12 +97,10 @@ void main() {
   test('another surface cannot cancel an in-flight retry identity', () async {
     final keys = <String>[];
     final response = Completer<ProcessingBacklog?>();
-    final usage = UsageProvider(
-      processBacklogRequest: ({required idempotencyKey}) {
-        keys.add(idempotencyKey);
-        return response.future;
-      },
-    );
+    final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) {
+      keys.add(idempotencyKey);
+      return response.future;
+    });
     addTearDown(usage.dispose);
     usage.debugSetSubscription(subscription(backlog: const ProcessingBacklog(state: 'waiting_choice')));
     final pending = usage.processBacklog();
@@ -120,12 +114,10 @@ void main() {
   test('only explicit waiting choice starts; concurrent calls deduplicate and use server snapshot', () async {
     var calls = 0;
     final response = Completer<ProcessingBacklog?>();
-    final usage = UsageProvider(
-      processBacklogRequest: ({required idempotencyKey}) {
-        calls++;
-        return response.future;
-      },
-    );
+    final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) {
+      calls++;
+      return response.future;
+    });
     addTearDown(usage.dispose);
     for (final state in ['capped', 'processing', 'none']) {
       usage.debugSetSubscription(subscription(backlog: ProcessingBacklog(state: state)));
@@ -146,9 +138,8 @@ void main() {
   test('an older subscription fetch cannot replace the explicit processing snapshot', () async {
     final response = Completer<UserSubscriptionResponse?>();
     final usage = UsageProvider(
-      subscriptionRequest: () => response.future,
-      processBacklogRequest: ({required idempotencyKey}) async => const ProcessingBacklog(state: 'processing'),
-    );
+        subscriptionRequest: () => response.future,
+        processBacklogRequest: ({required idempotencyKey}) async => const ProcessingBacklog(state: 'processing'));
     addTearDown(usage.dispose);
     final waiting = subscription(backlog: const ProcessingBacklog(state: 'waiting_choice'));
     usage.debugSetSubscription(waiting);
@@ -161,13 +152,11 @@ void main() {
 
   test('failed processing keeps choice and allows retry', () async {
     var calls = 0;
-    final usage = UsageProvider(
-      processBacklogRequest: ({required idempotencyKey}) async {
-        calls++;
-        if (calls == 1) throw StateError('offline');
-        return const ProcessingBacklog(state: 'processing');
-      },
-    );
+    final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
+      calls++;
+      if (calls == 1) throw StateError('offline');
+      return const ProcessingBacklog(state: 'processing');
+    });
     addTearDown(usage.dispose);
     usage.debugSetSubscription(subscription(backlog: const ProcessingBacklog(state: 'waiting_choice')));
     expect(await usage.processBacklog(), false);
@@ -192,11 +181,7 @@ void main() {
 
   test('processing_deferred defaults false and survives conversation persistence', () {
     final original = ServerConversation(
-      id: 'deferred',
-      createdAt: DateTime.utc(2026),
-      structured: Structured('', ''),
-      processingDeferred: true,
-    );
+        id: 'deferred', createdAt: DateTime.utc(2026), structured: Structured('', ''), processingDeferred: true);
     expect(ServerConversation.fromJson(original.toJson()).processingDeferred, true);
     final legacy = Map<String, dynamic>.from(original.toJson())..remove('processing_deferred');
     expect(ServerConversation.fromJson(legacy).processingDeferred, false);

@@ -18,27 +18,24 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 Widget host(Widget child, {TargetPlatform platform = TargetPlatform.iOS}) => MaterialApp(
-  debugShowCheckedModeBanner: false,
-  theme: buildOmiTheme(brightness: Brightness.light).copyWith(
-    platform: platform,
-    snackBarTheme: buildOmiTheme(brightness: Brightness.light).snackBarTheme.copyWith(
-      contentTextStyle: buildOmiTheme(brightness: Brightness.light).snackBarTheme.contentTextStyle!.copyWith(
-        fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
-      ),
-    ),
-    appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
-      titleTextStyle: OmiType.headline.copyWith(
-        fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
-      ),
-    ),
-    textTheme: buildOmiTheme(
-      brightness: Brightness.light,
-    ).textTheme.apply(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto'),
-  ),
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      debugShowCheckedModeBanner: false,
+      theme: buildOmiTheme(brightness: Brightness.light).copyWith(
+          platform: platform,
+          snackBarTheme: buildOmiTheme(brightness: Brightness.light).snackBarTheme.copyWith(
+              contentTextStyle: buildOmiTheme(brightness: Brightness.light)
+                  .snackBarTheme
+                  .contentTextStyle!
+                  .copyWith(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto')),
+          appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
+              titleTextStyle:
+                  OmiType.headline.copyWith(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto')),
+          textTheme: buildOmiTheme(brightness: Brightness.light)
+              .textTheme
+              .apply(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto')),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   setUp(() async {
@@ -49,16 +46,11 @@ void main() {
     var paired = false, completed = 0;
     final events = <RegisteredEvent>[];
     final props = <String, Object>{};
-    await tester.pumpWidget(
-      host(
-        OnboardingCompleteScreen(
-          onComplete: () => completed++,
-          emit: events.add,
-          setProperty: (k, v) => props[k] = v,
-          pairDevice: (_) async => paired,
-        ),
-      ),
-    );
+    await tester.pumpWidget(host(OnboardingCompleteScreen(
+        onComplete: () => completed++,
+        emit: events.add,
+        setProperty: (k, v) => props[k] = v,
+        pairDevice: (_) async => paired)));
     await tester.tap(find.byKey(const Key('first_capture_omi')));
     await tester.pump();
     expect(completed, 0);
@@ -76,9 +68,8 @@ void main() {
   testWidgets('already saved Omi retains has_omi_device without a new pair', (tester) async {
     await SharedPreferencesUtil().btDeviceSet(BtDevice(id: 'saved-omi', name: 'Omi', type: DeviceType.omi, rssi: -40));
     final props = <String, Object>{};
-    await tester.pumpWidget(
-      host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (key, value) => props[key] = value)),
-    );
+    await tester.pumpWidget(host(
+        OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (key, value) => props[key] = value)));
     await tester.tap(find.byKey(const Key('onboarding_complete_start')));
     expect(props['has_omi_device'], isTrue);
   });
@@ -86,16 +77,11 @@ void main() {
   testWidgets('pair failure stays on Connect with How to pair; explicit Back returns to choices', (tester) async {
     final pairing = _RenderPairingProvider();
     var completed = 0;
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
-          ChangeNotifierProvider<HomeProvider>(create: (_) => _RenderHomeProvider()),
-        ],
-        child: host(OnboardingCompleteScreen(onComplete: () => completed++, emit: (_) {}, setProperty: (_, value) {})),
-      ),
-    );
+    await tester.pumpWidget(MultiProvider(providers: [
+      ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
+      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      ChangeNotifierProvider<HomeProvider>(create: (_) => _RenderHomeProvider()),
+    ], child: host(OnboardingCompleteScreen(onComplete: () => completed++, emit: (_) {}, setProperty: (_, value) {}))));
     await tester.tap(find.byKey(const Key('first_capture_omi')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -126,16 +112,11 @@ void main() {
   testWidgets('no device opens the store in-app and returns to the choices, where Skip is one tap', (tester) async {
     var shopOpened = 0, completed = 0;
     final props = <String, Object>{};
-    await tester.pumpWidget(
-      host(
-        OnboardingCompleteScreen(
-          onComplete: () => completed++,
-          emit: (_) {},
-          setProperty: (k, v) => props[k] = v,
-          openShop: (_) async => shopOpened++,
-        ),
-      ),
-    );
+    await tester.pumpWidget(host(OnboardingCompleteScreen(
+        onComplete: () => completed++,
+        emit: (_) {},
+        setProperty: (k, v) => props[k] = v,
+        openShop: (_) async => shopOpened++)));
     await tester.tap(find.byKey(const Key('first_capture_shop')));
     await tester.pumpAndSettle();
     expect(shopOpened, 1);
@@ -148,10 +129,8 @@ void main() {
 
   test('restored tracker emits no auth exit and records the actual Back reason', () {
     final events = <RegisteredEvent>[];
-    final tracker = MobileOnboardingStepTelemetry(
-      emit: events.add,
-      platform: () => OnboardingStepCompletedPlatform.ios,
-    );
+    final tracker =
+        MobileOnboardingStepTelemetry(emit: events.add, platform: () => OnboardingStepCompletedPlatform.ios);
     tracker.seed(9);
     tracker.enter(9);
     expect(events, isEmpty);
@@ -178,10 +157,7 @@ void main() {
     var ms = 0;
     final events = <RegisteredEvent>[];
     final tracker = MobileOnboardingStepTelemetry(
-      emit: events.add,
-      platform: () => OnboardingStepCompletedPlatform.ios,
-      elapsedMs: () => ms,
-    );
+        emit: events.add, platform: () => OnboardingStepCompletedPlatform.ios, elapsedMs: () => ms);
     ms = 25;
     tracker.enter(1);
     tracker.enter(1);
@@ -197,7 +173,7 @@ void main() {
       'elapsed_ms': 75,
       'skipped': true,
       'platform': 'ios',
-      'exit_reason': 'skipped',
+      'exit_reason': 'skipped'
     });
     tracker.enter(6);
     tracker.enter(9);
@@ -211,30 +187,21 @@ void main() {
     expect(OnboardingProgressStepsForTest.completePage, 9);
     expect(OnboardingWrapper.isResumableStepForTesting(9), isTrue);
     expect(
-      OnboardingWrapper.previousStepForTesting(
-        currentIndex: 9,
-        setupPageEnabled: false,
-        knowledgeGraphStepEnabled: false,
-      ),
-      6,
-    );
+        OnboardingWrapper.previousStepForTesting(
+            currentIndex: 9, setupPageEnabled: false, knowledgeGraphStepEnabled: false),
+        6);
     expect(
-      OnboardingWrapper.previousStepForTesting(
-        currentIndex: 9,
-        setupPageEnabled: true,
-        knowledgeGraphStepEnabled: false,
-      ),
-      8,
-    );
+        OnboardingWrapper.previousStepForTesting(
+            currentIndex: 9, setupPageEnabled: true, knowledgeGraphStepEnabled: false),
+        8);
     for (final step in OnboardingStepCompletedStep.values) {
       final event = OnboardingStepCompleted(
-        step: step,
-        index: step.index,
-        elapsedMs: 23,
-        skipped: true,
-        platform: OnboardingStepCompletedPlatform.android,
-        exitReason: OnboardingStepCompletedExitReason.skipped,
-      );
+          step: step,
+          index: step.index,
+          elapsedMs: 23,
+          skipped: true,
+          platform: OnboardingStepCompletedPlatform.android,
+          exitReason: OnboardingStepCompletedExitReason.skipped);
       expect(event.properties.keys.toSet(), {'step', 'index', 'elapsed_ms', 'skipped', 'platform', 'exit_reason'});
       expect(event.properties['skipped'], isTrue);
     }

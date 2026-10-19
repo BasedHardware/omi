@@ -24,13 +24,9 @@ void main() {
     test('outline reads the onboarding placement from a map or a JSON string', () {
       expect(PaywallExperiment.parse(variant: 'outline').onboardingPaywall, isFalse);
       expect(
-        PaywallExperiment.parse(variant: 'outline', payload: {'onboarding_paywall': true}).onboardingPaywall,
-        isTrue,
-      );
-      expect(
-        PaywallExperiment.parse(variant: 'outline', payload: '{"onboarding_paywall": true}').onboardingPaywall,
-        isTrue,
-      );
+          PaywallExperiment.parse(variant: 'outline', payload: {'onboarding_paywall': true}).onboardingPaywall, isTrue);
+      expect(PaywallExperiment.parse(variant: 'outline', payload: '{"onboarding_paywall": true}').onboardingPaywall,
+          isTrue);
       expect(PaywallExperiment.parse(variant: 'outline', payload: 'not json').variant, PaywallVariant.outline);
     });
 
@@ -38,19 +34,15 @@ void main() {
       expect(PaywallExperiment.parse(variant: 'trial').variant, PaywallVariant.trial);
       expect(PaywallExperiment.parse(variant: 'trial').onboardingPaywall, isFalse);
       expect(
-        PaywallExperiment.parse(variant: 'trial', payload: {'onboarding_paywall': true}).onboardingPaywall,
-        isTrue,
-      );
+          PaywallExperiment.parse(variant: 'trial', payload: {'onboarding_paywall': true}).onboardingPaywall, isTrue);
     });
 
     test('web needs an https URL, otherwise control', () {
       final ok = PaywallExperiment.parse(variant: 'web', payload: {'url': 'https://omi-paywall.vercel.app/'});
       expect(ok.variant, PaywallVariant.web);
       expect(ok.webUrl, Uri.parse('https://omi-paywall.vercel.app/'));
-      expect(
-        PaywallExperiment.parse(variant: 'web', payload: {'url': 'http://example.com'}),
-        PaywallExperimentConfig.control,
-      );
+      expect(PaywallExperiment.parse(variant: 'web', payload: {'url': 'http://example.com'}),
+          PaywallExperimentConfig.control);
       expect(PaywallExperiment.parse(variant: 'web', payload: {}), PaywallExperimentConfig.control);
       expect(PaywallExperiment.parse(variant: 'web', payload: {'url': 'nope'}), PaywallExperimentConfig.control);
     });
@@ -70,11 +62,8 @@ void main() {
         return {'onboarding_paywall': true};
       }
 
-      final first = await PaywallExperiment.resolve(
-        identity: () => 'u',
-        readVariant: readVariant,
-        readPayload: readPayload,
-      );
+      final first =
+          await PaywallExperiment.resolve(identity: () => 'u', readVariant: readVariant, readPayload: readPayload);
       expect(first.variant, PaywallVariant.outline);
       expect(first.onboardingPaywall, isTrue);
       final second = await PaywallExperiment.resolve(
@@ -204,12 +193,19 @@ void main() {
     };
 
     test('a pending cancellation offers the current price instead of Unlimited', () {
-      final offer = PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'price_plus_m')!;
+      final offer = PaywallOffer.fromCatalog(
+        catalog,
+        cancelAtPeriodEnd: true,
+        currentPriceId: 'price_plus_m',
+      )!;
       expect(offer.resubscribe, isTrue);
       expect(offer.tierId, 'plus');
       expect(offer.monthly!.priceId, 'price_plus_m');
       expect(offer.yearly, isNull);
-      expect(PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'missing'), isNull);
+      expect(
+        PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'missing'),
+        isNull,
+      );
     });
 
     test('prefers the Unlimited tier and derives the yearly saving from its own prices', () {
@@ -234,13 +230,12 @@ void main() {
       expect(PaywallOffer.fromCatalog(null), isNull);
       expect(PaywallOffer.fromCatalog({'plans': []}), isNull);
       expect(
-        PaywallOffer.fromCatalog({
-          'plans': [
-            {'id': 'x', 'interval': 'month'},
-          ],
-        }),
-        isNull,
-      );
+          PaywallOffer.fromCatalog({
+            'plans': [
+              {'id': 'x', 'interval': 'month'}
+            ]
+          }),
+          isNull);
     });
   });
 }

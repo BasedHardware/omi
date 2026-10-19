@@ -32,12 +32,12 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
     this.canSummarizeOnPhone = false,
     this.manageNativeCustody = true,
     DateTime Function()? clock,
-  }) : _store = store,
-       _model = model,
-       _power = power,
-       _policy = policy,
-       _readGate = readGate ?? OnDeviceOverflowGate.read,
-       _clock = clock ?? DateTime.now;
+  })  : _store = store,
+        _model = model,
+        _power = power,
+        _policy = policy,
+        _readGate = readGate ?? OnDeviceOverflowGate.read,
+        _clock = clock ?? DateTime.now;
 
   static OnDeviceTranscriptionController _instance = OnDeviceTranscriptionController();
   static OnDeviceTranscriptionController get instance => _instance;
@@ -112,11 +112,9 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
       try {
         await AppleBatchEngine.channel.invokeMethod<void>('scheduleBackground', {
           'charging': _settings.schedule == OnDeviceSchedule.whileCharging,
-          'schedule': _settings.schedule.storageId,
+          'schedule': _settings.schedule.storageId
         });
-      } catch (_) {
-        /* Foreground runner remains available. */
-      }
+      } catch (_) {/* Foreground runner remains available. */}
     }
   }
 
@@ -168,17 +166,15 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
   /// Runs the policy for [pendingAudio] now and keeps the decision for the UI.
   Future<OnDeviceRunDecision> evaluate({required Duration pendingAudio, bool transcribeNow = false}) async {
     final power = await _power.read();
-    final decision = _policy.decide(
-      OnDeviceRunInputs(
-        schedule: _settings.schedule,
-        isCharging: power.isCharging,
-        batteryPercent: power.batteryPercent,
-        pendingAudio: pendingAudio,
-        lastRunAt: _lastRunAt,
-        now: _clock(),
-        transcribeNowRequested: transcribeNow,
-      ),
-    );
+    final decision = _policy.decide(OnDeviceRunInputs(
+      schedule: _settings.schedule,
+      isCharging: power.isCharging,
+      batteryPercent: power.batteryPercent,
+      pendingAudio: pendingAudio,
+      lastRunAt: _lastRunAt,
+      now: _clock(),
+      transcribeNowRequested: transcribeNow,
+    ));
     if (decision != _decision) {
       _decision = decision;
       notifyListeners();

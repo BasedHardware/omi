@@ -100,16 +100,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     }
     setState(() => _busy = true);
     try {
-      final start =
-          widget.checkout ??
+      final start = widget.checkout ??
           (BuildContext context, PaywallPrice price, String tierId) => PaywallCheckout.start(
-            context,
-            priceId: price.priceId,
-            plan: tierId,
-            interval: price.interval,
-            source: widget.source,
-            trialDays: TrialPaywallPage.trialDays,
-          );
+                context,
+                priceId: price.priceId,
+                plan: tierId,
+                interval: price.interval,
+                source: widget.source,
+                trialDays: TrialPaywallPage.trialDays,
+              );
       final outcome = await start(context, price, offer.tierId);
       if (!mounted || _dismissed) return;
       if (outcome == PaywallCheckoutOutcome.purchased) {
@@ -219,19 +218,14 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                           children: [
                             _FeatureRow(icon: Icons.description_outlined, label: l10n.paywallTrialSlideSummariesTitle),
                             _FeatureRow(
-                              icon: Icons.graphic_eq_rounded,
-                              label: l10n.paywallTrialSlideTranscriptionTitle,
-                            ),
+                                icon: Icons.graphic_eq_rounded, label: l10n.paywallTrialSlideTranscriptionTitle),
                             _FeatureRow(icon: Icons.auto_awesome_outlined, label: l10n.paywallTrialFeatureModels),
                             _FeatureRow(
-                              icon: Icons.record_voice_over_outlined,
-                              label: l10n.paywallTrialSlideSpeakersTitle,
-                            ),
+                                icon: Icons.record_voice_over_outlined, label: l10n.paywallTrialSlideSpeakersTitle),
                             _FeatureRow(
-                              icon: Icons.chat_bubble_outline_rounded,
-                              label: l10n.paywallTrialFeatureAsk,
-                              last: true,
-                            ),
+                                icon: Icons.chat_bubble_outline_rounded,
+                                label: l10n.paywallTrialFeatureAsk,
+                                last: true),
                           ],
                         ),
                       ),
@@ -239,51 +233,49 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: loading
-                            ? const Row(
-                                children: [
-                                  Expanded(child: _Skeleton(height: 96)),
-                                  SizedBox(width: 10),
-                                  Expanded(child: _Skeleton(height: 96)),
-                                ],
-                              )
+                            ? const Row(children: [
+                                Expanded(child: _Skeleton(height: 96)),
+                                SizedBox(width: 10),
+                                Expanded(child: _Skeleton(height: 96)),
+                              ])
                             : offer == null
-                            ? Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body())
-                            : IntrinsicHeight(
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (monthly != null)
-                                      Expanded(
-                                        child: _PlanCard(
-                                          key: const Key('trial_paywall_monthly'),
-                                          title: l10n.billingMonthly,
-                                          price: _money(monthly.amountMinor, monthly.currency),
-                                          footnote: l10n.paywallTrialBilledMonthly,
-                                          selected: !_yearly || yearly == null,
-                                          onTap: () => setState(() => _yearly = false),
-                                        ),
-                                      ),
-                                    if (monthly != null && yearly != null) const SizedBox(width: 10),
-                                    if (yearly != null)
-                                      Expanded(
-                                        child: _PlanCard(
-                                          key: const Key('trial_paywall_yearly'),
-                                          title: l10n.billingYearly,
-                                          price: _money(yearly.amountMinor, yearly.currency),
-                                          wasPrice: monthly == null
-                                              ? null
-                                              : _money(monthly.amountMinor * 12, monthly.currency),
-                                          footnote: l10n.paywallTrialBilledYearly,
-                                          saving: yearlySaving == null
-                                              ? null
-                                              : l10n.paywallTrialSaveAmount(_money(yearlySaving, yearly.currency)),
-                                          selected: _yearly || monthly == null,
-                                          onTap: () => setState(() => _yearly = true),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
+                                ? Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body())
+                                : IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (monthly != null)
+                                          Expanded(
+                                            child: _PlanCard(
+                                              key: const Key('trial_paywall_monthly'),
+                                              title: l10n.billingMonthly,
+                                              price: _money(monthly.amountMinor, monthly.currency),
+                                              footnote: l10n.paywallTrialBilledMonthly,
+                                              selected: !_yearly || yearly == null,
+                                              onTap: () => setState(() => _yearly = false),
+                                            ),
+                                          ),
+                                        if (monthly != null && yearly != null) const SizedBox(width: 10),
+                                        if (yearly != null)
+                                          Expanded(
+                                            child: _PlanCard(
+                                              key: const Key('trial_paywall_yearly'),
+                                              title: l10n.billingYearly,
+                                              price: _money(yearly.amountMinor, yearly.currency),
+                                              wasPrice: monthly == null
+                                                  ? null
+                                                  : _money(monthly.amountMinor * 12, monthly.currency),
+                                              footnote: l10n.paywallTrialBilledYearly,
+                                              saving: yearlySaving == null
+                                                  ? null
+                                                  : l10n.paywallTrialSaveAmount(_money(yearlySaving, yearly.currency)),
+                                              selected: _yearly || monthly == null,
+                                              onTap: () => setState(() => _yearly = true),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                       ),
                     ],
                   ),
@@ -324,42 +316,42 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   }
 
   List<_SlideSpec> _slideSpecs(dynamic l10n) => [
-    _SlideSpec(
-      caption: l10n.paywallTrialSlideSummariesTitle,
-      colors: const [Color(0xFF1F2937), Color(0xFF4B5563)], // omi-ux-allow: color-literal -- fixed card gradient
-      art: _SummaryArt(title: l10n.paywallTrialSlideSummariesTitle, body: l10n.paywallTrialSlideSummariesBody),
-    ),
-    _SlideSpec(
-      caption: l10n.paywallTrialSlideTranscriptionTitle,
-      colors: const [Color(0xFF5CC8F5), Color(0xFF5B7CF0)], // omi-ux-allow: color-literal -- fixed card gradient
-      art: _ChipArt(
-        labels: [
-          l10n.paywallTrialChipDetails,
-          l10n.paywallTrialChipSpeakers,
-          l10n.paywallTrialChipNoise,
-          l10n.paywallTrialChipAccents,
-          l10n.paywallTrialChipJargon,
-        ],
-      ),
-    ),
-    _SlideSpec(
-      caption: l10n.paywallTrialSlideSpeakersTitle,
-      colors: const [Color(0xFF7ED957), Color(0xFF2FB24C)], // omi-ux-allow: color-literal -- fixed card gradient
-      art: const _SpeakersArt(),
-    ),
-    _SlideSpec(
-      caption: l10n.paywallTrialSlideAskTitle,
-      colors: const [Color(0xFFF5A35C), Color(0xFFE85D5D)], // omi-ux-allow: color-literal -- fixed card gradient
-      art: _BubbleArt(
-        lines: [l10n.paywallTrialBubbleFollowUp, l10n.paywallTrialBubbleConflicts, l10n.paywallTrialBubbleBlockers],
-      ),
-    ),
-    _SlideSpec(
-      caption: l10n.paywallTrialSlideAppsTitle,
-      colors: const [Color(0xFFD8E25A), Color(0xFFE2B23A)], // omi-ux-allow: color-literal -- fixed card gradient
-      art: const _AppsArt(),
-    ),
-  ];
+        _SlideSpec(
+          caption: l10n.paywallTrialSlideSummariesTitle,
+          colors: const [Color(0xFF1F2937), Color(0xFF4B5563)], // omi-ux-allow: color-literal -- fixed card gradient
+          art: _SummaryArt(title: l10n.paywallTrialSlideSummariesTitle, body: l10n.paywallTrialSlideSummariesBody),
+        ),
+        _SlideSpec(
+          caption: l10n.paywallTrialSlideTranscriptionTitle,
+          colors: const [Color(0xFF5CC8F5), Color(0xFF5B7CF0)], // omi-ux-allow: color-literal -- fixed card gradient
+          art: _ChipArt(labels: [
+            l10n.paywallTrialChipDetails,
+            l10n.paywallTrialChipSpeakers,
+            l10n.paywallTrialChipNoise,
+            l10n.paywallTrialChipAccents,
+            l10n.paywallTrialChipJargon,
+          ]),
+        ),
+        _SlideSpec(
+          caption: l10n.paywallTrialSlideSpeakersTitle,
+          colors: const [Color(0xFF7ED957), Color(0xFF2FB24C)], // omi-ux-allow: color-literal -- fixed card gradient
+          art: const _SpeakersArt(),
+        ),
+        _SlideSpec(
+          caption: l10n.paywallTrialSlideAskTitle,
+          colors: const [Color(0xFFF5A35C), Color(0xFFE85D5D)], // omi-ux-allow: color-literal -- fixed card gradient
+          art: _BubbleArt(lines: [
+            l10n.paywallTrialBubbleFollowUp,
+            l10n.paywallTrialBubbleConflicts,
+            l10n.paywallTrialBubbleBlockers,
+          ]),
+        ),
+        _SlideSpec(
+          caption: l10n.paywallTrialSlideAppsTitle,
+          colors: const [Color(0xFFD8E25A), Color(0xFFE2B23A)], // omi-ux-allow: color-literal -- fixed card gradient
+          art: const _AppsArt(),
+        ),
+      ];
 }
 
 /// Light paper tokens for this one screen: it sits between the light onboarding pages.
@@ -378,8 +370,13 @@ abstract final class _Paper {
   static const ink = Color(0xFF1F2937); // omi-ux-allow: color-literal -- fixed light design canvas
   static const peach = Color(0xFFF59E8B); // omi-ux-allow: color-literal -- fixed light design canvas
 
-  static TextStyle headline(double size) =>
-      TextStyle(fontSize: size, height: 1.1, fontWeight: FontWeight.w700, letterSpacing: -0.02 * size, color: text);
+  static TextStyle headline(double size) => TextStyle(
+        fontSize: size,
+        height: 1.1,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.02 * size,
+        color: text,
+      );
 
   static TextStyle body({double size = 15, Color? color, double height = 1.4}) =>
       TextStyle(fontSize: size, height: height, fontWeight: FontWeight.w400, color: color ?? textSecondary);
@@ -406,10 +403,7 @@ class _Header extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                brand,
-                style: _Paper.label(size: 19, color: _Paper.textTertiary, weight: FontWeight.w600),
-              ),
+              Text(brand, style: _Paper.label(size: 19, color: _Paper.textTertiary, weight: FontWeight.w600)),
             ],
           ),
           Positioned(
@@ -455,37 +449,34 @@ class _SlideCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(OmiRadius.xl),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: spec.colors),
-      ),
-      child: Column(
-        children: [
-          // The art is designed at a fixed 280pt width and scaled down to whatever room the card
-          // has, so a narrow phone or a three-line caption never overflows it.
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: SizedBox(width: 280, child: spec.art),
+        borderRadius: BorderRadius.circular(OmiRadius.xl),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: spec.colors),
+          ),
+          child: Column(
+            children: [
+              // The art is designed at a fixed 280pt width and scaled down to whatever room the card
+              // has, so a narrow phone or a three-line caption never overflows it.
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                  child: FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: 280, child: spec.art)),
+                ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+                child: Text(
+                  spec.caption,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: _Paper.label(size: 21, color: _Paper.onAccent, weight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-            child: Text(
-              spec.caption,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: _Paper.label(size: 21, color: _Paper.onAccent, weight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }
 
 class _SummaryArt extends StatelessWidget {
@@ -496,31 +487,29 @@ class _SummaryArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Align(
-    alignment: Alignment.topCenter,
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(OmiRadius.lg),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 240),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-        decoration: const BoxDecoration(color: _Paper.card),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: _Paper.label(size: 14, weight: FontWeight.w700),
+        alignment: Alignment.topCenter,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(OmiRadius.lg),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 240),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            decoration: const BoxDecoration(color: _Paper.card),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _Paper.label(size: 14, weight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(body, maxLines: 4, overflow: TextOverflow.fade, style: _Paper.body(size: 11, height: 1.35)),
+                const SizedBox(height: 8),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(body, maxLines: 4, overflow: TextOverflow.fade, style: _Paper.body(size: 11, height: 1.35)),
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 class _ChipArt extends StatelessWidget {
@@ -530,20 +519,20 @@ class _ChipArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final label in labels)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.pill)),
-            child: Text(label, style: _Paper.label(size: 12, weight: FontWeight.w600)),
-          ),
-      ],
-    ),
-  );
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final label in labels)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.pill)),
+                child: Text(label, style: _Paper.label(size: 12, weight: FontWeight.w600)),
+              ),
+          ],
+        ),
+      );
 }
 
 class _SpeakersArt extends StatelessWidget {
@@ -552,62 +541,55 @@ class _SpeakersArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget bar(double fraction) => FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: fraction,
-      child: Container(
-        height: 7,
-        decoration: BoxDecoration(
-          color: _Paper.card.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(OmiRadius.pill),
-        ),
-      ),
-    );
-    Widget row(String initial, String name, String time, Alignment pill) => Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          height: 54,
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-          decoration: BoxDecoration(
-            color: _Paper.card.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(OmiRadius.md),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [bar(0.85), const SizedBox(height: 6), bar(0.55)],
-          ),
-        ),
-        Positioned(
-          right: 12,
-          top: 6,
-          child: Text(time, style: _Paper.label(size: 11, weight: FontWeight.w600)),
-        ),
-        Positioned(
-          left: pill == Alignment.topLeft ? 8 : null,
-          right: pill == Alignment.topRight ? 8 : null,
-          top: -12,
+          alignment: Alignment.centerLeft,
+          widthFactor: fraction,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(4, 3, 10, 3),
-            decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.pill)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircleAvatar(
-                  radius: 8,
-                  backgroundColor: _Paper.success,
-                  child: Text(
-                    initial,
-                    style: _Paper.label(size: 9, color: _Paper.onAccent, weight: FontWeight.w700),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(name, style: _Paper.label(size: 12, weight: FontWeight.w700)),
-              ],
+            height: 7,
+            decoration: BoxDecoration(
+              color: _Paper.card.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(OmiRadius.pill),
             ),
           ),
-        ),
-      ],
-    );
+        );
+    Widget row(String initial, String name, String time, Alignment pill) => Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 54,
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              decoration: BoxDecoration(
+                color: _Paper.card.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(OmiRadius.md),
+              ),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [bar(0.85), const SizedBox(height: 6), bar(0.55)]),
+            ),
+            Positioned(
+              right: 12,
+              top: 6,
+              child: Text(time, style: _Paper.label(size: 11, weight: FontWeight.w600)),
+            ),
+            Positioned(
+              left: pill == Alignment.topLeft ? 8 : null,
+              right: pill == Alignment.topRight ? 8 : null,
+              top: -12,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(4, 3, 10, 3),
+                decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.pill)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  CircleAvatar(
+                    radius: 8,
+                    backgroundColor: _Paper.success,
+                    child: Text(initial, style: _Paper.label(size: 9, color: _Paper.onAccent, weight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(name, style: _Paper.label(size: 12, weight: FontWeight.w700)),
+                ]),
+              ),
+            ),
+          ],
+        );
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -627,13 +609,10 @@ class _BubbleArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget bubble(String text, {double size = 12}) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.lg)),
-      child: Text(
-        text,
-        style: _Paper.label(size: size, weight: FontWeight.w500),
-      ),
-    );
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.lg)),
+          child: Text(text, style: _Paper.label(size: size, weight: FontWeight.w500)),
+        );
     // Two small bubbles share the row; the big one takes the width it has. Nothing here is a fixed
     // pixel width, so a 320pt phone lays out the same as a 430pt one.
     return Column(
@@ -660,11 +639,11 @@ class _AppsArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget tile(Widget child) => Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.md)),
-      child: Center(child: child),
-    );
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.md)),
+          child: Center(child: child),
+        );
     return Center(
       child: Wrap(
         spacing: 14,
@@ -691,18 +670,18 @@ class _Dots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      for (var i = 0; i < count; i++)
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: i == current ? _Paper.text : _Paper.border),
-        ),
-    ],
-  );
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (var i = 0; i < count; i++)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: i == current ? _Paper.text : _Paper.border),
+            ),
+        ],
+      );
 }
 
 class _Card extends StatelessWidget {
@@ -712,11 +691,11 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16),
-    padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-    decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.xl)),
-    child: child,
-  );
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.xl)),
+        child: child,
+      );
 }
 
 enum _TimelineEmphasis { first, accent, plain }
@@ -786,11 +765,7 @@ class _TimelineRow extends StatelessWidget {
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(0, 10, 0, 14),
-              decoration: last
-                  ? null
-                  : const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: _Paper.border)),
-                    ),
+              decoration: last ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _Paper.border))),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -807,14 +782,9 @@ class _TimelineRow extends StatelessWidget {
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _Paper.dateChip,
-                      borderRadius: BorderRadius.circular(OmiRadius.sm),
-                    ),
-                    child: Text(
-                      date,
-                      style: _Paper.label(size: 12, color: _Paper.dateText, weight: FontWeight.w600),
-                    ),
+                    decoration:
+                        BoxDecoration(color: _Paper.dateChip, borderRadius: BorderRadius.circular(OmiRadius.sm)),
+                    child: Text(date, style: _Paper.label(size: 12, color: _Paper.dateText, weight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -835,23 +805,17 @@ class _FeatureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    decoration: last
-        ? null
-        : const BoxDecoration(
-            border: Border(bottom: BorderSide(color: _Paper.border)),
-          ),
-    child: Row(
-      children: [
-        Icon(icon, size: 24, color: _Paper.text),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Text(label, style: _Paper.label(size: 16, weight: FontWeight.w600)),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: last ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: _Paper.border))),
+        child: Row(
+          children: [
+            Icon(icon, size: 24, color: _Paper.text),
+            const SizedBox(width: 14),
+            Expanded(child: Text(label, style: _Paper.label(size: 16, weight: FontWeight.w600))),
+            const Icon(Icons.check_rounded, color: _Paper.success, size: 24),
+          ],
         ),
-        const Icon(Icons.check_rounded, color: _Paper.success, size: 24),
-      ],
-    ),
-  );
+      );
 }
 
 class _PlanCard extends StatelessWidget {
@@ -897,9 +861,7 @@ class _PlanCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: Text(title, style: _Paper.label(size: 14, weight: FontWeight.w500)),
-                  ),
+                  Expanded(child: Text(title, style: _Paper.label(size: 14, weight: FontWeight.w500))),
                   Container(
                     width: 22,
                     height: 22,
@@ -920,34 +882,21 @@ class _PlanCard extends StatelessWidget {
                   if (wasPrice != null)
                     Text(
                       wasPrice,
-                      style: _Paper.label(
-                        size: 14,
-                        color: _Paper.textTertiary,
-                      ).copyWith(decoration: TextDecoration.lineThrough),
+                      style: _Paper.label(size: 14, color: _Paper.textTertiary)
+                          .copyWith(decoration: TextDecoration.lineThrough),
                     ),
                   Text(price, style: _Paper.label(size: 22, weight: FontWeight.w700)),
                 ],
               ),
               const SizedBox(height: 14),
               Text.rich(
-                TextSpan(
-                  children: [
+                TextSpan(children: [
+                  TextSpan(text: footnote, style: _Paper.body(size: 12, color: _Paper.textTertiary)),
+                  if (saving != null) TextSpan(text: ' · ', style: _Paper.body(size: 12, color: _Paper.textTertiary)),
+                  if (saving != null)
                     TextSpan(
-                      text: footnote,
-                      style: _Paper.body(size: 12, color: _Paper.textTertiary),
-                    ),
-                    if (saving != null)
-                      TextSpan(
-                        text: ' · ',
-                        style: _Paper.body(size: 12, color: _Paper.textTertiary),
-                      ),
-                    if (saving != null)
-                      TextSpan(
-                        text: saving,
-                        style: _Paper.label(size: 12, color: _Paper.success, weight: FontWeight.w600),
-                      ),
-                  ],
-                ),
+                        text: saving, style: _Paper.label(size: 12, color: _Paper.success, weight: FontWeight.w600)),
+                ]),
               ),
             ],
           ),
@@ -960,13 +909,8 @@ class _PlanCard extends StatelessWidget {
 enum _ButtonKind { primary, outline }
 
 class _Button extends StatelessWidget {
-  const _Button({
-    super.key,
-    required this.label,
-    required this.onPressed,
-    this.kind = _ButtonKind.primary,
-    this.busy = false,
-  });
+  const _Button(
+      {super.key, required this.label, required this.onPressed, this.kind = _ButtonKind.primary, this.busy = false});
 
   final String label;
   final VoidCallback? onPressed;
@@ -996,10 +940,7 @@ class _Button extends StatelessWidget {
                   : Text(
                       label,
                       style: _Paper.label(
-                        size: 17,
-                        color: primary ? _Paper.onAccent : _Paper.text,
-                        weight: FontWeight.w600,
-                      ),
+                          size: 17, color: primary ? _Paper.onAccent : _Paper.text, weight: FontWeight.w600),
                     ),
             ),
           ),
@@ -1016,7 +957,7 @@ class _Skeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: height,
-    decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.lg)),
-  );
+        height: height,
+        decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.lg)),
+      );
 }

@@ -88,7 +88,10 @@ class HeldAudioCardView extends StatelessWidget {
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
-                  child: Text(atCap ? l10n.processingPaused : l10n.heldAudioWaiting(duration), style: OmiType.headline),
+                  child: Text(
+                    atCap ? l10n.processingPaused : l10n.heldAudioWaiting(duration),
+                    style: OmiType.headline,
+                  ),
                 ),
               ],
             ),
@@ -185,14 +188,12 @@ class HeldAudioHomeSection extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final processing =
-            backlog ??
+        final processing = backlog ??
             ((summary == null && gate != false)
                 ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
         final active = gate ?? (processing != null || resolved.isActive);
-        final held =
-            summary ??
+        final held = summary ??
             (active && backlog == null
                 ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio)
                 : null);
@@ -377,8 +378,7 @@ class HeldAudioLiveBanner extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final processing =
-            backlog ??
+        final processing = backlog ??
             ((summary == null && gate != false)
                 ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
@@ -456,14 +456,12 @@ class HeldAudioUsageSection extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final processing =
-            backlog ??
+        final processing = backlog ??
             ((summary == null && gate != false)
                 ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
         final active = gate ?? (processing != null || resolved.isActive);
-        final held =
-            summary ??
+        final held = summary ??
             (active && backlog == null
                 ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio)
                 : null);
@@ -474,8 +472,7 @@ class HeldAudioUsageSection extends StatelessWidget {
         }
         final l10n = context.l10n;
         final duration = OmiDuration.compact(held?.seconds ?? 0, l10n);
-        final paidPlan =
-            paid ??
+        final paidPlan = paid ??
             (showSaveToggle ||
                 context.select<UsageProvider, bool>((p) => p.subscription?.subscription.plan.isPaid ?? false));
         final showPhoneToggle = paidPlan && heldAudioPhoneEligible(resolved);
@@ -507,8 +504,7 @@ class HeldAudioUsageSection extends StatelessWidget {
                         title: l10n.onDeviceSaveLiveHours,
                         subtitle: l10n.onDeviceSaveLiveHoursSubtitle,
                         value: resolved.settings.saveLiveHours,
-                        onChanged:
-                            onSaveLiveHours ??
+                        onChanged: onSaveLiveHours ??
                             (value) =>
                                 unawaited(resolved.updateSettings(resolved.settings.copyWith(saveLiveHours: value))),
                       ),

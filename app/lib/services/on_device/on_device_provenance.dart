@@ -43,19 +43,15 @@ class OnDeviceProvenance {
       }
     }
     return OnDeviceProvenance(
-      engine: engine,
-      summary: OnDeviceSummaryOrigin.values.firstWhere(
-        (s) => s.name == summary,
-        orElse: () =>
-            conversation.clientProcessing?['provenance'] is Map &&
-                conversation.clientProcessing!['provenance']['runtime'] == 'local'
-            ? OnDeviceSummaryOrigin.phone
-            : OnDeviceSummaryOrigin.cloud,
-      ),
-      reason: raw?['reason'] == OnDeviceReason.savingLiveHours.name
-          ? OnDeviceReason.savingLiveHours
-          : OnDeviceReason.liveHoursUsed,
-    );
+        engine: engine,
+        summary: OnDeviceSummaryOrigin.values.firstWhere((s) => s.name == summary,
+            orElse: () => conversation.clientProcessing?['provenance'] is Map &&
+                    conversation.clientProcessing!['provenance']['runtime'] == 'local'
+                ? OnDeviceSummaryOrigin.phone
+                : OnDeviceSummaryOrigin.cloud),
+        reason: raw?['reason'] == OnDeviceReason.savingLiveHours.name
+            ? OnDeviceReason.savingLiveHours
+            : OnDeviceReason.liveHoursUsed);
   }
 
   final String? engine;

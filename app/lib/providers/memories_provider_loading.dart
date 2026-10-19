@@ -6,13 +6,14 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     int offset = 0,
     bool thisDeviceOnly = false,
     String? cursor,
-  }) => getMemoriesResult(
-    limit: limit,
-    offset: offset,
-    thisDeviceOnly: thisDeviceOnly,
-    cursor: cursor,
-    retry: _memoriesReadRetry,
-  );
+  }) =>
+      getMemoriesResult(
+        limit: limit,
+        offset: offset,
+        thisDeviceOnly: thisDeviceOnly,
+        cursor: cursor,
+        retry: _memoriesReadRetry,
+      );
 
   Future<GetMemoriesResult> _fetchMemoryPage({
     required int limit,

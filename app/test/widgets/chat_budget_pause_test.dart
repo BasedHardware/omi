@@ -9,29 +9,23 @@ import 'storefront_plans_content_test.dart' show pumpSheet, capture;
 void main() {
   testWidgets('chat pause renders backend copy and upgrade without a send action', (tester) async {
     for (final plan in ['basic', 'plus', 'operator', 'architect']) {
-      final raw =
-          jsonDecode(File('../backend/tests/fixtures/chat_at_cap_$plan.json').readAsStringSync())
-              as Map<String, dynamic>;
+      final raw = jsonDecode(File('../backend/tests/fixtures/chat_at_cap_$plan.json').readAsStringSync())
+          as Map<String, dynamic>;
       final state = ChatAtCap.fromJson(raw);
       var upgraded = false;
-      await pumpSheet(
-        tester,
-        title: null,
-        content: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      await pumpSheet(tester,
+          title: null,
+          content: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const SafeArea(child: Text('Chat', style: TextStyle(fontSize: 24))),
               const Spacer(),
               const Text('What were the highlights of my day?'),
               const SizedBox(height: 24),
               ChatPauseCard(state: state, onUpgrade: () => upgraded = true),
               const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      );
+            ]),
+          ));
       expect(find.text(state.title), findsOneWidget);
       expect(find.text(state.body), findsOneWidget);
       expect(find.text(state.resetLine), findsOneWidget);
@@ -53,7 +47,7 @@ void main() {
       'title': 'Chat is paused',
       'body': 'body',
       'reset_line': 'reset',
-      'reset_at': 1,
+      'reset_at': 1
     });
     expect(state.active, isFalse);
   });

@@ -14,11 +14,10 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
-ServerConversation _conversationWithSections({
-  List<AppResponse> appResults = const [],
-  String overview = '',
-  List<TranscriptSegment> transcriptSegments = const [],
-}) {
+ServerConversation _conversationWithSections(
+    {List<AppResponse> appResults = const [],
+    String overview = '',
+    List<TranscriptSegment> transcriptSegments = const []}) {
   final structured = Structured('Sprint sync', overview, emoji: '🧠');
   structured.sections = [
     const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
@@ -75,10 +74,9 @@ void main() {
   testWidgets('timestamps use real starts and expand independently per section', (tester) async {
     final semantics = tester.ensureSemantics();
     final starts = [42.9, 312.0, 460.0, 3912.0, 3600.0];
-    final conversation = _conversationWithSections(
-      transcriptSegments: [
-        for (var i = 0; i < starts.length; i++)
-          TranscriptSegment(
+    final conversation = _conversationWithSections(transcriptSegments: [
+      for (var i = 0; i < starts.length; i++)
+        TranscriptSegment(
             id: 's$i',
             text: 'Source $i',
             speaker: null,
@@ -86,17 +84,12 @@ void main() {
             personId: null,
             start: starts[i],
             end: starts[i] + 1,
-            translations: [],
-          ),
-      ],
-    );
+            translations: []),
+    ]);
     conversation.structured.sections = [
       for (final heading in ['Main', 'Other'])
         Section(
-          heading: heading,
-          bodyMarkdown: 'Body',
-          sourceSegmentIds: ['missing', 's0', 's1', 's2', 's3', 's4', 's0'],
-        ),
+            heading: heading, bodyMarkdown: 'Body', sourceSegmentIds: ['missing', 's0', 's1', 's2', 's3', 's4', 's0']),
     ];
     final opened = <String>[];
     await _pumpSummary(tester, conversation, onOpenSource: opened.add);
@@ -148,10 +141,9 @@ void main() {
   testWidgets('hour timestamps speak singular hours and seconds precisely', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
-      final conversation = _conversationWithSections(
-        transcriptSegments: [
-          for (final start in [3600.0, 3601.0])
-            TranscriptSegment(
+      final conversation = _conversationWithSections(transcriptSegments: [
+        for (final start in [3600.0, 3601.0])
+          TranscriptSegment(
               id: '$start',
               text: 'Evidence',
               speaker: null,
@@ -159,10 +151,8 @@ void main() {
               personId: null,
               start: start,
               end: start + 1,
-              translations: [],
-            ),
-        ],
-      );
+              translations: []),
+      ]);
       conversation.structured.sections = [
         const Section(heading: 'Hour', bodyMarkdown: 'Body', sourceSegmentIds: ['3600.0', '3601.0']),
       ];
@@ -176,23 +166,12 @@ void main() {
     }
   });
 
-  testWidgets('typed section timestamps navigate and highlight through the existing transcript controller', (
-    tester,
-  ) async {
-    final conversation = _conversationWithSections(
-      transcriptSegments: [
-        TranscriptSegment(
-          id: 's1',
-          text: 'Approved',
-          speaker: null,
-          isUser: false,
-          personId: null,
-          start: 3,
-          end: 5,
-          translations: [],
-        ),
-      ],
-    );
+  testWidgets('typed section timestamps navigate and highlight through the existing transcript controller',
+      (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [
+      TranscriptSegment(
+          id: 's1', text: 'Approved', speaker: null, isUser: false, personId: null, start: 3, end: 5, translations: [])
+    ]);
     conversation.structured.sections = [
       const Section(heading: 'Decision []', bodyMarkdown: 'Approved. [s1]', sourceSegmentIds: ['missing', 's1', 's1']),
       const Section(heading: 'Legacy', bodyMarkdown: 'No typed sources. [s1] []'),
@@ -202,14 +181,10 @@ void main() {
     expect(selection.sections[1].sourceSegmentIds, isEmpty);
     final controller = ConversationPlaybackController(segments: conversation.transcriptSegments);
     addTearDown(controller.dispose);
-    await _pumpSummary(
-      tester,
-      conversation,
-      onOpenSource: (id) {
-        final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
-        controller.seek(segment.start, strict: true);
-      },
-    );
+    await _pumpSummary(tester, conversation, onOpenSource: (id) {
+      final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
+      controller.seek(segment.start, strict: true);
+    });
     expect(find.byKey(const ValueKey('quote-time-s1')), findsOneWidget);
     expect(find.byKey(const ValueKey('quote-time-missing')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('quote-time-s1')));

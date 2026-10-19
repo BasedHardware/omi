@@ -90,8 +90,8 @@ abstract class OnDeviceModel extends ChangeNotifier {
   static OnDeviceModel forPlatform() => Platform.isIOS
       ? AppleOnDeviceModel()
       : Platform.isAndroid
-      ? WhisperOnDeviceModel()
-      : UnavailableOnDeviceModel();
+          ? WhisperOnDeviceModel()
+          : UnavailableOnDeviceModel();
 }
 
 /// A model this phone does not have and cannot get yet.
@@ -119,8 +119,8 @@ class WhisperOnDeviceModel extends OnDeviceModel {
   WhisperOnDeviceModel({
     FreemiumTranscriptionService? freemium,
     Future<List<ConnectivityResult>> Function()? checkConnectivity,
-  }) : _freemium = freemium ?? FreemiumTranscriptionService(),
-       _checkConnectivity = checkConnectivity ?? Connectivity().checkConnectivity;
+  })  : _freemium = freemium ?? FreemiumTranscriptionService(),
+        _checkConnectivity = checkConnectivity ?? Connectivity().checkConnectivity;
 
   static const modelName = OnDeviceTuning.androidWhisperModel;
 
@@ -146,12 +146,10 @@ class WhisperOnDeviceModel extends OnDeviceModel {
     final path = _freemium.cachedModelPath;
     if (readiness == FreemiumReadiness.ready && path != null) {
       final file = File(path);
-      _set(
-        OnDeviceModelStatus(
-          phase: OnDeviceModelPhase.installed,
-          sizeBytes: await file.exists() ? await file.length() : OnDeviceTuning.modelSizeBytes,
-        ),
-      );
+      _set(OnDeviceModelStatus(
+        phase: OnDeviceModelPhase.installed,
+        sizeBytes: await file.exists() ? await file.length() : OnDeviceTuning.modelSizeBytes,
+      ));
     } else {
       _set(const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded));
     }
@@ -194,14 +192,12 @@ class WhisperOnDeviceModel extends OnDeviceModel {
         received += chunk.length;
         final elapsed = DateTime.now().difference(started);
         final rate = elapsed.inMilliseconds > 0 ? received / elapsed.inMilliseconds : 0;
-        _set(
-          OnDeviceModelStatus(
-            phase: OnDeviceModelPhase.downloading,
-            progress: (received / total).clamp(0.0, 1.0),
-            sizeBytes: total,
-            timeLeft: rate > 0 ? Duration(milliseconds: ((total - received) / rate).round()) : null,
-          ),
-        );
+        _set(OnDeviceModelStatus(
+          phase: OnDeviceModelPhase.downloading,
+          progress: (received / total).clamp(0.0, 1.0),
+          sizeBytes: total,
+          timeLeft: rate > 0 ? Duration(milliseconds: ((total - received) / rate).round()) : null,
+        ));
       }, cancelOnError: true).asFuture<void>();
       await sink.close();
       sink = null;
@@ -212,15 +208,12 @@ class WhisperOnDeviceModel extends OnDeviceModel {
     } catch (e) {
       Logger.debug('[OnDeviceModel] download stopped: $e');
       final cancelled = e is http.ClientException && !identical(_client, client);
-      _set(
-        OnDeviceModelStatus(
+      _set(OnDeviceModelStatus(
           phase: wifiLost
               ? OnDeviceModelPhase.waitingForWifi
               : cancelled
-              ? OnDeviceModelPhase.notDownloaded
-              : OnDeviceModelPhase.failed,
-        ),
-      );
+                  ? OnDeviceModelPhase.notDownloaded
+                  : OnDeviceModelPhase.failed));
     } finally {
       await _wifiSubscription?.cancel();
       _wifiSubscription = null;
@@ -273,10 +266,9 @@ class AppleOnDeviceModel extends OnDeviceModel {
   @override
   OnDeviceModelStatus get status => _status;
   Map<String, dynamic> get _args => {
-    'language': SharedPreferencesUtil().userPrimaryLanguage.isEmpty
-        ? 'en'
-        : SharedPreferencesUtil().userPrimaryLanguage,
-  };
+        'language':
+            SharedPreferencesUtil().userPrimaryLanguage.isEmpty ? 'en' : SharedPreferencesUtil().userPrimaryLanguage
+      };
   void _markDetectionUnavailable() {
     _engine = null;
     _detectionFailed = true;
@@ -294,13 +286,10 @@ class AppleOnDeviceModel extends OnDeviceModel {
     _detectionFailed = false;
     _engineResolved = true;
     _status = OnDeviceModelStatus(
-      phase: OnDeviceModelPhase.values.firstWhere(
-        (v) => v.name == value?['phase'],
-        orElse: () => OnDeviceModelPhase.failed,
-      ),
-      progress: (value?['progress'] as num?)?.toDouble() ?? 0,
-      sizeBytes: (value?['sizeBytes'] as num?)?.toInt() ?? 0,
-    );
+        phase: OnDeviceModelPhase.values
+            .firstWhere((v) => v.name == value?['phase'], orElse: () => OnDeviceModelPhase.failed),
+        progress: (value?['progress'] as num?)?.toDouble() ?? 0,
+        sizeBytes: (value?['sizeBytes'] as num?)?.toInt() ?? 0);
   }
 
   @override

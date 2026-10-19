@@ -103,17 +103,17 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
-  WalSyncDisplayState.failed => 4,
-  WalSyncDisplayState.corrupted => 4,
-  WalSyncDisplayState.outsideRecoveryWindow => 4,
-  WalSyncDisplayState.unsupportedAudio => 4,
-  WalSyncDisplayState.uploadRejected => 4,
-  WalSyncDisplayState.retrying => 3,
-  WalSyncDisplayState.syncing => 2,
-  WalSyncDisplayState.uploaded => 1,
-  WalSyncDisplayState.synced => 1,
-  WalSyncDisplayState.waiting => 1,
-};
+      WalSyncDisplayState.failed => 4,
+      WalSyncDisplayState.corrupted => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 4,
+      WalSyncDisplayState.unsupportedAudio => 4,
+      WalSyncDisplayState.uploadRejected => 4,
+      WalSyncDisplayState.retrying => 3,
+      WalSyncDisplayState.syncing => 2,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.synced => 1,
+      WalSyncDisplayState.waiting => 1,
+    };
 
 /// Max automatic sync attempts before a recording is considered
 /// [WalSyncDisplayState.failed]. This is the budget itself, not a display
@@ -397,9 +397,8 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
-      onDeviceConversation: json['on_device_conversation'] is Map
-          ? Map<String, dynamic>.from(json['on_device_conversation'])
-          : null,
+      onDeviceConversation:
+          json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
       capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
@@ -410,9 +409,8 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage: json['original_storage'] != null
-          ? WalStorage.values.asNameMap()[json['original_storage']]
-          : null,
+      originalStorage:
+          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
       recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],

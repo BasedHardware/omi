@@ -10,8 +10,9 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 String processingEstimateNumber(BuildContext context, double value) => (NumberFormat.decimalPattern(
-  Localizations.localeOf(context).toLanguageTag(),
-)..maximumFractionDigits = 1).format(value);
+      Localizations.localeOf(context).toLanguageTag(),
+    )..maximumFractionDigits = 1)
+        .format(value);
 
 /// Half-up whole percent. 12.5 is 13, matching the backend wire value.
 int processingWholePercent(double value) {
@@ -19,8 +20,9 @@ int processingWholePercent(double value) {
   return (value + 0.5).floor();
 }
 
-String processingPercentNumber(BuildContext context, double value) =>
-    (NumberFormat.decimalPattern(Localizations.localeOf(context).toLanguageTag())
+String processingPercentNumber(BuildContext context, double value) => (NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toLanguageTag(),
+    )
           ..minimumFractionDigits = 0
           ..maximumFractionDigits = 0)
         .format(processingWholePercent(value));
@@ -118,12 +120,15 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
     final backlog = widget.backlog;
     if (!backlog.isVisible) return const SizedBox.shrink();
     final l10n = context.l10n;
-    final duration = OmiDuration.compact(backlog.waitingSeconds, l10n);
+    final duration = OmiDuration.compact(
+      backlog.waitingSeconds,
+      l10n,
+    );
     final text = backlog.isCapped
         ? (backlog.budgetExhausted ? l10n.processingPaused : l10n.processingDeferred)
         : backlog.isProcessing
-        ? l10n.processingProgress
-        : l10n.processingWaiting(duration, processingPercentNumber(context, backlog.estimatedPercent));
+            ? l10n.processingProgress
+            : l10n.processingWaiting(duration, processingPercentNumber(context, backlog.estimatedPercent));
     return Padding(
       padding: widget.surface == 'c'
           ? EdgeInsets.zero
@@ -193,8 +198,8 @@ class ProcessingDeferredMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    context.l10n.processingDeferred,
-    key: const Key('processing_deferred_marker'),
-    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-  );
+        context.l10n.processingDeferred,
+        key: const Key('processing_deferred_marker'),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+      );
 }

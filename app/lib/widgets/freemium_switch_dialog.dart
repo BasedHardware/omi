@@ -93,11 +93,8 @@ class FreemiumSwitchHandler {
     final controller = OnDeviceTranscriptionController.instance;
     await controller.ensureLoaded();
     if (!context.mounted) return false;
-    final storefront = await PlanStorefrontApi().load(
-      source: 'on_device_at_cap',
-      trigger: 'usage_budget',
-      locale: context.l10n.localeName,
-    );
+    final storefront = await PlanStorefrontApi()
+        .load(source: 'on_device_at_cap', trigger: 'usage_budget', locale: context.l10n.localeName);
     if (!context.mounted) return true;
     final data = storefront is ApiSuccess<PlanStorefront> ? storefront.data : null;
     final copy = data?.atCap;
@@ -114,19 +111,14 @@ class FreemiumSwitchHandler {
       return true;
     }
     var dontAskAgain = false;
-    final choice = await showOnDeviceAtCapSheet(
-      context,
-      liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
-      copy: copy,
-      onDontAskAgain: (value) => dontAskAgain = value,
-    );
+    final choice = await showOnDeviceAtCapSheet(context,
+        liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
+        copy: copy,
+        onDontAskAgain: (value) => dontAskAgain = value);
     if (!context.mounted || choice == null) return true;
     if (copy != null && record is ApiSuccess<GeneratedBudgetChoiceResponse>) {
       final saved = await api.save(
-        record.data.period,
-        choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device',
-        dontAskAgain,
-      );
+          record.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
       if (saved is! ApiSuccess || !context.mounted) return true;
     }
     switch (choice) {

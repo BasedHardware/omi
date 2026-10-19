@@ -35,10 +35,8 @@ void main() {
     directory = await Directory.systemTemp.createTemp('omi-overflow-test-');
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (_) async => directory.path,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
   });
   tearDown(() async {
     await directory.delete(recursive: true);
@@ -52,10 +50,8 @@ void main() {
     expect(select(17), OnDeviceEngine.parakeetV2);
     expect(select(16), OnDeviceEngine.sfSpeech);
     expect(select(26, supported: false, english: false), OnDeviceEngine.sfSpeech);
-    expect(
-      selectOnDeviceEngine(ios: false, iosMajor: 0, appleLocaleSupported: false, english: true),
-      OnDeviceEngine.whisperTiny,
-    );
+    expect(selectOnDeviceEngine(ios: false, iosMajor: 0, appleLocaleSupported: false, english: true),
+        OnDeviceEngine.whisperTiny);
   });
 
   Future<File> recording({int frames = 6100, bool truncated = false}) async {
@@ -79,13 +75,12 @@ void main() {
 
   test('phone-only WALs cannot enter an automatic upload, including flag-off recovery', () {
     final wal = Wal(
-      timerStart: 100,
-      codec: BleAudioCodec.pcm16,
-      seconds: 30,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      onDeviceOnly: true,
-    );
+        timerStart: 100,
+        codec: BleAudioCodec.pcm16,
+        seconds: 30,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        onDeviceOnly: true);
     expect(isAutoUploadEligible(wal), isFalse);
     final restored = Wal.fromJson(wal.toJson());
     expect(restored.onDeviceOnly, isTrue);
@@ -95,42 +90,36 @@ void main() {
   test('runner commits a transcript-only conversation and retries safely across runs', () async {
     await recording();
     final wal = Wal(
-      timerStart: 1700000000,
-      codec: BleAudioCodec.pcm16,
-      seconds: 61,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      filePath: 'synthetic.bin',
-      onDeviceOnly: true,
-    );
+        timerStart: 1700000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 61,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: 'synthetic.bin',
+        onDeviceOnly: true);
     final persisted = <Map<String, dynamic>>[];
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      persistWals: (wals) async {
-        persisted.add(wals.first.toJson());
-      },
-    );
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (wals) async {
+      persisted.add(wals.first.toJson());
+    });
     sync.testWals = [wal];
     final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource());
     controller.debugActivate(settings: const OnDeviceSettings(enabled: true, keepEverythingOnDevice: true));
     var calls = 0;
     final rows = <ServerConversation>[];
     final runner = OnDeviceRunner(
-      sync: sync,
-      controller: controller,
-      publish: rows.add,
-      recordings: () => [],
-      transcribeChunk: (bytes, language) async {
-        calls++;
-        final duration = (bytes.length - 44) / 32000;
-        expect(duration, lessThanOrEqualTo(30));
-        return OnDeviceBatchResult(
-          engine: 'synthetic',
-          text: 'A synthetic test sentence.',
-          words: [OnDeviceWord('A synthetic test sentence.', 0, duration)],
-        );
-      },
-    );
+        sync: sync,
+        controller: controller,
+        publish: rows.add,
+        recordings: () => [],
+        transcribeChunk: (bytes, language) async {
+          calls++;
+          final duration = (bytes.length - 44) / 32000;
+          expect(duration, lessThanOrEqualTo(30));
+          return OnDeviceBatchResult(
+              engine: 'synthetic',
+              text: 'A synthetic test sentence.',
+              words: [OnDeviceWord('A synthetic test sentence.', 0, duration)]);
+        });
     await runner.run();
     expect(calls, 0); // Charging is the default.
     await runner.run(transcribeNow: true);
@@ -149,35 +138,30 @@ void main() {
   test('account change during inference cannot commit or publish', () async {
     await recording(frames: 100);
     final wal = Wal(
-      timerStart: 1700000000,
-      codec: BleAudioCodec.pcm16,
-      seconds: 1,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      filePath: 'synthetic.bin',
-      onDeviceOnly: true,
-    );
+        timerStart: 1700000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: 'synthetic.bin',
+        onDeviceOnly: true);
     var persists = 0;
-    final sync = LocalWalSyncImpl(
-      _Listener(),
-      persistWals: (_) async {
-        persists++;
-      },
-    );
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {
+      persists++;
+    });
     sync.testWals = [wal];
     final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource());
     controller.debugActivate(settings: const OnDeviceSettings(enabled: true, keepEverythingOnDevice: true));
     final rows = <ServerConversation>[];
     final runner = OnDeviceRunner(
-      sync: sync,
-      controller: controller,
-      publish: rows.add,
-      recordings: () => [],
-      transcribeChunk: (_, __) async {
-        sync.clearUserData();
-        return const OnDeviceBatchResult(engine: 'synthetic', text: 'Test.', words: [OnDeviceWord('Test.', 0, 1)]);
-      },
-    );
+        sync: sync,
+        controller: controller,
+        publish: rows.add,
+        recordings: () => [],
+        transcribeChunk: (_, __) async {
+          sync.clearUserData();
+          return const OnDeviceBatchResult(engine: 'synthetic', text: 'Test.', words: [OnDeviceWord('Test.', 0, 1)]);
+        });
     await runner.run(transcribeNow: true);
     expect(persists, 0);
     expect(rows, isEmpty);
@@ -189,14 +173,13 @@ void main() {
   test('cloud summaries send transcript text, preserve provenance and retry failed ingestion', () async {
     await recording(frames: 100);
     final wal = Wal(
-      timerStart: 1700000000,
-      codec: BleAudioCodec.pcm16,
-      seconds: 1,
-      status: WalStatus.miss,
-      storage: WalStorage.disk,
-      filePath: 'synthetic.bin',
-      onDeviceOnly: true,
-    );
+        timerStart: 1700000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: 'synthetic.bin',
+        onDeviceOnly: true);
     final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {});
     sync.testWals = [wal];
     final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource());
@@ -205,47 +188,41 @@ void main() {
     var unavailable = true;
     final requests = <String>[];
     final cloud = ServerConversation(
-      id: 'cloud-synthetic',
-      createdAt: DateTime.utc(2026),
-      structured: Structured('Synthetic title', 'Synthetic cloud overview'),
-      transcriptSegments: [
-        TranscriptSegment(
-          id: '1',
-          text: 'A synthetic test.',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0,
-          end: 1,
-          translations: const [],
-          sttProvider: 'on_device:synthetic',
-        ),
-      ],
-    );
+        id: 'cloud-synthetic',
+        createdAt: DateTime.utc(2026),
+        structured: Structured('Synthetic title', 'Synthetic cloud overview'),
+        transcriptSegments: [
+          TranscriptSegment(
+              id: '1',
+              text: 'A synthetic test.',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              start: 0,
+              end: 1,
+              translations: const [],
+              sttProvider: 'on_device:synthetic')
+        ]);
     final runner = OnDeviceRunner(
-      sync: sync,
-      controller: controller,
-      publish: rows.add,
-      recordings: () => [],
-      cloudBaseUrl: 'http://127.0.0.1:1/',
-      transcribeChunk: (_, __) async => const OnDeviceBatchResult(
-        engine: 'synthetic',
-        text: 'A synthetic test.',
-        words: [OnDeviceWord('A synthetic test.', 0, 1)],
-      ),
-      send: (request) async {
-        requests.add(request.method);
-        if (unavailable) return http.Response('', 503);
-        if (request.method == 'POST') {
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          expect(body['client_session_id'], startsWith('ondevice-'));
-          expect(body['transcript_segments'][0]['stt_provider'], 'on_device:synthetic');
-          expect(body.containsKey('audio'), isFalse);
-          return http.Response(jsonEncode({'id': cloud.id}), 200);
-        }
-        return http.Response(jsonEncode(cloud.toJson()), 200);
-      },
-    );
+        sync: sync,
+        controller: controller,
+        publish: rows.add,
+        recordings: () => [],
+        cloudBaseUrl: 'http://127.0.0.1:1/',
+        transcribeChunk: (_, __) async => const OnDeviceBatchResult(
+            engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),
+        send: (request) async {
+          requests.add(request.method);
+          if (unavailable) return http.Response('', 503);
+          if (request.method == 'POST') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(body['client_session_id'], startsWith('ondevice-'));
+            expect(body['transcript_segments'][0]['stt_provider'], 'on_device:synthetic');
+            expect(body.containsKey('audio'), isFalse);
+            return http.Response(jsonEncode({'id': cloud.id}), 200);
+          }
+          return http.Response(jsonEncode(cloud.toJson()), 200);
+        });
     await runner.run(transcribeNow: true);
     expect(wal.onDeviceConversation, isNull);
     expect(rows, isEmpty);
@@ -263,16 +240,15 @@ void main() {
   test('local summaries survive refresh only with a bound digest and the feature on', () {
     final segments = [
       TranscriptSegment(
-        id: '1',
-        text: 'Synthetic speech.',
-        speaker: 'SPEAKER_00',
-        isUser: false,
-        personId: null,
-        start: 0,
-        end: 1,
-        translations: const [],
-        sttProvider: 'on_device:synthetic',
-      ),
+          id: '1',
+          text: 'Synthetic speech.',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 1,
+          translations: const [],
+          sttProvider: 'on_device:synthetic')
     ];
     final projection = {
       'transcript_sha256': onDeviceTranscriptHash(segments),
@@ -282,17 +258,16 @@ void main() {
         'runtime': 'local',
         'device_class': 'iphone',
         'model_id': 'apple-foundation-models',
-        'generated_at': '2026-10-14T00:00:00Z',
+        'generated_at': '2026-10-14T00:00:00Z'
       },
-      'structure': {'title': 'Local title', 'overview': 'Local overview'},
+      'structure': {'title': 'Local title', 'overview': 'Local overview'}
     };
     final row = ServerConversation(
-      id: 'test',
-      createdAt: DateTime.utc(2026),
-      structured: Structured('Cloud title', ''),
-      transcriptSegments: segments,
-      clientProcessing: projection,
-    );
+        id: 'test',
+        createdAt: DateTime.utc(2026),
+        structured: Structured('Cloud title', ''),
+        transcriptSegments: segments,
+        clientProcessing: projection);
     expect(applyOnDeviceProjection(row, enabled: false), same(row));
     expect(applyOnDeviceProjection(row, enabled: true).structured.title, 'Local title');
     segments.first.text = 'Different speech.';
@@ -301,15 +276,14 @@ void main() {
 
   test('v5 digest binds attribution and canonical UTF8 fields', () {
     TranscriptSegment segment(String text, {bool user = false}) => TranscriptSegment(
-      id: '1',
-      text: text,
-      speaker: 'SPEAKER_00',
-      isUser: user,
-      personId: null,
-      start: 0,
-      end: 1,
-      translations: const [],
-    );
+        id: '1',
+        text: text,
+        speaker: 'SPEAKER_00',
+        isUser: user,
+        personId: null,
+        start: 0,
+        end: 1,
+        translations: const []);
     expect(onDeviceTranscriptHash([segment(' hello ')]), onDeviceTranscriptHash([segment('hello')]));
     expect(onDeviceTranscriptHash([segment('hello')]), isNot(onDeviceTranscriptHash([segment('hello', user: true)])));
     expect(onDeviceTranscriptHash([]), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');

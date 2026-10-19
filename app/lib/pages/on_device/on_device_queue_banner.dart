@@ -100,11 +100,9 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
       listenable: _controller,
       builder: (context, _) {
         if (!_controller.isActive) return const SizedBox.shrink();
-        final recordingSeconds = context.select<LocalRecordingsProvider, int>(
-          (p) => p.recordings
-              .where((r) => r.state == LocalRecordingState.pending)
-              .fold<int>(0, (sum, r) => sum + r.seconds),
-        );
+        final recordingSeconds = context.select<LocalRecordingsProvider, int>((p) => p.recordings
+            .where((r) => r.state == LocalRecordingState.pending)
+            .fold<int>(0, (sum, r) => sum + r.seconds));
         final pendingSeconds = recordingSeconds + _controller.pendingSeconds;
         final atCap = context.select<UsageProvider, bool>((p) => p.isOutOfCredits);
         if (pendingSeconds != _evaluatedSeconds) {
@@ -113,11 +111,12 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
         }
         if (_controller.lastRunFailed) {
           return OmiErrorState(
-            message: context.l10n.failedToTranscribeAudio,
-            onRetry: () => unawaited(_controller.transcribeNow()),
-          );
+              message: context.l10n.failedToTranscribeAudio, onRetry: () => unawaited(_controller.transcribeNow()));
         }
-        final moreLabel = onDeviceMoreUsageTitle(plansSheetAvailable: _plansSheet, moreLabel: _moreLabel);
+        final moreLabel = onDeviceMoreUsageTitle(
+          plansSheetAvailable: _plansSheet,
+          moreLabel: _moreLabel,
+        );
         return OnDeviceQueueBannerView(
           controller: _controller,
           pendingSeconds: pendingSeconds,
@@ -210,9 +209,9 @@ class OnDeviceQueueBannerView extends StatelessWidget {
   }
 
   Widget _body(String text) => Padding(
-    padding: const EdgeInsets.only(top: OmiSpacing.xxs),
-    child: Text(text, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
-  );
+        padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+        child: Text(text, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
+      );
 
   Widget _waiting(BuildContext context, OnDeviceSettings settings) {
     final l10n = context.l10n;

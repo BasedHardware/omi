@@ -60,11 +60,11 @@ abstract final class PaywallRouter {
   }
 
   static PaywallVariantShownVariant variantWire(PaywallVariant variant) => switch (variant) {
-    PaywallVariant.control => PaywallVariantShownVariant.control,
-    PaywallVariant.outline => PaywallVariantShownVariant.outline,
-    PaywallVariant.web => PaywallVariantShownVariant.web,
-    PaywallVariant.trial => PaywallVariantShownVariant.trial,
-  };
+        PaywallVariant.control => PaywallVariantShownVariant.control,
+        PaywallVariant.outline => PaywallVariantShownVariant.outline,
+        PaywallVariant.web => PaywallVariantShownVariant.web,
+        PaywallVariant.trial => PaywallVariantShownVariant.trial,
+      };
 
   static PaywallVariantShownSource sourceWire(String source) {
     for (final value in PaywallVariantShownSource.values) {

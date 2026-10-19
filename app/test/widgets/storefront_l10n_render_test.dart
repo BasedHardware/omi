@@ -93,23 +93,22 @@ void main() {
     });
     final theme = buildOmiTheme(brightness: Brightness.dark).copyWith(
       platform: TargetPlatform.iOS,
-      textTheme: buildOmiTheme(
-        brightness: Brightness.dark,
-      ).textTheme.apply(fontFamily: 'Arial Unicode', fontFamilyFallback: const ['Arial Unicode']),
-    );
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: boundaryKey,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          locale: locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          theme: theme,
-          home: home,
-        ),
+      textTheme: buildOmiTheme(brightness: Brightness.dark).textTheme.apply(
+        fontFamily: 'Arial Unicode',
+        fontFamilyFallback: const ['Arial Unicode'],
       ),
     );
+    await tester.pumpWidget(RepaintBoundary(
+      key: boundaryKey,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: theme,
+        home: home,
+      ),
+    ));
     await tester.pump();
   }
 
@@ -124,7 +123,11 @@ void main() {
     return controller;
   }
 
-  for (final locale in const [(Locale('es'), 'es'), (Locale('ja'), 'ja'), (Locale('ar'), 'ar')]) {
+  for (final locale in const [
+    (Locale('es'), 'es'),
+    (Locale('ja'), 'ja'),
+    (Locale('ar'), 'ar'),
+  ]) {
     testWidgets('plans sheet ${locale.$2}', (tester) async {
       final data = PlanStorefront.fromJson(sheet('${locale.$2}_free_settings'));
       await pumpLocalized(

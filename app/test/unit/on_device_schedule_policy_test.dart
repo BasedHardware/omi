@@ -19,26 +19,22 @@ void main() {
     DateTime? lastRunAt,
     bool transcribeNow = false,
   }) {
-    return policy.decide(
-      OnDeviceRunInputs(
-        schedule: schedule,
-        isCharging: charging,
-        batteryPercent: battery,
-        pendingAudio: pending,
-        lastRunAt: lastRunAt,
-        now: now,
-        transcribeNowRequested: transcribeNow,
-      ),
-    );
+    return policy.decide(OnDeviceRunInputs(
+      schedule: schedule,
+      isCharging: charging,
+      batteryPercent: battery,
+      pendingAudio: pending,
+      lastRunAt: lastRunAt,
+      now: now,
+      transcribeNowRequested: transcribeNow,
+    ));
   }
 
   group('nothing pending', () {
     test('waits on every schedule, even on a charger or when asked', () {
       for (final schedule in OnDeviceSchedule.values) {
-        expect(
-          decide(schedule: schedule, pending: Duration.zero, charging: true, transcribeNow: true),
-          const OnDeviceRunDecision.wait(OnDeviceRunReason.nothingPending),
-        );
+        expect(decide(schedule: schedule, pending: Duration.zero, charging: true, transcribeNow: true),
+            const OnDeviceRunDecision.wait(OnDeviceRunReason.nothingPending));
       }
     });
   });
@@ -46,18 +42,14 @@ void main() {
   group('charger', () {
     test('every schedule runs on a charger', () {
       for (final schedule in OnDeviceSchedule.values) {
-        expect(
-          decide(schedule: schedule, charging: true, battery: 5),
-          const OnDeviceRunDecision.run(OnDeviceRunReason.charging),
-        );
+        expect(decide(schedule: schedule, charging: true, battery: 5),
+            const OnDeviceRunDecision.run(OnDeviceRunReason.charging));
       }
     });
 
     test('a Transcribe Now tap on a charger reports the request', () {
       expect(
-        decide(charging: true, transcribeNow: true),
-        const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested),
-      );
+          decide(charging: true, transcribeNow: true), const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested));
     });
   });
 
@@ -87,10 +79,8 @@ void main() {
     });
 
     test('runs once the interval has passed, exactly at the boundary', () {
-      expect(
-        decide(schedule: schedule, lastRunAt: now.subtract(const Duration(hours: 3))),
-        const OnDeviceRunDecision.run(OnDeviceRunReason.intervalElapsed),
-      );
+      expect(decide(schedule: schedule, lastRunAt: now.subtract(const Duration(hours: 3))),
+          const OnDeviceRunDecision.run(OnDeviceRunReason.intervalElapsed));
     });
 
     test('waits inside the interval and says when to look again', () {
@@ -110,10 +100,8 @@ void main() {
     });
 
     test('Transcribe Now skips the interval', () {
-      expect(
-        decide(schedule: schedule, lastRunAt: now, transcribeNow: true),
-        const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested),
-      );
+      expect(decide(schedule: schedule, lastRunAt: now, transcribeNow: true),
+          const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested));
     });
   });
 
@@ -130,10 +118,8 @@ void main() {
   });
 
   test('an unknown battery level does not block scheduled work', () {
-    expect(
-      decide(schedule: OnDeviceSchedule.asYouTalk, battery: null),
-      const OnDeviceRunDecision.run(OnDeviceRunReason.continuous),
-    );
+    expect(decide(schedule: OnDeviceSchedule.asYouTalk, battery: null),
+        const OnDeviceRunDecision.run(OnDeviceRunReason.continuous));
     expect(decide(transcribeNow: true, battery: null), const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested));
   });
 }

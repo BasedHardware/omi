@@ -198,7 +198,8 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
-  }) async => null;
+  }) async =>
+      null;
 }
 
 class _CountingSocketCaptureProvider extends CaptureProvider {
@@ -295,7 +296,7 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
 
 class _IdentifiedSocketService extends TranscriptSegmentSocketService {
   _IdentifiedSocketService(this.id, this.onSubscribed)
-    : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
 
   final int id;
   final void Function(int id) onSubscribed;
@@ -402,25 +403,21 @@ void main() {
       inProgressConversationLoader: () async {},
       conversationLocationCapture: _CountingConversationLocationCapture(),
     );
-    provider.onMessageEventReceived(
-      MessageEvent.fromJson({
-        'type': 'stt_cap_live_held',
-        'session_id': 'connection-1',
-        'held_seconds': 125,
-        'paused': true,
-      }),
-    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': true,
+    }));
     await Future<void>.delayed(Duration.zero);
     expect(provider.liveHeldAudio.heldSeconds, 125);
     expect(provider.liveHeldAudio.paused, isTrue);
-    provider.onMessageEventReceived(
-      MessageEvent.fromJson({
-        'type': 'stt_cap_live_held',
-        'session_id': 'connection-1',
-        'held_seconds': 125,
-        'paused': false,
-      }),
-    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': false,
+    }));
     await Future<void>.delayed(Duration.zero);
     expect(provider.liveHeldAudio.paused, isFalse);
     expect(provider.liveHeldAudio.heldSeconds, 125);
@@ -428,14 +425,12 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.liveHeldAudio.sessionId, isNull);
     expect(provider.liveHeldAudio.heldSeconds, 0);
-    provider.onMessageEventReceived(
-      MessageEvent.fromJson({
-        'type': 'stt_cap_live_held',
-        'session_id': 'connection-2',
-        'held_seconds': 3,
-        'paused': true,
-      }),
-    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-2',
+      'held_seconds': 3,
+      'paused': true,
+    }));
     await Future<void>.delayed(Duration.zero);
     expect(provider.liveHeldAudio.sessionId, 'connection-2');
     expect(provider.liveHeldAudio.heldSeconds, 3);
@@ -454,10 +449,9 @@ void main() {
       'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
     });
     final provider = CaptureProvider(
-      externalActions: actions,
-      inProgressConversationLoader: () async {},
-      conversationLocationCapture: _CountingConversationLocationCapture(),
-    );
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
     provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
@@ -491,10 +485,9 @@ void main() {
       'transcript_segments': [_segment('a', 'one').toJson()],
     });
     final provider = CaptureProvider(
-      externalActions: actions,
-      inProgressConversationLoader: () async {},
-      conversationLocationCapture: _CountingConversationLocationCapture(),
-    );
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
     provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
@@ -516,7 +509,7 @@ void main() {
       'speaker_id': 0,
       'person_id': '',
       'person_name': 'Alex',
-      'segment_id': 'candidate',
+      'segment_id': 'candidate'
     };
     provider.onMessageEventReceived(MessageEvent.fromJson(payload));
     expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
@@ -529,7 +522,7 @@ void main() {
       {...payload, 'person_name': false},
       {...payload, 'segment_id': []},
       {...payload, 'segment_id': 'old-conversation'},
-      {...payload, 'speaker_id': 9},
+      {...payload, 'speaker_id': 9}
     ]) {
       provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
     }
@@ -586,9 +579,9 @@ void main() {
     final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
-    );
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
     provider.dispose();
@@ -605,9 +598,9 @@ void main() {
     );
 
     await provider.startPhoneMicBatchForTesting().timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => fail('phone batch start blocked on location capture'),
-    );
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
 
     expect(micRecorder.startBatchCalls, 1);
     expect(provider.recordingState, RecordingState.record);
@@ -657,10 +650,8 @@ void main() {
       device: _device(id: 'omi-1', type: DeviceType.omi),
     );
 
-    expect(events.map((event) => event.name), [
-      RecordingLifecycleTelemetry.requestedEvent,
-      RecordingLifecycleTelemetry.startFailedEvent,
-    ]);
+    expect(events.map((event) => event.name),
+        [RecordingLifecycleTelemetry.requestedEvent, RecordingLifecycleTelemetry.startFailedEvent]);
     expect(events.last.properties['failure_class'], 'capture_unavailable');
     expect(events.last.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
@@ -844,24 +835,10 @@ void main() {
     test('replacing a near match removes the old chip across segments of the same speaker', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello'), _segment('seg2', 'later')];
-      provider.onMessageEventReceived(
-        SpeakerLabelSuggestionEvent(
-          speakerId: 0,
-          personId: '',
-          personName: 'Maya',
-          segmentId: 'seg1',
-          suggestedPersonId: 'maya',
-        ),
-      );
-      provider.onMessageEventReceived(
-        SpeakerLabelSuggestionEvent(
-          speakerId: 0,
-          personId: '',
-          personName: 'Sam',
-          segmentId: 'seg2',
-          suggestedPersonId: 'sam',
-        ),
-      );
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Sam', segmentId: 'seg2', suggestedPersonId: 'sam'));
       expect(provider.suggestionsBySegmentId.keys, ['seg2']);
       expect(provider.suggestionsBySegmentId['seg2']?.suggestedPersonId, 'sam');
       expect(provider.segments.every((segment) => segment.personId == null), isTrue);
@@ -870,30 +847,13 @@ void main() {
     test('a wire retraction clears every stale chip for that speaker even after its segment leaves', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
-      provider.onMessageEventReceived(
-        SpeakerLabelSuggestionEvent(
-          speakerId: 0,
-          personId: '',
-          personName: 'Maya',
-          segmentId: 'seg1',
-          suggestedPersonId: 'maya',
-        ),
-      );
+      provider.onMessageEventReceived(SpeakerLabelSuggestionEvent(
+          speakerId: 0, personId: '', personName: 'Maya', segmentId: 'seg1', suggestedPersonId: 'maya'));
       provider.suggestionsBySegmentId['other'] = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: '',
-        personName: 'Other',
-        segmentId: 'other',
-        suggestedPersonId: 'other',
-      );
+          speakerId: 1, personId: '', personName: 'Other', segmentId: 'other', suggestedPersonId: 'other');
       provider.segments = [];
-      final retraction = SpeakerLabelSuggestionEvent.fromJson({
-        'speaker_id': 0,
-        'person_id': '',
-        'person_name': '',
-        'segment_id': 'new',
-        'retracted': true,
-      });
+      final retraction = SpeakerLabelSuggestionEvent.fromJson(
+          {'speaker_id': 0, 'person_id': '', 'person_name': '', 'segment_id': 'new', 'retracted': true});
       provider.onMessageEventReceived(retraction);
       expect(provider.suggestionsBySegmentId.keys, ['other']);
     });
@@ -1110,12 +1070,10 @@ void main() {
         final first = Completer<void>();
         actions.setSetPeopleCompleter(first);
         provider.onMessageEventReceived(
-          SpeakerLabelSuggestionEvent(speakerId: 0, personId: 'suggested-a', personName: 'A', segmentId: 'seg-a'),
-        );
+            SpeakerLabelSuggestionEvent(speakerId: 0, personId: 'suggested-a', personName: 'A', segmentId: 'seg-a'));
         expect(actions.setPeopleCallCount, 1);
         provider.onMessageEventReceived(
-          SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'),
-        );
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
         expect(actions.setPeopleCallCount, 1);
         first.completeError(sentinel, deterministicStack);
         await _flushEventQueue();
@@ -1123,8 +1081,7 @@ void main() {
         final second = Completer<void>();
         actions.setSetPeopleCompleter(second);
         provider.onMessageEventReceived(
-          SpeakerLabelSuggestionEvent(speakerId: 2, personId: 'suggested-c', personName: 'C', segmentId: 'seg-c'),
-        );
+            SpeakerLabelSuggestionEvent(speakerId: 2, personId: 'suggested-c', personName: 'C', segmentId: 'seg-c'));
         expect(actions.setPeopleCallCount, 2);
         second.complete();
         await _flushEventQueue();
@@ -1145,7 +1102,10 @@ void main() {
       final deterministicStack = StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)');
       final actions = MockCaptureExternalActions();
       final provider = _seamedProvider(actions);
-      provider.segments = [_segmentWithPerson('seed', null), _segmentWithPerson('seg-b', null)..speakerId = 1];
+      provider.segments = [
+        _segmentWithPerson('seed', null),
+        _segmentWithPerson('seg-b', null)..speakerId = 1,
+      ];
 
       final outcome = await _runInGuardedZone(() async {
         final gate = Completer<void>();
@@ -1153,8 +1113,7 @@ void main() {
         provider.onSegmentReceived([_segmentWithPerson('seg-a', 'seg-person-a')]);
         expect(actions.setPeopleCallCount, 1);
         provider.onMessageEventReceived(
-          SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'),
-        );
+            SpeakerLabelSuggestionEvent(speakerId: 1, personId: 'suggested-b', personName: 'B', segmentId: 'seg-b'));
         expect(actions.setPeopleCallCount, 1);
         gate.completeError(sentinel, deterministicStack);
         await _flushEventQueue();
@@ -1403,17 +1362,17 @@ void main() {
       final provider = CaptureProvider(
         phoneMicRecorder: mic,
         microphonePermissionRequester: () async => true,
-        openSocket:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async => null,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
       );
       addTearDown(provider.dispose);
       provider.onConnectionStateChanged(true);
@@ -1977,11 +1936,12 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) => provider.changeAudioRecordProfile(
-      audioCodec: codec,
-      sampleRate: sampleRate,
-      source: ConversationSource.phone.name,
-    );
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();
@@ -2134,11 +2094,9 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(
-          inProgressConversationLoader: () async {
-            loadCalls++;
-          },
-        );
+        final provider = CaptureProvider(inProgressConversationLoader: () async {
+          loadCalls++;
+        });
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

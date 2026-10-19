@@ -20,7 +20,10 @@ String? onDeviceMeterLine(StorefrontUsage usage) {
 
 /// Shown only when the plans sheet can open. [moreLabel] is the catalog string for the
 /// locale the client already sent.
-String? onDeviceMoreUsageTitle({required bool plansSheetAvailable, required String? moreLabel}) {
+String? onDeviceMoreUsageTitle({
+  required bool plansSheetAvailable,
+  required String? moreLabel,
+}) {
   if (!plansSheetAvailable || moreLabel == null || moreLabel.trim().isEmpty) return null;
   return moreLabel;
 }
@@ -151,10 +154,7 @@ class OnDeviceBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
       decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
-      child: Text(
-        label,
-        style: OmiType.footnote.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w600),
-      ),
+      child: Text(label, style: OmiType.footnote.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w600)),
     );
   }
 }

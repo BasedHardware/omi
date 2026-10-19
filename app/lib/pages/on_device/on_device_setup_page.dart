@@ -85,10 +85,8 @@ class _OnDeviceSetupPageState extends State<OnDeviceSetupPage> {
                       const SizedBox(height: OmiSpacing.xs),
                       Semantics(header: true, child: Text(l10n.onDeviceTranscribeOnPhone, style: OmiType.title1)),
                       const SizedBox(height: OmiSpacing.xs),
-                      Text(
-                        l10n.onDeviceSetupBody,
-                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                      ),
+                      Text(l10n.onDeviceSetupBody,
+                          style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
                       const SizedBox(height: OmiSpacing.xl),
                       OnDeviceModelCard(model: _controller.model, wifiOnly: settings.wifiOnlyDownload),
                       const SizedBox(height: OmiSpacing.md),
@@ -163,10 +161,8 @@ class OnDeviceModelCard extends StatelessWidget {
                   const SizedBox(width: OmiSpacing.sm),
                   Expanded(child: Text(l10n.onDeviceSpeechModel, style: OmiType.headline)),
                   if (status.isSupported && !status.isInstalled && status.sizeBytes > 0)
-                    Text(
-                      onDeviceSizeLabel(l10n, status.sizeBytes),
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    ),
+                    Text(onDeviceSizeLabel(l10n, status.sizeBytes),
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                 ],
               ),
               const SizedBox(height: OmiSpacing.sm),
@@ -195,7 +191,10 @@ class OnDeviceModelCard extends StatelessWidget {
                     ),
                 ],
               ),
-              if (_action(context, status) case final action?) ...[const SizedBox(height: OmiSpacing.sm), action],
+              if (_action(context, status) case final action?) ...[
+                const SizedBox(height: OmiSpacing.sm),
+                action,
+              ],
             ],
           ),
         );

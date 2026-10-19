@@ -28,17 +28,14 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
   /// network-backed) for [language]. Bare codes like "en" are resolved
   /// natively to an installed full locale such as en-US. Returns false on any
   /// channel error so callers treat "unknown" as "unavailable".
-  static Future<bool> isOnDeviceAvailable(
-    String language, {
-    Future<bool> Function()? useSpeechAnalyzer,
-    bool? isIOS,
-  }) async {
+  static Future<bool> isOnDeviceAvailable(String language,
+      {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
     if (!(isIOS ?? Platform.isIOS)) return false;
     try {
       if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) return (await readiness(language)).ready;
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
         'language': language,
-        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
+        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
       });
       return available ?? false;
     } catch (e) {
@@ -89,29 +86,23 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         if (result.text.trim().isEmpty) {
           return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration);
         }
-        return SttTranscriptionResult(
-          rawText: result.text,
-          audioEndSeconds: audioOffsetSeconds + duration,
-          segments: [
-            if (result.words.isEmpty)
-              SttSegment(
+        return SttTranscriptionResult(rawText: result.text, audioEndSeconds: audioOffsetSeconds + duration, segments: [
+          if (result.words.isEmpty)
+            SttSegment(
                 text: result.text,
                 start: audioOffsetSeconds,
                 end: audioOffsetSeconds + duration,
                 speakerId: 0,
-                sttProvider: 'on_device:${result.engine}',
-              )
-            else
-              for (final word in result.words)
-                SttSegment(
+                sttProvider: 'on_device:${result.engine}')
+          else
+            for (final word in result.words)
+              SttSegment(
                   text: word.text,
                   start: audioOffsetSeconds + word.start,
                   end: audioOffsetSeconds + word.end,
                   speakerId: 0,
-                  sttProvider: 'on_device:${result.engine}',
-                ),
-          ],
-        );
+                  sttProvider: 'on_device:${result.engine}'),
+        ]);
       }
       final sw = Stopwatch()..start();
 
@@ -136,7 +127,10 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         }
 
         final duration = normalized.duration;
-        final filteredText = _qualityGate.filter(result, audioData: audioData);
+        final filteredText = _qualityGate.filter(
+          result,
+          audioData: audioData,
+        );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
           return SttTranscriptionResult(audioEndSeconds: audioOffsetSeconds + duration);

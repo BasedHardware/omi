@@ -53,15 +53,14 @@ Stream<List<Uint8List>> readOnDeviceChunks(File file, int framesPerSecond) async
 
 /// Owns only finalized phone-only WALs. The WAL generation fences every asynchronous publish.
 class OnDeviceRunner with WidgetsBindingObserver {
-  OnDeviceRunner({
-    required this.sync,
-    required this.controller,
-    required this.publish,
-    required this.recordings,
-    this.transcribeChunk,
-    this.send,
-    this.cloudBaseUrl,
-  });
+  OnDeviceRunner(
+      {required this.sync,
+      required this.controller,
+      required this.publish,
+      required this.recordings,
+      this.transcribeChunk,
+      this.send,
+      this.cloudBaseUrl});
   final LocalWalSyncImpl sync;
   final OnDeviceTranscriptionController controller;
   final void Function(ServerConversation) publish;
@@ -99,7 +98,7 @@ class OnDeviceRunner with WidgetsBindingObserver {
     if (Platform.isAndroid) {
       await channel.invokeMethod<void>('scheduleBackground', {
         'charging': controller.settings.schedule.storageId == 'while_charging',
-        'schedule': controller.settings.schedule.storageId,
+        'schedule': controller.settings.schedule.storageId
       });
     }
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(run()));
@@ -111,14 +110,10 @@ class OnDeviceRunner with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) unawaited(run());
     if (state == AppLifecycleState.paused) {
-      unawaited(
-        channel
-            .invokeMethod<void>('scheduleBackground', {
-              'charging': controller.settings.schedule.storageId == 'while_charging',
-              'schedule': controller.settings.schedule.storageId,
-            })
-            .catchError((_) {}),
-      );
+      unawaited(channel.invokeMethod<void>('scheduleBackground', {
+        'charging': controller.settings.schedule.storageId == 'while_charging',
+        'schedule': controller.settings.schedule.storageId
+      }).catchError((_) {}));
     }
   }
 
@@ -143,19 +138,17 @@ class OnDeviceRunner with WidgetsBindingObserver {
         if (all.any((w) => w.filePath == recording.fileName)) continue;
         if (generation != sync.sessionGeneration) return;
         await sync.addExternalWal(
-          Wal(
-            timerStart: recording.timerStart,
-            codec: recording.codec,
-            seconds: recording.seconds,
-            sampleRate: 16000,
-            status: WalStatus.miss,
-            storage: WalStorage.disk,
-            device: 'omibatchoverflow',
-            filePath: recording.fileName,
-            onDeviceOnly: true,
-          ),
-          admittedGeneration: generation,
-        );
+            Wal(
+                timerStart: recording.timerStart,
+                codec: recording.codec,
+                seconds: recording.seconds,
+                sampleRate: 16000,
+                status: WalStatus.miss,
+                storage: WalStorage.disk,
+                device: 'omibatchoverflow',
+                filePath: recording.fileName,
+                onDeviceOnly: true),
+            admittedGeneration: generation);
       }
       all = await sync.getAllWals();
       for (final wal in all.where((w) => w.onDeviceConversation != null)) {
@@ -166,21 +159,17 @@ class OnDeviceRunner with WidgetsBindingObserver {
         if (_published.add(row.id)) publish(row);
       }
       final pending = all
-          .where(
-            (w) =>
-                w.onDeviceOnly &&
-                w.storage == WalStorage.disk &&
-                w.status == WalStatus.miss &&
-                w.onDeviceConversation == null,
-          )
+          .where((w) =>
+              w.onDeviceOnly &&
+              w.storage == WalStorage.disk &&
+              w.status == WalStatus.miss &&
+              w.onDeviceConversation == null)
           .toList();
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
       if (!controller.settings.enabled || !controller.model.status.isInstalled) return;
-      final decision = await controller.evaluate(
-        pendingAudio: Duration(seconds: pendingSeconds),
-        transcribeNow: transcribeNow,
-      );
+      final decision =
+          await controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds), transcribeNow: transcribeNow);
       if (!decision.shouldRun) return;
       controller.markRunFailure(false);
       controller.markRun(running: true);
@@ -212,8 +201,8 @@ class OnDeviceRunner with WidgetsBindingObserver {
     final source = wal.device.contains('phone')
         ? ConversationSource.phone
         : wal.device.contains('limitless')
-        ? ConversationSource.limitless
-        : ConversationSource.omi;
+            ? ConversationSource.limitless
+            : ConversationSource.omi;
     final language = SharedPreferencesUtil().userPrimaryLanguage;
     final apple = AppleBatchEngine();
     OnDeviceWhisperProvider? whisper;
@@ -252,8 +241,7 @@ class OnDeviceRunner with WidgetsBindingObserver {
         for (var i = 0; i < words.length; i += 30) {
           final group = words.skip(i).take(30).where((w) => w.text.trim().isNotEmpty).toList();
           if (group.isEmpty) continue;
-          segments.add(
-            TranscriptSegment(
+          segments.add(TranscriptSegment(
               id: '${segments.length}',
               text: group.map((w) => w.text.trim()).join(' '),
               speaker: 'SPEAKER_00',
@@ -262,9 +250,7 @@ class OnDeviceRunner with WidgetsBindingObserver {
               start: offset + group.first.start,
               end: offset + group.last.end,
               translations: const [],
-              sttProvider: 'on_device:$engine',
-            ),
-          );
+              sttProvider: 'on_device:$engine'));
         }
         offset += duration;
         controller.setProgress(wal.seconds > 0 ? (offset / wal.seconds).clamp(0, 1) : 0);
@@ -298,8 +284,8 @@ class OnDeviceRunner with WidgetsBindingObserver {
             'model_id': 'apple-foundation-models',
             'runtime': 'local',
             'device_class': 'iphone',
-            'generated_at': DateTime.now().toUtc().toIso8601String(),
-          },
+            'generated_at': DateTime.now().toUtc().toIso8601String()
+          }
         };
       } on PlatformException {
         recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
@@ -311,23 +297,21 @@ class OnDeviceRunner with WidgetsBindingObserver {
       final baseUrl = cloudBaseUrl ?? Env.apiBaseUrl;
       if (baseUrl == null || baseUrl.isEmpty) throw StateError('Cloud endpoint unavailable');
       final response = await executeApi<String>(
-        send: send,
-        canSend: () => !_cancelled && generation == sync.sessionGeneration,
-        request: ApiRequest(
-          url: '${baseUrl}v1/conversations/from-segments',
-          method: 'POST',
-          body: jsonEncode({
-            'client_session_id': id,
-            'source': source.name,
-            'language': language.isEmpty ? 'en' : language,
-            'started_at': started.toIso8601String(),
-            'finished_at': finished.toIso8601String(),
-            'transcript_segments': segments.map((s) => s.toJson()).toList(),
-            if (projection != null) 'client_processing': projection,
-          }),
-        ),
-        decode: (body) => (jsonDecode(body) as Map<String, dynamic>)['id'] as String,
-      );
+          send: send,
+          canSend: () => !_cancelled && generation == sync.sessionGeneration,
+          request: ApiRequest(
+              url: '${baseUrl}v1/conversations/from-segments',
+              method: 'POST',
+              body: jsonEncode({
+                'client_session_id': id,
+                'source': source.name,
+                'language': language.isEmpty ? 'en' : language,
+                'started_at': started.toIso8601String(),
+                'finished_at': finished.toIso8601String(),
+                'transcript_segments': segments.map((s) => s.toJson()).toList(),
+                if (projection != null) 'client_processing': projection
+              })),
+          decode: (body) => (jsonDecode(body) as Map<String, dynamic>)['id'] as String);
       switch (response) {
         case ApiSuccess<String>():
           id = response.data;
@@ -355,24 +339,21 @@ class OnDeviceRunner with WidgetsBindingObserver {
         recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
       }
     }
-    final row =
-        server ??
+    final row = server ??
         ServerConversation(
-          id: id,
-          createdAt: started,
-          startedAt: started,
-          finishedAt: finished,
-          structured: structure,
-          transcriptSegments: segments,
-          source: source,
-        );
+            id: id,
+            createdAt: started,
+            startedAt: started,
+            finishedAt: finished,
+            structured: structure,
+            transcriptSegments: segments,
+            source: source);
     final json = row.toJson();
     json['on_device_provenance'] = {
       'engine': engine,
       'summary': summary.name,
-      'reason': controller.settings.saveLiveHours
-          ? OnDeviceReason.savingLiveHours.name
-          : OnDeviceReason.liveHoursUsed.name,
+      'reason':
+          controller.settings.saveLiveHours ? OnDeviceReason.savingLiveHours.name : OnDeviceReason.liveHoursUsed.name
     };
     if (!await sync.persistOnDeviceConversation(wal, json, generation)) return;
     final stored = ServerConversation.fromJson(json);

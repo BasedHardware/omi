@@ -34,9 +34,7 @@ class NativePhonePowerSource implements PhonePowerSource {
     try {
       final data = await channel.invokeMapMethod<String, dynamic>('read');
       return PhonePowerState(
-        isCharging: data?['battery_charging'] == true,
-        batteryPercent: data?['battery_level'] as int?,
-      );
+          isCharging: data?['battery_charging'] == true, batteryPercent: data?['battery_level'] as int?);
     } on PlatformException {
       return PhonePowerState.unknown;
     } on MissingPluginException {

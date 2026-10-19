@@ -64,15 +64,13 @@ class _OnDeviceSettingsPageState extends State<OnDeviceSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final subscription = context.watch<UsageProvider>().subscription;
-    final recordings = context.watch<LocalRecordingsProvider>().recordings.where(
-      (r) => r.state == LocalRecordingState.pending,
-    );
+    final recordings =
+        context.watch<LocalRecordingsProvider>().recordings.where((r) => r.state == LocalRecordingState.pending);
     return OnDeviceSettingsView(
       usage: _usage,
       plansSheetAvailable: _plansSheet,
       showSaveUsage: subscription?.subscription.plan.isPaid ?? false,
-      pendingSeconds:
-          recordings.fold<int>(0, (sum, r) => sum + r.seconds) +
+      pendingSeconds: recordings.fold<int>(0, (sum, r) => sum + r.seconds) +
           (widget.controller ?? OnDeviceTranscriptionController.instance).pendingSeconds,
       pendingBytes: recordings.fold(0, (sum, r) => sum + r.sizeBytes),
       onGetMoreUsage: () => unawaited(openOnDeviceUsagePlans(context)),
@@ -210,8 +208,8 @@ class OnDeviceSettingsView extends StatelessWidget {
                       value: settings.keepEverythingOnDevice
                           ? l10n.off
                           : controller.canSummarizeOnPhone
-                          ? l10n.onDeviceSummariesOnIphone
-                          : l10n.onDeviceSummariesCloud,
+                              ? l10n.onDeviceSummariesOnIphone
+                              : l10n.onDeviceSummariesCloud,
                     ),
                     OmiSettingsRow.toggle(
                       key: const Key('on_device_settings_keep'),

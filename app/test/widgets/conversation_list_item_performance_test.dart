@@ -26,31 +26,26 @@ void main() {
       processingDeferred: true,
       transcriptSegments: [
         TranscriptSegment(
-          id: 's1',
-          text: 'Keep the original transcript visible.',
-          speaker: 'SPEAKER_0',
-          isUser: true,
-          personId: null,
-          start: 0,
-          end: 5,
-          translations: [],
-        ),
+            id: 's1',
+            text: 'Keep the original transcript visible.',
+            speaker: 'SPEAKER_0',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 5,
+            translations: [])
       ],
     );
     final provider = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
     addTearDown(provider.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider<ConversationProvider>.value(
+    await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
         value: provider,
         child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0),
-          ),
-        ),
-      ),
-    );
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+                body: ConversationListItem(
+                    conversation: conversation, date: conversation.createdAt, conversationIdx: 0)))));
     expect(find.byKey(const Key('processing_deferred_marker')), findsOneWidget);
     expect(find.textContaining('Keep the original transcript visible.'), findsWidgets);
   });

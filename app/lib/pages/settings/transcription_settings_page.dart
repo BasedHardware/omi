@@ -239,8 +239,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest =
-          config.requestType != null ||
+      final hasCustomRequest = config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
@@ -889,7 +888,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           onTap: () {
             final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
             PlatformManager.instance.analytics.paywallOpened('transcription_settings', currentPlan: plan);
-            routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'));
+            routeToPage(
+              context,
+              const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'),
+            );
           },
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
@@ -901,7 +903,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     TextSpan(text: l10n.premiumMinutesMonth, style: secondary),
                     TextSpan(
                       text: l10n.viewUsage,
-                      style: secondary.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.underline),
+                      style: secondary.copyWith(
+                        color: OmiColors.textSecondary,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                     TextSpan(text: '.', style: secondary),
                   ],
@@ -1035,27 +1040,17 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       return _buildOnDeviceWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
       return _buildUrlConfig(
-        context.l10n.apiUrl,
-        'https://your-stt-api.com/transcribe',
-        context.l10n.enterSttHttpEndpoint,
-      );
+          context.l10n.apiUrl, 'https://your-stt-api.com/transcribe', context.l10n.enterSttHttpEndpoint);
     } else if (_selectedProvider == SttProvider.customLive) {
       return _buildUrlConfig(
-        context.l10n.websocketUrl,
-        'wss://your-stt-api.com/live',
-        context.l10n.enterLiveSttWebsocket,
-      );
+          context.l10n.websocketUrl, 'wss://your-stt-api.com/live', context.l10n.enterLiveSttWebsocket);
     } else if (_selectedProvider == SttProvider.omiParakeet) {
       // Omi-hosted — no API key needed, just language.
       return _buildLanguageSelector();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildApiKeyInput(),
-        const SizedBox(height: OmiSpacing.lg),
-        _buildLanguageSelector(),
-      ],
+      children: [_buildApiKeyInput(), const SizedBox(height: OmiSpacing.lg), _buildLanguageSelector()],
     );
   }
 
@@ -1067,9 +1062,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       overridden: overridden,
       language: _currentLanguage,
       primaryLanguage: primary,
-      primaryLanguageName: primary.isEmpty
-          ? context.l10n.notSet
-          : context.read<HomeProvider>().getLanguageName(primary),
+      primaryLanguageName:
+          primary.isEmpty ? context.l10n.notSet : context.read<HomeProvider>().getLanguageName(primary),
       pickerKey: ValueKey('${_selectedProvider.name}_language_$_configSyncVersion'),
       onOverride: () => setState(() {
         // Start the picker from the language in use.
@@ -1109,7 +1103,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TranscriptionTextField(controller: _urlController, label: label, hint: hint, onChanged: (_) => setState(() {})),
+        TranscriptionTextField(
+          controller: _urlController,
+          label: label,
+          hint: hint,
+          onChanged: (_) => setState(() {}),
+        ),
         const SizedBox(height: OmiSpacing.xs),
         TranscriptionHelpText(help),
       ],
@@ -1208,10 +1207,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 Icon(Icons.apple, color: OmiColors.textPrimary, size: 24),
                 const SizedBox(width: OmiSpacing.sm),
                 Expanded(
-                  child: Text(
-                    context.l10n.usingNativeIosSpeech,
-                    style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                  ),
+                  child: Text(context.l10n.usingNativeIosSpeech,
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
                 ),
               ],
             ),
@@ -1223,13 +1220,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               final readiness = snapshot.data;
               if (readiness == null || readiness.ready) return const SizedBox.shrink();
               return LocalSttRecoveryNotice(
-                language: _currentLanguage,
-                failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
-                onRetry: () async {
-                  setState(() {});
-                },
-                onSetup: openAppSettings,
-              );
+                  language: _currentLanguage,
+                  failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
+                  onRetry: () async {
+                    setState(() {});
+                  },
+                  onSetup: openAppSettings);
             },
           ),
           const SizedBox(height: OmiSpacing.lg),

@@ -32,21 +32,19 @@ Future<BuildContext> _context(WidgetTester tester, UsageProvider usage) async {
   return captured;
 }
 
-UserSubscriptionResponse _response({
-  required PlanType plan,
-  bool showSubscriptionUi = true,
-  bool trialEligible = false,
-}) => UserSubscriptionResponse(
-  trialEligible: trialEligible,
-  subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
-  transcriptionSecondsUsed: 0,
-  transcriptionSecondsLimit: 18000,
-  wordsTranscribedUsed: 0,
-  wordsTranscribedLimit: 0,
-  insightsGainedUsed: 0,
-  insightsGainedLimit: 0,
-  showSubscriptionUi: showSubscriptionUi,
-);
+UserSubscriptionResponse _response(
+        {required PlanType plan, bool showSubscriptionUi = true, bool trialEligible = false}) =>
+    UserSubscriptionResponse(
+      trialEligible: trialEligible,
+      subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 18000,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      showSubscriptionUi: showSubscriptionUi,
+    );
 
 void main() {
   testWidgets('a free reader in control is exposed as control and the opener keeps the sheet', (tester) async {
@@ -101,9 +99,8 @@ void main() {
     expect(exposures, isEmpty);
   });
 
-  testWidgets('trial arm: a former subscriber on the free plan is exposed as trial but keeps the sheet', (
-    tester,
-  ) async {
+  testWidgets('trial arm: a former subscriber on the free plan is exposed as trial but keeps the sheet',
+      (tester) async {
     final usage = UsageProvider();
     usage.debugSetSubscription(_response(plan: PlanType.basic, trialEligible: false));
     final context = await _context(tester, usage);

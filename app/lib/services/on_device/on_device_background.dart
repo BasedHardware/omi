@@ -43,9 +43,7 @@ Future<void> runOnDeviceBackground({required Future<void> Function() initialize}
     final sync = LocalWalSyncImpl(_WorkerListener());
     await sync.loadForOnDeviceWorker();
     controller = OnDeviceTranscriptionController(
-      manageNativeCustody: false,
-      readGate: () async => prefs.getBool('onDeviceOverflowConfigured'),
-    );
+        manageNativeCustody: false, readGate: () async => prefs.getBool('onDeviceOverflowConfigured'));
     // This worker is Android-only; Apple's summary capability has no channel here.
     await controller.ensureLoaded();
     await controller.model.refresh();
@@ -61,22 +59,17 @@ Future<void> runOnDeviceBackground({required Future<void> Function() initialize}
           if (!name.startsWith('audio_omibatchoverflow_') || !name.endsWith('.bin') || owners[name] != uid) continue;
           final size = await entity.length();
           final initial = LocalRecording.fromFile(
-            fileName: name,
-            filePath: entity.path,
-            sizeBytes: size,
-            state: LocalRecordingState.pending,
-          );
+              fileName: name, filePath: entity.path, sizeBytes: size, state: LocalRecordingState.pending);
           if (initial == null) continue;
           final frames = await countBatchRecordingFrames(entity.path);
           final fps = initial.codec.getFramesPerSecond();
           if (fps <= 0) continue;
           final recording = LocalRecording.fromFile(
-            fileName: name,
-            filePath: entity.path,
-            sizeBytes: size,
-            seconds: frames ~/ fps,
-            state: LocalRecordingState.pending,
-          );
+              fileName: name,
+              filePath: entity.path,
+              sizeBytes: size,
+              seconds: frames ~/ fps,
+              state: LocalRecordingState.pending);
           if (recording != null) recordings.add(recording);
         }
       }

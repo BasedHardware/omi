@@ -26,9 +26,7 @@ import 'package:omi/utils/logger.dart';
 const _deviceId = 'B56E190F-1298-F479-A89D-21C3B506DEA5';
 final _services = [
   BleService(
-    uuid: '19b10000-e8f2-537e-4f6c-d104768a1214',
-    characteristicUuids: ['19b10001-e8f2-537e-4f6c-d104768a1214'],
-  ),
+      uuid: '19b10000-e8f2-537e-4f6c-d104768a1214', characteristicUuids: ['19b10001-e8f2-537e-4f6c-d104768a1214']),
 ];
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
@@ -60,15 +58,13 @@ void main() {
     });
   }
 
-  void pairPendant() => SharedPreferencesUtil().btDeviceSet(
-    BtDevice(
-      id: _deviceId,
-      name: 'Omi',
-      type: DeviceType.omi,
-      rssi: -60,
-      locator: DeviceLocator.bluetooth(deviceId: _deviceId),
-    ),
-  );
+  void pairPendant() => SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: _deviceId,
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: _deviceId),
+      ));
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
@@ -112,9 +108,8 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(unmanage, (message) async {
       unmanageCalls++;
       // A pigeon error reply: [code, message, details].
-      return BleHostApi.pigeonChannelCodec.encodeMessage(
-        unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null],
-      );
+      return BleHostApi.pigeonChannelCodec
+          .encodeMessage(unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null]);
     });
     handle('isPeripheralConnected', (_) => linkUp);
     handle('subscribeCharacteristic', (_) => null);
@@ -339,11 +334,8 @@ void main() {
       provider.nativeLink.reconcile();
       async.elapse(const Duration(seconds: 5));
 
-      expect(
-        manageCalls,
-        0,
-        reason: 'native has no link; reconnecting is native auto-reconnect, not a resume side effect',
-      );
+      expect(manageCalls, 0,
+          reason: 'native has no link; reconnecting is native auto-reconnect, not a resume side effect');
       expect(provider.isConnected, isFalse);
       provider.dispose();
       async.flushTimers();
@@ -394,24 +386,19 @@ void main() {
       // connect debounce, then move the pairing elsewhere before it fires.
       async.flushMicrotasks();
       expect(provider.isConnected, isFalse, reason: 'admission is still queued');
-      SharedPreferencesUtil().btDeviceSet(
-        BtDevice(
-          id: 'OTHER-PENDANT',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -60,
-          locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
-        ),
-      );
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
       async.elapse(const Duration(seconds: 5));
 
       expect(provider.isConnected, isFalse, reason: 'the old device must not publish over the newer pairing');
       expect(provider.connectedDevice?.id, isNot(_deviceId));
-      expect(
-        SharedPreferencesUtil().btDevice.id,
-        'OTHER-PENDANT',
-        reason: 'the stale admission must not rewrite pairing',
-      );
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT',
+          reason: 'the stale admission must not rewrite pairing');
       reconciler.dispose();
       provider.dispose();
       async.flushTimers();
@@ -426,15 +413,13 @@ void main() {
       final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) => probe.future);
 
       reconciler.reconcile();
-      SharedPreferencesUtil().btDeviceSet(
-        BtDevice(
-          id: 'OTHER-PENDANT',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -60,
-          locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
-        ),
-      );
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
       probe.complete(true);
       async.elapse(const Duration(seconds: 5));
 
@@ -485,27 +470,21 @@ void main() {
       // The release hangs; native delivers the ready while it is pending, then
       // the release fails. The buffered ready must be replayed, not dropped.
       final release = Completer<void>();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice',
-        (message) async {
-          unmanageCalls++;
-          await release.future;
-          return BleHostApi.pigeonChannelCodec.encodeMessage(
-            unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null],
-          );
-        },
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice', (message) async {
+        unmanageCalls++;
+        await release.future;
+        return BleHostApi.pigeonChannelCodec
+            .encodeMessage(unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null]);
+      });
       unmanageFails = true;
       connection.transport.disconnect();
       BleBridge.instance.onDeviceReady(_deviceId, _services);
       release.complete();
       async.flushMicrotasks();
 
-      expect(
-        transportStates.last,
-        DeviceTransportState.connected,
-        reason: 'the pending ready survives the failed release and re-adopts the live link',
-      );
+      expect(transportStates.last, DeviceTransportState.connected,
+          reason: 'the pending ready survives the failed release and re-adopts the live link');
 
       // Settle the transport like the failed-release test above so tearDown
       // finds a released, disconnected transport.
@@ -532,15 +511,13 @@ void main() {
       async.flushMicrotasks();
       // The transport is forming; the persisted pairing moves on before the
       // connected admission can run.
-      SharedPreferencesUtil().btDeviceSet(
-        BtDevice(
-          id: 'OTHER-PENDANT',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -60,
-          locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
-        ),
-      );
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
       async.elapse(const Duration(seconds: 5));
 
       expect(provider.isConnected, isFalse, reason: 'the forming link belongs to a retired pairing');
@@ -567,13 +544,11 @@ void main() {
       // Connection handling now holds DeviceService's mutex on a slow native
       // link check, so the first connected event is still mid-flight while
       // the provider mirrors disconnected.
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected',
-        (_) async {
-          await Future<void>.delayed(const Duration(seconds: 2));
-          return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
-        },
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected', (_) async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
+      });
       final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) async => true);
 
       provider.onDeviceConnectionStateChanged(_deviceId, DeviceConnectionState.connected);
@@ -600,13 +575,11 @@ void main() {
       // generic admission while the reconcile is still forming the link.
       // Block that admission inside ensureConnection behind DeviceService's
       // mutex on a slow native link check.
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected',
-        (_) async {
-          await Future<void>.delayed(const Duration(seconds: 2));
-          return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
-        },
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected', (_) async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
+      });
       final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) async => true);
 
       reconciler.reconcile();
@@ -614,22 +587,17 @@ void main() {
       // The transport's connected event has queued the generic admission; it
       // runs while the link is still forming, and the persisted pairing moves
       // on before it passes its checks.
-      SharedPreferencesUtil().btDeviceSet(
-        BtDevice(
-          id: 'OTHER-PENDANT',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -60,
-          locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
-        ),
-      );
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
       async.elapse(const Duration(seconds: 15));
 
-      expect(
-        provider.isConnected,
-        isFalse,
-        reason: 'the racing generic admission must not publish the retired pairing',
-      );
+      expect(provider.isConnected, isFalse,
+          reason: 'the racing generic admission must not publish the retired pairing');
       expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT');
       reconciler.dispose();
       provider.dispose();
@@ -655,39 +623,32 @@ void main() {
       // persists a new microphone before awaiting its own connection.
       var linkChecks = 0;
       final linkCheckBlocked = Completer<void>();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-        'dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected',
-        (message) async {
-          linkChecks++;
-          if (linkChecks == 2) {
-            await linkCheckBlocked.future;
-          }
-          return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
-        },
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected', (message) async {
+        linkChecks++;
+        if (linkChecks == 2) {
+          await linkCheckBlocked.future;
+        }
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
+      });
       final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) async => true);
 
       reconciler.reconcile();
       async.elapse(const Duration(seconds: 5));
       // Device setup is parked mid-setup; the persisted pairing moves on
       // inside the window.
-      SharedPreferencesUtil().btDeviceSet(
-        BtDevice(
-          id: 'OTHER-PENDANT',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -60,
-          locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
-        ),
-      );
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
       linkCheckBlocked.complete();
       async.elapse(const Duration(seconds: 20));
 
-      expect(
-        SharedPreferencesUtil().btDevice.id,
-        'OTHER-PENDANT',
-        reason: 'device setup must not publish the retired pairing over the newer choice',
-      );
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT',
+          reason: 'device setup must not publish the retired pairing over the newer choice');
       reconciler.dispose();
       provider.dispose();
       async.flushTimers();

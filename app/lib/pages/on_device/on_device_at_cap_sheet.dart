@@ -10,12 +10,8 @@ enum OnDeviceAtCapChoice { transcribeOnPhone, upgrade }
 /// Offered once when this month's usage limit is reached: keep going on the phone (included) or
 /// upgrade. Returns the reader's choice, or null when they close the sheet. Recording continues
 /// either way.
-Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(
-  BuildContext context, {
-  DateTime? liveHoursReturnOn,
-  GeneratedStorefrontCapChoice? copy,
-  ValueChanged<bool>? onDontAskAgain,
-}) {
+Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(BuildContext context,
+    {DateTime? liveHoursReturnOn, GeneratedStorefrontCapChoice? copy, ValueChanged<bool>? onDontAskAgain}) {
   return showOmiSheet<OnDeviceAtCapChoice>(
     context: context,
     builder: (sheetContext) => OnDeviceAtCapSheet(
@@ -28,13 +24,8 @@ Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(
 }
 
 class OnDeviceAtCapSheet extends StatefulWidget {
-  const OnDeviceAtCapSheet({
-    super.key,
-    required this.onContinue,
-    this.liveHoursReturnOn,
-    this.copy,
-    this.onDontAskAgain,
-  });
+  const OnDeviceAtCapSheet(
+      {super.key, required this.onContinue, this.liveHoursReturnOn, this.copy, this.onDontAskAgain});
 
   final ValueChanged<OnDeviceAtCapChoice> onContinue;
   final GeneratedStorefrontCapChoice? copy;
@@ -63,7 +54,13 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text(widget.copy?.title ?? l10n.onDeviceAtCapTitle, style: OmiType.title2)),
+          Semantics(
+            header: true,
+            child: Text(
+              widget.copy?.title ?? l10n.onDeviceAtCapTitle,
+              style: OmiType.title2,
+            ),
+          ),
           const SizedBox(height: OmiSpacing.xs),
           Text(widget.copy?.body ?? body, style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
           const SizedBox(height: OmiSpacing.lg),
@@ -86,10 +83,8 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
           const SizedBox(height: OmiSpacing.lg),
           if (widget.copy != null)
             CheckboxListTile(
-              title: Text(
-                widget.copy!.dontAskAgainLabel,
-                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-              ),
+              title: Text(widget.copy!.dontAskAgainLabel,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               value: _dontAskAgain,
               onChanged: (value) {
                 setState(() => _dontAskAgain = value == true);
@@ -101,8 +96,8 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
             label: widget.copy == null
                 ? l10n.continueButton
                 : _choice == OnDeviceAtCapChoice.upgrade
-                ? widget.copy!.upgradeLabel
-                : widget.copy!.onDeviceLabel,
+                    ? widget.copy!.upgradeLabel
+                    : widget.copy!.onDeviceLabel,
             expand: true,
             onPressed: () => widget.onContinue(_choice),
           ),

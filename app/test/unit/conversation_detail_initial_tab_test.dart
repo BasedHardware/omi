@@ -34,11 +34,8 @@ TranscriptSegment _segment(String text) {
   );
 }
 
-ServerConversation _conversation({
-  String overview = '',
-  List<TranscriptSegment>? segments,
-  bool processingDeferred = false,
-}) {
+ServerConversation _conversation(
+    {String overview = '', List<TranscriptSegment>? segments, bool processingDeferred = false}) {
   return ServerConversation(
     id: 'conversation-1',
     createdAt: DateTime.utc(2026, 9, 21, 12),
@@ -114,10 +111,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('processing_deferred_marker')), findsOneWidget);
-    expect(
-      tester.state<ConversationDetailPageState>(find.byType(ConversationDetailPage)).selectedTab,
-      ConversationTab.transcript,
-    );
+    expect(tester.state<ConversationDetailPageState>(find.byType(ConversationDetailPage)).selectedTab,
+        ConversationTab.transcript);
     expect(find.textContaining('Mm-hmm.', findRichText: true), findsWidgets);
   });
 

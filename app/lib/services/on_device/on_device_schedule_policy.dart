@@ -63,7 +63,9 @@ class OnDeviceRunInputs {
 
 @immutable
 class OnDeviceRunDecision {
-  const OnDeviceRunDecision.run(this.reason) : shouldRun = true, retryAt = null;
+  const OnDeviceRunDecision.run(this.reason)
+      : shouldRun = true,
+        retryAt = null;
   const OnDeviceRunDecision.wait(this.reason, {this.retryAt}) : shouldRun = false;
 
   final bool shouldRun;
@@ -110,8 +112,7 @@ class OnDeviceSchedulePolicy {
     }
     if (inputs.isCharging) {
       return OnDeviceRunDecision.run(
-        inputs.transcribeNowRequested ? OnDeviceRunReason.userRequested : OnDeviceRunReason.charging,
-      );
+          inputs.transcribeNowRequested ? OnDeviceRunReason.userRequested : OnDeviceRunReason.charging);
     }
     final battery = inputs.batteryPercent;
     if (inputs.transcribeNowRequested) {

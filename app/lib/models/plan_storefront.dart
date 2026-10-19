@@ -152,8 +152,7 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   }
   if (price.id == null) return StorefrontCheckoutDecision.refuse;
   final held = _priceOnTier(tier, current?.priceId);
-  final sameTierAnnualToMonthly =
-      price.interval == 'month' &&
+  final sameTierAnnualToMonthly = price.interval == 'month' &&
       current != null &&
       current.interval == 'year' &&
       PlanType.fromWire(current.planId) == PlanType.fromWire(tier.planId);
@@ -239,12 +238,10 @@ class StorefrontTier {
       planId: _text(json, 'plan_id'),
       name: _text(json, 'name'),
       hoursLine: hours,
-      bullets: List.unmodifiable(
-        (json['bullets'] as List).map((value) {
-          if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid bullet');
-          return value;
-        }),
-      ),
+      bullets: List.unmodifiable((json['bullets'] as List).map((value) {
+        if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid bullet');
+        return value;
+      })),
       recommended: _boolean(json, 'recommended'),
       isCurrent: _boolean(json, 'is_current'),
       prices: List.unmodifiable(prices),
@@ -311,8 +308,7 @@ class StorefrontPrice {
       monthsFree: months as int?,
       ctaLabel: _optionalText(json, 'cta_label'),
       confirmLines: List<String>.unmodifiable(
-        (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty),
-      ),
+          (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty)),
     );
   }
 }
@@ -420,17 +416,17 @@ class StorefrontUsage {
   }
 
   StorefrontUsage withMeterLine(String? meterLine) => StorefrontUsage(
-    kind: kind,
-    percent: percent,
-    periodId: periodId,
-    resetLabel: resetLabel,
-    meterLine: meterLine,
-    hoursLeft: hoursLeft,
-    nudgeLine: nudgeLine,
-    moreLabel: moreLabel,
-    mcpCapReached: mcpCapReached,
-    proGates: proGates,
-  );
+        kind: kind,
+        percent: percent,
+        periodId: periodId,
+        resetLabel: resetLabel,
+        meterLine: meterLine,
+        hoursLeft: hoursLeft,
+        nudgeLine: nudgeLine,
+        moreLabel: moreLabel,
+        mcpCapReached: mcpCapReached,
+        proGates: proGates,
+      );
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.
   bool get showBudgetNudge =>
@@ -476,24 +472,18 @@ class ChatAtCap {
   final String title, body, resetLine;
   final int resetAt;
   final String? upgradeLabel;
-  const ChatAtCap({
-    required this.title,
-    required this.body,
-    required this.resetLine,
-    required this.resetAt,
-    this.upgradeLabel,
-  });
+  const ChatAtCap(
+      {required this.title, required this.body, required this.resetLine, required this.resetAt, this.upgradeLabel});
   factory ChatAtCap.fromJson(Map<String, dynamic> json) {
     if (json['state'] != 'paused' || json['trigger'] != 'usage_budget' || json['reset_at'] is! int) {
       throw const FormatException('Invalid chat pause state');
     }
     return ChatAtCap(
-      title: _text(json, 'title'),
-      body: _text(json, 'body'),
-      resetLine: _text(json, 'reset_line'),
-      resetAt: json['reset_at'] as int,
-      upgradeLabel: json['upgrade_label'] as String?,
-    );
+        title: _text(json, 'title'),
+        body: _text(json, 'body'),
+        resetLine: _text(json, 'reset_line'),
+        resetAt: json['reset_at'] as int,
+        upgradeLabel: json['upgrade_label'] as String?);
   }
   bool get active => DateTime.now().millisecondsSinceEpoch < resetAt * 1000;
 }

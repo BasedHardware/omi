@@ -38,13 +38,11 @@ Future<void> _pump(WidgetTester tester, Widget child, {bool page = false}) async
   tester.view.physicalSize = const Size(1179, 2556);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: page ? child : Scaffold(body: SingleChildScrollView(child: child)),
-    ),
-  );
+  await tester.pumpWidget(MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: page ? child : Scaffold(body: SingleChildScrollView(child: child)),
+  ));
   await tester.pump();
 }
 
@@ -75,17 +73,13 @@ void main() {
   group('at-cap sheet', () {
     testWidgets('ladder cap renders backend strings and records the monthly preference', (tester) async {
       final copy = GeneratedStorefrontCapChoice.fromJson(
-        jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()),
-      );
+          jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()));
       var dontAsk = false;
-      await renders.pumpSheet(
-        tester,
-        title: null,
-        content: Padding(
-          padding: const EdgeInsets.all(20),
-          child: OnDeviceAtCapSheet(copy: copy, onDontAskAgain: (value) => dontAsk = value, onContinue: (_) {}),
-        ),
-      );
+      await renders.pumpSheet(tester,
+          title: null,
+          content: Padding(
+              padding: const EdgeInsets.all(20),
+              child: OnDeviceAtCapSheet(copy: copy, onDontAskAgain: (value) => dontAsk = value, onContinue: (_) {})));
       expect(find.text(copy.title), findsOneWidget);
       expect(copy.title, "Processing paused. You've reached this month's limit.");
       expect(find.text(copy.body), findsOneWidget);
@@ -119,19 +113,14 @@ void main() {
 
     testWidgets('a non-english device keeps the backend at-cap title', (tester) async {
       final copy = GeneratedStorefrontCapChoice.fromJson(
-        jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()),
-      );
+          jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()));
       final spanish = lookupAppLocalizations(const Locale('es'));
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('es'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: OnDeviceAtCapSheet(copy: copy, onContinue: (_) {}),
-          ),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: OnDeviceAtCapSheet(copy: copy, onContinue: (_) {})),
+      ));
       await tester.pump();
       expect(find.text(copy.title), findsOneWidget);
       expect(find.text(spanish.onDeviceAtCapTitle), findsNothing);
@@ -139,14 +128,8 @@ void main() {
   });
 
   group('queue banner', () {
-    Future<void> pumpBanner(
-      WidgetTester tester,
-      OnDeviceTranscriptionController controller, {
-      int pendingSeconds = 3900,
-      bool atCap = true,
-      VoidCallback? onSetUp,
-      VoidCallback? onUpgrade,
-    }) {
+    Future<void> pumpBanner(WidgetTester tester, OnDeviceTranscriptionController controller,
+        {int pendingSeconds = 3900, bool atCap = true, VoidCallback? onSetUp, VoidCallback? onUpgrade}) {
       return _pump(
         tester,
         OnDeviceQueueBannerView(
@@ -240,15 +223,10 @@ void main() {
   group('recording chip', () {
     Future<Widget?> chip(WidgetTester tester, OnDeviceTranscriptionController controller, {bool atCap = false}) async {
       Widget? result;
-      await _pump(
-        tester,
-        Builder(
-          builder: (context) {
-            result = onDeviceRecordingChip(context, controller, atCap: atCap);
-            return const SizedBox.shrink();
-          },
-        ),
-      );
+      await _pump(tester, Builder(builder: (context) {
+        result = onDeviceRecordingChip(context, controller, atCap: atCap);
+        return const SizedBox.shrink();
+      }));
       return result;
     }
 
@@ -260,17 +238,14 @@ void main() {
     testWidgets('names what the recording waits for', (tester) async {
       final charging = await chip(tester, _controller());
       expect((charging! as OnDeviceStatusChip).label, l10n.onDeviceWaitingForCharger);
-      final hours = await chip(
-        tester,
-        _controller(settings: const OnDeviceSettings(enabled: true, schedule: OnDeviceSchedule.everyFewHours)),
-      );
+      final hours = await chip(tester,
+          _controller(settings: const OnDeviceSettings(enabled: true, schedule: OnDeviceSchedule.everyFewHours)));
       expect((hours! as OnDeviceStatusChip).label, l10n.onDeviceWaitingToTranscribe);
       final setup = await chip(
         tester,
         _controller(
-          status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded),
-          settings: const OnDeviceSettings(),
-        ),
+            status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded),
+            settings: const OnDeviceSettings()),
         atCap: true,
       );
       expect((setup! as OnDeviceStatusChip).label, l10n.onDeviceWaitingForSetup);
@@ -289,14 +264,10 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       final controller = _controller()
         ..recordProvenance(
-          'c1',
-          const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed),
-        );
+            'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed));
       var redos = 0;
       await _pump(
-        tester,
-        OnDeviceProvenanceSection(conversationId: 'c1', controller: controller, onRedo: () => redos++),
-      );
+          tester, OnDeviceProvenanceSection(conversationId: 'c1', controller: controller, onRedo: () => redos++));
 
       expect(find.text(l10n.onDeviceTranscribedSummarizedOnIphone), findsOneWidget);
       expect(find.text(l10n.onDeviceSummarizedByCloud), findsNothing);
@@ -310,10 +281,8 @@ void main() {
     testWidgets('summarized by Omi Cloud: both badges, why, and keep-everything switch', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       final controller = _controller()
-        ..recordProvenance(
-          'c1',
-          const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.savingLiveHours),
-        );
+        ..recordProvenance('c1',
+            const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.savingLiveHours));
       await _pump(tester, OnDeviceProvenanceSection(conversationId: 'c1', controller: controller));
 
       expect(find.text(l10n.onDeviceTranscribedOnPhone), findsOneWidget);
@@ -329,17 +298,13 @@ void main() {
     testWidgets('list chip appears only for on-device conversations', (tester) async {
       final controller = _controller()
         ..recordProvenance(
-          'c1',
-          const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.none, reason: OnDeviceReason.liveHoursUsed),
-        );
+            'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.none, reason: OnDeviceReason.liveHoursUsed));
       await _pump(
         tester,
-        Column(
-          children: [
-            OnDeviceProvenanceChip(conversationId: 'c1', controller: controller),
-            OnDeviceProvenanceChip(conversationId: 'c2', controller: controller),
-          ],
-        ),
+        Column(children: [
+          OnDeviceProvenanceChip(conversationId: 'c1', controller: controller),
+          OnDeviceProvenanceChip(conversationId: 'c2', controller: controller),
+        ]),
       );
       expect(find.text(l10n.onDeviceTranscribedOnPhone), findsOneWidget);
     });
@@ -359,12 +324,8 @@ void main() {
 
     testWidgets('setup shows progress and cancels', (tester) async {
       final controller = _controller(
-        status: const OnDeviceModelStatus(
-          phase: OnDeviceModelPhase.downloading,
-          progress: 0.62,
-          timeLeft: Duration(minutes: 4),
-        ),
-      );
+          status: const OnDeviceModelStatus(
+              phase: OnDeviceModelPhase.downloading, progress: 0.62, timeLeft: Duration(minutes: 4)));
       await _pump(tester, OnDeviceSetupPage(controller: controller), page: true);
       expect(find.text(l10n.onDeviceDownloadingWifi(62)), findsOneWidget);
       expect(find.text(l10n.onDeviceTimeLeft('4m')), findsOneWidget);
@@ -386,10 +347,8 @@ void main() {
   });
 
   group('settings', () {
-    Future<OnDeviceTranscriptionController> pumpSettings(
-      WidgetTester tester, {
-      OnDeviceSettings settings = const OnDeviceSettings(enabled: true),
-    }) async {
+    Future<OnDeviceTranscriptionController> pumpSettings(WidgetTester tester,
+        {OnDeviceSettings settings = const OnDeviceSettings(enabled: true)}) async {
       final controller = _controller(settings: settings);
       await _pump(
         tester,
@@ -494,31 +453,29 @@ void main() {
 
     testWidgets('get more usage does not open the legacy usage page', (tester) async {
       final usage = UsageProvider()
-        ..debugSetSubscription(
-          UserSubscriptionResponse(
-            subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
-            transcriptionSecondsUsed: 0,
-            transcriptionSecondsLimit: 0,
-            wordsTranscribedUsed: 0,
-            wordsTranscribedLimit: 0,
-            insightsGainedUsed: 0,
-            insightsGainedLimit: 0,
-            showSubscriptionUi: false,
-          ),
-        );
-      await tester.pumpWidget(
-        ChangeNotifierProvider<UsageProvider>.value(
-          value: usage,
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Builder(
-              builder: (context) =>
-                  TextButton(onPressed: () => openOnDeviceUsagePlans(context), child: const Text('more')),
+        ..debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          showSubscriptionUi: false,
+        ));
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openOnDeviceUsagePlans(context),
+              child: const Text('more'),
             ),
           ),
         ),
-      );
+      ));
       await tester.tap(find.text('more'));
       await tester.pumpAndSettle();
       expect(find.byType(UsagePage), findsNothing);
@@ -565,41 +522,35 @@ void main() {
 
     testWidgets('a spanish device shows the backend meter and get more usage', (tester) async {
       final controller = _controller();
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('es'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: OnDeviceSettingsView(
-            controller: controller,
-            usage: const StorefrontUsage(
-              kind: 'usage_budget',
-              percent: 80,
-              resetLabel: 'resets Nov 1',
-              meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
-              hoursLeft: 3,
-              moreLabel: 'Get more usage',
-            ),
-            plansSheetAvailable: true,
-            showSaveUsage: false,
-            pendingSeconds: 0,
-            pendingBytes: 0,
-            onGetMoreUsage: () {},
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: OnDeviceSettingsView(
+          controller: controller,
+          usage: const StorefrontUsage(
+            kind: 'usage_budget',
+            percent: 80,
+            resetLabel: 'resets Nov 1',
+            meterLine: '80% used · about 3 hours of recording left · resets Nov 1',
+            hoursLeft: 3,
+            moreLabel: 'Get more usage',
           ),
+          plansSheetAvailable: true,
+          showSaveUsage: false,
+          pendingSeconds: 0,
+          pendingBytes: 0,
+          onGetMoreUsage: () {},
         ),
-      );
+      ));
       await tester.pump();
       expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
       expect(find.text('Get more usage'), findsOneWidget);
     });
 
     testWidgets('detection failure offers retry and hides the speech model', (tester) async {
-      final model = FakeOnDeviceModel(
-        const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported),
-        null,
-        true,
-        true,
-      );
+      final model =
+          FakeOnDeviceModel(const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported), null, true, true);
       var refreshes = 0;
       model.beforeRefresh = () async => refreshes++;
       final controller = OnDeviceTranscriptionController(model: model, power: const UnknownPhonePowerSource())
@@ -625,15 +576,11 @@ void main() {
 
   group('engine detection', () {
     Future<void> mockChannel(Future<dynamic> Function(MethodCall call) handler) async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        AppleOnDeviceModel.channel,
-        handler,
-      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(AppleOnDeviceModel.channel, handler);
       addTearDown(() {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-          AppleOnDeviceModel.channel,
-          null,
-        );
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(AppleOnDeviceModel.channel, null);
       });
     }
 
@@ -735,9 +682,27 @@ void main() {
 
   group('queue banner plans sheet', () {
     test('get more usage stays hidden unless the plans sheet can open', () {
-      expect(onDeviceMoreUsageTitle(plansSheetAvailable: false, moreLabel: 'Get more usage'), isNull);
-      expect(onDeviceMoreUsageTitle(plansSheetAvailable: true, moreLabel: 'Get more usage'), 'Get more usage');
-      expect(onDeviceMoreUsageTitle(plansSheetAvailable: true, moreLabel: 'Obtén más uso'), 'Obtén más uso');
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: false,
+          moreLabel: 'Get more usage',
+        ),
+        isNull,
+      );
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: true,
+          moreLabel: 'Get more usage',
+        ),
+        'Get more usage',
+      );
+      expect(
+        onDeviceMoreUsageTitle(
+          plansSheetAvailable: true,
+          moreLabel: 'Obtén más uso',
+        ),
+        'Obtén más uso',
+      );
     });
 
     testWidgets('finish setup hides get more usage when the sheet label is withheld', (tester) async {
@@ -749,7 +714,10 @@ void main() {
           pendingSeconds: 120,
           atCap: true,
           onSetUp: () {},
-          moreLabel: onDeviceMoreUsageTitle(plansSheetAvailable: false, moreLabel: 'Get more usage'),
+          moreLabel: onDeviceMoreUsageTitle(
+            plansSheetAvailable: false,
+            moreLabel: 'Get more usage',
+          ),
           onGetMoreUsage: () {},
         ),
       );
@@ -759,31 +727,29 @@ void main() {
 
     testWidgets('upgrade from the banner does not open the legacy usage page', (tester) async {
       final usage = UsageProvider()
-        ..debugSetSubscription(
-          UserSubscriptionResponse(
-            subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
-            transcriptionSecondsUsed: 0,
-            transcriptionSecondsLimit: 0,
-            wordsTranscribedUsed: 0,
-            wordsTranscribedLimit: 0,
-            insightsGainedUsed: 0,
-            insightsGainedLimit: 0,
-            showSubscriptionUi: false,
-          ),
-        );
-      await tester.pumpWidget(
-        ChangeNotifierProvider<UsageProvider>.value(
-          value: usage,
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Builder(
-              builder: (context) =>
-                  TextButton(onPressed: () => openOnDeviceUpgrade(context), child: const Text('more')),
+        ..debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.unlimited, status: SubscriptionStatus.active),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          showSubscriptionUi: false,
+        ));
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openOnDeviceUpgrade(context),
+              child: const Text('more'),
             ),
           ),
         ),
-      );
+      ));
       await tester.tap(find.text('more'));
       await tester.pumpAndSettle();
       expect(find.byType(UsagePage), findsNothing);

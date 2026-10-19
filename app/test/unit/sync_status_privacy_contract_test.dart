@@ -26,14 +26,14 @@ class _Listener implements IWalSyncListener {
 }
 
 Wal pending(int i) => Wal(
-  timerStart: 1700000000 + i,
-  codec: BleAudioCodec.opus,
-  seconds: 31,
-  status: WalStatus.uploaded,
-  storage: WalStorage.disk,
-  device: 'omi',
-  filePath: 'audio_$i.bin',
-)..jobId = 'job-$i';
+    timerStart: 1700000000 + i,
+    codec: BleAudioCodec.opus,
+    seconds: 31,
+    status: WalStatus.uploaded,
+    storage: WalStorage.disk,
+    device: 'omi',
+    filePath: 'audio_$i.bin')
+  ..jobId = 'job-$i';
 
 void main() {
   late Directory dir;
@@ -49,20 +49,16 @@ void main() {
     limiter.clockForTesting = () => now;
     SyncJobPoller.instance.resetForTesting(clock: () => now);
     dir = await Directory.systemTemp.createTemp('sync_status_privacy_');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => dir.path,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (call) async => dir.path);
     await WalFileManager.init();
   });
   tearDown(() async {
     limiter.clear();
     limiter.clockForTesting = null;
     SyncJobPoller.instance.resetForTesting();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await dir.delete(recursive: true);
   });
 

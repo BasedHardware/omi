@@ -54,14 +54,11 @@ void main() {
     test('reads the PostHog key and fails closed', () async {
       String? asked;
       expect(
-        await OnDeviceOverflowGate.read(
-          readFlag: (key) async {
+          await OnDeviceOverflowGate.read(readFlag: (key) async {
             asked = key;
             return true;
-          },
-        ),
-        isTrue,
-      );
+          }),
+          isTrue);
       expect(asked, 'mobile-on-device-overflow');
       expect(await OnDeviceOverflowGate.read(readFlag: (_) async => throw StateError('offline')), isFalse);
       expect(await OnDeviceOverflowGate.read(readFlag: (_) async => false), isFalse);
@@ -77,16 +74,13 @@ void main() {
       expect(controller.isActive, isFalse);
       expect(controller.settings, const OnDeviceSettings());
       controller.recordProvenance(
-        'c1',
-        const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed),
-      );
+          'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed));
       expect(controller.provenanceFor('c1'), isNull);
     });
 
     test('loads saved settings once the flag is on, and reads the gate once', () async {
-      await OnDeviceSettingsStore().save(
-        const OnDeviceSettings(enabled: true, schedule: OnDeviceSchedule.everyFewHours),
-      );
+      await OnDeviceSettingsStore()
+          .save(const OnDeviceSettings(enabled: true, schedule: OnDeviceSchedule.everyFewHours));
       var reads = 0;
       final controller = OnDeviceTranscriptionController(
         model: FakeOnDeviceModel(),
@@ -127,10 +121,8 @@ void main() {
       const pending = Duration(minutes: 40);
 
       expect((await controller.evaluate(pendingAudio: pending)).reason, OnDeviceRunReason.waitingForCharger);
-      expect(
-        (await controller.evaluate(pendingAudio: pending, transcribeNow: true)).reason,
-        OnDeviceRunReason.userRequested,
-      );
+      expect((await controller.evaluate(pendingAudio: pending, transcribeNow: true)).reason,
+          OnDeviceRunReason.userRequested);
 
       power.state = const PhonePowerState(isCharging: true, batteryPercent: 90);
       expect((await controller.evaluate(pendingAudio: pending)).reason, OnDeviceRunReason.charging);

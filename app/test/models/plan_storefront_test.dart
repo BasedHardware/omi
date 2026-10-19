@@ -48,9 +48,9 @@ void main() {
     if (!backend.existsSync()) return;
     final app = Directory('test/fixtures/storefront_v2');
     Map<String, File> jsonFiles(Directory directory) => {
-      for (final entity in directory.listSync().whereType<File>())
-        if (entity.path.endsWith('.json')) entity.uri.pathSegments.last: entity,
-    };
+          for (final entity in directory.listSync().whereType<File>())
+            if (entity.path.endsWith('.json')) entity.uri.pathSegments.last: entity
+        };
     final backendFiles = jsonFiles(backend);
     final appFiles = jsonFiles(app);
     expect(appFiles.keys.toSet(), backendFiles.keys.toSet());
@@ -72,24 +72,19 @@ void main() {
       if (entry.key == 'free_mcp_cap') {
         expect(data.header, "You've used today's 100 MCP requests");
         expect(data.tiers.singleWhere((tier) => tier.isCurrent).bullets, isEmpty);
-        expect(
-          data.tiers.where((tier) => tier.bullets.isNotEmpty).every((tier) => tier.bullets.first.contains('MCP')),
-          isTrue,
-        );
+        expect(data.tiers.where((tier) => tier.bullets.isNotEmpty).every((tier) => tier.bullets.first.contains('MCP')),
+            isTrue);
       }
       if (entry.key == 'free_pro_gate_proactive') {
-        expect(
-          data.tiers.singleWhere((tier) => tier.planId == 'operator').bullets.first,
-          "Omi reminds you of things you said you'd do",
-        );
+        expect(data.tiers.singleWhere((tier) => tier.planId == 'operator').bullets.first,
+            "Omi reminds you of things you said you'd do");
       }
     });
   }
 
   test('screen gate leads the Pro card with the screen bullet', () {
-    final pro = PlanStorefront.fromJson(
-      fixture('free_pro_gate_screen'),
-    ).tiers.singleWhere((tier) => tier.planId == 'operator');
+    final pro =
+        PlanStorefront.fromJson(fixture('free_pro_gate_screen')).tiers.singleWhere((tier) => tier.planId == 'operator');
     expect(pro.bullets.first, "On your Mac, Omi can see what you're working on and help with it");
   });
 
@@ -97,29 +92,20 @@ void main() {
     for (final name in ['legacy_unlimited', 'legacy_neo']) {
       final legacy = PlanStorefront.fromJson(fixture(name));
       expect(legacy.current!.legacy, isTrue, reason: name);
-      expect(
-        legacy.current!.legacyNote,
-        'We don\'t sell this plan anymore, but yours stays exactly as it is.',
-        reason: name,
-      );
+      expect(legacy.current!.legacyNote, 'We don\'t sell this plan anymore, but yours stays exactly as it is.',
+          reason: name);
       expect(legacy.shouldGate('proactive_agent'), isFalse, reason: name);
       expect(legacy.showBudgetNudge, isFalse, reason: name);
       final pro = legacy.tiers.singleWhere((tier) => tier.planId == 'operator');
       expect(
         storefrontCheckoutDecision(
-          legacy.current,
-          PlanType.fromWire(legacy.current!.planId),
-          pro,
-          pro.priceFor('month')!,
-        ),
+            legacy.current, PlanType.fromWire(legacy.current!.planId), pro, pro.priceFor('month')!),
         StorefrontCheckoutDecision.refuse,
         reason: name,
       );
     }
-    expect(
-      PlanStorefront.fromJson(fixture('legacy_unlimited')).current!.line,
-      r"You're on Unlimited · $29.99/mo · renews Nov 1",
-    );
+    expect(PlanStorefront.fromJson(fixture('legacy_unlimited')).current!.line,
+        r"You're on Unlimited · $29.99/mo · renews Nov 1");
     expect(PlanStorefront.fromJson(fixture('legacy_neo')).current!.line, r"You're on Neo · $19.99/mo · renews Nov 1");
     expect(PlanStorefront.fromJson(fixture('legacy_neo')).current!.planId, 'unlimited');
     final missing = fixture('legacy_unlimited');
@@ -166,7 +152,7 @@ void main() {
       [1],
       ['proactive_agent', null],
       [''],
-      'proactive_agent',
+      'proactive_agent'
     ]) {
       final json = fixture();
       json['usage']['pro_gates'] = gates;
@@ -235,36 +221,33 @@ void main() {
 
   test('storefrontCheckoutDecision allows only upward moves or same-tier annual', () {
     StorefrontPrice priced(String id, String interval) => StorefrontPrice(
-      id: id,
-      interval: interval,
-      amountMinor: 100,
-      currency: 'usd',
-      headline: r'$1/month',
-      renewalLine: 'Renews monthly until you cancel. Cancel anytime in settings.',
-    );
+        id: id,
+        interval: interval,
+        amountMinor: 100,
+        currency: 'usd',
+        headline: r'$1/month',
+        renewalLine: 'Renews monthly until you cancel. Cancel anytime in settings.');
     StorefrontTier tier(String id, List<StorefrontPrice> prices) => StorefrontTier(
-      tierId: '$id:ladder_v1',
-      planId: id,
-      name: id,
-      hoursLine: 'About 1 hour of recording a month',
-      bullets: const ['Included'],
-      recommended: id == 'operator',
-      isCurrent: false,
-      prices: prices,
-      action: 'checkout',
-      ctaLabel: 'Continue',
-    );
+        tierId: '$id:ladder_v1',
+        planId: id,
+        name: id,
+        hoursLine: 'About 1 hour of recording a month',
+        bullets: const ['Included'],
+        recommended: id == 'operator',
+        isCurrent: false,
+        prices: prices,
+        action: 'checkout',
+        ctaLabel: 'Continue');
     StorefrontCurrentPlan current(String id, {String? priceId, bool legacy = false, String? interval = 'month'}) =>
         StorefrontCurrentPlan(
-          planId: id,
-          name: id,
-          priceId: priceId,
-          interval: interval,
-          legacy: legacy,
-          cancelAtPeriodEnd: false,
-          line: 'You\'re on $id',
-          legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null,
-        );
+            planId: id,
+            name: id,
+            priceId: priceId,
+            interval: interval,
+            legacy: legacy,
+            cancelAtPeriodEnd: false,
+            line: 'You\'re on $id',
+            legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null);
 
     final plusMonth = priced('plus_month', 'month');
     final plusMonthOther = priced('plus_month_other', 'month');
@@ -278,312 +261,303 @@ void main() {
     final architect = tier('architect', [architectMonth, priced('architect_year', 'year')]);
     final basic = tier('basic', [priced('basic_month', 'month')]);
 
-    final cases =
-        <
-          (
-            String,
-            StorefrontCheckoutDecision,
-            StorefrontCurrentPlan?,
-            PlanType?,
-            StorefrontTier,
-            StorefrontPrice,
-            bool,
-            bool,
-          )
-        >[
-          (
-            'plus monthly to annual',
-            StorefrontCheckoutDecision.checkout,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plus,
-            plusYear,
-            false,
-            false,
-          ),
-          (
-            'plus annual to monthly',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusYear.id),
-            PlanType.plus,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'same-tier annual interval refuses monthly when the yearly price is omitted',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: 'omitted_plus_year', interval: 'year'),
-            PlanType.plus,
-            tier('plus', [plusMonth]),
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'annual interval still checks out a higher monthly tier when the yearly price is omitted',
-            StorefrontCheckoutDecision.checkout,
-            current('plus', priceId: 'omitted_plus_year', interval: 'year'),
-            PlanType.plus,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'plus annual to operator monthly',
-            StorefrontCheckoutDecision.checkout,
-            current('plus', priceId: plusYear.id),
-            PlanType.plus,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'operator to architect',
-            StorefrontCheckoutDecision.checkout,
-            current('operator', priceId: 'operator_month'),
-            PlanType.operator,
-            architect,
-            architectMonth,
-            false,
-            false,
-          ),
-          (
-            'architect to operator',
-            StorefrontCheckoutDecision.refuse,
-            current('architect', priceId: 'architect_month'),
-            PlanType.architect,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'architect payload blocks operator when live plan is plus',
-            StorefrontCheckoutDecision.refuse,
-            current('architect', priceId: 'architect_month'),
-            PlanType.plus,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'live architect blocks operator when payload says plus',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.architect,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'operator to plus',
-            StorefrontCheckoutDecision.refuse,
-            current('operator', priceId: operatorMonth.id),
-            PlanType.operator,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'usage legacy hides checkout',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            operator,
-            operatorMonth,
-            true,
-            false,
-          ),
-          (
-            'live unlimited_v2 refuses even when payload legacy is false',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id, legacy: false),
-            PlanType.unlimitedV2,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'live unlimited refuses even when payload legacy is false',
-            StorefrontCheckoutDecision.refuse,
-            current('basic'),
-            PlanType.unlimited,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'payload unlimited_v2 refuses when legacy is false',
-            StorefrontCheckoutDecision.refuse,
-            current('unlimited_v2', priceId: 'legacy', legacy: false),
-            PlanType.plus,
-            plus,
-            plusYear,
-            false,
-            false,
-          ),
-          (
-            'unrecognized current id refuses plus',
-            StorefrontCheckoutDecision.refuse,
-            current('future_desktop', priceId: 'future'),
-            PlanType.basic,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'unrecognized live plan refuses plus',
-            StorefrontCheckoutDecision.refuse,
-            current('basic'),
-            PlanType.unknown('future_desktop'),
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'pro alias is architect and refuses operator',
-            StorefrontCheckoutDecision.refuse,
-            current('pro', priceId: 'architect_month'),
-            PlanType.architect,
-            operator,
-            operatorMonth,
-            false,
-            false,
-          ),
-          (
-            'same price without cancellation',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'cancelled current price resubscribes',
-            StorefrontCheckoutDecision.resubscribe,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plus,
-            plusMonth,
-            false,
-            true,
-          ),
-          (
-            'cancelled higher tier refuses',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            operator,
-            operatorMonth,
-            false,
-            true,
-          ),
-          (
-            'cancelled same-tier yearly refuses',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plus,
-            plusYear,
-            false,
-            true,
-          ),
-          (
-            'cancelled lower tier refuses',
-            StorefrontCheckoutDecision.refuse,
-            current('operator', priceId: operatorMonth.id),
-            PlanType.operator,
-            plus,
-            plusMonth,
-            false,
-            true,
-          ),
-          (
-            'current legacy refuses',
-            StorefrontCheckoutDecision.refuse,
-            current('unlimited_v2', priceId: 'legacy', legacy: true),
-            PlanType.unlimitedV2,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'basic to plus',
-            StorefrontCheckoutDecision.checkout,
-            current('basic'),
-            PlanType.basic,
-            plus,
-            plusMonth,
-            false,
-            false,
-          ),
-          (
-            'plus to basic',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            basic,
-            basic.prices.single,
-            false,
-            false,
-          ),
-          (
-            'monthly current checks out the only yearly price',
-            StorefrontCheckoutDecision.checkout,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plusYearOnly,
-            plusYear,
-            false,
-            false,
-          ),
-          (
-            'same-tier other monthly price refuses',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: plusMonth.id),
-            PlanType.plus,
-            plusTwoMonths,
-            plusMonthOther,
-            false,
-            false,
-          ),
-          (
-            'same-tier other yearly price refuses when already yearly',
-            StorefrontCheckoutDecision.refuse,
-            current('plus', priceId: 'other_year', interval: 'year'),
-            PlanType.plus,
-            plusYearOnly,
-            plusYear,
-            false,
-            false,
-          ),
-        ];
+    final cases = <(
+      String,
+      StorefrontCheckoutDecision,
+      StorefrontCurrentPlan?,
+      PlanType?,
+      StorefrontTier,
+      StorefrontPrice,
+      bool,
+      bool
+    )>[
+      (
+        'plus monthly to annual',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plus,
+        plusYear,
+        false,
+        false
+      ),
+      (
+        'plus annual to monthly',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusYear.id),
+        PlanType.plus,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'same-tier annual interval refuses monthly when the yearly price is omitted',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: 'omitted_plus_year', interval: 'year'),
+        PlanType.plus,
+        tier('plus', [plusMonth]),
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'annual interval still checks out a higher monthly tier when the yearly price is omitted',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: 'omitted_plus_year', interval: 'year'),
+        PlanType.plus,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'plus annual to operator monthly',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: plusYear.id),
+        PlanType.plus,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'operator to architect',
+        StorefrontCheckoutDecision.checkout,
+        current('operator', priceId: 'operator_month'),
+        PlanType.operator,
+        architect,
+        architectMonth,
+        false,
+        false
+      ),
+      (
+        'architect to operator',
+        StorefrontCheckoutDecision.refuse,
+        current('architect', priceId: 'architect_month'),
+        PlanType.architect,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'architect payload blocks operator when live plan is plus',
+        StorefrontCheckoutDecision.refuse,
+        current('architect', priceId: 'architect_month'),
+        PlanType.plus,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'live architect blocks operator when payload says plus',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.architect,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'operator to plus',
+        StorefrontCheckoutDecision.refuse,
+        current('operator', priceId: operatorMonth.id),
+        PlanType.operator,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'usage legacy hides checkout',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        operator,
+        operatorMonth,
+        true,
+        false
+      ),
+      (
+        'live unlimited_v2 refuses even when payload legacy is false',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id, legacy: false),
+        PlanType.unlimitedV2,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'live unlimited refuses even when payload legacy is false',
+        StorefrontCheckoutDecision.refuse,
+        current('basic'),
+        PlanType.unlimited,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'payload unlimited_v2 refuses when legacy is false',
+        StorefrontCheckoutDecision.refuse,
+        current('unlimited_v2', priceId: 'legacy', legacy: false),
+        PlanType.plus,
+        plus,
+        plusYear,
+        false,
+        false
+      ),
+      (
+        'unrecognized current id refuses plus',
+        StorefrontCheckoutDecision.refuse,
+        current('future_desktop', priceId: 'future'),
+        PlanType.basic,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'unrecognized live plan refuses plus',
+        StorefrontCheckoutDecision.refuse,
+        current('basic'),
+        PlanType.unknown('future_desktop'),
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'pro alias is architect and refuses operator',
+        StorefrontCheckoutDecision.refuse,
+        current('pro', priceId: 'architect_month'),
+        PlanType.architect,
+        operator,
+        operatorMonth,
+        false,
+        false
+      ),
+      (
+        'same price without cancellation',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'cancelled current price resubscribes',
+        StorefrontCheckoutDecision.resubscribe,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plus,
+        plusMonth,
+        false,
+        true
+      ),
+      (
+        'cancelled higher tier refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        operator,
+        operatorMonth,
+        false,
+        true
+      ),
+      (
+        'cancelled same-tier yearly refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plus,
+        plusYear,
+        false,
+        true
+      ),
+      (
+        'cancelled lower tier refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('operator', priceId: operatorMonth.id),
+        PlanType.operator,
+        plus,
+        plusMonth,
+        false,
+        true
+      ),
+      (
+        'current legacy refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('unlimited_v2', priceId: 'legacy', legacy: true),
+        PlanType.unlimitedV2,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'basic to plus',
+        StorefrontCheckoutDecision.checkout,
+        current('basic'),
+        PlanType.basic,
+        plus,
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'plus to basic',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        basic,
+        basic.prices.single,
+        false,
+        false
+      ),
+      (
+        'monthly current checks out the only yearly price',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plusYearOnly,
+        plusYear,
+        false,
+        false
+      ),
+      (
+        'same-tier other monthly price refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plusTwoMonths,
+        plusMonthOther,
+        false,
+        false
+      ),
+      (
+        'same-tier other yearly price refuses when already yearly',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: 'other_year', interval: 'year'),
+        PlanType.plus,
+        plusYearOnly,
+        plusYear,
+        false,
+        false
+      ),
+    ];
 
     for (final entry in cases) {
       final (name, expected, held, live, selectedTier, selectedPrice, usageLegacy, cancelScheduled) = entry;
       expect(
-        storefrontCheckoutDecision(
-          held,
-          live,
-          selectedTier,
-          selectedPrice,
-          usageLegacy: usageLegacy,
-          cancelScheduled: cancelScheduled,
-        ),
+        storefrontCheckoutDecision(held, live, selectedTier, selectedPrice,
+            usageLegacy: usageLegacy, cancelScheduled: cancelScheduled),
         expected,
         reason: name,
       );
@@ -601,17 +575,24 @@ void main() {
       StorefrontCheckoutDecision.checkout,
     );
     expect(
-      storefrontActionLabel(tier: plus, price: plus.priceFor('year')!, decision: StorefrontCheckoutDecision.checkout),
+      storefrontActionLabel(
+        tier: plus,
+        price: plus.priceFor('year')!,
+        decision: StorefrontCheckoutDecision.checkout,
+      ),
       r'Switch to yearly · save $39.98',
     );
     expect(plus.priceFor('month'), isNull);
     expect(
-      storefrontActionLabel(tier: plus, price: plus.priceFor('year')!, decision: StorefrontCheckoutDecision.refuse),
+      storefrontActionLabel(
+        tier: plus,
+        price: plus.priceFor('year')!,
+        decision: StorefrontCheckoutDecision.refuse,
+      ),
       isNull,
     );
-    final architect = PlanStorefront.fromJson(
-      fixture('architect_settings'),
-    ).tiers.singleWhere((tier) => tier.planId == 'architect');
+    final architect =
+        PlanStorefront.fromJson(fixture('architect_settings')).tiers.singleWhere((tier) => tier.planId == 'architect');
     expect(architect.priceFor('year')!.headline, r'$199/month');
     expect(architect.priceFor('year')!.ctaLabel, r'Switch to yearly · save $398');
     expect(architect.ctaLabel, isNull);
@@ -625,9 +606,8 @@ void main() {
       storefrontCheckoutDecision(free.current, PlanType.basic, basic, basic.priceFor('month')!),
       StorefrontCheckoutDecision.refuse,
     );
-    final unlimited = PlanStorefront.fromJson(
-      fixture('legacy_unlimited'),
-    ).tiers.singleWhere((tier) => tier.planId == 'unlimited_v2');
+    final unlimited =
+        PlanStorefront.fromJson(fixture('legacy_unlimited')).tiers.singleWhere((tier) => tier.planId == 'unlimited_v2');
     expect(unlimited.hoursLine, isEmpty);
     expect(unlimited.compact, isTrue);
     expect(unlimited.bullets, isEmpty);
@@ -696,7 +676,11 @@ void main() {
       'Resubscribe',
     );
     expect(
-      storefrontActionLabel(tier: pro, price: pro.priceFor('month')!, decision: StorefrontCheckoutDecision.refuse),
+      storefrontActionLabel(
+        tier: pro,
+        price: pro.priceFor('month')!,
+        decision: StorefrontCheckoutDecision.refuse,
+      ),
       isNull,
     );
     expect(currentTier.priceFor('year'), isNull);

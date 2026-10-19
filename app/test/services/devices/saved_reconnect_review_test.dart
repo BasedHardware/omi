@@ -14,13 +14,8 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
 const a = 'saved-pendant-a';
 const b = 'saved-pendant-b';
-BtDevice pendant(String id) => BtDevice(
-  id: id,
-  name: 'Omi',
-  type: DeviceType.omi,
-  rssi: -50,
-  locator: DeviceLocator.bluetooth(deviceId: id),
-);
+BtDevice pendant(String id) =>
+    BtDevice(id: id, name: 'Omi', type: DeviceType.omi, rssi: -50, locator: DeviceLocator.bluetooth(deviceId: id));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -144,9 +139,8 @@ void main() {
       final owner = service();
       await owner.reconnectSavedDevice('launch');
       calls.clear();
-      await SharedPreferencesUtil().btDeviceSet(
-        toBluetooth ? pendant(b) : BtDevice(id: b, name: 'Meta', type: DeviceType.raybanMeta, rssi: 0),
-      );
+      await SharedPreferencesUtil()
+          .btDeviceSet(toBluetooth ? pendant(b) : BtDevice(id: b, name: 'Meta', type: DeviceType.raybanMeta, rssi: 0));
       await owner.reconnectSavedDevice('launch');
       await pumpEventQueue(); // Wait for the observed target-change attempt already in flight.
       expect(owner.connectionFor(a), isNull);

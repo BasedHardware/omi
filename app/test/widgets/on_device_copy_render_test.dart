@@ -88,23 +88,21 @@ void main() {
     );
 
     const boundaryKey = ValueKey('on_device_evidence');
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: boundaryKey,
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          locale: locale,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          theme: titled,
-          builder: (context, child) => DefaultTextStyle.merge(
-            style: TextStyle(fontFamily: 'SF Pro Display', fontFamilyFallback: fontFallback),
-            child: child!,
-          ),
-          home: home,
+    await tester.pumpWidget(RepaintBoundary(
+      key: boundaryKey,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: titled,
+        builder: (context, child) => DefaultTextStyle.merge(
+          style: TextStyle(fontFamily: 'SF Pro Display', fontFamilyFallback: fontFallback),
+          child: child!,
         ),
+        home: home,
       ),
-    );
+    ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     if (afterPump != null) await afterPump(tester);
@@ -125,10 +123,8 @@ void main() {
   }
 
   OnDeviceTranscriptionController controller({
-    OnDeviceModelStatus status = const OnDeviceModelStatus(
-      phase: OnDeviceModelPhase.installed,
-      sizeBytes: 120 * 1024 * 1024,
-    ),
+    OnDeviceModelStatus status =
+        const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: 120 * 1024 * 1024),
     String? engine,
     OnDeviceSettings settings = const OnDeviceSettings(enabled: true),
     bool transcribing = false,
@@ -164,24 +160,18 @@ void main() {
   }
 
   testWidgets('at-cap sheet', (tester) async {
-    await shoot(
-      tester,
-      '01-at-cap-sheet-ios.png',
-      home: conversationsBackdrop(),
-      afterPump: (tester) async {
-        showOnDeviceAtCapSheet(tester.element(find.text('Conversations')), liveHoursReturnOn: DateTime(2026, 11, 1));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-      },
-    );
+    await shoot(tester, '01-at-cap-sheet-ios.png', home: conversationsBackdrop(), afterPump: (tester) async {
+      showOnDeviceAtCapSheet(tester.element(find.text('Conversations')), liveHoursReturnOn: DateTime(2026, 11, 1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    });
     expect(find.text("You've reached this month's limit"), findsOneWidget);
     expect(find.text('Runs while your phone charges.'), findsOneWidget);
   });
 
   testWidgets('parakeet setup not downloaded', (tester) async {
     final value = controller(
-      status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
-    );
+        status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024));
     await shoot(tester, '02-setup-step1-not-downloaded-ios.png', home: OnDeviceSetupPage(controller: value));
     expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceSetupBody), findsOneWidget);
   });
@@ -189,11 +179,10 @@ void main() {
   testWidgets('parakeet setup downloading', (tester) async {
     final value = controller(
       status: const OnDeviceModelStatus(
-        phase: OnDeviceModelPhase.downloading,
-        progress: 0.62,
-        timeLeft: Duration(minutes: 4),
-        sizeBytes: 538 * 1024 * 1024,
-      ),
+          phase: OnDeviceModelPhase.downloading,
+          progress: 0.62,
+          timeLeft: Duration(minutes: 4),
+          sizeBytes: 538 * 1024 * 1024),
     );
     await shoot(tester, '03-setup-step1-downloading-ios.png', home: OnDeviceSetupPage(controller: value));
   });
@@ -212,15 +201,14 @@ void main() {
       tester,
       '06-conversations-waiting-for-charger-ios.png',
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(),
-          pendingSeconds: 3900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(),
+        pendingSeconds: 3900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
@@ -229,47 +217,32 @@ void main() {
       tester,
       '07-conversations-transcribing-ios.png',
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(transcribing: true),
-          pendingSeconds: 3900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(transcribing: true),
+        pendingSeconds: 3900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
   testWidgets('summary on iphone', (tester) async {
     final value = controller()
       ..recordProvenance(
-        'c1',
-        const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed),
-      );
-    await shoot(
-      tester,
-      '08-summary-made-on-iphone-ios.png',
-      home: Scaffold(
-        body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value, onRedo: () {}),
-      ),
-    );
+          'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.phone, reason: OnDeviceReason.liveHoursUsed));
+    await shoot(tester, '08-summary-made-on-iphone-ios.png',
+        home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value, onRedo: () {})));
     expect(find.textContaining("You reached this month's limit"), findsOneWidget);
   });
 
   testWidgets('summary by cloud on iphone', (tester) async {
     final value = controller()
       ..recordProvenance(
-        'c1',
-        const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed),
-      );
-    await shoot(
-      tester,
-      '09-summary-by-omi-cloud-ios.png',
-      home: Scaffold(
-        body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value),
-      ),
-    );
+          'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.liveHoursUsed));
+    await shoot(tester, '09-summary-by-omi-cloud-ios.png',
+        home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)));
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
 
@@ -286,8 +259,8 @@ void main() {
   }
 
   OnDeviceTranscriptionController parakeetSettings() => controller(
-    status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: OnDeviceTuning.parakeetSizeBytes),
-  );
+      status:
+          const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: OnDeviceTuning.parakeetSizeBytes));
 
   testWidgets('parakeet settings top', (tester) async {
     await shoot(tester, '10-settings-top-ios.png', home: settings(parakeetSettings()));
@@ -299,15 +272,10 @@ void main() {
   });
 
   testWidgets('parakeet settings scrolled', (tester) async {
-    await shoot(
-      tester,
-      '11-settings-scrolled-ios.png',
-      home: settings(parakeetSettings()),
-      afterPump: (tester) async {
-        await tester.drag(find.byType(ListView), const Offset(0, -500));
-        await tester.pump();
-      },
-    );
+    await shoot(tester, '11-settings-scrolled-ios.png', home: settings(parakeetSettings()), afterPump: (tester) async {
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pump();
+    });
     expect(find.text('Remove Speech Model'), findsOneWidget);
   });
 
@@ -325,7 +293,12 @@ void main() {
   });
 
   testWidgets('spanish settings at 80 show the backend meter', (tester) async {
-    await shoot(tester, '27-settings-80-es.png', locale: const Locale('es'), home: settings(parakeetSettings()));
+    await shoot(
+      tester,
+      '27-settings-80-es.png',
+      locale: const Locale('es'),
+      home: settings(parakeetSettings()),
+    );
     expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
     expect(find.text('Get more usage'), findsOneWidget);
   });
@@ -335,15 +308,14 @@ void main() {
       tester,
       '12-conversations-unsupported-ios.png',
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported)),
-          pendingSeconds: 3900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported)),
+        pendingSeconds: 3900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
@@ -353,15 +325,14 @@ void main() {
       '13-conversations-waiting-light-ios.png',
       light: true,
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(),
-          pendingSeconds: 3900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(),
+        pendingSeconds: 3900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
@@ -371,17 +342,15 @@ void main() {
       '14-android-no-model-finish-setup.png',
       platform: TargetPlatform.android,
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(
-            status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
-          ),
-          pendingSeconds: 3900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(
+            status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024)),
+        pendingSeconds: 3900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
@@ -391,30 +360,22 @@ void main() {
       '15-android-downloading.png',
       platform: TargetPlatform.android,
       home: OnDeviceSetupPage(
-        controller: controller(
-          status: const OnDeviceModelStatus(
-            phase: OnDeviceModelPhase.downloading,
-            progress: 0.4,
-            sizeBytes: 538 * 1024 * 1024,
-          ),
-        ),
-      ),
+          controller: controller(
+        status: const OnDeviceModelStatus(
+            phase: OnDeviceModelPhase.downloading, progress: 0.4, sizeBytes: 538 * 1024 * 1024),
+      )),
     );
   });
 
   testWidgets('android cloud summary', (tester) async {
     final value = controller()
       ..recordProvenance(
-        'c1',
-        const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.savingLiveHours),
-      );
+          'c1', const OnDeviceProvenance(summary: OnDeviceSummaryOrigin.cloud, reason: OnDeviceReason.savingLiveHours));
     await shoot(
       tester,
       '16-android-summary-by-omi-cloud.png',
       platform: TargetPlatform.android,
-      home: Scaffold(
-        body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value),
-      ),
+      home: Scaffold(body: OnDeviceProvenanceSection(conversationId: 'c1', controller: value)),
     );
     expect(find.textContaining("doesn't count toward your usage"), findsOneWidget);
   });
@@ -423,12 +384,10 @@ void main() {
     await shoot(
       tester,
       '18-ios26-os-asset-installing.png',
-      home: settings(
-        controller(
-          engine: 'speech_analyzer',
-          status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.4),
-        ),
-      ),
+      home: settings(controller(
+        engine: 'speech_analyzer',
+        status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.4),
+      )),
     );
     expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceGettingSpeechReady(40)), findsOneWidget);
     expect(find.byType(OnDeviceSetupPage), findsNothing);
@@ -440,24 +399,18 @@ void main() {
       tester,
       '19-ios17-parakeet-setup.png',
       home: OnDeviceSetupPage(
-        controller: controller(
-          status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
-        ),
-      ),
+          controller: controller(
+        status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
+      )),
     );
   });
 
   testWidgets('free at cap', (tester) async {
-    await shoot(
-      tester,
-      '20-free-user-at-cap.png',
-      home: conversationsBackdrop(),
-      afterPump: (tester) async {
-        showOnDeviceAtCapSheet(tester.element(find.text('Conversations')), liveHoursReturnOn: DateTime(2026, 11, 1));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-      },
-    );
+    await shoot(tester, '20-free-user-at-cap.png', home: conversationsBackdrop(), afterPump: (tester) async {
+      showOnDeviceAtCapSheet(tester.element(find.text('Conversations')), liveHoursReturnOn: DateTime(2026, 11, 1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    });
   });
 
   testWidgets('transcribing progress', (tester) async {
@@ -465,15 +418,14 @@ void main() {
       tester,
       '21-transcribing-on-phone-progress.png',
       home: Scaffold(
-        body: OnDeviceQueueBannerView(
-          controller: controller(transcribing: true),
-          pendingSeconds: 900,
-          atCap: true,
-          onSetUp: () {},
-          moreLabel: 'Get more usage',
-          onGetMoreUsage: () {},
-        ),
-      ),
+          body: OnDeviceQueueBannerView(
+        controller: controller(transcribing: true),
+        pendingSeconds: 900,
+        atCap: true,
+        onSetUp: () {},
+        moreLabel: 'Get more usage',
+        onGetMoreUsage: () {},
+      )),
     );
   });
 
@@ -481,62 +433,53 @@ void main() {
     await shoot(
       tester,
       '22-ios15-lower-quality-fallback.png',
-      home: settings(
-        controller(
-          engine: 'sfspeech',
-          status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.2),
-        ),
-      ),
+      home: settings(controller(
+        engine: 'sfspeech',
+        status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading, progress: 0.2),
+      )),
     );
     expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceGettingSpeechReady(20)), findsOneWidget);
     expect(find.text(lookupAppLocalizations(const Locale('en')).onDeviceSetupBody), findsNothing);
   });
 
   testWidgets('ios 26 settings top and scrolled', (tester) async {
-    final value = controller(
-      engine: 'speech_analyzer',
-      status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed),
-    );
+    final value =
+        controller(engine: 'speech_analyzer', status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.installed));
     await shoot(tester, '23-ios26-settings-top.png', home: settings(value));
     expect(find.text('80% used · about 3 hours of recording left · resets Nov 1'), findsOneWidget);
     expect(find.text('Speech model'), findsNothing);
-    await shoot(
-      tester,
-      '24-ios26-settings-scrolled.png',
-      home: settings(value),
-      afterPump: (tester) async {
-        await tester.drag(find.byType(ListView), const Offset(0, -400));
-        await tester.pump();
-      },
-    );
+    await shoot(tester, '24-ios26-settings-scrolled.png', home: settings(value), afterPump: (tester) async {
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pump();
+    });
     expect(find.text('Remove Speech Model'), findsNothing);
   });
 
   HeldAudioSummary heldSummary({bool retainLive = true, String state = 'paused'}) => HeldAudioSummary(
-    state: state,
-    seconds: 150,
-    count: 22,
-    resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
-    retainLive: retainLive,
-    recordings: [
-      HeldAudioRecording(
-        id: 'newer',
-        startedAt: DateTime.utc(2026, 10, 17, 15, 4).millisecondsSinceEpoch ~/ 1000,
-        seconds: 90,
-      ),
-      HeldAudioRecording(
-        id: 'older',
-        startedAt: DateTime.utc(2026, 10, 17, 9, 12).millisecondsSinceEpoch ~/ 1000,
-        seconds: 60,
-      ),
-    ],
-  );
+        state: state,
+        seconds: 150,
+        count: 22,
+        resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
+        retainLive: retainLive,
+        recordings: [
+          HeldAudioRecording(
+              id: 'newer', startedAt: DateTime.utc(2026, 10, 17, 15, 4).millisecondsSinceEpoch ~/ 1000, seconds: 90),
+          HeldAudioRecording(
+              id: 'older', startedAt: DateTime.utc(2026, 10, 17, 9, 12).millisecondsSinceEpoch ~/ 1000, seconds: 60),
+        ],
+      );
 
   Widget heldHome(OnDeviceTranscriptionController value) {
     return Scaffold(
       body: ListView(
         children: [
-          HeldAudioHomeSection(controller: value, gate: true, summary: heldSummary(), onUpgrade: () {}, onPhone: () {}),
+          HeldAudioHomeSection(
+            controller: value,
+            gate: true,
+            summary: heldSummary(),
+            onUpgrade: () {},
+            onPhone: () {},
+          ),
         ],
       ),
     );
@@ -563,7 +506,10 @@ void main() {
     final value = controller(settings: const OnDeviceSettings(enabled: true));
     await shoot(tester, 'held-audio-a-phone-en-dark.png', home: heldHome(value));
     expect(find.textContaining('Your recordings and transcripts are saved.'), findsOneWidget);
-    expect(find.textContaining('Waiting recordings stay waiting until you choose to process them.'), findsOneWidget);
+    expect(
+      find.textContaining('Waiting recordings stay waiting until you choose to process them.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
   });
 
@@ -606,16 +552,15 @@ void main() {
           fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
           home: Scaffold(
             body: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-              child: HeldAudioUsageSection(
-                controller: value,
-                gate: true,
-                summary: heldSummary(retainLive: false),
-                paid: true,
-                onUpgrade: () {},
-                onSaveLiveHours: (_) {},
-              ),
-            ),
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                child: HeldAudioUsageSection(
+                  controller: value,
+                  gate: true,
+                  summary: heldSummary(retainLive: false),
+                  paid: true,
+                  onUpgrade: () {},
+                  onSaveLiveHours: (_) {},
+                )),
           ),
         );
       });
@@ -629,54 +574,42 @@ void main() {
           testWidgets('held audio v5 $state $surface $language $light', (tester) async {
             final value = controller(settings: const OnDeviceSettings(enabled: true));
             final backlog = ProcessingBacklog(
-              state: state,
-              heldAudioCount: 22,
-              heldAudioSeconds: 7200,
-              deferredSeconds: 1800,
-              deferredConversations: 3,
-              estimatedHours: 2.5,
-              estimatedPercent: 12.5,
-              estimatedUnits: 25,
-              remainingUnits: 100,
-            );
+                state: state,
+                heldAudioCount: 22,
+                heldAudioSeconds: 7200,
+                deferredSeconds: 1800,
+                deferredConversations: 3,
+                estimatedHours: 2.5,
+                estimatedPercent: 12.5,
+                estimatedUnits: 25,
+                remainingUnits: 100);
             final held = heldSummary(retainLive: state == 'capped');
             final Widget content = switch (surface) {
-              'a' => HeldAudioHomeSection(
-                controller: value,
-                gate: true,
-                summary: held,
-                backlog: backlog,
-                onUpgrade: () {},
-              ),
+              'a' =>
+                HeldAudioHomeSection(controller: value, gate: true, summary: held, backlog: backlog, onUpgrade: () {}),
               'b' => HeldAudioLiveBanner(
-                controller: value,
-                gate: true,
-                summary: held,
-                backlog: backlog,
-                recordedSeconds: 185,
-                onUpgrade: () {},
-              ),
-              _ => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                child: HeldAudioUsageSection(
                   controller: value,
                   gate: true,
                   summary: held,
                   backlog: backlog,
-                  paid: true,
-                  onUpgrade: () {},
-                  onSaveLiveHours: (_) {},
-                ),
-              ),
+                  recordedSeconds: 185,
+                  onUpgrade: () {}),
+              _ => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                  child: HeldAudioUsageSection(
+                      controller: value,
+                      gate: true,
+                      summary: held,
+                      backlog: backlog,
+                      paid: true,
+                      onUpgrade: () {},
+                      onSaveLiveHours: (_) {})),
             };
-            await shoot(
-              tester,
-              'held-audio-$surface-$state-$language-${light ? 'light' : 'dark'}.png',
-              light: light,
-              locale: Locale(language),
-              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-              home: Scaffold(body: ListView(children: [content])),
-            );
+            await shoot(tester, 'held-audio-$surface-$state-$language-${light ? 'light' : 'dark'}.png',
+                light: light,
+                locale: Locale(language),
+                fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+                home: Scaffold(body: ListView(children: [content])));
             expect(find.textContaining('resets'), findsNothing);
             expect(find.byKey(Key('processing_backlog_$surface')), state == 'none' ? findsNothing : findsOneWidget);
           });
@@ -684,65 +617,55 @@ void main() {
       }
       for (final exceeds in const [false, true]) {
         testWidgets('held audio v5 confirm $exceeds $language $light', (tester) async {
-          await shoot(
-            tester,
-            'held-audio-confirm-$exceeds-$language-${light ? 'light' : 'dark'}.png',
-            light: light,
-            locale: Locale(language),
-            fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-            home: Scaffold(
-              body: ListView(
-                children: [
-                  ProcessingBacklogView(
-                    backlog: ProcessingBacklog(
+          await shoot(tester, 'held-audio-confirm-$exceeds-$language-${light ? 'light' : 'dark'}.png',
+              light: light,
+              locale: Locale(language),
+              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+              home: Scaffold(
+                  body: ListView(children: [
+                ProcessingBacklogView(
+                  backlog: ProcessingBacklog(
                       state: 'waiting_choice',
                       heldAudioSeconds: 7200,
                       deferredSeconds: 1800,
                       estimatedHours: 2.5,
                       estimatedPercent: 12.5,
-                      exceedsRemaining: exceeds,
-                    ),
-                    surface: 'a',
-                    onUpgrade: () {},
-                    onProcess: () async => true,
-                  ),
-                ],
-              ),
-            ),
-            afterPump: (tester) async {
-              // OmiButton holds its Future until the dialog closes: do not await the action Future here.
-              await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-              await tester.pump();
-              await tester.pump(const Duration(milliseconds: 500));
-            },
-          );
+                      exceedsRemaining: exceeds),
+                  surface: 'a',
+                  onUpgrade: () {},
+                  onProcess: () async => true,
+                )
+              ])), afterPump: (tester) async {
+            // OmiButton holds its Future until the dialog closes: do not await the action Future here.
+            await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 500));
+          });
         });
       }
       for (final surface in const ['list', 'detail']) {
         testWidgets('held audio v5 deferred transcript $surface $language $light', (tester) async {
           final conversation = ServerConversation(
-            id: 'held-deferred',
-            createdAt: DateTime.utc(2026, 10, 17, 9),
-            startedAt: DateTime.utc(2026, 10, 17, 9),
-            finishedAt: DateTime.utc(2026, 10, 17, 9, 2),
-            processingDeferred: true,
-            structured: Structured('', ''),
-            transcriptSegments: [
-              TranscriptSegment(
-                id: 's1',
-                text: 'Let’s review the launch plan tomorrow morning.',
-                speaker: 'SPEAKER_0',
-                isUser: true,
-                personId: null,
-                start: 0,
-                end: 12,
-                translations: [],
-              ),
-            ],
-          );
+              id: 'held-deferred',
+              createdAt: DateTime.utc(2026, 10, 17, 9),
+              startedAt: DateTime.utc(2026, 10, 17, 9),
+              finishedAt: DateTime.utc(2026, 10, 17, 9, 2),
+              processingDeferred: true,
+              structured: Structured('', ''),
+              transcriptSegments: [
+                TranscriptSegment(
+                    id: 's1',
+                    text: 'Let’s review the launch plan tomorrow morning.',
+                    speaker: 'SPEAKER_0',
+                    isUser: true,
+                    personId: null,
+                    start: 0,
+                    end: 12,
+                    translations: [])
+              ]);
           final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
           conversations.groupedConversations = {
-            conversationLocalDayKey(conversation.createdAt): [conversation],
+            conversationLocalDayKey(conversation.createdAt): [conversation]
           };
           conversations.conversationDetailsFetcherOverride = (_) async => conversation;
           final detail = ConversationDetailProvider();
@@ -754,47 +677,33 @@ void main() {
             conversations.dispose();
           });
           final content = MultiProvider(
-            providers: [
-              ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-              ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-              ChangeNotifierProvider<AppProvider>.value(value: apps),
-              ChangeNotifierProvider(create: (_) => PeopleProvider()),
-              ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => [])),
-              ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-              ChangeNotifierProvider(
-                create: (_) => IntegrationProvider(
-                  fetchStatus: (_) async => null,
-                  saveStatus: (_, __) async => false,
-                  deleteStatus: (_) async => false,
-                  persistPref: (_, __) async {},
-                ),
-              ),
-            ],
-            child: surface == 'list'
-                ? Scaffold(
-                    body: ListView(
-                      children: [
-                        ConversationListItem(
-                          conversation: conversation,
-                          date: conversation.createdAt,
-                          conversationIdx: 0,
-                        ),
-                      ],
-                    ),
-                  )
-                : ConversationDetailPage(conversation: conversation),
-          );
-          await shoot(
-            tester,
-            'held-audio-deferred-$surface-$language-${light ? 'light' : 'dark'}.png',
-            light: light,
-            locale: Locale(language),
-            fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-            home: content,
-            afterPump: (tester) async {
-              await tester.pump(const Duration(milliseconds: 500));
-            },
-          );
+              providers: [
+                ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+                ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+                ChangeNotifierProvider<AppProvider>.value(value: apps),
+                ChangeNotifierProvider(create: (_) => PeopleProvider()),
+                ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => [])),
+                ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+                ChangeNotifierProvider(
+                    create: (_) => IntegrationProvider(
+                        fetchStatus: (_) async => null,
+                        saveStatus: (_, __) async => false,
+                        deleteStatus: (_) async => false,
+                        persistPref: (_, __) async {})),
+              ],
+              child: surface == 'list'
+                  ? Scaffold(
+                      body: ListView(children: [
+                      ConversationListItem(conversation: conversation, date: conversation.createdAt, conversationIdx: 0)
+                    ]))
+                  : ConversationDetailPage(conversation: conversation));
+          await shoot(tester, 'held-audio-deferred-$surface-$language-${light ? 'light' : 'dark'}.png',
+              light: light,
+              locale: Locale(language),
+              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+              home: content, afterPump: (tester) async {
+            await tester.pump(const Duration(milliseconds: 500));
+          });
           expect(find.byKey(const Key('processing_deferred_marker')), findsOneWidget);
           expect(find.textContaining('Let’s review the launch plan', findRichText: true), findsWidgets);
         });
@@ -808,10 +717,9 @@ void main() {
       '25-android-setup.png',
       platform: TargetPlatform.android,
       home: OnDeviceSetupPage(
-        controller: controller(
-          status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
-        ),
-      ),
+          controller: controller(
+        status: const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded, sizeBytes: 538 * 1024 * 1024),
+      )),
     );
   });
 }

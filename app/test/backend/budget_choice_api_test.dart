@@ -9,18 +9,16 @@ void main() {
   test('choice uses the capability and backend period, and only saves intent', () async {
     final requests = <ApiRequest>[];
     final api = BudgetChoiceApi(
-      baseUrl: 'http://localhost/',
-      send: (request) async {
-        requests.add(request);
-        if (request.method == 'GET') {
+        baseUrl: 'http://localhost/',
+        send: (request) async {
+          requests.add(request);
+          if (request.method == 'GET') {
+            return http.Response(
+                jsonEncode({'period': '2026-10', 'state': 'held_pending_choice', 'choice': null, 'ask': true}), 200);
+          }
           return http.Response(
-            jsonEncode({'period': '2026-10', 'state': 'held_pending_choice', 'choice': null, 'ask': true}),
-            200,
-          );
-        }
-        return http.Response(jsonEncode({'period': '2026-10', 'ask': false, 'choice': jsonDecode(request.body)}), 200);
-      },
-    );
+              jsonEncode({'period': '2026-10', 'ask': false, 'choice': jsonDecode(request.body)}), 200);
+        });
     final result = await api.load();
     expect(result, isA<ApiSuccess<GeneratedBudgetChoiceResponse>>());
     final record = (result as ApiSuccess<GeneratedBudgetChoiceResponse>).data;

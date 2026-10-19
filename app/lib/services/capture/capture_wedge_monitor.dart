@@ -41,13 +41,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     Future<void> Function()? transferRetry,
     required String Function() appBuild,
     required String Function() platform,
-  }) : _now = now ?? DateTime.now,
-       _featureGate = featureGate,
-       _track = track,
-       _bleRetry = bleRetry,
-       _transferRetry = transferRetry,
-       _appBuild = appBuild,
-       _platform = platform;
+  })  : _now = now ?? DateTime.now,
+        _featureGate = featureGate,
+        _track = track,
+        _bleRetry = bleRetry,
+        _transferRetry = transferRetry,
+        _appBuild = appBuild,
+        _platform = platform;
 
   static CaptureWedgeMonitor? _instance;
   static CaptureWedgeMonitor get instance => _instance ??= composeCaptureWedgeMonitor();
@@ -120,8 +120,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       _nativeIngressDevices.remove(deviceId);
     }
     if (health != null) {
-      final event =
-          '${health.generation}:${health.phase}:${health.reason}:'
+      final event = '${health.generation}:${health.phase}:${health.reason}:'
           '${health.subscriptionConfirmed}:${health.recoveryOutcome}:${health.recoverySpent}:${health.reconnectSpent}';
       if (_ingressEvents[deviceId] != event) {
         _ingressEvents[deviceId] = event;
@@ -717,7 +716,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   ({int ingress, int transcript}) _silenceAge(String deviceId, {_OpenCaptureSession? session}) {
     final resolved = session ?? _longestOpenSession(deviceId);
     if (resolved == null) return (ingress: -1, transcript: -1);
-    return (ingress: _secondsSince(resolved.lastBleIngressAt), transcript: _secondsSince(resolved.lastTranscriptAt));
+    return (
+      ingress: _secondsSince(resolved.lastBleIngressAt),
+      transcript: _secondsSince(resolved.lastTranscriptAt),
+    );
   }
 
   _OpenCaptureSession? _longestOpenSession(String deviceId) {

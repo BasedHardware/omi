@@ -31,22 +31,17 @@ UserSubscriptionResponse _subscriptionOn(PlanType plan, {required int used, requ
 void main() {
   test('exhausted ladder budget overrides the Pro unlimited-transcription shortcut', () {
     final provider = UsageProvider();
-    provider.debugSetSubscription(
-      UserSubscriptionResponse(
-        subscription: Subscription(plan: PlanType.operator, status: SubscriptionStatus.active),
-        transcriptionSecondsUsed: 0,
-        transcriptionSecondsLimit: 0,
-        wordsTranscribedUsed: 0,
-        wordsTranscribedLimit: 0,
-        insightsGainedUsed: 0,
-        insightsGainedLimit: 0,
-        transcriptionAllowance: const TranscriptionAllowanceSnapshot(
-          mode: 'on_device',
-          reason: 'usage_budget_exhausted',
-          remainingSeconds: 0,
-        ),
-      ),
-    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.operator, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      transcriptionAllowance: const TranscriptionAllowanceSnapshot(
+          mode: 'on_device', reason: 'usage_budget_exhausted', remainingSeconds: 0),
+    ));
     expect(provider.isOutOfCredits, true);
   });
   group('UsageProvider.clearUserData', () {

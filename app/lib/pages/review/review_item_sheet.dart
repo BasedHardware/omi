@@ -106,7 +106,9 @@ class _SpeakerDetail extends StatefulWidget {
 
 class _SpeakerChoice {
   const _SpeakerChoice.person(this.personId) : isMe = false;
-  const _SpeakerChoice.me() : personId = null, isMe = true;
+  const _SpeakerChoice.me()
+      : personId = null,
+        isMe = true;
 
   final String? personId;
   final bool isMe;
@@ -138,7 +140,9 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
     final people = context.read<PeopleProvider?>()?.people ?? const <Person>[];
     final choice = await showSpeakerPicker(
       context,
-      candidates: [for (final c in speaker.candidates) SpeakerPickerCandidate(personId: c.personId, name: c.name)],
+      candidates: [
+        for (final c in speaker.candidates) SpeakerPickerCandidate(personId: c.personId, name: c.name),
+      ],
       people: people,
       // The sheet's own Not Sure button already covers "don't know".
       allowUnknown: false,
@@ -162,8 +166,7 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
     final speaker = widget.item.speaker!;
     final people = context.watch<PeopleProvider?>()?.people ?? const <Person>[];
     final playing = provider.playingItemId == widget.item.itemId;
-    final chosenName =
-        _newName ??
+    final chosenName = _newName ??
         switch (_choice) {
           _SpeakerChoice(isMe: true) => l10n.reviewAnswerMe,
           _SpeakerChoice(:final personId?) =>
@@ -290,15 +293,15 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
             label: chosenName == null ? l10n.reviewConfirm : l10n.reviewConfirmPerson(chosenName),
             onPressed: canConfirm
                 ? () => _send(
-                    context,
-                    widget.item,
-                    _newName != null
-                        ? ReviewAnswer.speaker(newName: _newName)
-                        : _choice!.isMe
-                        ? const ReviewAnswer.speaker(isMe: true)
-                        : ReviewAnswer.speaker(personId: _choice!.personId),
-                    widget.onDone,
-                  )
+                      context,
+                      widget.item,
+                      _newName != null
+                          ? ReviewAnswer.speaker(newName: _newName)
+                          : _choice!.isMe
+                              ? const ReviewAnswer.speaker(isMe: true)
+                              : ReviewAnswer.speaker(personId: _choice!.personId),
+                      widget.onDone,
+                    )
                 : null,
           ),
           secondary: [
@@ -775,9 +778,8 @@ class _SpellingDetailState extends State<_SpellingDetail> {
         _Actions(
           primary: OmiButton(
             label: l10n.save,
-            onPressed: value == null
-                ? null
-                : () => _send(context, widget.item, ReviewAnswer.spelling(value), widget.onDone),
+            onPressed:
+                value == null ? null : () => _send(context, widget.item, ReviewAnswer.spelling(value), widget.onDone),
           ),
           secondary: [
             OmiButton.secondary(

@@ -17,7 +17,7 @@ import 'package:omi/utils/logger.dart';
 /// never touches the radio and never starts a physical connect.
 class NativeLinkReconciler {
   NativeLinkReconciler(this._provider, {Future<bool> Function(String deviceId)? nativeLinkProbe})
-    : _nativeLinkProbe = nativeLinkProbe ?? BleHostApi().isPeripheralConnected;
+      : _nativeLinkProbe = nativeLinkProbe ?? BleHostApi().isPeripheralConnected;
 
   final DeviceProvider _provider;
   final Future<bool> Function(String deviceId) _nativeLinkProbe;
