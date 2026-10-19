@@ -11,6 +11,11 @@ parity smoke before the train (swarm-plan §5).
     check_release_tree.py tree <rev>
     check_release_tree.py verify --sha <main-merge-sha> --qualified-tree <tree>
     check_release_tree.py verify --sha <main-merge-sha> --from-staging [--project based-hardware-dev]
+    check_release_tree.py image --labels-json <file> --sha <admitted-sha>
+
+`image` is the worker digest-promotion check: an already-built image may deploy for
+an admitted SHA only when its `omi.release.tree` label (or the tree of its
+`org.opencontainers.image.revision` label) equals that SHA's tree.
 
 `--from-staging` reads OMI_RELEASE_TREE from the revision each staging Cloud Run
 service actually serves (status.traffic), never from spec.template, and requires
@@ -36,6 +41,8 @@ STAGING_SERVICES = (
     'backend-integration-staging',
 )
 RELEASE_TREE_KEY = 'OMI_RELEASE_TREE'
+TREE_LABEL = 'omi.release.tree'
+REVISION_LABEL = 'org.opencontainers.image.revision'
 
 Runner = Callable[[Sequence[str]], str]
 
@@ -91,6 +98,18 @@ def staging_release_tree(project: str, region: str, runner: Runner = run) -> str
     return tree
 
 
+def image_tree(labels: Any, runner: Runner = run) -> str:
+    if not isinstance(labels, dict):
+        raise TreeCheckError('image has no labels; images built before B7 cannot be promoted by digest')
+    tree = labels.get(TREE_LABEL)
+    if isinstance(tree, str) and TREE.match(tree):
+        return tree
+    revision = labels.get(REVISION_LABEL)
+    if isinstance(revision, str) and TREE.match(revision):
+        return tree_of(revision, runner)
+    raise TreeCheckError(f'image carries neither {TREE_LABEL} nor {REVISION_LABEL}')
+
+
 def main(argv: Sequence[str] | None = None, *, runner: Runner = run) -> int:
     parser = argparse.ArgumentParser(description='Promotion identity: main merge tree == staging-qualified tree.')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -104,11 +123,23 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = run) -> int:
     verify.add_argument('--project', default='based-hardware-dev')
     verify.add_argument('--region', default='us-central1')
     verify.add_argument('--main-ref', default='origin/main')
+    image = sub.add_parser('image')
+    image.add_argument('--labels-json', required=True)
+    image.add_argument('--sha', required=True)
     args = parser.parse_args(argv)
 
     try:
         if args.command == 'tree':
             print(tree_of(args.rev, runner))
+            return 0
+        if args.command == 'image':
+            with open(args.labels_json, encoding='utf-8') as handle:
+                labels = json.load(handle)
+            built, admitted = image_tree(labels, runner), tree_of(args.sha, runner)
+            if built != admitted:
+                print(f'MISMATCH: image tree {built} != admitted {args.sha} tree {admitted}', file=sys.stderr)
+                return 1
+            print(f'TREE_EQUAL image {built}')
             return 0
         if args.from_staging:
             qualified = staging_release_tree(args.project, args.region, runner)

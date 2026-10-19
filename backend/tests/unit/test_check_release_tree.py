@@ -102,3 +102,38 @@ def test_from_staging_requires_agreement_and_single_revision(repo):
     same = {name: tree for name in crt.STAGING_SERVICES}
     split = _staging_runner(same, split='backend-staging')
     assert crt.main(['verify', '--sha', 'HEAD', '--from-staging'], runner=split) == 2
+
+
+def test_worker_digest_promotes_only_for_the_same_tree(repo, tmp_path, capsys):
+    sha = _git(repo, 'rev-parse', 'HEAD')
+    tree = _git(repo, 'rev-parse', 'HEAD^{tree}')
+    labels = tmp_path / 'labels.json'
+    labels.write_text(json.dumps({'omi.release.tree': tree, 'org.opencontainers.image.revision': sha}))
+    assert crt.main(['image', '--labels-json', str(labels), '--sha', sha]) == 0
+    (repo / 'a.txt').write_text('changed\n')
+    _git(repo, 'commit', '-qam', 'later')
+    assert crt.main(['image', '--labels-json', str(labels), '--sha', 'HEAD']) == 1
+
+
+def test_worker_digest_falls_back_to_revision_label_and_refuses_unlabelled(repo, tmp_path):
+    labels = tmp_path / 'labels.json'
+    labels.write_text(json.dumps({'org.opencontainers.image.revision': _git(repo, 'rev-parse', 'HEAD')}))
+    assert crt.main(['image', '--labels-json', str(labels), '--sha', 'HEAD']) == 0
+    labels.write_text('null')
+    assert crt.main(['image', '--labels-json', str(labels), '--sha', 'HEAD']) == 2
+
+
+def test_diarizer_workflow_promotes_worker_digests_through_the_tree_check():
+    import yaml
+
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[3] / '.github/workflows/gcp_diarizer.yml').read_text())
+    on = workflow.get(True) or workflow['on']
+    assert on['workflow_dispatch']['inputs']['image_digest']['default'] == ''
+    steps = {step.get('name'): step for step in workflow['jobs']['deploy']['steps']}
+    assert steps['Build and Push Docker image']['if'] == "github.event.inputs.image_digest == ''"
+    assert 'omi.release.tree=' in steps['Build and Push Docker image']['run']
+    promote = steps['Verify promoted worker digest']
+    assert promote['if'] == "github.event.inputs.image_digest != ''"
+    assert 'check_release_tree.py image' in promote['run']
+    helm = steps['Deploy Diarizer to GKE cluster using Helm']['run']
+    assert 'steps.build.outputs.image_digest || steps.promote.outputs.image_digest' in helm
