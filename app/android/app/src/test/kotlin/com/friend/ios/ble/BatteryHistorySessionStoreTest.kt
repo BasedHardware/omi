@@ -37,6 +37,10 @@ class BatteryHistorySessionStoreTest {
         first.start("device", 1000, "build")
         disk["audio_outage_epoch_device"] = "7"
         disk["audio_outage_device"] = "1000"
+        // A later disconnect makes history readable and does not record this marker.
+        disk["disconnect_history_device"] = JSONArray()
+            .put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000))
+            .toString()
         val restarted = process()
         assertNull(restarted.openSince("device"))
         assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
@@ -60,6 +64,12 @@ class BatteryHistorySessionStoreTest {
         val plan = planAudioOutageCleanup("[]", disk["session_device"], 7L, 90000L, markerEpochMatches = true)
         assertFalse(plan.dropMarker)
         assertNull(plan.rewrittenHistory)
+        // Pruned to [] cannot tell a session-start copy from a same-millisecond disconnect.
+        disk["audio_outage_device"] = "1000"
+        disk["disconnect_history_device"] = "[]"
+        assertNull(store.openSince("device"))
+        assertEquals("1000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
     }
     @Test fun `unreadable disconnect history keeps a genuine marker`() {
         val session = JSONObject().put("device", "device").put("started_at", 1000).put("identity_epoch", 7).toString()
@@ -67,11 +77,27 @@ class BatteryHistorySessionStoreTest {
         assertFalse(genuine.dropMarker)
         assertNull(genuine.rewrittenHistory)
         val echo = planAudioOutageCleanup("{", session, 7L, 1000L, markerEpochMatches = true)
-        assertTrue(echo.dropMarker)
+        assertFalse(echo.dropMarker)
         assertNull(echo.rewrittenHistory)
+        val recoveryOnly = JSONArray()
+            .put(JSONObject().put("eventType", "audio_recovered").put("timestamp", 1000).put("lostAudioResolvedAt", 2000))
+            .toString()
+        val untouched = planAudioOutageCleanup(recoveryOnly, session, 7L, 1000L, markerEpochMatches = true)
+        assertFalse(untouched.dropMarker)
+        assertNull(untouched.rewrittenHistory)
         val mismatchedEpoch = planAudioOutageCleanup("[]", session, 8L, 1000L, markerEpochMatches = true)
         assertFalse(mismatchedEpoch.dropMarker)
         assertNull(mismatchedEpoch.rewrittenHistory)
+        val disk = mutableMapOf<String, String>()
+        disk["session_device"] = session
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = "1000"
+        disk["disconnect_history_device"] = "{"
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertNull(store.openSince("device"))
+        assertEquals("1000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
     }
     @Test fun `only a session-start echo recovery is dropped`() {
         val history = JSONArray()
@@ -108,7 +134,8 @@ class BatteryHistorySessionStoreTest {
         assertEquals(12003L, store.openSince("device"))
         assertEquals("12003", disk["audio_outage_device"])
         val echo = planAudioOutageCleanup("[]", session, 7L, 12000L, markerEpochMatches = true)
-        assertTrue(echo.dropMarker)
+        assertFalse(echo.dropMarker)
+        assertNull(echo.rewrittenHistory)
         val supported = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 12000)).toString()
         assertFalse(planAudioOutageCleanup(supported, session, 7L, 12000L, markerEpochMatches = true).dropMarker)
         val later = JSONArray().put(JSONObject().put("eventType", "disconnect").put("timestamp", 80000)).toString()

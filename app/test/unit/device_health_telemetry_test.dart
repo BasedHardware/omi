@@ -777,26 +777,70 @@ void main() {
 
   test('an aged-out native recovery does not delete the persisted day', () async {
     const id = 'aged-out-native-recovery';
-    final start = DateTime(2026, 10, 14, 10);
+    final observedAt = DateTime(2026, 10, 16, 8);
+    // Native history and recovery proofs expire after seven days. This recovery
+    // ended before that horizon; Dart still emits the calendar day.
+    const nativeRetentionMs = 7 * 24 * 3600 * 1000;
+    final horizon = observedAt.millisecondsSinceEpoch - nativeRetentionMs;
+    final resolvedAt = DateTime.fromMillisecondsSinceEpoch(horizon - 3600000);
+    final start = resolvedAt.subtract(const Duration(hours: 2));
+    expect(resolvedAt.millisecondsSinceEpoch, lessThan(horizon));
     await DeviceHealthTelemetry.recordOutage(id, at: start);
-    await DeviceHealthTelemetry.recordRecovery(id, at: start.add(const Duration(hours: 2)));
+    await DeviceHealthTelemetry.recordRecovery(id, at: resolvedAt);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('device_health_day_$id', '2026-10-13');
+    await prefs.setString('device_health_day_$id', '2026-10-08');
     final events = <Map<String, dynamic>>[];
     await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
-        now: DateTime(2026, 10, 16, 8),
+        now: observedAt,
         emissionContext: {},
         loadDiagnostics: (_) async => jsonEncode({
-              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'observed_at': observedAt.millisecondsSinceEpoch,
               'disconnect_history_v2': [],
             }),
         emit: (_, props) => events.add(props));
-    expect(events.single['day'], '2026-10-14');
+    expect(events.single['day'], '2026-10-09');
     expect(events.single['lost_audio_seconds'], 2 * 3600);
     final record =
         jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
     expect(
-        (record['resolved_days'] as Map).containsKey(DateTime(2026, 10, 14).millisecondsSinceEpoch.toString()), isTrue);
+        (record['resolved_days'] as Map).containsKey(DateTime(2026, 10, 9).millisecondsSinceEpoch.toString()), isTrue);
+  });
+
+  test('importing the same native proofs twice does not double count', () async {
+    const id = 'proofs-twice';
+    final first = DateTime(2026, 10, 15, 12).millisecondsSinceEpoch;
+    final second = DateTime(2026, 10, 15, 14).millisecondsSinceEpoch;
+    Future<String> load(_) async => jsonEncode({
+          'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+          'audio_outage_resolved_start': second,
+          'audio_outage_resolved_at': second + 120000,
+          'audio_outage_recovery_proofs': [
+            {'start': first, 'at': first + 60000},
+            {'start': second, 'at': second + 120000},
+          ],
+          'disconnect_history_v2': [
+            {'timestamp': first, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': first + 60000},
+            {'timestamp': second, 'eventType': 'audio_recovered', 'lostAudioResolvedAt': second + 120000},
+          ],
+        });
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: load,
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 180);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('device_health_day_$id', '2026-10-14');
+    events.clear();
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: load,
+        emit: (_, props) => events.add(props));
+    expect(events.single['lost_audio_seconds'], 180);
+    final record = jsonDecode(prefs.getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect((record['resolved_days'] as Map)[DateTime(2026, 10, 15).millisecondsSinceEpoch.toString()], 180);
   });
 
   test('audio recovery backed by a disconnect is imported', () async {

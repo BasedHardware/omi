@@ -1055,8 +1055,9 @@ class OmiBleForegroundService : Service() {
             row.put("expected", row.optLong("expected") + after.second - before.second)
             row.put("last_at", now)
             while (days.length() > 8) days.remove(0)
-            // openSince drops a marker the current session proves is its own start.
-            // Unreadable history is not that proof: keep the marker and skip this packet.
+            // openSince drops a session-start echo only when readable history has a
+            // disconnect and none records the marker. Unreadable or empty history
+            // keeps the marker and skips this packet.
             val marker = healthSessions.openSince(addr) ?: return
             val key = historyKey(addr)
             val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }

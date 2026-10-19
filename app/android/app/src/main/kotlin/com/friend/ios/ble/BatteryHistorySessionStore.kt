@@ -154,8 +154,29 @@ internal fun putAudioRecoveryStamps(target: JSONObject, proofsJson: String?, epo
 }
 
 /**
- * [dropMarker] is true only when the session row proves the marker is a session start.
- * [rewrittenHistory] is null when history must be left untouched (parse failure, or no echo row).
+ * The parsed history when it contains at least one disconnect row.
+ * Parse failure, a blank payload, and a history with no disconnect row
+ * (including one pruned to `[]`) are unavailable: a session-start timestamp
+ * match is then ambiguous and must not drop a marker.
+ */
+internal fun readableDisconnectHistory(historyJson: String?): JSONArray? {
+    val history = try {
+        JSONArray(historyJson?.takeIf { it.isNotBlank() } ?: "[]")
+    } catch (_: Exception) {
+        return null
+    }
+    for (i in 0 until history.length()) {
+        if (history.optJSONObject(i)?.optString("eventType") == "disconnect") return history
+    }
+    return null
+}
+
+/**
+ * [dropMarker] is true only when [readableDisconnectHistory] is non-null, no
+ * disconnect row records [marker], and the session row proves the marker is
+ * that session's start. Unavailable history leaves the marker and the history
+ * bytes alone, including `audio_recovered` rows.
+ * [rewrittenHistory] is null when history must be left untouched.
  */
 internal class AudioOutageCleanup(val dropMarker: Boolean, val rewrittenHistory: JSONArray?)
 
@@ -166,12 +187,8 @@ internal fun planAudioOutageCleanup(
     marker: Long,
     markerEpochMatches: Boolean,
 ): AudioOutageCleanup {
-    val parsed = try {
-        JSONArray(historyJson?.takeIf { it.isNotBlank() } ?: "[]")
-    } catch (_: Exception) {
-        val echo = markerEpochMatches && sessionStartMatchingMarker(sessionJson, epoch, marker) != null
-        return AudioOutageCleanup(dropMarker = echo, rewrittenHistory = null)
-    }
+    val parsed = readableDisconnectHistory(historyJson)
+        ?: return AudioOutageCleanup(dropMarker = false, rewrittenHistory = null)
     val sessionStarted = provenSessionStartedAt(sessionJson, epoch)
     val echo = markerEpochMatches && sessionStartMatchingMarker(sessionJson, epoch, marker, parsed) != null
     val kept = dropUnmeasuredAudioRecoveries(parsed, sessionStarted)
@@ -202,16 +219,19 @@ internal class BatteryHistorySessionStore(
         if (!enabled()) return null
         // Only a marker written at disconnect is an outage. session.started_at is
         // when the link came up; after process death it is not lost audio, and
-        // billing from it charges the whole connected interval. A marker is that
-        // session start only when it equals started_at and no disconnect row
-        // records it. A marker after started_at is a short link that died before
-        // the session row was removed. Missing session evidence keeps the marker.
+        // billing from it charges the whole connected interval. Drop that copy
+        // only when readable history has a disconnect and none records the
+        // marker, and the marker equals started_at within 5ms without being
+        // later. Unreadable or empty history shares that timestamp with a real
+        // same-millisecond disconnect, so return nothing and keep the marker.
+        // A marker after started_at is a short link that died before the session
+        // row was removed. Missing session evidence keeps the marker.
         if (read("audio_outage_epoch_$device")?.toLongOrNull() != epoch()) return null
         val marker = read("audio_outage_$device")?.toLongOrNull() ?: return null
-        val history = try {
-            JSONArray(read("disconnect_history_$device") ?: "[]")
-        } catch (_: Exception) {
-            null
+        val history = readableDisconnectHistory(read("disconnect_history_$device"))
+        if (history == null) {
+            if (sessionStartMatchingMarker(read("session_$device"), epoch(), marker) != null) return null
+            return marker
         }
         if (sessionStartMatchingMarker(read("session_$device"), epoch(), marker, history) != null) {
             remove("audio_outage_$device")
