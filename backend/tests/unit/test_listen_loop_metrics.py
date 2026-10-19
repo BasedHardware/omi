@@ -1,6 +1,7 @@
 """Listen loop-health metrics: loop lag probe, per-frame timing, VAD window rate and kill switch."""
 
 import asyncio
+import contextvars
 import struct
 import time
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from utils.observability.listen_loop import (
     listen_loop_metrics_enabled,
     record_vad_windows,
 )
+from utils.byok import get_byok_key, set_validated_byok_keys
 from utils.stt.vad_gate import VADStreamingGate
 
 
@@ -234,3 +236,30 @@ async def test_receiver_times_each_audio_frame_but_not_text_or_heartbeats(monkey
     )
     await receiver.receive_data()
     assert _frame_count('opus') == before + expected
+
+
+@pytest.mark.anyio
+async def test_lag_probe_does_not_inherit_session_byok_or_uid_context(monkeypatch):
+    monkeypatch.delenv(ENABLED_ENV, raising=False)
+    monkeypatch.setattr(listen_loop, '_probe', None)
+    captured: list[contextvars.Context] = []
+
+    async def capture(_interval: float) -> None:
+        captured.append(contextvars.copy_context())
+
+    monkeypatch.setattr(listen_loop, '_probe_loop_lag', capture)
+
+    async def session() -> asyncio.Task:
+        set_validated_byok_keys({'deepgram': 'secret-key'}, 'user-1')
+        assert get_byok_key('deepgram') == 'secret-key'
+        task = ensure_loop_lag_probe(interval=0.01)
+        assert task is not None
+        return task
+
+    task = await asyncio.create_task(session())
+    await task
+    assert len(captured) == 1
+    leaked = {var.name: value for var, value in captured[0].items() if var.name.startswith('byok')}
+    assert all(value in (None, False) for value in leaked.values()), leaked
+    assert 'secret-key' not in repr(list(captured[0].values()))
+    assert 'user-1' not in repr(list(captured[0].values()))

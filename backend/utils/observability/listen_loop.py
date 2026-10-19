@@ -12,6 +12,7 @@ change and pod restart.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import os
 import time
@@ -129,6 +130,8 @@ def ensure_loop_lag_probe(interval: float = LOOP_LAG_PROBE_INTERVAL_SECONDS) -> 
     current = _probe
     if current is not None and current[0] is loop and not current[1].done():
         return current[1]
-    task = start_background_task(_probe_loop_lag(interval), name='listen_loop_lag_probe')
+    # Start from an empty context: the first session's context carries its uid and
+    # validated BYOK keys, and a lifetime task would otherwise pin them for the pod.
+    task = contextvars.Context().run(start_background_task, _probe_loop_lag(interval), name='listen_loop_lag_probe')
     _probe = (loop, task)
     return task
