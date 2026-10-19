@@ -358,6 +358,8 @@ def perform_merge_async(
             conversations_db.store_conversation_photos(uid, new_conversation_id, new_conversation.photos)
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
+        # Its created webhook is held until a failure can no longer roll the record back.
+        created_webhook_sends: List[Callable[[], None]] = []
         if reprocess:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -366,6 +368,7 @@ def perform_merge_async(
                         new_conversation.language or "en",
                         new_conversation,
                         trigger=ProcessingTrigger.MERGE,
+                        created_webhook_observer=created_webhook_sends.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -381,6 +384,14 @@ def perform_merge_async(
         if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
+        # transfer() returns only once committed, so failure handling now keeps the merged
+        # record; had it raised, the rollback would have deleted it. Announce it only now.
+        for send_created_webhook in created_webhook_sends:
+            try:
+                send_created_webhook()
+            except Exception as e:
+                logger.error(f"Error sending created webhook for merged conversation {new_conversation_id}: {e}")
 
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
