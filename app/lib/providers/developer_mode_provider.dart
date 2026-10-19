@@ -318,8 +318,19 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Developer Settings disposes this provider when the page closes, which can happen while a load or a
+  /// save is still waiting on the server. When that request finishes there is nothing left to update,
+  /// and notifying a disposed notifier is an error.
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     for (final controller in _webhookControllers) {
       controller.removeListener(_onWebhookTextChanged);
     }
