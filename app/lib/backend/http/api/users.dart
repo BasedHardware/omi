@@ -191,19 +191,21 @@ Future<bool> setUserWebhookUrl({required String type, required String url}) asyn
   return false;
 }
 
-Future<String> getUserWebhookUrl({required String type}) async {
+/// The webhook URL saved for [type], `''` when none is set, or null when it could not be read: a
+/// failed read is not an unset webhook, and saving it back as empty turns the webhook off.
+Future<String?> getUserWebhookUrl({required String type}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/developer/webhook/$type',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return '';
+  if (response == null) return null;
   if (response.statusCode == 200) {
     final data = wire.GeneratedUserWebhookUrlResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return data.url ?? '';
   }
-  return '';
+  return null;
 }
 
 Future disableWebhook({required String type}) async {
