@@ -393,8 +393,13 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
     )
+    # The lifecycle emits the manifest's backfill queue, defaulting to sync-backfill when undeclared.
+    backfill_queue = 'sync-backfill'
+    for line in rendered_outputs.get('backend_sync_backfill_env_vars', '').splitlines():
+        if line.startswith('SYNC_BACKFILL_TASKS_QUEUE=') and line.split('=', 1)[1]:
+            backfill_queue = line.split('=', 1)[1]
     sync_backfill_overlay = (
-        'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill\n'
+        f'SYNC_BACKFILL_TASKS_QUEUE={backfill_queue}\n'
         'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run\n'
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )

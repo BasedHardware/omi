@@ -35,6 +35,14 @@ DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
+DEFAULT_CANDIDATE_TIMEOUT_SECONDS = 45
+DEFAULT_RETRY_TIMEOUT_SECONDS = 19
+SMOKE_RETRY_ATTEMPTS = 3
+SMOKE_RETRY_SLEEP_SECONDS = 5
+MAX_BROWSER_CANDIDATES = 5
+# The requested app values need 20m50s if all five browser names are present
+# and every attempt times out. Keep a small, explicit ceiling above that bound.
+MAX_TOTAL_SMOKE_SECONDS = 21 * 60
 MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
     inputs:
       environment:
@@ -66,6 +74,8 @@ class PublicInput:
 class CandidateAcceptance:
     command: tuple[str, ...]
     marker: str
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS
     # environment -> absolute HTTPS URL served by the load balancer in front of
     # the service. Required for any environment whose ingress hides the tagged
     # candidate URL from CI; see acceptance_route().
@@ -227,6 +237,33 @@ def _require_string(value: Any, *, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a non-empty string")
     return value
+
+
+def _parse_candidate_timeouts(acceptance: Mapping[str, Any], *, target_name: str) -> tuple[int, int]:
+    timeout = acceptance.get("timeout_seconds", DEFAULT_CANDIDATE_TIMEOUT_SECONDS)
+    retry_timeout = acceptance.get("retry_timeout_seconds", DEFAULT_RETRY_TIMEOUT_SECONDS)
+    for field_name, value in (
+        ("timeout_seconds", timeout),
+        ("retry_timeout_seconds", retry_timeout),
+    ):
+        if type(value) is not int or value <= 0:
+            raise ValueError(
+                f"target {target_name} candidate_acceptance.{field_name} must be a positive integer"
+            )
+    if retry_timeout >= timeout:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance.retry_timeout_seconds must be less than timeout_seconds"
+        )
+    per_browser_seconds = timeout + (SMOKE_RETRY_ATTEMPTS - 1) * (
+        retry_timeout + SMOKE_RETRY_SLEEP_SECONDS
+    )
+    worst_case_seconds = MAX_BROWSER_CANDIDATES * per_browser_seconds
+    if worst_case_seconds > MAX_TOTAL_SMOKE_SECONDS:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance timeouts allow a {worst_case_seconds}s worst-case smoke, "
+            f"exceeding the {MAX_TOTAL_SMOKE_SECONDS}s ceiling"
+        )
+    return timeout, retry_timeout
 
 
 def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
@@ -457,6 +494,9 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
         if "{sha}" in command and "--expect-sha" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command uses {{sha}} without --expect-sha")
+        timeout_seconds, retry_timeout_seconds = _parse_candidate_timeouts(
+            acceptance, target_name=target_name
+        )
         gateway_required = raw_target.get("gateway_required", False)
         if not isinstance(gateway_required, bool):
             raise ValueError(f"target {target_name} gateway_required must be boolean")
@@ -476,6 +516,8 @@ def load_contract(path: Path) -> Contract:
             candidate_acceptance=CandidateAcceptance(
                 command=tuple(command),
                 marker=_require_string(acceptance.get("marker"), field="candidate marker"),
+                timeout_seconds=timeout_seconds,
+                retry_timeout_seconds=retry_timeout_seconds,
                 public_urls=_parse_public_urls(
                     acceptance.get("public_urls"), target_name=target_name, environments=environments
                 ),
