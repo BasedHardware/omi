@@ -68,13 +68,6 @@ def need(harness, *names):
         pytest.skip(f'not applicable to the {harness.name} backend')
 
 
-def known_gap(request, harness, name, reason):
-    """The backend is MISSING a protocol behaviour. strict xfail: the day it is fixed this fails loudly,
-    so the gap list cannot rot. Gaps are listed in swarm/status/lane12.md."""
-    if harness.name == name:
-        request.applymarker(pytest.mark.xfail(strict=True, reason=reason))
-
-
 # -- document semantics ------------------------------------------------------------------------------
 def test_missing_document_reads_as_empty_dict(h):
     assert h.store.run(lambda tx: tx.get('jobs', 'nope')) == {}
@@ -161,8 +154,7 @@ def test_write_budget_is_450(h):
     assert h.store.run(lambda tx: tx.get('gpus', 'g450')) == {}
 
 
-def test_conversation_documents_cannot_be_set_and_only_route_owner_patches(h, request):
-    known_gap(request, h, 'sim', 'SimTransaction accepts conversation put/patch that FirestoreTransaction refuses')
+def test_conversation_documents_cannot_be_set_and_only_route_owner_patches(h):
     with pytest.raises(ValueError):
         h.store.run(lambda tx: tx.put('conversations', f"{h.uid('o')}/c1", {'x': 1}))
     with pytest.raises(ValueError):
@@ -185,8 +177,7 @@ def test_first_pending_orders_by_capture_then_segment_and_scopes_to_owner(h):
     assert h.store.run(lambda tx: tx.first_pending('ok-nobody')) is None
 
 
-def test_ready_predecessor_requires_exactly_one_ready_link(h, request):
-    known_gap(request, h, 'sim', 'SimTransaction has no ready_predecessor')
+def test_ready_predecessor_requires_exactly_one_ready_link(h):
     ok = owner_key(h.uid('o'))
     put_all(
         h,
@@ -262,8 +253,7 @@ def test_oldest_retry_ignores_rows_that_never_retried(h):
     assert h.store.oldest_retry(0) is None
 
 
-def test_control_candidate_picks_lowest_service_then_availability(h, request):
-    known_gap(request, h, 'sim', 'SimStore.control_candidate does not validate priority/pool')
+def test_control_candidate_picks_lowest_service_then_availability(h):
 
     def control(**kw):
         base = {'p1_active': True, 'p1_service': 5.0, 'p1_batch_available_at': 0.0, 'p1_live_available_at': 0.0}
@@ -290,8 +280,7 @@ def test_control_candidate_picks_lowest_service_then_availability(h, request):
         h.store.control_candidate(1, 'gpu', 1.0)
 
 
-def test_service_frontier_is_the_maximum_virtual_time_or_zero(h, request):
-    known_gap(request, h, 'sim', 'SimStore.service_frontier does not validate priority')
+def test_service_frontier_is_the_maximum_virtual_time_or_zero(h):
     assert h.store.run(lambda tx: tx.service_frontier(1)) == 0.0
     put_all(
         h,
@@ -397,7 +386,6 @@ def _projection_rows(h):
 
 
 def test_projection_page_is_a_stable_keyset_scan(h):
-    need(h, 'sim')  # SimStore does not model the projection scan; emulator and Postgres must agree
     put_all(h, _projection_rows(h))
     ids, cursor = h.store.projection_page(2)
     assert ids == ['r4', 'r2'] and cursor is not None  # committed_at ascending, key breaks ties
@@ -409,7 +397,6 @@ def test_projection_page_is_a_stable_keyset_scan(h):
 
 
 def test_projection_cursor_survives_removal_of_its_source_row(h):
-    need(h, 'sim')
     put_all(h, _projection_rows(h))
     ids, cursor = h.store.projection_page(2)
     put_all(h, [('results', ids[-1], {'segment_id': ids[-1], 'projection_state': 'completed', 'committed_at': 1.0})])
