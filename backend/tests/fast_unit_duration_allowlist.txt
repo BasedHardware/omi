@@ -474,3 +474,5 @@ tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requi
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
 tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
+# Product search through the HTTP surface on a short-term/archive fixture; measured 0.37-0.47s CPU on m5 (unchanged test, 2026-10-19).
+tests/unit/test_product_memory_router.py::test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive
