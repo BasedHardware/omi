@@ -300,6 +300,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "config_train.yml/config-train": {
+      "budget_p50_minutes": 5,
+      "display_name": "config-train",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "backend deploy (two-lane lead)",
+      "rationale": "B4 config-train: manual dispatch only, no build; plan/apply of backend/deploy/ops in about 5 minutes",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "desktop-backend-contracts.yml/contracts": {
       "budget_p50_minutes": 1,
       "display_name": "contracts",
@@ -979,7 +997,7 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
       "matrix": {},
       "matrix_size": 1,
@@ -989,7 +1007,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1001,13 +1019,13 @@
       "budget_p50_minutes": 5,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1019,13 +1037,13 @@
       "budget_p50_minutes": 5,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "${{ needs.firestore_readiness.outputs.break_glass == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1037,13 +1055,13 @@
       "budget_p50_minutes": 5,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'repair-traffic-only'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1055,13 +1073,13 @@
       "budget_p50_minutes": 5,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "github.event.inputs.mode == 'deploy'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1127,13 +1145,13 @@
       "budget_p50_minutes": 10,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1145,13 +1163,13 @@
       "budget_p50_minutes": 5,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1163,13 +1181,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1271,13 +1289,13 @@
       "budget_p50_minutes": 20,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual diarizer or batch GPU worker release; conservatively allow a 20-minute p50 for the worker model image build until measured.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1415,13 +1433,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1433,13 +1451,13 @@
       "budget_p50_minutes": 5,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "${{ needs.deploy.outputs.break_glass == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "deploy",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1541,13 +1559,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2784,6 +2802,48 @@
         "workflow_dispatch": ""
       }
     },
+    "config_train.yml": {
+      "name": "Config Train (ops file)",
+      "owner": "backend deploy (two-lane lead)",
+      "rationale": "B4 config-train (named by David 2026-10-19); manual dispatch only",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "staging",
+              "description": "Target environment",
+              "options": [
+                "staging",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "mode": {
+              "default": "plan",
+              "description": "plan (read-only diff) or apply (plan, apply, verify)",
+              "options": [
+                "plan",
+                "apply"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "ref": {
+              "default": "main",
+              "description": "Source: main or a full SHA on main (prod); any branch or SHA (staging)",
+              "required": "true"
+            }
+          }
+        }
+      }
+    },
     "desktop-backend-contracts.yml": {
       "name": "Desktop Backend Contracts",
       "owner": "CI maintainers",
@@ -3417,7 +3477,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3425,6 +3485,12 @@
               "default": "",
               "description": "Type deploy-without-proof when skip_eligibility_proof is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -3508,7 +3574,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "push": {
           "branches": [
@@ -3536,6 +3602,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "chat_agent_route": {
               "default": "chart-default",
@@ -3608,7 +3680,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3621,6 +3693,12 @@
               "default": "",
               "description": "Type skip-live-capacity-gate when skip_live_capacity_gate is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -3795,7 +3873,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "Manual dispatch now selects either the diarizer release or the dedicated batch GPU worker release.",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3803,6 +3881,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "environment": {
               "default": "development",
@@ -3998,7 +4082,7 @@
     "gcp_llm_gateway.yml": {
       "name": "Deploy LLM Gateway to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4011,6 +4095,12 @@
               "default": "",
               "description": "Type deploy-without-proof when skip_eligibility_proof is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -4193,7 +4283,7 @@
     "gcp_parakeet.yml": {
       "name": "Deploy Parakeet ASR to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4201,6 +4291,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "environment": {
               "default": "development",
