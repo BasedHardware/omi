@@ -23,6 +23,14 @@ spec:
       policies:
         - {type: Pods, value: 1, periodSeconds: 120}
   metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- else }}
     {{- range $priority, $target := .Values.autoscaling.targets }}
     - type: External
       external:
@@ -36,5 +44,6 @@ spec:
         target:
           type: Value
           value: {{ $target | quote }}
+    {{- end }}
     {{- end }}
 {{- end }}

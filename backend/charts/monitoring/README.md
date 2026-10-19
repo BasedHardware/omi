@@ -371,6 +371,15 @@ The adapter translates Prometheus queries into K8s metrics APIs so HPAs can scal
 
 Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are mirrored in the production cluster-wide adapter (see below).
 
+The batch-pipeline-worker chart includes a ready-age HPA and the rule fragment
+`backend/charts/batch-pipeline-worker/prometheus-adapter-rules.yaml`, but that
+fragment is not currently installed by
+`prometheus-adapter/prod_omi_prometheus_adapter.yaml`. Its production HPA uses
+the explicitly temporary 80% CPU resource-metric fallback. Do not switch the
+worker back to ready-age scaling until the rule is merged into the production
+adapter and fresh per-priority samples are verified through
+`external.metrics.k8s.io`.
+
 ### Stackdriver Exporter
 
 Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):

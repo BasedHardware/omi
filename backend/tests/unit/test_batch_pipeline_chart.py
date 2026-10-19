@@ -102,6 +102,28 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     )
 
 
+def test_cpu_fallback_hpa_uses_resource_metric_only():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true',
+        '--set',
+        'autoscaling.targetCPUUtilizationPercentage=80',
+    )
+    assert result.returncode == 0, result.stderr
+    manifests = {doc['kind']: doc for doc in yaml.safe_load_all(result.stdout) if doc}
+    hpa = manifests['HorizontalPodAutoscaler']['spec']
+    assert hpa['metrics'] == [
+        {
+            'type': 'Resource',
+            'resource': {
+                'name': 'cpu',
+                'target': {'type': 'Utilization', 'averageUtilization': 80},
+            },
+        }
+    ]
+
+
 def test_enabled_chart_refuses_unpinned_image_and_unsampled_scale_to_zero():
     assert render('--set', 'enabled=true').returncode != 0
     result = render(*enabled_arguments(), '--set', 'autoscaling.enabled=true', '--set', 'autoscaling.minReplicas=0')
@@ -160,7 +182,10 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
-    assert deployment['spec']['replicas'] == 1
+    if environment == 'prod':
+        assert 'replicas' not in deployment['spec']
+    else:
+        assert deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
         'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
@@ -196,7 +221,24 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
         assert project_env[name]['valueFrom']['secretKeyRef']['name'] == secret
     project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'
     assert container['image'] == f"gcr.io/{project_id}/batch-pipeline-worker@sha256:{'b' * 64}"
-    assert 'HorizontalPodAutoscaler' not in manifests
+    if environment == 'prod':
+        autoscaling = environment_values['autoscaling']
+        assert autoscaling['enabled'] is True
+        assert autoscaling['minReplicas'] == 1 and autoscaling['maxReplicas'] == 6
+        assert autoscaling['targetCPUUtilizationPercentage'] == 80
+        hpa = manifests['HorizontalPodAutoscaler']['spec']
+        assert hpa['minReplicas'] == 1 and hpa['maxReplicas'] == 6
+        assert hpa['metrics'] == [
+            {
+                'type': 'Resource',
+                'resource': {
+                    'name': 'cpu',
+                    'target': {'type': 'Utilization', 'averageUtilization': 80},
+                },
+            }
+        ]
+    else:
+        assert 'HorizontalPodAutoscaler' not in manifests
 
 
 @pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '1800s'), ('diarizer', '600s')])
@@ -257,7 +299,17 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert 'HorizontalPodAutoscaler' not in docs
+    hpa = docs['HorizontalPodAutoscaler']['spec']
+    assert hpa['minReplicas'] == 1 and hpa['maxReplicas'] == 6
+    assert hpa['metrics'] == [
+        {
+            'type': 'Resource',
+            'resource': {
+                'name': 'cpu',
+                'target': {'type': 'Utilization', 'averageUtilization': 80},
+            },
+        }
+    ]
 
 
 @pytest.mark.parametrize('enabled', [False, True])
