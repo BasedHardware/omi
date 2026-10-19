@@ -387,3 +387,108 @@ def resolve_listen_policy(
         demand_admitted=admitted,
         demand_dwell_seconds=demand.dwell_seconds,
     )
+
+
+def listen_generation_violations(policy_or_values) -> tuple[str, ...]:
+    """Return impossible resolved listen combinations for policy generation.
+
+    Resolver error states remain representable on ``ListenSessionPolicy`` for
+    fail-closed runtime handling. This narrower contract describes valid
+    generated policies and sits beside the type so its dependencies stay local.
+    """
+    get = policy_or_values.get if isinstance(policy_or_values, Mapping) else lambda key: getattr(policy_or_values, key)
+    has = lambda *keys: not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
+    violations = []
+
+    if (
+        has('routing_on_percent', 'routing_percent_valid')
+        and bool(get('routing_percent_valid'))
+        and (not math.isfinite(float(get('routing_on_percent'))) or not 0 <= float(get('routing_on_percent')) <= 100)
+    ):
+        violations.append('valid_routing_percent_must_be_between_zero_and_one_hundred')
+    if (
+        has('routing_on_percent', 'routing_percent_valid')
+        and not bool(get('routing_percent_valid'))
+        and float(get('routing_on_percent')) != 0
+    ):
+        violations.append('invalid_routing_percent_fails_closed')
+    if (
+        has('routing_on', 'routing_mode_raw', 'routing_percent_valid', 'routing_on_percent')
+        and bool(get('routing_on'))
+        and (
+            str(get('routing_mode_raw')).strip().lower() != 'on'
+            or not bool(get('routing_percent_valid'))
+            or float(get('routing_on_percent')) <= 0
+        )
+    ):
+        violations.append('routing_on_requires_on_mode_and_positive_valid_percent')
+    if (
+        has('routing_mode_raw', 'routing_on')
+        and str(get('routing_mode_raw')).strip().lower() != 'on'
+        and bool(get('routing_on'))
+    ):
+        violations.append('routing_off_or_shadow_cannot_select_on_arm')
+
+    if (
+        has('window_allocation_percent', 'window_allocation_parse_valid')
+        and bool(get('window_allocation_parse_valid'))
+        and (
+            not math.isfinite(float(get('window_allocation_percent')))
+            or not 0 <= float(get('window_allocation_percent')) <= 100
+        )
+    ):
+        violations.append('parsed_window_percent_must_be_clamped')
+    if (
+        has('window_allocation_parse_valid', 'window_allocation_percent', 'window_allocation_valid', 'window_allocated')
+        and not bool(get('window_allocation_parse_valid'))
+        and (
+            float(get('window_allocation_percent')) != 0
+            or bool(get('window_allocation_valid'))
+            or bool(get('window_allocated'))
+        )
+    ):
+        violations.append('unparsed_window_percent_fails_closed')
+    if (
+        has('window_allocated', 'window_allocation_parse_valid', 'window_allocation_percent')
+        and bool(get('window_allocated'))
+        and (not bool(get('window_allocation_parse_valid')) or float(get('window_allocation_percent')) <= 0)
+    ):
+        violations.append('window_allocation_requires_positive_parsed_percent')
+
+    if has('hintable_percent') and (
+        not math.isfinite(float(get('hintable_percent'))) or not 0 <= float(get('hintable_percent')) <= 100
+    ):
+        violations.append('hintable_percent_must_be_clamped')
+    if (
+        has('hintable_allocated', 'hintable_percent')
+        and bool(get('hintable_allocated'))
+        and float(get('hintable_percent')) <= 0
+    ):
+        violations.append('hintable_allocation_requires_positive_percent')
+
+    if has('demand_percent') and (
+        not math.isfinite(float(get('demand_percent'))) or not 0 <= float(get('demand_percent')) <= 100
+    ):
+        violations.append('demand_percent_must_be_between_zero_and_one_hundred')
+    if has('demand_dwell_seconds') and (
+        not math.isfinite(float(get('demand_dwell_seconds'))) or not 5 <= float(get('demand_dwell_seconds')) <= 300
+    ):
+        violations.append('demand_dwell_must_be_between_five_and_three_hundred_seconds')
+    if has('demand_admitted', 'demand_enabled') and bool(get('demand_admitted')) and not bool(get('demand_enabled')):
+        violations.append('demand_admission_requires_enabled_demand')
+
+    if (
+        has('no_text_rescue_enabled', 'no_text_rescue_seconds')
+        and bool(get('no_text_rescue_enabled'))
+        and not 5 <= float(get('no_text_rescue_seconds')) <= 120
+    ):
+        violations.append('no_text_rescue_seconds_must_be_clamped')
+    if has('no_text_seconds') and float(get('no_text_seconds')) < 1:
+        violations.append('no_text_seconds_must_be_at_least_one')
+    if has('shed_connect_failures') and (
+        int(get('shed_connect_failures')) < 1 or int(get('shed_connect_failures')) > 1000
+    ):
+        violations.append('shed_connect_failures_must_be_bounded')
+    if has('circuit_half_open_probes') and int(get('circuit_half_open_probes')) < 1:
+        violations.append('circuit_half_open_probes_must_be_positive')
+    return tuple(violations)

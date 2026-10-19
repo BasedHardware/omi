@@ -60,6 +60,51 @@ class BatchUnitPolicy(PolicyPart):
         return super().from_dict(values)
 
 
+def batch_generation_violations(policy_or_values) -> tuple[str, ...]:
+    """Return impossible admission combinations for generated batch policies.
+
+    Keep these relationships beside ``BatchUnitPolicy`` so the pairwise
+    generator and its constraints evolve with the immutable policy shape.
+    """
+    get = policy_or_values.get if isinstance(policy_or_values, Mapping) else lambda key: getattr(policy_or_values, key)
+    has = lambda *keys: not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
+    violations = []
+
+    if (
+        has('retire_percent', 'batch_percent')
+        and not 0 <= float(get('retire_percent')) <= float(get('batch_percent')) <= 100
+    ):
+        violations.append('retire_percent_must_be_nested_within_batch_percent')
+    if has('batch_allowlisted', 'batch_enabled') and bool(get('batch_allowlisted')) and not bool(get('batch_enabled')):
+        violations.append('batch_allowlisted_requires_batch_enabled')
+    if (
+        has('batch_enabled', 'batch_percent', 'batch_allowlisted')
+        and bool(get('batch_enabled'))
+        and float(get('batch_percent')) == 0
+        and not bool(get('batch_allowlisted'))
+    ):
+        violations.append('zero_percent_batch_requires_allowlist')
+    if (
+        has('live_record_enabled', 'batch_enabled', 'live_admission_enabled')
+        and bool(get('live_record_enabled'))
+        and not (bool(get('batch_enabled')) and bool(get('live_admission_enabled')))
+    ):
+        violations.append('live_record_requires_batch_and_live_admission')
+    if (
+        has('live_stt_retired', 'batch_enabled', 'retire_percent')
+        and bool(get('live_stt_retired'))
+        and not (bool(get('batch_enabled')) and float(get('retire_percent')) > 0)
+    ):
+        violations.append('live_stt_retirement_requires_batch_and_positive_retire_percent')
+    if (
+        has('final_pass_authoritative', 'final_pass_enabled')
+        and bool(get('final_pass_authoritative'))
+        and not bool(get('final_pass_enabled'))
+    ):
+        violations.append('authoritative_final_pass_requires_final_pass')
+    return tuple(violations)
+
+
 def parse_percent(raw: str) -> float:
     try:
         value = float(raw)
