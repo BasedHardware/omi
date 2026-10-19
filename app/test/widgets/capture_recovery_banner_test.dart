@@ -49,8 +49,7 @@ void main() {
     zeroSession(monitor, source: source);
   }
 
-  Future<void> pumpStatus(WidgetTester tester, CaptureWedgeMonitor monitor,
-      {bool tickerEnabled = true}) async {
+  Future<void> pumpStatus(WidgetTester tester, CaptureWedgeMonitor monitor, {bool tickerEnabled = true}) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: const [
