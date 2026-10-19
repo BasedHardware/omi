@@ -32,6 +32,10 @@ worker:
   batchSize: 8
   unitSeconds: 3600
   paddedSeconds: 272
+  # Pack pyannote segmentation/embedding forwards across one flight's units.
+  # Kill switch; per-forward batch stays batchSize, so peak VRAM is unchanged.
+  flightBatchingEnabled: true
+  flightBatchSeconds: 1800
   emptyAsrRecoveryEnabled: false
   emptyAsrDispositionEnabled: false
   headPriorityEnabled: false

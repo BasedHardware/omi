@@ -33,6 +33,21 @@ speaker labels never pool across owners. Payloads retain words and turns as
 separate evidence for the downstream projection/assignment layer; this worker
 does not name speakers or write user conversation records.
 
+Flight packing (`BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED`, default on;
+`BATCH_PIPELINE_FLIGHT_BATCH_SECONDS`, default 1800) removes duplicated pyannote
+work inside one locked flight without changing any per-conversation result:
+community-1's segmentation runs once per unit and feeds both VAD (CPU
+aggregation and binarization) and diarization, and the WeSpeaker trunk runs once
+per 10s chunk instead of once per (chunk, local speaker), pooled with the same
+masks. Forwards pack chunks across the flight's units at the pinned model batch
+size, so a forward is never larger than the serial one. Clustering, labels and
+turns stay pyannote's own per-unit `apply`. Units above the budget, unsupported
+model layouts, non-fatal packed failures and CUDA out-of-memory inside the
+packed path take the unchanged serial calls; other fatal CUDA errors still
+quarantine the chain. `tests/unit/test_batch_pipeline_flight.py` compares both
+paths on CPU (exact VAD spans and turns; segmentation within 1e-5, embeddings
+within 1e-4) whenever torch and pyannote are installed.
+
 Pre-STT live reuse additionally defaults off. It requires existing lineage gates
 plus an injected resolver's immutable-audio-bound full-source-coverage and
 words-of-record-quality receipt. Current lexical dedupe runs after STT and cannot
