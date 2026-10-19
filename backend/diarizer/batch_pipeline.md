@@ -70,17 +70,32 @@ PYTHONPATH=. BATCH_PIPELINE_MODEL_BATCH_SIZE=8 python diarizer/batch_pipeline_fl
 ```
 
 It cuts the inputs into one flight of mixed-length units (ragged tails share
-packed forwards), runs the serial calls and the packed path on the same
-waveforms, and records per unit: segmentation max abs and active-frame
-disagreements, embedding max abs, VAD span equality, speaker counts and
-time-weighted speaker-assignment agreement after optimal label mapping, plus the
-`ChainMemoryProbe` peaks of both paths. The gate passes (exit 0) only when every
-unit's VAD spans are equal, speaker counts are equal, units where serial finds two
-or more speakers agree on at least 99% of speech time, at least five such
-multi-speaker units exist (otherwise exit 2, insufficient evidence), and the
-packed CUDA working-set peak stays within 1.10x serial. The packed flight must
-also stay inside the chart's host envelope (9.795 GiB receipt, 12 GiB request,
-14 GiB limit). Attach the receipt to the enabling change. #22324's `vad` and
+packed forwards) and scores two configurations, serial against flag-on, on the
+same waveforms. Every serial reference is taken on the unpatched pipeline,
+before `FlightPyannote` installs its hooks.
+
+- `speech_only` (the Helm default, `diarizeSpeechOnlyEnabled=true`): packed
+  segmentation feeds VAD, then the worker's own `_diarize_unit` diarizes the
+  compacted waveform through the per-file shared-trunk hook. Evidence is
+  VAD-only, since the harness runs no ASR.
+- `full_unit` (speech-only off): full-unit `diarize_many`, plus raw
+  segmentation and embeddings against the unpatched pipeline.
+
+Exit status comes from the configuration the deployment runs (`--speech-only`,
+default from the env, else on). A `full_unit` pass never authorizes the flag
+while speech-only stays on. The gate fails closed. It passes (exit 0) only when:
+
+- every unit was actually packed;
+- VAD spans are equal;
+- speaker counts are equal;
+- units where serial finds two or more speakers agree on at least 99% of
+  speech time after optimal label mapping;
+- at least five such units exist;
+- the packed CUDA working-set peak stays within 1.10x serial.
+
+A non-positive serial CUDA baseline, or too few multi-speaker units, exits 2
+(insufficient evidence). The packed flight must also stay inside the chart's
+host envelope (9.795 GiB receipt, 12 GiB request, 14 GiB limit). Attach the receipt to the enabling change. #22324's `vad` and
 `diarize` stage timers measure GPU time for this path only once they wrap
 `_flight_segment`/`vad_spans` and `_flight_diarize`.
 

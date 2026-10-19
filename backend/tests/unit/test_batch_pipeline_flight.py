@@ -259,8 +259,10 @@ def test_silence_skips_packed_diarization():
 # ---- real pyannote equivalence (CPU) --------------------------------------------
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture
 def pyannote_pair(tmp_path_factory):
+    # Function scope: FlightPyannote installs hooks on the pipeline, so every
+    # test needs a fresh, unpatched instance for its serial references.
     torch = pytest.importorskip('torch')
     pytest.importorskip('pyannote.audio')
     from pyannote.audio.core.plda import PLDA
@@ -319,35 +321,53 @@ def pyannote_pair(tmp_path_factory):
 
 def test_packed_segmentation_vad_and_diarization_match_serial_pyannote(pyannote_pair):
     torch, diarizer, vad = pyannote_pair
+    from diarizer.batch_pipeline_flight_qualify import _SpeechOnly
     from diarizer.batch_pipeline_models import PyannoteDiarizer, PyannoteVAD
 
     # Below one window, exact window multiple, ragged tails and multi-batch units.
     clips = [synthetic_audio(s, i) for i, s in enumerate((3.5, 10.0, 12.25, 21.5))]
+    files = [{'waveform': torch.from_numpy(c).unsqueeze(0), 'sample_rate': RATE} for c in clips]
+    speech_only = _SpeechOnly(diarizer)
+    # Every serial reference is taken on the unpatched pipeline, before create.
     serial_vad = [PyannoteVAD(vad)(c) for c in clips]
     serial_diarization = [PyannoteDiarizer(diarizer)(c) for c in clips]
-    serial_segmentation = [
-        diarizer._segmentation({'waveform': torch.from_numpy(c).unsqueeze(0), 'sample_rate': RATE}) for c in clips
+    serial_compacted = [speech_only(c, spans) for c, spans in zip(clips, serial_vad)]
+    serial_segmentation = [diarizer._segmentation(f) for f in files]
+    speaking = [
+        i
+        for i, seg in enumerate(serial_segmentation)
+        if np.nanmax(diarizer.speaker_count(seg, diarizer._segmentation.model.receptive_field, warm_up=(0.0, 0.0)).data)
+        > 0
     ]
+    serial_embeddings = {
+        i: diarizer.get_embeddings(files[i], serial_segmentation[i], exclude_overlap=True) for i in speaking
+    }
+    original_get_embeddings = diarizer.get_embeddings
 
     packed = flight.FlightPyannote.create(diarizer, vad, budget_seconds=1800)
     assert packed is not None and packed.shared_trunk
+    assert diarizer.get_embeddings is not original_get_embeddings  # hooks now installed
     features = packed.segment(clips)
+    assert all(f is not None for f in features)
     for feature, reference in zip(features, serial_segmentation):
         assert feature.segmentation.data.shape == reference.data.shape
         window, expected = feature.segmentation.sliding_window, reference.sliding_window
         assert (window.start, window.duration, window.step) == (expected.start, expected.duration, expected.step)
         np.testing.assert_allclose(feature.segmentation.data, reference.data, rtol=0, atol=1e-5)
-    assert [packed.vad_spans(c, f) for c, f in zip(clips, features)] == serial_vad
+    packed_vad = [packed.vad_spans(c, f) for c, f in zip(clips, features)]
+    assert packed_vad == serial_vad
 
-    for clip, feature in zip(clips, features):
-        file = {'waveform': torch.from_numpy(clip).unsqueeze(0), 'sample_rate': RATE}
-        if not packed.speaking(feature.segmentation):
-            continue
-        reference = diarizer.get_embeddings(file, feature.segmentation, exclude_overlap=True)
-        shared = packed.embed_group([file], [feature.segmentation])[0]
-        np.testing.assert_array_equal(np.isnan(shared), np.isnan(reference))
-        np.testing.assert_allclose(shared, reference, rtol=0, atol=1e-4, equal_nan=True)
+    # Cross-unit packed shared trunk vs pyannote's per-pair serial forward.
+    assert len(speaking) >= 2
+    shared = packed.embed_group([files[i] for i in speaking], [features[i].segmentation for i in speaking])
+    for i, value in zip(speaking, shared):
+        np.testing.assert_array_equal(np.isnan(value), np.isnan(serial_embeddings[i]))
+        np.testing.assert_allclose(value, serial_embeddings[i], rtol=0, atol=1e-4, equal_nan=True)
 
+    # Production composition (speech-only on): packed VAD, then the worker's
+    # compacted diarization through the per-file shared-trunk hook.
+    assert [speech_only(c, spans) for c, spans in zip(clips, packed_vad)] == serial_compacted
+    # Speech-only off: full-unit packed diarization.
     assert sum(len(d['turns']) for d in serial_diarization) > 20
     assert packed.diarize_many(list(zip(clips, features))) == serial_diarization
     # Over-budget units fall back to the fully serial calls with the same output.
