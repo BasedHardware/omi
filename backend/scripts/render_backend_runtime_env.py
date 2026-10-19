@@ -189,14 +189,9 @@ def main() -> int:
                 if name.startswith('LADDER_V1_') and name.endswith('_PRICE_ID')
             )
             _emit_output('ladder_price_env_vars', ladder_price_env_vars)
-            stripe_resource_refs = desktop_state['services']['desktop-backend'].get('secrets', [])
-            _emit_output(
-                'screen_vector_stripe_secret',
-                '\n'.join(
-                    f'{entry["name"]}={entry["valueFrom"]["secretKeyRef"]["name"]}:{entry["valueFrom"]["secretKeyRef"]["key"]}'
-                    for entry in stripe_resource_refs
-                ),
-            )
+            # Resource references remain in the validated expected state. The
+            # deploy action binds the same selected-environment reference directly,
+            # without copying credential-shaped mappings through workflow outputs.
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
             return 0
 

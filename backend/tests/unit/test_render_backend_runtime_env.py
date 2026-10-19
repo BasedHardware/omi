@@ -1037,7 +1037,8 @@ def test_desktop_mixed_prices_require_only_optional_restricted_read_reference(
             }
         ]
         output = _read_workflow_outputs()
-        assert f'\nSCREEN_VECTOR_STRIPE_API_KEY={reference}:latest\n' in output
+        assert reference not in output
+        assert 'screen_vector_stripe_secret' not in output
         assert '\nSTRIPE_API_KEY=' not in output
         assert all(entry['name'] != 'SCREEN_VECTOR_STRIPE_READ_SECRET' for entry in state['env'])
     workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
@@ -1058,7 +1059,14 @@ def test_desktop_mixed_prices_require_only_optional_restricted_read_reference(
         for step in job.get('steps', [])
         if step.get('id') == 'deploy-candidate'
     )
-    assert '${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}' in deploy['with']['secrets']
+    steps = render[0]['steps']
+    assert steps.index(render[1]) < steps.index(deploy)
+    assert not render[1].get('continue-on-error')
+    assert not deploy.get('if')  # Default success() keeps invalid metadata from reaching deployment.
+    assert (
+        "${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && "
+        "format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}"
+    ) in deploy['with']['secrets']
     assert '\nSTRIPE_API_KEY=' not in deploy['with']['secrets']
 
 
@@ -1260,6 +1268,7 @@ def test_cli_emits_only_resource_metadata_never_runtime_credential_value(
         }
     ]
     output = _read_workflow_outputs()
-    assert f'SCREEN_VECTOR_STRIPE_API_KEY={resource_name}:latest' in output
+    assert resource_name not in output
+    assert 'screen_vector_stripe_secret' not in output
     assert fixture_credential not in output + state_path.read_text()
     assert capsys.readouterr() == ('', '')

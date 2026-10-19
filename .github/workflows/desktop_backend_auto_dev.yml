@@ -300,7 +300,7 @@ jobs:
             CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED=true
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
-            ${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}
+            ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

@@ -395,7 +395,7 @@ jobs:
             ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
-            ${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}
+            ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
