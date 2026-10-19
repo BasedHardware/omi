@@ -8,6 +8,7 @@ import os
 import time
 
 from database.batch_pipeline_store import FirestoreStore
+from database.jobstore.dual_store import shadow_from_env
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
@@ -116,7 +117,7 @@ class Serving:
 def serving_for_stage(stage: str) -> Serving:
     if stage != current_stage():
         raise ValueError('worker and serving stages must match')
-    store = FirestoreStore(f'batch_pipeline_{stage}')
+    store = shadow_from_env(FirestoreStore(f'batch_pipeline_{stage}'))
     artifacts = artifacts_for(store)
     projector = Projector(store, artifacts.load_result, fetch_audio=artifacts.fetch_audio)
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery

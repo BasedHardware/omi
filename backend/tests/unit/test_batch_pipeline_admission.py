@@ -165,7 +165,7 @@ def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
     store, _, lease, _ = setup(monkeypatch, fresh=True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     if policy is not None:
-        store.rows['jobs', 'segment']['projection_binding']['policy'] = policy
+        store.rows['jobs', 'segment']['policy'] = policy
     gate = Mock(return_value=False)  # no funded consent or allowance for this owner
     monkeypatch.setattr(admission, 'sync_allowed', gate)
     receipt = admission.authorize(store, tokens(lease), now=1)

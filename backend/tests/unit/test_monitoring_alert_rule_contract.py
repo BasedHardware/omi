@@ -1265,13 +1265,9 @@ EXTERNAL_ALERT_METRICS = {
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
 
-# omi_reason_total is owned by legacy-retirement PR #22422 and is not declared yet.
-# Remove the pending allowance once that producer lands; until then it permits the
-# alert to arrive before the M3 rollout. omi_reason_unknown_total is already declared
-# by the lane-1 stub (utils/observability/reasons.py, #22420).
-PENDING_BACKEND_ALERT_METRICS = {
-    "omi_reason_total": "legacy-retirement PR #22422",
-}
+# Backend counters whose alert may arrive before the producer lands. Both reason
+# counters are now declared by utils/observability/reasons.py (#22422), so none pend.
+PENDING_BACKEND_ALERT_METRICS = {}
 
 _METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
 _PROMQL_KEYWORDS = frozenset(

@@ -445,3 +445,41 @@ def test_leaving_on_requires_every_draining_precondition():
     # Returning to on, and draining -> dark, are never gated (rollback and progression after the gate passed).
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), {**on, 'legacy_sync': 'dark'})[0]
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), {**on, 'legacy_sync': 'draining'})[0]
+
+
+class _TimeoutRecordingClient:
+    """Records the timeout of each `_ramp` point read; the document is absent."""
+
+    def __init__(self):
+        self.timeouts = []
+
+    def collection(self, name):
+        return self
+
+    def document(self, doc_id):
+        return self
+
+    def get(self, *, timeout, retry):
+        self.timeouts.append(timeout)
+        return type('Absent', (), {'exists': False})()
+
+
+def test_operator_tools_read_with_a_cold_client_budget(capsys):
+    # A fresh client from an operator host needs >1s for its first read; the serving 1s budget made
+    # `ramp_set --show` and the controller's first tick fail with DeadlineExceeded every time.
+    client = _TimeoutRecordingClient()
+    assert ramp_set.main(['--env', 'staging', '--show'], client_factory=lambda **kw: client) == 0
+    assert json.loads(capsys.readouterr().out) == {'entry': None, 'env': 'staging', 'revision': 0}
+    assert client.timeouts == [store.OPERATOR_READ_TIMEOUT_SECONDS]
+
+    serving = _TimeoutRecordingClient()
+    assert store.read_ramp(firestore_client=serving) is None
+    assert serving.timeouts == [store.SERVING_READ_TIMEOUT_SECONDS] == [1.0]
+
+
+def test_controller_reads_with_the_operator_budget(tmp_path, monkeypatch):
+    client = _TimeoutRecordingClient()
+    monkeypatch.setattr(rc, 'run_fleet_gate', lambda *a, **kw: pytest.fail('unseeded env must not run the gate'))
+    argv = ['--env', 'staging', '--gate-cmd', 'true', '--no-anx', '--state-file', str(tmp_path / 'STATE.md')]
+    rc.main(argv, client_factory=lambda **kw: client, runner=lambda argv, timeout: (0, ''))
+    assert client.timeouts and set(client.timeouts) == {store.OPERATOR_READ_TIMEOUT_SECONDS}
