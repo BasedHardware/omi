@@ -183,6 +183,19 @@ def worker_silence_disposition_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
 
 
+LONG_SPEECH_HANDOFF_SECONDS = 5.0
+
+
+def long_speech_handoff_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    A unit whose intake language Parakeet cannot transcribe, with an empty first
+    pass and at least LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, skips the
+    padded Parakeet retry and goes straight to quarantine recovery.
+    """
+    return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
+
+
 def worker_validation_disposition_enabled() -> bool:
     """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
     return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
