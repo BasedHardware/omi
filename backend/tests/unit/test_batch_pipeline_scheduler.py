@@ -635,22 +635,34 @@ def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch,
     assert Scheduler(store).pull(3)[0].item.segment_id == 'head'
 
 
-@pytest.mark.parametrize('count', [160])
-def test_indexed_head_beyond_64_preserves_all_links_and_order(monkeypatch, count):
+@pytest.fixture
+def reverse_capture_run(monkeypatch):
+    # Execute the snapshot-store workload in setup, as the virtual-clock suite
+    # does; the fast-unit call-phase budget measures the ordering assertions.
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
     store = MemoryStore()
     queue = Scheduler(store)
-    for n in reversed(range(count)):
+    for n in reversed(range(160)):
         queue.enqueue(item(f's{n:03}', capture=n), 0)
     merge = OrderedMerge(store)
-    for n in range(count):
+    receipts = []
+    for n in range(160):
         lease = queue.pull(10 + n)[0]
-        assert lease.item.segment_id == f's{n:03}'
-        assert queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 10 + n)
+        accepted = queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 10 + n)
         entry = merge.commit_next('heavy', 10 + n)
-        assert entry['segment_id'] == f's{n:03}'
+        receipts.append((lease.item.segment_id, accepted, entry))
+    return receipts, queue.pull(1000)
+
+
+def test_indexed_head_beyond_64_preserves_all_links_and_order(reverse_capture_run):
+    receipts, remaining = reverse_capture_run
+    assert len(receipts) == 160
+    for n, (segment_id, accepted, entry) in enumerate(receipts):
+        assert segment_id == f's{n:03}'
+        assert accepted
+        assert entry['segment_id'] == segment_id
         assert entry['previous_segment_id'] == (f's{n-1:03}' if n else None)
-    assert queue.pull(1000) == []
+    assert remaining == []
 
 
 def test_head_metrics_and_missing_predecessor_fail_closed(monkeypatch):
