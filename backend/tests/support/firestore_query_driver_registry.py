@@ -3150,6 +3150,8 @@ _add(
             'now': (T0.timestamp(), 'operand clock only'),
             'limit': _LIMIT,
             'discard': (None, 'privacy callback runs per row after the query'),
+            'client': (None, 'defaults to the shared Firestore client'),
+            'wake': (None, 'task creator runs per row after the query'),
         },
         patchers=(_stub('utils.enrichment.outbox._mutate', None), _stub('utils.enrichment.outbox.owns_runtime', True)),
     )

@@ -72,12 +72,37 @@ def _holds(row: Mapping[str, Any] | None, claim: Claim) -> bool:
 class FirestoreEnrichmentOutbox:
     kind = OutboxKind.ENRICHMENT
 
-    def __init__(self, client: Any = None):
+    def __init__(
+        self,
+        client: Any = None,
+        *,
+        privacy_blocked: Callable[[str], bool] | None = None,
+        create_wake: Callable[[Mapping[str, Any]], None] | None = None,
+    ):
         # Projection binds its own client so its transactional row and the post-commit wake read one store.
+        # The conformance suite also injects the privacy check and the task creator (contract (b)).
         self._bound_client = client
+        self._privacy_blocked = privacy_blocked
+        self._create_wake = create_wake
 
     def _client(self) -> Any:
         return self._bound_client or _outbox().get_firestore_client()
+
+    def _mutate(self, row_id: str, operation):
+        return _outbox().mutate_row(row_id, operation, client=self._bound_client)
+
+    def _wake(self, row: Mapping[str, Any]) -> None:
+        if self._create_wake is not None:
+            self._create_wake(row)
+        else:
+            _outbox().wake_row(dict(row))
+
+    def _blocked(self, row_id: str) -> bool:
+        if self._privacy_blocked is not None:
+            return self._privacy_blocked(row_id)
+        from utils.enrichment.custody import discard_blocked
+
+        return discard_blocked(row_id)
 
     # --- producers ------------------------------------------------------------------------------
     def enqueue(
@@ -112,7 +137,7 @@ class FirestoreEnrichmentOutbox:
             new_dispatch=new_dispatch,
         )
         if tx is None:
-            row, coalesced = outbox.mutate_row(dedupe_key, update)
+            row, coalesced = self._mutate(dedupe_key, update)
         else:
             row, coalesced = self._mutate_in(tx, dedupe_key, update)
         wake = bool(row.get('_wake', not coalesced)) and outbox.valid_dispatch_binding(row.get('dispatch'))
@@ -122,7 +147,7 @@ class FirestoreEnrichmentOutbox:
             outbox.UNBOUND.labels(action='mark').inc()
         token = row.get('task_token') if wake else None
         if wake and tx is None:
-            outbox.wake_row(row)  # Failure leaves the obligation durable for the sweep.
+            self._wake(row)  # Failure leaves the obligation durable for the sweep.
         return EnqueueResult(row_id=dedupe_key, coalesced=coalesced, wake_token=token)
 
     def _mutate_in(self, tx: Any, document_id: str, update):
@@ -146,18 +171,16 @@ class FirestoreEnrichmentOutbox:
         if not row or row.get('dormant') or row.get('task_token') != wake_token:
             return  # A newer wake or completion superseded this one.
         if outbox.valid_effects_binding(row):
-            outbox.wake_row(row)  # Named task: an existing wake answers AlreadyExists, which counts as success.
+            self._wake(row)  # Named task: an existing wake answers AlreadyExists, which counts as success.
 
     # --- consumers ------------------------------------------------------------------------------
     def claim_key(self, row_id: str, wake_token: str, lease_seconds: float, *, now: float) -> Claim | Outcome:
         if not _DOCUMENT_ID.fullmatch(row_id) or not _TOKEN.fullmatch(wake_token):
             raise ValueError('invalid enrichment task binding')
-        outbox = _outbox()
-        from utils.enrichment.custody import discard_blocked
         from utils.conversations.demand_processing import admit
         from config.demand_processing import enabled
 
-        if discard_blocked(row_id):
+        if self._blocked(row_id):
             return Outcome.DISCARDED
         if not admit(row_id, now=now, token=wake_token):
             return Outcome.DEFERRED  # Demand processing owns this row's next wake.
@@ -177,12 +200,12 @@ class FirestoreEnrichmentOutbox:
             )
             return row, (None, row)
 
-        outcome, row = outbox.mutate_row(row_id, claim)
+        outcome, row = self._mutate(row_id, claim)
         if row is None:
             assert outcome is not None
             return outcome
         if outcome is Outcome.DEFERRED:
-            outbox.wake_row(row)
+            self._wake(row)
             return outcome
         return _claim(row, row_id)
 
@@ -203,7 +226,7 @@ class FirestoreEnrichmentOutbox:
                 return old, False
             return {**old, 'lease_until': now + lease_seconds}, True
 
-        return _outbox().mutate_row(claim.row_id, renew)
+        return self._mutate(claim.row_id, renew)
 
     def record_summary(self, claim: Claim) -> bool:
         """Enrichment-only: this lease delivered the first summary, so ``ack`` keeps a dormant receipt."""
@@ -213,7 +236,7 @@ class FirestoreEnrichmentOutbox:
                 return old, False
             return {**old, 'summary_seen_by': claim.lease_token}, True
 
-        return _outbox().mutate_row(claim.row_id, seen)
+        return self._mutate(claim.row_id, seen)
 
     def ack(self, claim: Claim, reason: str, *, now: float) -> bool:
         """Settle a processed lease with today's ``run`` completion rules (``finish``)."""
@@ -255,13 +278,12 @@ class FirestoreEnrichmentOutbox:
             pending.update(lease_until=0, owner=None, task_token=uuid.uuid4().hex, task_due_at=pending['due_at'])
             return pending, (True, pending)
 
-        settled, pending = outbox.mutate_row(claim.row_id, finish)
+        settled, pending = self._mutate(claim.row_id, finish)
         if pending is not None:
-            outbox.wake_row(pending)
+            self._wake(pending)
         return settled
 
     def defer(self, claim: Claim, available_at: float, reason: str, *, now: float) -> str | None:
-        outbox = _outbox()
 
         def rearm(old):
             if not _holds(old, claim):
@@ -279,10 +301,10 @@ class FirestoreEnrichmentOutbox:
             )
             return pending, pending
 
-        pending = outbox.mutate_row(claim.row_id, rearm)
+        pending = self._mutate(claim.row_id, rearm)
         if pending is None:
             return None
-        outbox.wake_row(pending)
+        self._wake(pending)
         return pending['task_token']
 
     def release(self, claim: Claim, reason: str, *, now: float) -> bool:
@@ -295,18 +317,35 @@ class FirestoreEnrichmentOutbox:
             row.pop('summary_seen_by', None)
             return row, True
 
-        return _outbox().mutate_row(claim.row_id, drop)
+        return self._mutate(claim.row_id, drop)
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
-        from utils.enrichment.custody import discard_blocked
-
-        counts = _outbox().sweep(now=now, limit=limit, discard=discard_blocked)
+        counts = _outbox().sweep(
+            now=now,
+            limit=limit,
+            discard=self._blocked,
+            client=self._bound_client,
+            wake=None if self._create_wake is None else self._wake,
+        )
         return SweepCounts(
             rewoken=counts['repaired'], expired_leases=0, discarded=counts.get('discarded', 0), errors=counts['error']
         )
 
 
 ENRICHMENT_OUTBOX = FirestoreEnrichmentOutbox()
+
+
+def FirestoreOutbox(  # noqa: N802 (the conformance suite's factory name, contract (b))
+    kind: OutboxKind,
+    *,
+    client: Any = None,
+    privacy_blocked: Callable[[str], bool] | None = None,
+    create_wake: Callable[[Mapping[str, Any]], None] | None = None,
+) -> FirestoreEnrichmentOutbox:
+    """A Firestore outbox bound to ``client``; the conformance suite injects the privacy check and task creator."""
+    if OutboxKind(kind) is not OutboxKind.ENRICHMENT:
+        raise NotImplementedError(f'no Firestore outbox for {OutboxKind(kind).value} in this window')
+    return FirestoreEnrichmentOutbox(client, privacy_blocked=privacy_blocked, create_wake=create_wake)
 
 
 def firestore_outbox(kind: OutboxKind):

@@ -71,7 +71,10 @@ def owns_runtime() -> bool:
 def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
     if not owns_runtime():
         raise RuntimeError('sync reprocess outbox requires production or a Firestore emulator')
-    client = get_firestore_client()
+    return _cas(get_firestore_client(), document_id, operation)
+
+
+def _cas(client: Any, document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
     ref = client.collection(COLLECTION).document(document_id)
 
     # All state for one obligation is in one document. Optimistic conditional
@@ -100,8 +103,12 @@ def _mutate(document_id: str, operation: Callable[[Row | None], tuple[Row | None
     raise AssertionError('outbox CAS loop must return or raise within its retry budget')
 
 
-def mutate_row(document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]]) -> ResultT:
-    """Public CAS entry for ``database.outbox_firestore``; resolves ``_mutate`` per call."""
+def mutate_row(
+    document_id: str, operation: Callable[[Row | None], tuple[Row | None, ResultT]], *, client: Any = None
+) -> ResultT:
+    """Public CAS entry for ``database.outbox_firestore``; resolves ``_mutate`` per call unless bound to a client."""
+    if client is not None:
+        return _cas(client, document_id, operation)
     return _mutate(document_id, operation)
 
 
@@ -583,9 +590,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
 
 def sweep(
-    *, now: float | None = None, limit: int = 100, discard: Callable[[str], bool] | None = None
+    *,
+    now: float | None = None,
+    limit: int = 100,
+    discard: Callable[[str], bool] | None = None,
+    client: Any = None,
+    wake: Callable[[Row], None] | None = None,
 ) -> dict[str, int]:
-    """Re-wake due obligations; ``discard`` retires privacy-fenced rows instead (contract (b) invariant 6)."""
+    """Re-wake due obligations; ``discard`` retires privacy-fenced rows instead (contract (b) invariant 6).
+
+    ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite).
+    """
     from utils.enrichment import scan as enrichment_scan
 
     current = time.time() if now is None else now
@@ -597,7 +612,13 @@ def sweep(
 
     binding = _dispatch_binding()
     limit = max(1, min(100, limit))
-    client = get_firestore_client()
+    bound = client
+    client = bound or get_firestore_client()
+
+    def mutate(document_id: str, operation):
+        return _cas(bound, document_id, operation) if bound is not None else _mutate(document_id, operation)
+
+    enqueue = wake or _enqueue
     # One range/order field uses the automatic single-field index.
     previous, cursor = enrichment_scan.begin(client, COLLECTION)
     query = (
@@ -652,7 +673,7 @@ def sweep(
             return row, ('ready', row)
 
         try:
-            status, row = _mutate(snapshot.id, repair)
+            status, row = mutate(snapshot.id, repair)
             if status == 'check' and row is not None:
                 checked += 1
                 if _wake_exists(row):
@@ -675,14 +696,14 @@ def sweep(
                     replacement.pop('wake_generation', None)
                     return replacement, replacement
 
-                row = _mutate(snapshot.id, replace)
+                row = mutate(snapshot.id, replace)
             if status == 'unbound':
                 UNBOUND.labels(action='repair').inc()
             if row is not None and discard is not None and discard(snapshot.id):
                 counts['discarded'] += 1
                 row = None
             if row is not None:
-                _enqueue(row)
+                enqueue(row)
                 counts['repaired'] += 1
         except Exception as error:
             counts['error'] += 1

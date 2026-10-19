@@ -4,6 +4,8 @@ The emulator conformance suite (lane 12, ``tests/integration/test_outbox_conform
 persistence; this file pins the row semantics and their compatibility with ``mark``/``run``.
 """
 
+from unittest.mock import Mock
+
 import pytest
 
 from database.outbox import Claim, Outcome
@@ -205,3 +207,26 @@ def test_outbox_for_selects_the_firestore_enrichment_outbox():
     from database.outbox import outbox_for
 
     assert outbox_for(OutboxKind.ENRICHMENT) is outbox
+
+
+def test_not_due_deferral_is_not_a_processing_attempt(rows):
+    _enqueue(600.0)
+    assert outbox.claim_key(KEY, rows[0][KEY]['task_token'], 120, now=10) is Outcome.DEFERRED
+    assert not rows[0][KEY].get('claim_attempts')
+    assert _claim(rows, now=700).attempt == 1
+
+
+def test_conformance_factory_uses_the_injected_privacy_check_and_wake(rows, monkeypatch):
+    from database.outbox_firestore import FirestoreOutbox
+
+    wakes, blocked = [], set()
+    injected = FirestoreOutbox(
+        OutboxKind.ENRICHMENT, privacy_blocked=lambda row_id: row_id in blocked, create_wake=wakes.append
+    )
+    monkeypatch.setattr(custody, 'discard_blocked', Mock(side_effect=AssertionError('default fence used')))
+    result = injected.enqueue(KEY, 'u', PAYLOAD, 1.0, now=0.0)
+    assert [wake['task_token'] for wake in wakes] == [result.wake_token]
+    blocked.add(KEY)
+    assert injected.claim_key(KEY, result.wake_token, 120, now=10) is Outcome.DISCARDED
+    with pytest.raises(NotImplementedError):
+        FirestoreOutbox(OutboxKind.PROVIDER_STT)
