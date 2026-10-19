@@ -8,18 +8,56 @@ import hashlib
 import json
 import logging
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
-from database.conversations import conversations_collection, decode_manual_speaker_assignments
+from database._client import get_firestore_client, run_transactional
 from database.redis_db import create_bounded_redis_client
 from utils.encryption import decrypt_audio_file, encrypt_audio_chunk
 
 logger = logging.getLogger(__name__)
 GAP_SECONDS = 120
 MAX_PAYLOAD_BYTES = 16_384
+conversations_collection = 'conversations'
+
+
+def decode_manual_speaker_assignments(uid: str, raw: Any, compressed: bool) -> dict:
+    if raw is None:
+        return {}
+    from database.conversations import decode_manual_speaker_assignments as _decode
+
+    return _decode(uid, raw, compressed)
+
+
+def _sanitize_doc_id(value: object, field_name: str = 'id') -> str:
+    if not isinstance(value, str):
+        raise ValueError(f'{field_name} must be a non-empty string')
+    cleaned = value.strip()
+    if (
+        not cleaned
+        or len(cleaned) > 128
+        or any(ch in cleaned for ch in ('/', '\\', '\x00', '\r', '\n'))
+        or '..' in cleaned
+    ):
+        raise ValueError(f'{field_name} must be a safe document id')
+    return cleaned
+
+
+def _clean_optional_doc_id(value: object) -> str:
+    try:
+        return _sanitize_doc_id(value)
+    except ValueError:
+        return ''
+
+
+def _clean_non_empty_str(value: object) -> str:
+    if not isinstance(value, str):
+        return ''
+    cleaned = value.strip()
+    if not cleaned or any(ch in cleaned for ch in ('\x00', '\r', '\n')):
+        return ''
+    return cleaned
 
 
 @lru_cache(maxsize=1)
@@ -36,15 +74,20 @@ def _keys(uid: str, device: str) -> tuple[str, str]:
 
 def begin(uid: str, device: str, token: str) -> tuple[Optional[dict[str, Any]], str]:
     """Consume at most one donor; a newer socket fences every older writer."""
+    clean_uid = _clean_optional_doc_id(uid)
+    clean_device = _clean_non_empty_str(device)
+    clean_token = _clean_non_empty_str(token)
+    if not clean_uid or not clean_device or not clean_token:
+        return None, 'absent'
     try:
         raw = _client().eval(
             "local v=redis.call('GET',KEYS[2]); redis.call('DEL',KEYS[2]); "
             "redis.call('SET',KEYS[1],ARGV[1],'EX',86400); "
             "redis.call('SET',KEYS[3],0,'EX',86400); return v",
             3,
-            *_keys(uid, device),
-            _keys(uid, device)[0] + ':revision',
-            token,
+            *_keys(clean_uid, clean_device),
+            _keys(clean_uid, clean_device)[0] + ':revision',
+            clean_token,
         )
     except Exception as error:
         logger.warning('owner_reconnect_cache_read_failed type=%s', type(error).__name__)
@@ -54,22 +97,26 @@ def begin(uid: str, device: str, token: str) -> tuple[Optional[dict[str, Any]], 
     try:
         if len(raw) > MAX_PAYLOAD_BYTES:
             return None, 'corrupt'
-        payload = json.loads(decrypt_audio_file(raw, uid))
-        if not isinstance(payload, dict) or payload.get('device') != device or payload.get('v') != 1:
+        payload = json.loads(decrypt_audio_file(raw, clean_uid))
+        if not isinstance(payload, dict) or payload.get('device') != clean_device or payload.get('v') != 1:
             return None, 'corrupt'
         return payload, 'loaded'
     except Exception:
         return None, 'corrupt'
 
 
-def donor_authority(uid: str, conversation: str) -> Optional[dict]:
+def donor_authority(uid: str, conversation: str, *, firestore_client: Any = None) -> Optional[dict]:
     """Read durable receipt authority, failing closed on missing/ineligible donors."""
+    clean_uid = _clean_optional_doc_id(uid)
+    clean_conv = _clean_optional_doc_id(conversation)
+    if not clean_uid or not clean_conv:
+        return None
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     snapshot = (
-        get_firestore_client()
-        .collection('users')
-        .document(uid)
+        client.collection('users')
+        .document(clean_uid)
         .collection(conversations_collection)
-        .document(conversation)
+        .document(clean_conv)
         .get(
             field_paths=[
                 'deleted',
@@ -80,11 +127,12 @@ def donor_authority(uid: str, conversation: str) -> Optional[dict]:
             ]
         )
     )
-    data = snapshot.to_dict() if snapshot.exists else None
+    raw_data: object = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    data: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw_data) if isinstance(raw_data, dict) else None
     if data is None or any(data.get(key) for key in ('deleted', 'discarded', 'is_locked')):
         return None
     return decode_manual_speaker_assignments(
-        uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+        clean_uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
     )
 
 
@@ -97,15 +145,17 @@ def authority_snapshot(
     never been authoritative. Only projected receipt/privacy fields are read;
     no transcript or user evidence is written by this transaction.
     """
-    if not 1 <= len(conversations) <= 3:
+    clean_uid = _sanitize_doc_id(uid, 'uid')
+    if not isinstance(conversations, (tuple, list)) or not 1 <= len(conversations) <= 3:
         raise ValueError('owner authority requires one to three conversations')
+    clean_conversations = [_sanitize_doc_id(conv, 'conversation') for conv in conversations]
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    collection = client.collection('users').document(uid).collection(conversations_collection)
+    collection = client.collection('users').document(clean_uid).collection(conversations_collection)
 
     @firestore.transactional
     def read(transaction: Any) -> dict[str, Optional[dict]]:
         result = {}
-        for conversation in dict.fromkeys(conversations):
+        for conversation in dict.fromkeys(clean_conversations):
             snapshot = collection.document(conversation).get(
                 transaction=transaction,
                 field_paths=[
@@ -116,23 +166,40 @@ def authority_snapshot(
                     'manual_speaker_assignments_compressed',
                 ],
             )
-            data = snapshot.to_dict() if snapshot.exists else None
+            raw_data: object = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+            data: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw_data) if isinstance(raw_data, dict) else None
             result[conversation] = (
                 decode_manual_speaker_assignments(
-                    uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+                    clean_uid,
+                    data.get('manual_speaker_assignments'),
+                    bool(data.get('manual_speaker_assignments_compressed')),
                 )
                 if data is not None and not any(data.get(key) for key in ('deleted', 'discarded', 'is_locked'))
                 else None
             )
         return result
 
-    return read(client.transaction())
+    return run_transactional(client, read)
 
 
 def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]], revision: int) -> None:
     """CAS publication/withdrawal; late completion from an old socket loses."""
+    clean_uid = _clean_optional_doc_id(uid)
+    clean_device = _clean_non_empty_str(device)
+    clean_token = _clean_non_empty_str(token)
+    if (
+        not clean_uid
+        or not clean_device
+        or not clean_token
+        or isinstance(revision, bool)
+        or not isinstance(revision, int)
+        or revision <= 0
+    ):
+        return
+    if payload is not None and not isinstance(payload, dict):
+        return
     try:
-        encrypted = encrypt_audio_chunk(json.dumps(payload).encode(), uid) if payload is not None else b''
+        encrypted = encrypt_audio_chunk(json.dumps(payload).encode(), clean_uid) if payload is not None else b''
         if len(encrypted) > MAX_PAYLOAD_BYTES:
             return
         _client().eval(
@@ -142,9 +209,9 @@ def publish(uid: str, device: str, token: str, payload: Optional[dict[str, Any]]
             "if ARGV[2]=='' then redis.call('DEL',KEYS[2]) else "
             "redis.call('SET',KEYS[2],ARGV[2],'EX',ARGV[3]) end; return 1",
             3,
-            *_keys(uid, device),
-            _keys(uid, device)[0] + ':revision',
-            token,
+            *_keys(clean_uid, clean_device),
+            _keys(clean_uid, clean_device)[0] + ':revision',
+            clean_token,
             encrypted,
             GAP_SECONDS,
             revision,
