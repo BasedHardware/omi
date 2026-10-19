@@ -101,7 +101,9 @@ that stamp without changing the routing algorithm. `STT_SERVICE_MODELS` comes
 from the listen process's existing provider-order getter, so another role cannot
 stamp its order. The raw mode is retained because legacy consumers normalize it
 differently. Registry targets (including static routing permission/ramp and replay
-limits) parse once at admission/load. Credentials, provider health, account
+limits) parse once at admission/load. The serialized field contains the complete
+normalized resolved list, even when env was empty, so later code-default changes
+cannot reinterpret an existing record. Credentials, provider health, account
 benches, privacy and capacity remain live operational inputs.
 
 `routers/listen/policy.py` loads before STT selection. Redis keys are

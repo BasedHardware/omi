@@ -391,3 +391,20 @@ def test_fallback_liveness_grace_is_pinned_but_nonlisten_getter_stays_process_ow
     policy = resolve_listen_policy('owner', flags={'STT_FALLBACK_LIVENESS_GRACE_SECONDS': '0.2'})
     current_listen_policy.set(policy)
     assert fallback_liveness_grace(0.7) == 0.2
+
+
+@pytest.mark.asyncio
+async def test_restart_does_not_reinterpret_registry_code_defaults(monkeypatch):
+    import config.live_stt_registry as registry_module
+
+    redis = Redis()
+    original = resolve_listen_policy('owner', flags={})
+    assert original.routing_targets_json
+    first, _ = await store.load_listen_policy('owner', 'conversation', resolver=lambda: original, redis_client=redis)
+    monkeypatch.setattr(registry_module, 'DEFAULT_TARGETS', (Target('soniox', 'soniox', 99.0, ramp_percent=0),))
+    resolve = Mock(side_effect=AssertionError('saved resolved targets must survive code defaults changing'))
+    loaded, source = await store.load_listen_policy('owner', 'conversation', resolver=resolve, redis_client=redis)
+    assert source == 'redis'
+    assert loaded.policy_id == first.policy_id
+    assert loaded.targets == first.targets
+    resolve.assert_not_called()

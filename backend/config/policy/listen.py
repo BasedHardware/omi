@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, ClassVar
 from contextvars import ContextVar
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 import math
+import json
 import os
 
 from config.policy.batch import cohort_bucket
@@ -74,6 +75,16 @@ class ListenSessionPolicy(PolicyPart):
             targets = parse_registry(self.routing_targets_json)
         except (ValueError, TypeError):
             targets = None
+        if targets is not None:
+            # Record resolved code defaults too: a new pod must not reinterpret
+            # an empty env value using a different DEFAULT_TARGETS tuple.
+            entries = []
+            for target in targets:
+                entry = asdict(target)
+                if target.replay is None:
+                    entry.pop('replay')
+                entries.append(entry)
+            object.__setattr__(self, 'routing_targets_json', json.dumps(entries, sort_keys=True, separators=(',', ':')))
         object.__setattr__(self, '_targets', targets)
         super().__post_init__()
 
