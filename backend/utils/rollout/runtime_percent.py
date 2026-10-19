@@ -30,12 +30,13 @@ from database import rollout_cohorts as store
 from utils import executors
 
 RAMP_NAMES = store.RAMP_NAMES
+RAMP_DOC_ID = store.RAMP_DOC_ID
 RAMP_ENVS = store.RAMP_ENVS
 LEGACY_SYNC_MODES = store.LEGACY_SYNC_MODES
 TTL_SECONDS = 30.0
 COLD_READ_WAIT_SECONDS = 1.25
 LKG_ALERT_SECONDS = 300.0
-SOURCES = ('ramp', 'lkg', 'env_default')
+SOURCES = ('firestore', 'lkg', 'env_default')
 
 LegacySyncMode = Literal['on', 'draining', 'dark']
 logger = logging.getLogger(__name__)
@@ -60,11 +61,11 @@ RUNTIME_PERCENT_VALUE = Gauge(
 class RampSnapshot:
     """Frozen view of one environment's `_ramp` entry as this process currently serves it."""
 
-    revision: int | None
+    revision: int  # 0 when no document exists
     percents: Mapping[str, float]
     legacy_sync: LegacySyncMode
     locked_by: str | None
-    source: Literal['ramp', 'lkg', 'env_default']
+    source: Literal['firestore', 'lkg', 'env_default']
     env: str | None = None
     updated_at: str | None = None
     updated_by: str | None = None
@@ -96,7 +97,7 @@ def clamp_nesting(percents: Mapping[str, float]) -> dict[str, float]:
 @dataclass
 class _Loaded:
     env: str
-    revision: int | None
+    revision: int
     env_doc: dict[str, Any] | None  # None: no document or no entry for this env (nothing configured)
 
 
@@ -121,7 +122,7 @@ class _RampCache:
             env = deployment_env()
             document = self.reader()
             entry = document['envs'].get(env) if document is not None else None
-            loaded = _Loaded(env, document['revision'] if document is not None else None, entry)
+            loaded = _Loaded(env, document['revision'] if document is not None else 0, entry)
         except Exception:
             # SDK errors can carry paths and payloads; keep the line content-free.
             logger.warning('event=runtime_percent_read outcome=error served=lkg_or_env_default')
@@ -183,20 +184,20 @@ class _RampCache:
         error_seconds = 0.0 if error_since is None else max(0.0, time.monotonic() - error_since)
         if loaded is None:
             return RampSnapshot(
-                revision=None,
+                revision=0,
                 percents=MappingProxyType({}),
                 legacy_sync='on',
                 locked_by=None,
                 source='env_default',
                 error_seconds=error_seconds,
             )
-        source: Literal['ramp', 'lkg', 'env_default']
+        source: Literal['firestore', 'lkg', 'env_default']
         if error_since is not None:
             source = 'lkg'
         elif loaded.env_doc is None:
             source = 'env_default'
         else:
-            source = 'ramp'
+            source = 'firestore'
         doc = loaded.env_doc or store.empty_ramp_env()
         return RampSnapshot(
             revision=loaded.revision,

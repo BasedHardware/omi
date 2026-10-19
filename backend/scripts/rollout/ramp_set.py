@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # LIFECYCLE: permanent
 """Operator CLI for `rollout_cohorts/_ramp` (contracts (f), (h)). Never prints uids or SDK errors.
 

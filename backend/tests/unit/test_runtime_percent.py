@@ -81,7 +81,7 @@ def test_document_values_cached_for_thirty_seconds(reader, clock):
     clock[0] += 0.2
     rp.runtime_percent('batch-pipeline', env_default=5.0)
     assert len(calls) == 2
-    assert rp.ramp_snapshot().source == 'ramp'
+    assert rp.ramp_snapshot().source == 'firestore'
 
 
 def test_missing_name_uses_env_default(reader):

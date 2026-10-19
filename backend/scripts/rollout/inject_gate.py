@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # LIFECYCLE: permanent
 """Staging-only rehearsal wrapper around the fleet gate (contract (g) M2 rehearsal).
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # LIFECYCLE: permanent
 """Ramp controller (contract (g)): a pure decision function plus a thin, host-agnostic runner.
 
@@ -186,7 +185,7 @@ def decide(
         return Decision(Action.HOLD, name, value, value, reason, detail, page)
 
     is_fail = verdict.status == 'FAIL'
-    if snapshot.source != 'ramp' or current is None:
+    if snapshot.source != 'firestore' or current is None:
         return hold(RampReason.LOCKED_BY_OPERATOR, 'not_seeded_or_unreadable', page=is_fail)
     if snapshot.legacy_sync != 'on':
         # A percent rollback cannot change admission in draining/dark (h); the lead's rollback is legacy_sync -> on.
@@ -302,7 +301,7 @@ def snapshot_from_document(document: Mapping[str, Any] | None, env: str) -> Ramp
         percents=clamp_nesting(entry['percents']),
         legacy_sync=entry['legacy_sync'],
         locked_by=entry['locked_by'],
-        source='ramp',
+        source='firestore',
         env=env,
         updated_at=entry['updated_at'],
         updated_by=entry['updated_by'],
@@ -505,7 +504,7 @@ def tick(
     current = snapshot.percents.get(LEAD_NAME)
     since = facts.hold_started_at or parse_iso(snapshot.updated_at) or now
     since = min(since, now)
-    if current is None or snapshot.source != 'ramp':
+    if current is None or snapshot.source != 'firestore':
         verdict = GateVerdict('PENDING', 'not_seeded', now, 0.0, 0.0, {})
     else:
         verdict = effects.gate(since, current)

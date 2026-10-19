@@ -20,7 +20,7 @@ def snap(percent=10.0, **kw):
         percents={'batch-pipeline': percent, 'first-summary': percent},
         legacy_sync='on',
         locked_by=None,
-        source='ramp',
+        source='firestore',
         env='prod',
     )
     fields.update(kw)
