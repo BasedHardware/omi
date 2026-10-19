@@ -1,9 +1,13 @@
-# Screen task extraction: default-off Jev gate
+# Screen task extraction: default-on Jev gate
 
-`screen_task_jev_gate` defaults off for every bundle. Enabling it is separate
-from merging this code. OCR and bounded local task/profile context go to
-TypeSafe/Jev when enabled; enablement requires privacy approval. This PR does
-not change live flags, deploy anything or use personal screen frames.
+`screen_task_jev_gate` is on by default for every bundle. Only an explicit
+Boolean `false` disables it; an absent or unknown value, a quota-limited flag
+read, or a flag-read error keeps it on. David approved sending OCR text to Jev
+for all users on 2026-10-18. OCR and bounded local task/profile context go to
+TypeSafe/Jev when the gate runs. Existing backend screen-task admission still
+enforces its plan, quota and stop policies. A Jev gate failure continues to
+fail open to screenshot extraction. This change does not alter live flags,
+deploy anything or use personal screen frames.
 
 Capture binds the original owner and authorization generation plus the app's
 exclusion generation before capture suspends. The immutable frame carries that

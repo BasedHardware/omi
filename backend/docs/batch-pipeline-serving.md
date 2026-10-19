@@ -395,10 +395,16 @@ kill switch. Deploy the worker from the same change first: its exhausted
 `RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
 lease CAS only when the GPU padded retry actually ran and returned empty; units
 whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
-retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. Recovery
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. A
+zero-word unit with at least 5 s of worker VAD speech whose intake-recorded STT
+language (`stt_language` in the staged context) is unknown, `multi`, or outside
+Parakeet TDT v3's set skips the retry too and persists
+`worker_empty_evidence.padded_retry=skipped_long_speech`: repadding cannot make
+Parakeet transcribe a language it lacks, so the unit goes straight to recovery
+(`BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED`, kill switch, unset is on). Recovery
 pins/persists its provider before dispatch. With the flag on, positive strict
 local VAD, affirmative GPU padded-empty evidence, and a validated empty
-**multilingual** response produce `no_recoverable_speech`. Oversized units that
+**multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
 skipped the GPU padded retry still run strict VAD and multilingual recovery, but
 an empty multilingual response stays `failed_held` rather than terminal-empty.
 Timeouts, malformed responses, uncertain calls, missing evidence, and provider

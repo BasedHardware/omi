@@ -5,6 +5,8 @@ from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from routers import sync as router

@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config

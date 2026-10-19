@@ -188,6 +188,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "STT_CAP_DISPATCH_ENFORCEMENT": "false",
+        "STT_CAP_DISPATCH_COHORT": "",
+        "STT_CAP_DISPATCH_LANES": "live",
         "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
         "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
         "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",

@@ -4,6 +4,8 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from database.batch_pipeline_intake import admit
@@ -174,3 +176,30 @@ def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
     else:
         assert receipt['allowed'] == ['segment']
         gate.assert_not_called()
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'cohort,lanes,held',
+    [
+        ('uid:synthetic-owner', 'batch', True),
+        ('uid:synthetic-owner', 'live', False),
+        ('uid:other', 'batch', False),
+        ('', 'batch', False),
+    ],
+)
+def test_queued_authorization_uses_owner_and_batch_scope(monkeypatch, ladder, cohort, lanes, held):
+    from utils import stt_cap_dispatch as cap
+
+    store, _, lease, _ = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    allowance = Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(cap, 'funded_allowance', allowance)
+    result = admission.authorize(store, tokens(lease), now=1)
+    assert result['allowed'] == ([] if held else ['segment'])
+    assert allowance.call_count == int(held)
+    if held:
+        allowance.assert_called_once_with('synthetic-owner', lane='batch')

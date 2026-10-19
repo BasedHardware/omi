@@ -1,5 +1,7 @@
 from dataclasses import replace
 from contextlib import nullcontext
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import io
 import logging
 import sys
@@ -1050,3 +1052,33 @@ async def test_empty_asr_records_padded_retry_empty_only_when_padded_retry_ran(
     assert job.get('worker_empty_evidence') == expected_evidence
     direct = worker.process_batch([item('b', duration)])
     assert direct == [RecoveryWork('b', padded_retry_empty=expected_empty, padded_retry=expected_retry)]
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+def test_mixed_owner_gpu_batch_only_enforces_enrolled_owner(monkeypatch, ladder):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:owner-a')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'batch')
+    worker, words, saved, _, _, failures = setup_worker()
+    checks = []
+
+    def authorize(ids):
+        checks.append(ids)
+        return set()
+
+    result = worker.process_batch([item('a', 2), item('b', 2)], authorize_dispatch=authorize)
+    assert checks == [{'a'}]
+    assert words.calls == [[2]]
+    assert set(saved) == {'b'} and not failures
+    assert 'cap_dispatch' not in saved['b']
+    assert any(isinstance(row, batch_pipeline.HeldWork) and row.segment_id == 'a' for row in result)
+
+
+@pytest.mark.parametrize('lanes', ['live', 'sync', ''])
+def test_gpu_batch_outside_lane_does_not_require_cap_authority(monkeypatch, lanes):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    worker, words, saved, _, _, failures = setup_worker()
+    worker.process_batch([item('a', 2)])
+    assert words.calls == [[2]] and set(saved) == {'a'} and not failures
