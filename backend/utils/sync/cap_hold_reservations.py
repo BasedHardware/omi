@@ -57,7 +57,7 @@ def _entries(data: Any) -> dict[str, dict[str, Any]]:
     return dict(entries) if isinstance(entries, dict) else {}
 
 
-def _valid_units(units: float) -> float:
+def _valid_units(units: object) -> float:
     if isinstance(units, bool) or not isinstance(units, (int, float)) or not math.isfinite(units) or units < 0:
         raise ValueError('reservation units must be a finite non-negative number')
     return float(units)

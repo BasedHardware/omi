@@ -417,7 +417,7 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
                     snapshot.id,
                     units=cap_hold.remaining_seconds(row) * float(recording_units_per_hour('batch')) / 3600,
                     period=funded_processing.period_id(),
-                    batch_job_id=admitted.batch_job_id,
+                    batch_job_id=admitted.batch_job_id or '',
                 ),
             )
             if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
