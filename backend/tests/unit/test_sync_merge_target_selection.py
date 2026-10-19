@@ -19,6 +19,8 @@ from database.conversations import eligible_merge_target, select_closest_convers
 @pytest.fixture(scope="module", autouse=True)
 def warm_pipeline():
     from utils.conversations import lifecycle  # noqa: F401
+    from utils.sync import legacy_segment_core  # noqa: F401  (import graph is setup, not call-phase CPU)
+    import tests.unit.test_sync_cross_job_assignment  # noqa: F401
 
 
 _BASE = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)

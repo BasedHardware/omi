@@ -20,6 +20,7 @@ import asyncio  # noqa: E402
 import numpy as np  # noqa: E402
 
 import utils.speaker_identification as speaker_identification_mod  # noqa: E402
+import utils.sync.legacy_segment_core  # noqa: E402,F401  (imported at collection: the core's import graph is setup)
 
 SAMPLE_RATE = 16000
 
