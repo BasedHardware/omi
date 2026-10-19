@@ -324,8 +324,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
   final SyncJobPoller? _jobPollerOverride;
-  late final SyncJobPoller _jobPoller =
-      _jobPollerOverride ?? (_jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller(clock: _now));
+  late final SyncJobPoller _jobPoller = _jobPollerOverride ??
+      (_jobStatusFetcherOverride == null
+          ? (SyncJobPoller.instance..persistMissingWith(PreferencesSyncJobMissingStore()))
+          : SyncJobPoller(clock: _now));
   Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
       _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
   Future<SyncLocalFilesResponse>? _reconcileInFlight;
@@ -2570,7 +2572,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
     // Serial requests let a 429 stop this pass before another request escapes.
     const maxConcurrent = 1;
-    final entries = _jobPoller.ordered(byJob.keys).map((id) => MapEntry(id, byJob[id]!)).toList();
+    // Fresh uploads and old handles alternate; a dead backlog cannot starve them.
+    final uploadedAt = {for (final e in byJob.entries) e.key: e.value.map((w) => w.uploadedAt).reduce(max)};
+    final entries =
+        _jobPoller.ordered(byJob.keys, uploadedAtSeconds: uploadedAt).map((id) => MapEntry(id, byJob[id]!)).toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
