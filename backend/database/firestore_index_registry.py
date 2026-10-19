@@ -33,6 +33,15 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_predecessor',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
