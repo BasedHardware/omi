@@ -105,7 +105,10 @@ class HomeAskAnythingButton extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
+            style: OmiType.subhead.copyWith(
+              color: OmiColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
           ),

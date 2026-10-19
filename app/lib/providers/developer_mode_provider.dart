@@ -60,8 +60,8 @@ class DeveloperModeProvider extends BaseProvider {
   DeveloperModeProvider({
     Future<String?> Function({required String type})? fetchWebhookUrl,
     Future<bool> Function({required String type, required String url})? saveWebhookUrl,
-  }) : _fetchWebhookUrl = fetchWebhookUrl ?? getUserWebhookUrl,
-       _saveWebhookUrl = saveWebhookUrl ?? setUserWebhookUrl {
+  })  : _fetchWebhookUrl = fetchWebhookUrl ?? getUserWebhookUrl,
+        _saveWebhookUrl = saveWebhookUrl ?? setUserWebhookUrl {
     for (final controller in _webhookControllers) {
       controller.addListener(_onWebhookTextChanged);
     }
@@ -69,20 +69,20 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   List<TextEditingController> get _webhookControllers => [
-    webhookOnConversationCreated,
-    webhookOnTranscriptReceived,
-    webhookAudioBytes,
-    webhookAudioBytesDelay,
-    webhookDaySummary,
-  ];
+        webhookOnConversationCreated,
+        webhookOnTranscriptReceived,
+        webhookAudioBytes,
+        webhookAudioBytesDelay,
+        webhookDaySummary,
+      ];
 
   Map<String, String> _webhookText() => {
-    'conversation': webhookOnConversationCreated.text,
-    'transcript': webhookOnTranscriptReceived.text,
-    'audio': webhookAudioBytes.text,
-    'audioDelay': webhookAudioBytesDelay.text,
-    'daySummary': webhookDaySummary.text,
-  };
+        'conversation': webhookOnConversationCreated.text,
+        'transcript': webhookOnTranscriptReceived.text,
+        'audio': webhookAudioBytes.text,
+        'audioDelay': webhookAudioBytesDelay.text,
+        'daySummary': webhookDaySummary.text,
+      };
 
   void _markWebhooksSaved() => _savedWebhookText = _webhookText();
 

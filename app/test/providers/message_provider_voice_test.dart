@@ -19,19 +19,11 @@ ServerMessage _voiceRow(String id, MessageSender sender, String text) =>
 /// What `/v2/voice-messages` streams for an answered pendant question: the transcribed
 /// question, the answer text, then the saved answer.
 Stream<ServerMessageChunk> _answeredVoiceQuestion() async* {
-  yield ServerMessageChunk(
-    'question',
-    '',
-    MessageChunkType.message,
-    message: _voiceRow('question', MessageSender.human, 'What did I promise Sam?'),
-  );
+  yield ServerMessageChunk('question', '', MessageChunkType.message,
+      message: _voiceRow('question', MessageSender.human, 'What did I promise Sam?'));
   yield ServerMessageChunk('answer', 'Call him on Friday.', MessageChunkType.data);
-  yield ServerMessageChunk(
-    'answer',
-    '',
-    MessageChunkType.done,
-    message: _voiceRow('answer', MessageSender.ai, 'Call him on Friday.'),
-  );
+  yield ServerMessageChunk('answer', '', MessageChunkType.done,
+      message: _voiceRow('answer', MessageSender.ai, 'Call him on Friday.'));
 }
 
 class _TestEnvFields implements EnvFields {
@@ -92,7 +84,7 @@ void main() {
 
     await provider.sendVoiceMessageStreamToServer(
       [
-        <int>[1, 2, 3],
+        <int>[1, 2, 3]
       ],
       codec: BleAudioCodec.opus,
       onNoSpeech: () async => failureHaptics++,
@@ -116,7 +108,7 @@ void main() {
     provider.chatSessionId = 'past';
     provider.messages = [prior];
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
     expect(provider.messages, [prior]);
     expect(provider.messages.single.text, 'Past thread');
@@ -140,7 +132,7 @@ void main() {
     provider.messages = [mentorTip];
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
 
     expect(provider.messages, [mentorTip]);
@@ -163,14 +155,13 @@ void main() {
     provider.messages = [earlier];
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
 
-    expect(provider.messages.map((m) => m.text).toList(), [
-      'Earlier answer',
-      'What did I promise Sam?',
-      'Call him on Friday.',
-    ]);
+    expect(
+      provider.messages.map((m) => m.text).toList(),
+      ['Earlier answer', 'What did I promise Sam?', 'Call him on Friday.'],
+    );
   });
 
   test('voice reply timeout clears the re-entry guard for the next question', () async {
@@ -187,10 +178,10 @@ void main() {
     );
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1],
+      <int>[1]
     ], codec: BleAudioCodec.opus);
     await provider.sendVoiceMessageStreamToServer([
-      <int>[2],
+      <int>[2]
     ], codec: BleAudioCodec.opus);
 
     expect(streamCalls, 2);

@@ -195,26 +195,26 @@ final chatScenarios = <AuditScenario>[
     state: 'One reply mid-stream with three steps; one finished reply with the same steps',
     run: (a) async {
       ServerMessage reply(String id, String text) => ServerMessage(
-        id,
-        DateTime(2026, 9, 29, 10, 5),
-        text,
-        MessageSender.ai,
-        MessageType.text,
-        null,
-        false,
-        [],
-        [],
-        [],
-        askForNps: false,
-      )..thinkings.addAll(['Searching conversations', 'Loaded calendar', 'Searching memories']);
+            id,
+            DateTime(2026, 9, 29, 10, 5),
+            text,
+            MessageSender.ai,
+            MessageType.text,
+            null,
+            false,
+            [],
+            [],
+            [],
+            askForNps: false,
+          )..thinkings.addAll(['Searching conversations', 'Loaded calendar', 'Searching memories']);
       Widget message(ServerMessage m, {required bool working}) => AIMessage(
-        message: m,
-        sendMessage: (_) {},
-        displayOptions: false,
-        updateConversation: (_) {},
-        setMessageNps: (_, {reason}) {},
-        showTypingIndicator: working,
-      );
+            message: m,
+            sendMessage: (_) {},
+            displayOptions: false,
+            updateConversation: (_) {},
+            setMessageNps: (_, {reason}) {},
+            showTypingIndicator: working,
+          );
       await a.pump(
         ListView(
           padding: const EdgeInsets.all(18),

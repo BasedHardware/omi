@@ -229,11 +229,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final l = context.l10n;
     final attention = NeedsAttentionSection(store: _pendingWork, captureMonitor: _captureMonitor);
-    final hasAttention = NeedsAttentionSection.hasContent(
-      _pendingWork,
-      context.watch<SyncProvider?>(),
-      _captureMonitor,
-    );
+    final hasAttention =
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();
@@ -310,29 +307,25 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
                   for (final item in items)
                     switch (item) {
                       _RecapItem(:final summary) => _ActivityRow(
-                        key: ValueKey('activity_recap_${summary.id}'),
-                        leading: summary.dayEmoji.isEmpty
-                            ? Icon(Icons.calendar_today_outlined, size: 18, color: OmiColors.textSecondary)
-                            : Text(summary.dayEmoji, style: OmiType.title3),
-                        title: summary.headline,
-                        subtitle: '${l.recap} · ${dates.time(item.at)}',
-                        isNew: _isNew(item),
-                        onTap: () => _openRecap(summary),
-                      ),
-                      _ChangeItem(:final change) => _ActivityRow(
-                        key: ValueKey('activity_change_${change.changeId}'),
-                        leading: Icon(
-                          change.undone ? Icons.undo : reviewChangeIcon(change.kind),
-                          size: 18,
-                          color: OmiColors.textSecondary,
+                          key: ValueKey('activity_recap_${summary.id}'),
+                          leading: summary.dayEmoji.isEmpty
+                              ? Icon(Icons.calendar_today_outlined, size: 18, color: OmiColors.textSecondary)
+                              : Text(summary.dayEmoji, style: OmiType.title3),
+                          title: summary.headline,
+                          subtitle: '${l.recap} · ${dates.time(item.at)}',
+                          isNew: _isNew(item),
+                          onTap: () => _openRecap(summary),
                         ),
-                        title: change.title,
-                        subtitle: change.undone
-                            ? '${l.reviewChangeUndone} · ${dates.time(item.at)}'
-                            : dates.time(item.at),
-                        isNew: false,
-                        onTap: _openRecentChanges,
-                      ),
+                      _ChangeItem(:final change) => _ActivityRow(
+                          key: ValueKey('activity_change_${change.changeId}'),
+                          leading: Icon(change.undone ? Icons.undo : reviewChangeIcon(change.kind),
+                              size: 18, color: OmiColors.textSecondary),
+                          title: change.title,
+                          subtitle:
+                              change.undone ? '${l.reviewChangeUndone} · ${dates.time(item.at)}' : dates.time(item.at),
+                          isNew: false,
+                          onTap: _openRecentChanges,
+                        ),
                     },
                 ],
               ),
@@ -371,11 +364,8 @@ class _DayHeader extends StatelessWidget {
         header: true,
         child: Text(
           label.toUpperCase(),
-          style: OmiType.footnote.copyWith(
-            fontWeight: FontWeight.w600,
-            color: OmiColors.textSecondary,
-            letterSpacing: 0.4,
-          ),
+          style: OmiType.footnote
+              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
         ),
       ),
     );

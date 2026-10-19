@@ -104,7 +104,10 @@ void main() {
 
     test('keeps a device single-flight after cooldown while dispatch is pending', () async {
       var elapsed = Duration.zero;
-      final limiter = ExternalHapticRateLimiter(cooldown: const Duration(seconds: 2), elapsed: () => elapsed);
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
       final firstDispatch = Completer<bool>();
       var calls = 0;
 
@@ -150,7 +153,10 @@ void main() {
 
     test('failed dispatch still consumes cooldown and bounds reconnect attempts', () async {
       var elapsed = Duration.zero;
-      final limiter = ExternalHapticRateLimiter(cooldown: const Duration(seconds: 2), elapsed: () => elapsed);
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
       var calls = 0;
 
       Future<bool> unavailable(String _, int __) async {
@@ -188,7 +194,10 @@ void main() {
 
     test('a thrown player error releases single-flight but preserves cooldown', () async {
       var elapsed = Duration.zero;
-      final limiter = ExternalHapticRateLimiter(cooldown: const Duration(seconds: 2), elapsed: () => elapsed);
+      final limiter = ExternalHapticRateLimiter(
+        cooldown: const Duration(seconds: 2),
+        elapsed: () => elapsed,
+      );
       var calls = 0;
 
       Future<bool> throwingPlayer(String _, int __) async {

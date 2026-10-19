@@ -57,22 +57,22 @@ final _today = DateTime(_now.year, _now.month, _now.day);
 DateTime _at(int daysAgo, int hour, int minute) => DateTime(_now.year, _now.month, _now.day - daysAgo, hour, minute);
 
 Wal _wal(DateTime start, int minutes, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
-  timerStart: start.millisecondsSinceEpoch ~/ 1000,
-  codec: BleAudioCodec.opus,
-  seconds: minutes * 60,
-  status: status,
-  storage: storage,
-  device: 'pendant',
-);
+      timerStart: start.millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: minutes * 60,
+      status: status,
+      storage: storage,
+      device: 'pendant',
+    );
 
 ServerConversation _convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
-  id: id,
-  createdAt: at,
-  startedAt: at,
-  finishedAt: at.add(Duration(minutes: minutes)),
-  structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
-  status: ConversationStatus.completed,
-);
+      id: id,
+      createdAt: at,
+      startedAt: at,
+      finishedAt: at.add(Duration(minutes: minutes)),
+      structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
+      status: ConversationStatus.completed,
+    );
 
 final _recaps = [
   DailySummary(
@@ -205,8 +205,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'home-first-load',
     title: 'Home: first load with conversations on the way',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
-    state:
-        'Cold start: the list loads while two recordings transcribe, then today\'s three conversations '
+    state: 'Cold start: the list loads while two recordings transcribe, then today\'s three conversations '
         'arrive; two recaps',
     run: (a) async {
       final sync = _SyncAuditProvider(
@@ -249,8 +248,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'on-the-way',
     title: 'On the Way',
     page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
-    state:
-        'One recording transcribing, one uploading from the phone, one still on the pendant, '
+    state: 'One recording transcribing, one uploading from the phone, one still on the pendant, '
         'and one the server refused',
     run: (a) async {
       final sync = _SyncAuditProvider(
@@ -276,29 +274,22 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'on-the-way-server-work',
     title: 'On the Way: work the phone did not start',
     page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
-    state:
-        'No local recordings pending; the server reports one conversation summarizing and one '
+    state: 'No local recordings pending; the server reports one conversation summarizing and one '
         'sync job transcribing (the state Home’s row draws for)',
     run: (a) async {
       final sync = _SyncAuditProvider();
       final store = PendingWorkStore(
-        loadPending: () async => ApiSuccess(
-          PendingWorkSnapshot(
-            enabled: true,
-            attentionUnseenCount: 0,
-            items: [
-              PendingWorkItem(
-                id: 'conv:a',
-                kind: 'conversation',
-                state: 'summarizing',
-                conversationIds: const ['a'],
-                startedAt: _at(0, 18, 41),
-                durationSeconds: 14 * 60,
-              ),
-              const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
-            ],
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: [
+          PendingWorkItem(
+            id: 'conv:a',
+            kind: 'conversation',
+            state: 'summarizing',
+            conversationIds: const ['a'],
+            startedAt: _at(0, 18, 41),
+            durationSeconds: 14 * 60,
           ),
-        ),
+          const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+        ])),
         loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
       );
       await a.tester.runAsync(store.refresh);

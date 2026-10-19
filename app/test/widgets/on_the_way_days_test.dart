@@ -38,13 +38,13 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 final _now = DateTime(2026, 10, 18, 9);
 
 Wal _wal(DateTime start, int seconds, WalStatus status) => Wal(
-  timerStart: start.millisecondsSinceEpoch ~/ 1000,
-  codec: BleAudioCodec.opus,
-  seconds: seconds,
-  status: status,
-  storage: WalStorage.disk,
-  device: 'phone',
-);
+      timerStart: start.millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: seconds,
+      status: status,
+      storage: WalStorage.disk,
+      device: 'phone',
+    );
 
 Future<void> _pump(WidgetTester tester, List<Wal> wals, {double textScale = 1}) async {
   final sync = _FakeSync(wals);
@@ -126,9 +126,9 @@ void main() {
     expect(_headerLine(tester, '2026-10-15'), '2 recordings · 31m · 1 needs attention');
 
     // Only the attention count is in warning colour.
-    final spans =
-        tester.widget<Text>(find.descendant(of: _day('2026-10-18'), matching: find.byType(Text)).at(1)).textSpan!
-            as TextSpan;
+    final spans = tester
+        .widget<Text>(find.descendant(of: _day('2026-10-18'), matching: find.byType(Text)).at(1))
+        .textSpan! as TextSpan;
     final warning = spans.children!.cast<TextSpan>().where((s) => s.style?.color == OmiColors.warning).toList();
     expect(warning.map((s) => s.text), [' · 1 needs attention']);
 
@@ -145,15 +145,15 @@ void main() {
     // the audio still sits on the wearable: the recording must read as needing
     // attention (its worst part), never as merely syncing (its healthy part).
     Wal drainPiece(DateTime start, int seconds, {WalStorage? original, int retries = 0}) => Wal(
-      timerStart: start.millisecondsSinceEpoch ~/ 1000,
-      codec: BleAudioCodec.opus,
-      seconds: seconds,
-      status: WalStatus.miss,
-      storage: original == null ? WalStorage.sdcard : WalStorage.disk,
-      originalStorage: original,
-      device: 'pendant',
-      retryCount: retries,
-    );
+          timerStart: start.millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: seconds,
+          status: WalStatus.miss,
+          storage: original == null ? WalStorage.sdcard : WalStorage.disk,
+          originalStorage: original,
+          device: 'pendant',
+          retryCount: retries,
+        );
     final start = DateTime(2026, 10, 18, 8);
     await _pump(tester, [
       drainPiece(start, 4 * 60, original: WalStorage.sdcard, retries: 3),
@@ -215,10 +215,14 @@ void main() {
   });
 
   testWidgets('pinned headers grow with large text instead of clipping', (tester) async {
-    await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss),
-      _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.outsideRecoveryWindow),
-    ], textScale: 2);
+    await _pump(
+      tester,
+      [
+        _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss),
+        _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.outsideRecoveryWindow),
+      ],
+      textScale: 2,
+    );
     expect(tester.takeException(), isNull);
     expect(tester.getSize(_day('2026-10-18')).height, greaterThan(44 * 1.5));
     final title = tester.getRect(find.descendant(of: _day('2026-10-15'), matching: find.byType(Text)).at(1));

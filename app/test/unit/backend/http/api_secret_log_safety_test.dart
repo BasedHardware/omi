@@ -99,9 +99,8 @@ void main() {
   });
 
   test('adding an MCP server never logs its OAuth auth_url', () async {
-    final logs = await _captureLogs(
-      () async => expect((await addMcpServer('n', 'https://mcp.invalid'))?['app_id'], 'mcp-1'),
-    );
+    final logs =
+        await _captureLogs(() async => expect((await addMcpServer('n', 'https://mcp.invalid'))?['app_id'], 'mcp-1'));
     expect(logs, isNot(contains(_secret)));
   });
 

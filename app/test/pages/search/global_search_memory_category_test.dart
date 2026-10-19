@@ -27,26 +27,26 @@ const _gym = 'Gym at 7am before work';
 const _reading = 'Reads before bed';
 
 Memory _memory(String id, String content, MemoryCategory category) => Memory(
-  id: id,
-  uid: 'global-search-user',
-  content: content,
-  category: category,
-  createdAt: DateTime(2026, 10, 1),
-  updatedAt: DateTime(2026, 10, 1),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'global-search-user',
+      content: content,
+      category: category,
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
+      visibility: MemoryVisibility.private,
+    );
 
 List<Memory> _memories() => [
-  _memory('mem-coffee-sam', _coffeeWithSam, MemoryCategory.system),
-  _memory('mem-coffee-beans', _coffeeBeans, MemoryCategory.manual),
-  _memory('mem-gym', _gym, MemoryCategory.system),
-  _memory('mem-reading', _reading, MemoryCategory.manual),
-];
+      _memory('mem-coffee-sam', _coffeeWithSam, MemoryCategory.system),
+      _memory('mem-coffee-beans', _coffeeBeans, MemoryCategory.manual),
+      _memory('mem-gym', _gym, MemoryCategory.system),
+      _memory('mem-reading', _reading, MemoryCategory.manual),
+    ];
 
 MemoriesProvider _memoriesProvider() => MemoriesProvider(
-  fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
-      GetMemoriesResult(_memories(), true),
-);
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult(_memories(), true),
+    );
 
 /// Memory search answers like `GET /memory/search`, which has no category filter: every memory that
 /// holds a query word is found, whatever its category. Every other kind finds nothing.
@@ -56,17 +56,10 @@ class _MemorySearchSource extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => const ConversationSearchResult(
-    items: [],
-    currentPage: 1,
-    totalPages: 1,
-    outcome: ConversationSearchResultOutcome.success,
-  );
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
+      const ConversationSearchResult(
+          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
@@ -96,22 +89,18 @@ Future<MemoriesProvider> _pumpSearch(WidgetTester tester, String query) async {
   addTearDown(memories.dispose);
   final home = HomeProvider();
   addTearDown(home.dispose);
-  await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
-        ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
-        ChangeNotifierProvider<HomeProvider>.value(value: home),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: GlobalSearchPage(initialQuery: query, source: _MemorySearchSource()),
-        ),
-      ),
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+      ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
+      ChangeNotifierProvider<HomeProvider>.value(value: home),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: GlobalSearchPage(initialQuery: query, source: _MemorySearchSource())),
     ),
-  );
+  ));
   await tester.pump();
   await tester.pumpAndSettle();
   return memories;

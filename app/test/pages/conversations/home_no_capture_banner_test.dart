@@ -44,10 +44,12 @@ void main() {
         status: ConversationStatus.completed,
       ),
     ];
-    final conversations =
-        ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
-          ..conversations = items
-          ..groupConversationsByDate();
+    final conversations = ConversationProvider(
+      conversationListFetcher: () async => (items: items, ok: true),
+      isSignedIn: () => true,
+    )
+      ..conversations = items
+      ..groupConversationsByDate();
     addTearDown(conversations.dispose);
     return conversations;
   }
@@ -78,11 +80,8 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(monitor.acuteEpisode, isNotNull, reason: 'the seeded episode is acute and visible');
     expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
-    expect(
-      find.text('Omi isn\'t sending audio'),
-      findsNothing,
-      reason: 'Home carries no capture banner; the bell dot is the signal',
-    );
+    expect(find.text('Omi isn\'t sending audio'), findsNothing,
+        reason: 'Home carries no capture banner; the bell dot is the signal');
     expect(monitor.hasUnseenCaptureAttention.value, isTrue, reason: 'the bell warns instead');
     expect(find.text('Capture banner check'), findsOneWidget, reason: 'the page itself still renders');
     await tester.pumpWidget(const SizedBox.shrink());
@@ -108,11 +107,8 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
-    expect(
-      find.text('Phone storage full'),
-      findsNothing,
-      reason: 'storage at risk is slow-burn and lives in Activity, not on Home',
-    );
+    expect(find.text('Phone storage full'), findsNothing,
+        reason: 'storage at risk is slow-burn and lives in Activity, not on Home');
     expect(find.text('Capture banner check'), findsOneWidget, reason: 'the page itself still renders');
     await tester.pumpWidget(const SizedBox.shrink());
   });

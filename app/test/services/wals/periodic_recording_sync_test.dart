@@ -260,11 +260,8 @@ void main() {
 Future<Object?> _nativeCall(String method) async {
   final completed = Completer<Object?>();
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
-    PeriodicRecordingSync.channel.name,
-    const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
-    (reply) {
-      completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
-    },
-  );
+      PeriodicRecordingSync.channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall(method)), (reply) {
+    completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
+  });
   return completed.future;
 }

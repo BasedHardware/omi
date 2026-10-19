@@ -27,21 +27,21 @@ const _coffeeGym = 'Coffee gym on the corner opens at 6';
 const _reading = 'Reads before bed';
 
 Memory _memory(String id, String content) => Memory(
-  id: id,
-  uid: 'global-search-user',
-  content: content,
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 10, 1),
-  updatedAt: DateTime(2026, 10, 1),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'global-search-user',
+      content: content,
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
+      visibility: MemoryVisibility.private,
+    );
 
 List<Memory> _memories() => [
-  _memory('mem-coffee', _coffee),
-  _memory('mem-gym', _gym),
-  _memory('mem-coffee-gym', _coffeeGym),
-  _memory('mem-reading', _reading),
-];
+      _memory('mem-coffee', _coffee),
+      _memory('mem-gym', _gym),
+      _memory('mem-coffee-gym', _coffeeGym),
+      _memory('mem-reading', _reading),
+    ];
 
 /// Memory search answers like `GET /memory/search`: a memory is found when it holds any one word of
 /// the query, not the whole query. Every other kind finds nothing.
@@ -51,17 +51,10 @@ class _MemorySearchSource extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(
-    String query, {
-    String? speakerId,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async => const ConversationSearchResult(
-    items: [],
-    currentPage: 1,
-    totalPages: 1,
-    outcome: ConversationSearchResultOutcome.success,
-  );
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
+      const ConversationSearchResult(
+          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
@@ -94,22 +87,18 @@ Future<MemoriesProvider> _pumpSearch(WidgetTester tester, String query) async {
   addTearDown(memories.dispose);
   final home = HomeProvider();
   addTearDown(home.dispose);
-  await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
-        ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
-        ChangeNotifierProvider<HomeProvider>.value(value: home),
-      ],
-      child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: GlobalSearchPage(initialQuery: query, source: _MemorySearchSource()),
-        ),
-      ),
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+      ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
+      ChangeNotifierProvider<HomeProvider>.value(value: home),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: GlobalSearchPage(initialQuery: query, source: _MemorySearchSource())),
     ),
-  );
+  ));
   await tester.pump();
   await tester.pumpAndSettle();
   return memories;

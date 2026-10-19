@@ -1,7 +1,13 @@
 typedef ExternalHapticPlayer = Future<bool> Function(String deviceId, int level);
 typedef ExternalHapticElapsed = Duration Function();
 
-enum ExternalHapticTriggerResult { notHandled, noPairedDevice, rateLimited, played, unavailable }
+enum ExternalHapticTriggerResult {
+  notHandled,
+  noPairedDevice,
+  rateLimited,
+  played,
+  unavailable,
+}
 
 class ExternalHapticTrigger {
   const ExternalHapticTrigger({required this.level});
@@ -24,9 +30,11 @@ class ExternalHapticTrigger {
 }
 
 class ExternalHapticRateLimiter {
-  ExternalHapticRateLimiter({Duration cooldown = const Duration(seconds: 2), ExternalHapticElapsed? elapsed})
-    : cooldown = cooldown,
-      _elapsed = elapsed ?? _monotonicElapsed() {
+  ExternalHapticRateLimiter({
+    Duration cooldown = const Duration(seconds: 2),
+    ExternalHapticElapsed? elapsed,
+  })  : cooldown = cooldown,
+        _elapsed = elapsed ?? _monotonicElapsed() {
     if (cooldown.inMicroseconds <= 0) {
       throw ArgumentError.value(cooldown, 'cooldown', 'must be greater than zero');
     }

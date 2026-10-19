@@ -117,12 +117,10 @@ void main() {
       // The automatic retry at declaration completes at once; the reader's retry is held in
       // flight, so the test can see the line step aside while it runs.
       final held = Completer<void>();
-      final monitor = makeMonitor(
-        bleRetry: (_) {
-          bleRetries++;
-          return bleRetries == 1 ? Future.value() : held.future;
-        },
-      );
+      final monitor = makeMonitor(bleRetry: (_) {
+        bleRetries++;
+        return bleRetries == 1 ? Future.value() : held.future;
+      });
       wedge(monitor);
       final opened = <String>[];
       Future<bool> opener(String route, {bool Function()? canOpen}) async {
@@ -143,19 +141,13 @@ void main() {
       expect(bleRetries, retriesBeforeTap + 1, reason: 'Reconnect retries the same episode in place, once');
       expect(opened, isEmpty, reason: 'a stalled BLE link is fixed where the reader stands, not in settings');
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'live_status');
-      expect(
-        find.byKey(const Key('capture_recovery_status')),
-        findsNothing,
-        reason: 'the line leaves while the retry runs',
-      );
+      expect(find.byKey(const Key('capture_recovery_status')), findsNothing,
+          reason: 'the line leaves while the retry runs');
 
       held.complete();
       await tester.pump();
-      expect(
-        find.byKey(const Key('capture_recovery_status')),
-        findsOneWidget,
-        reason: 'a retry that brought no audio back puts the line back',
-      );
+      expect(find.byKey(const Key('capture_recovery_status')), findsOneWidget,
+          reason: 'a retry that brought no audio back puts the line back');
     });
 
     testWidgets('tapping the message opens the details sheet with the BLE explanation', (tester) async {
@@ -170,11 +162,8 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_recovery_status_details')));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text(l10n.captureRecoveryBannerTitle),
-        findsNWidgets(2),
-        reason: 'the line and the sheet title both name the episode',
-      );
+      expect(find.text(l10n.captureRecoveryBannerTitle), findsNWidgets(2),
+          reason: 'the line and the sheet title both name the episode');
       expect(find.text(l10n.captureWedgeBleExplanation), findsOneWidget);
 
       await tester.tap(find.text(l10n.gotIt));
@@ -209,26 +198,14 @@ void main() {
 
       final context = tester.element(find.byType(CaptureRecoveryStatus));
       final l10n = AppLocalizations.of(context);
-      expect(
-        find.text(l10n.captureIngressNeedsReconnect),
-        findsOneWidget,
-        reason: 'the title names the required manual action, not a wait or a retry',
-      );
-      expect(
-        find.text(l10n.captureRecoveryBannerTitle),
-        findsNothing,
-        reason: 'the stall title would promise a reconnect this trigger cannot perform',
-      );
-      expect(
-        find.text(l10n.captureAudioSavedTranscribesLater),
-        findsNothing,
-        reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)',
-      );
-      expect(
-        find.byKey(const Key('capture_recovery_status_retry')),
-        findsNothing,
-        reason: 'no retry affordance when the Dart-side retry would no-op',
-      );
+      expect(find.text(l10n.captureIngressNeedsReconnect), findsOneWidget,
+          reason: 'the title names the required manual action, not a wait or a retry');
+      expect(find.text(l10n.captureRecoveryBannerTitle), findsNothing,
+          reason: 'the stall title would promise a reconnect this trigger cannot perform');
+      expect(find.text(l10n.captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)');
+      expect(find.byKey(const Key('capture_recovery_status_retry')), findsNothing,
+          reason: 'no retry affordance when the Dart-side retry would no-op');
     });
 
     testWidgets('every action on the line keeps a 44-point target', (tester) async {
@@ -237,7 +214,10 @@ void main() {
 
       await pumpStatus(tester, monitor);
 
-      for (final key in const [Key('capture_recovery_status_retry'), Key('capture_recovery_status_details')]) {
+      for (final key in const [
+        Key('capture_recovery_status_retry'),
+        Key('capture_recovery_status_details'),
+      ]) {
         final size = tester.getSize(find.byKey(key));
         expect(size.height, greaterThanOrEqualTo(44), reason: 'UX contract: 44pt minimum tap target');
       }
@@ -247,32 +227,22 @@ void main() {
       var retries = 0;
       final monitor = makeMonitor(transferRetry: () async => retries++);
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
 
       await pumpStatus(tester, monitor);
       final retriesBeforeTap = retries;
       final context = tester.element(find.byType(CaptureRecoveryStatus));
       final l10n = AppLocalizations.of(context);
-      expect(
-        find.text(l10n.captureBannerRetrySync),
-        findsOneWidget,
-        reason: 'the storage primary action names what its retry does',
-      );
+      expect(find.text(l10n.captureBannerRetrySync), findsOneWidget,
+          reason: 'the storage primary action names what its retry does');
       expect(find.text(l10n.reconnect), findsNothing);
 
       await tester.tap(find.byKey(const Key('capture_recovery_status_retry')));
       await tester.pump();
 
       expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
-      expect(
-        find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater),
-        findsNothing,
-        reason: 'the storage title already says what is unsynced',
-      );
+      expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'the storage title already says what is unsynced');
     });
 
     testWidgets('stale upload backlog retries transfer without a duplicate banner', (tester) async {
@@ -312,11 +282,7 @@ void main() {
     testWidgets('admission-blocked storage shows a localized phone-storage risk warning', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
 
       await pumpStatus(tester, monitor);
 
@@ -329,11 +295,7 @@ void main() {
     testWidgets('a storage episode whose probe failed does not claim the disk is full', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_space_unknown',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_space_unknown');
 
       await pumpStatus(tester, monitor);
 
@@ -362,24 +324,14 @@ void main() {
       final acute = makeMonitor();
       wedge(acute);
       await pumpEventQueue();
-      expect(
-        CaptureRecoveryStatus.overridesHeader(acute),
-        isTrue,
-        reason: 'audio is not reaching the app: the header reads Reconnecting',
-      );
+      expect(CaptureRecoveryStatus.overridesHeader(acute), isTrue,
+          reason: 'audio is not reaching the app: the header reads Reconnecting');
 
       final storage = makeMonitor();
       storage.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
-      expect(
-        CaptureRecoveryStatus.overridesHeader(storage),
-        isFalse,
-        reason: 'recording continues on the device; the header stays live',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      expect(CaptureRecoveryStatus.overridesHeader(storage), isFalse,
+          reason: 'recording continues on the device; the header stays live');
       acute.dispose();
       storage.dispose();
     });
@@ -389,11 +341,7 @@ void main() {
       var transferRetries = 0;
       final monitor = makeMonitor(bleRetry: (_) async => bleRetries++, transferRetry: () async => transferRetries++);
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
       wedge(monitor);
 
       await pumpStatus(tester, monitor);
@@ -411,29 +359,25 @@ void main() {
     testWidgets('the header reads Reconnecting for a stall, including while the retry runs', (tester) async {
       var bleRetries = 0;
       final held = Completer<void>();
-      final monitor = makeMonitor(
-        bleRetry: (_) {
-          bleRetries++;
-          return bleRetries == 1 ? Future.value() : held.future;
-        },
-      );
+      final monitor = makeMonitor(bleRetry: (_) {
+        bleRetries++;
+        return bleRetries == 1 ? Future.value() : held.future;
+      });
       wedge(monitor);
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            appBar: CaptureWedgeAppBar(
-              monitor: monitor,
-              // A pendant whose capture is not yet verified: the stall must still force the status.
-              showStatus: false,
-              state: CaptureDisplayState.listening,
-              sourceLabel: 'Pendant',
-            ),
-            body: CaptureRecoveryStatus(monitor: monitor),
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: CaptureWedgeAppBar(
+            monitor: monitor,
+            // A pendant whose capture is not yet verified: the stall must still force the status.
+            showStatus: false,
+            state: CaptureDisplayState.listening,
+            sourceLabel: 'Pendant',
           ),
+          body: CaptureRecoveryStatus(monitor: monitor),
         ),
-      );
+      ));
       await tester.pump();
       final l10n = AppLocalizations.of(tester.element(find.byType(CaptureRecoveryStatus)));
       final reconnecting = l10n.captureStatusWithSource(l10n.reconnecting, 'Pendant');
@@ -442,11 +386,8 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_recovery_status_retry')));
       await tester.pump();
       expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
-      expect(
-        find.text(reconnecting),
-        findsOneWidget,
-        reason: 'no live label while the retry runs and no audio reaches the app',
-      );
+      expect(find.text(reconnecting), findsOneWidget,
+          reason: 'no live label while the retry runs and no audio reaches the app');
 
       held.complete();
       await tester.pump();
@@ -460,25 +401,15 @@ void main() {
     testWidgets('a storage episode leaves the header live', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(
-        engagedAt: DateTime(2026),
-        blockedCount: 1,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            appBar: CaptureWedgeAppBar(
-              monitor: monitor,
-              showStatus: true,
-              state: CaptureDisplayState.listening,
-              sourceLabel: 'Pendant',
-            ),
-          ),
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: CaptureWedgeAppBar(
+              monitor: monitor, showStatus: true, state: CaptureDisplayState.listening, sourceLabel: 'Pendant'),
         ),
-      );
+      ));
       await tester.pump();
       final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
       expect(find.text(l10n.captureStatusWithSource(l10n.listening, 'Pendant')), findsOneWidget);

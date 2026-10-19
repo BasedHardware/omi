@@ -70,7 +70,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   final Timer Function(Duration, void Function()) _transferTimer;
 
   RingStorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
-    : _transferTimer = transferTimer ?? Timer.new;
+      : _transferTimer = transferTimer ?? Timer.new;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -533,7 +533,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
             ? recordTimestamps.first
             : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                  bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
           if (chunk.isEmpty) {
@@ -858,12 +858,10 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync: final flush error: $e');
     }
 
-    final beginConsistent =
-        !beginAborted &&
+    final beginConsistent = !beginAborted &&
         (beginStartSeq == null ||
             (beginStartSeq == readStart && (beginPacketCount == null || beginPacketCount == recordsConsumed)));
-    final doneConsistent =
-        doneNextSeq != null &&
+    final doneConsistent = doneNextSeq != null &&
         doneNextSeq == readStart + recordsConsumed &&
         reassembler.pendingBytes == 0 &&
         beginConsistent;

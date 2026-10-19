@@ -147,8 +147,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         title: searching
             ? l10n.noMemoriesFound
             : filtered
-            ? l10n.noMemoriesInCategories
-            : l10n.noMemoriesYet,
+                ? l10n.noMemoriesInCategories
+                : l10n.noMemoriesYet,
         action: OmiButton(
           key: const Key('memories_empty_action'),
           variant: searching || filtered ? OmiButtonVariant.secondary : OmiButtonVariant.primary,
@@ -156,8 +156,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           label: searching
               ? l10n.clearSearch
               : filtered
-              ? l10n.resetFilters
-              : l10n.addFirstMemory,
+                  ? l10n.resetFilters
+                  : l10n.addFirstMemory,
           onPressed: () {
             if (searching) {
               _searchController.clear();
@@ -245,9 +245,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     provider: provider,
                                     onTap:
                                         (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                          PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
-                                          _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                        },
+                                      PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
+                                      _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                    },
                                   );
                                 }, childCount: visibleMemories.length),
                               ),

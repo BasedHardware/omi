@@ -12,56 +12,56 @@ import 'package:omi/pages/apps/app_detail/reviews_section.dart';
 const _readerUid = 'reader-uid';
 
 App _app({double? ratingAvg, int ratingCount = 0, AppReview? userReview}) => App(
-  id: 'app-1',
-  uid: 'author-uid',
-  name: 'Notes Sync',
-  author: 'Omi',
-  description: 'Syncs notes',
-  image: '',
-  capabilities: {'chat'},
-  status: 'approved',
-  category: 'productivity',
-  approved: true,
-  ratingAvg: ratingAvg,
-  ratingCount: ratingCount,
-  userReview: userReview,
-  enabled: true,
-  deleted: false,
-  isPaid: false,
-  isUserPaid: false,
-);
+      id: 'app-1',
+      uid: 'author-uid',
+      name: 'Notes Sync',
+      author: 'Omi',
+      description: 'Syncs notes',
+      image: '',
+      capabilities: {'chat'},
+      status: 'approved',
+      category: 'productivity',
+      approved: true,
+      ratingAvg: ratingAvg,
+      ratingCount: ratingCount,
+      userReview: userReview,
+      enabled: true,
+      deleted: false,
+      isPaid: false,
+      isUserPaid: false,
+    );
 
 /// The app detail page's wiring: the header reads the same [App] the reviews card edits, and the
 /// card's callback rebuilds the page.
 Widget _detailPage(App app, {required AppReviewSender send}) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: const [Locale('en')],
-  home: Scaffold(
-    body: StatefulBuilder(
-      builder: (context, setState) => ListView(
-        children: [
-          AppDetailSummary(
-            name: app.name,
-            author: app.author,
-            official: false,
-            ratingCount: app.ratingCount,
-            rating: app.getRatingAvg(),
-            installs: 0,
-            action: const SizedBox.shrink(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) => ListView(
+            children: [
+              AppDetailSummary(
+                name: app.name,
+                author: app.author,
+                official: false,
+                ratingCount: app.ratingCount,
+                rating: app.getRatingAvg(),
+                installs: 0,
+                action: const SizedBox.shrink(),
+              ),
+              RecentReviewsSection(
+                reviews: app.reviews,
+                app: app,
+                userReview: app.userReview,
+                sendReview: send,
+                sendReviewUpdate: send,
+                onReviewUpdated: () => setState(() {}),
+              ),
+            ],
           ),
-          RecentReviewsSection(
-            reviews: app.reviews,
-            app: app,
-            userReview: app.userReview,
-            sendReview: send,
-            sendReviewUpdate: send,
-            onReviewUpdated: () => setState(() {}),
-          ),
-        ],
+        ),
       ),
-    ),
-  ),
-);
+    );
 
 /// The five tappable stars of the review being written (the summary and review rows draw smaller ones).
 Finder get _editableStars => find.byWidgetPredicate((widget) => widget is FaIcon && widget.size == 24);
@@ -84,7 +84,13 @@ void main() {
       const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: RatingDistributionWidget(ratingAvg: 4.2, ratingCount: 7, reviews: [])),
+        home: Scaffold(
+          body: RatingDistributionWidget(
+            ratingAvg: 4.2,
+            ratingCount: 7,
+            reviews: [],
+          ),
+        ),
       ),
     );
 
@@ -96,15 +102,10 @@ void main() {
   testWidgets('the first review of an app shows its score as the rating, not null', (tester) async {
     final app = _app();
     final sent = <AppReview>[];
-    await tester.pumpWidget(
-      _detailPage(
-        app,
-        send: (appId, review) async {
-          sent.add(review);
-          return true;
-        },
-      ),
-    );
+    await tester.pumpWidget(_detailPage(app, send: (appId, review) async {
+      sent.add(review);
+      return true;
+    }));
 
     await tester.tap(_editableStars.at(3));
     await tester.pump();

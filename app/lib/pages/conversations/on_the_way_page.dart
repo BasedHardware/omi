@@ -128,8 +128,7 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         if (items.every((i) => i.needsAttention) && SyncPendingWork.hasServerJobs(p)) {
           final status = SyncPendingWork.stageLabel(p, l);
           final phase = p.syncState.phase;
-          final transferring =
-              p.syncState.isSyncing &&
+          final transferring = p.syncState.isSyncing &&
               !p.syncState.isFetchingConversations &&
               (phase == SyncPhase.downloadingFromDevice ||
                   phase == SyncPhase.waitingForInternet ||
@@ -155,16 +154,11 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
           body = CustomScrollView(
             slivers: [
               if (items.isNotEmpty)
-                SliverPadding(
-                  padding: gutter,
-                  sliver: SliverToBoxAdapter(child: _Summary(items: items)),
-                ),
+                SliverPadding(padding: gutter, sliver: SliverToBoxAdapter(child: _Summary(items: items))),
               if (undated.isNotEmpty)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: _Group(items: undated, dates: dates),
-                  ),
+                  sliver: SliverToBoxAdapter(child: _Group(items: undated, dates: dates)),
                 ),
               for (var i = 0; i < days.length; i++)
                 SliverPadding(
@@ -249,12 +243,12 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
 
   /// The Offline Sync page's own reason for each refused state.
   static String _attentionLabel(WalSyncDisplayState state, AppLocalizations l) => switch (state) {
-    WalSyncDisplayState.corrupted => l.syncStatusFileUnavailable,
-    WalSyncDisplayState.outsideRecoveryWindow => l.syncStatusTooOld,
-    WalSyncDisplayState.unsupportedAudio => l.syncStatusUnsupportedAudio,
-    WalSyncDisplayState.uploadRejected => l.failedStatus,
-    _ => l.syncStatusFailed,
-  };
+        WalSyncDisplayState.corrupted => l.syncStatusFileUnavailable,
+        WalSyncDisplayState.outsideRecoveryWindow => l.syncStatusTooOld,
+        WalSyncDisplayState.unsupportedAudio => l.syncStatusUnsupportedAudio,
+        WalSyncDisplayState.uploadRejected => l.failedStatus,
+        _ => l.syncStatusFailed,
+      };
 
   static String _syncingLabel(RecordingBlock block, AppLocalizations l) {
     final onDevice = walIsOnDevice(block.representative);
@@ -268,19 +262,21 @@ class _PendingItem {
   const _PendingItem({required this.start, required this.seconds, required this.label, required this.step});
 
   _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
-    : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
-      seconds = block.seconds;
+      : start = DateTime.fromMillisecondsSinceEpoch(block.startSeconds * 1000),
+        seconds = block.seconds;
 
   /// A stage with no recording to name yet: only the label shows.
-  const _PendingItem.status({required this.label, required this.step}) : start = null, seconds = 0;
+  const _PendingItem.status({required this.label, required this.step})
+      : start = null,
+        seconds = 0;
 
   /// Work the server reports: `summarizing` is step 3, `transcribing` step 2, and `queued` (synced,
   /// waiting its turn) reads as processing like Home's row does.
   _PendingItem.server(PendingWorkItem work, AppLocalizations l)
-    : start = work.startedAt?.toLocal(),
-      seconds = work.durationSeconds ?? 0,
-      label = work.state == 'transcribing' ? l.transcribing : l.processing,
-      step = work.state == 'summarizing' ? 3 : 2;
+      : start = work.startedAt?.toLocal(),
+        seconds = work.durationSeconds ?? 0,
+        label = work.state == 'transcribing' ? l.transcribing : l.processing,
+        step = work.state == 'summarizing' ? 3 : 2;
 
   final DateTime? start;
   final int seconds;
@@ -392,10 +388,7 @@ class _DayHeader extends StatelessWidget {
                           TextSpan(text: _totals(items, l)),
                           if (moving != null) TextSpan(text: ' · $moving'),
                           if (attention != null)
-                            TextSpan(
-                              text: ' · $attention',
-                              style: TextStyle(color: OmiColors.warning),
-                            ),
+                            TextSpan(text: ' · $attention', style: TextStyle(color: OmiColors.warning)),
                         ],
                       ),
                       style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),

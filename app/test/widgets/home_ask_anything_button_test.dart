@@ -22,7 +22,12 @@ Widget _buildHarness({required Widget child, Brightness brightness = Brightness.
     ],
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
-      body: Center(child: SizedBox(width: 300, child: child)),
+      body: Center(
+        child: SizedBox(
+          width: 300,
+          child: child,
+        ),
+      ),
     ),
   );
 }
@@ -59,7 +64,12 @@ void main() {
   });
 
   testWidgets('HomeAskAnythingButton renders properly in Dark theme without icons', (tester) async {
-    await tester.pumpWidget(_buildHarness(brightness: Brightness.dark, child: const HomeAskAnythingButton()));
+    await tester.pumpWidget(
+      _buildHarness(
+        brightness: Brightness.dark,
+        child: const HomeAskAnythingButton(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Ask anything'), findsOneWidget);

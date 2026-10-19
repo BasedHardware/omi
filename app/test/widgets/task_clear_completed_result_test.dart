@@ -22,10 +22,10 @@ class _TaskServer {
   final deleted = <String>[];
 
   List<ActionItemWithMetadata> get _tasks => [
-    for (final id in ['task-1', 'task-2'])
-      if (!deleted.contains(id))
-        ActionItemWithMetadata(id: id, description: 'Done $id', completed: true, dueAt: DateTime.now()),
-  ];
+        for (final id in ['task-1', 'task-2'])
+          if (!deleted.contains(id))
+            ActionItemWithMetadata(id: id, description: 'Done $id', completed: true, dueAt: DateTime.now()),
+      ];
 
   Future<ActionItemsResponse?> list({
     int limit = 100,
@@ -36,7 +36,8 @@ class _TaskServer {
     DateTime? endDate,
     DateTime? dueStartDate,
     DateTime? dueEndDate,
-  }) async => ActionItemsResponse(actionItems: _tasks);
+  }) async =>
+      ActionItemsResponse(actionItems: _tasks);
 
   Future<bool> delete(String id) async {
     if (!accept) return false;

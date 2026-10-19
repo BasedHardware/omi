@@ -100,16 +100,15 @@ void main() {
       final monitor = await declare();
       void health({String phase = 'flowing', bool subscribed = true, bool fresh = true}) {
         monitor.observeIngressHealth(
-          'dev-a',
-          CaptureIngressHealth(
-            phase: phase,
-            generation: 'recovered',
-            reason: 'audio',
-            validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
-            subscriptionConfirmed: subscribed,
-            unverifiedSinceMs: 0,
-          ),
-        );
+            'dev-a',
+            CaptureIngressHealth(
+              phase: phase,
+              generation: 'recovered',
+              reason: 'audio',
+              validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
+              subscriptionConfirmed: subscribed,
+              unverifiedSinceMs: 0,
+            ));
       }
 
       health(subscribed: false);
@@ -200,16 +199,15 @@ void main() {
       monitor.onBleIngressBytes(CaptureWedgeMonitor.localWalDeviceId, 80);
     }
     monitor.observeIngressHealth(
-      CaptureWedgeMonitor.localWalDeviceId,
-      CaptureIngressHealth(
-        phase: 'flowing',
-        generation: 'native-1',
-        reason: 'audio',
-        validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
-        subscriptionConfirmed: true,
-        unverifiedSinceMs: 0,
-      ),
-    );
+        CaptureWedgeMonitor.localWalDeviceId,
+        CaptureIngressHealth(
+          phase: 'flowing',
+          generation: 'native-1',
+          reason: 'audio',
+          validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+          subscriptionConfirmed: true,
+          unverifiedSinceMs: 0,
+        ));
     expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
     expect(forEvent('Capture Recovery Resolved'), isEmpty);
   });
@@ -270,13 +268,13 @@ void main() {
     addTearDown(monitor.dispose);
     monitor.setNativeIngressOwner('dev-a', true);
     CaptureIngressHealth health(String phase) => CaptureIngressHealth(
-      phase: phase,
-      generation: 'epoch-1',
-      reason: phase,
-      validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
-      subscriptionConfirmed: phase == 'quiet',
-      unverifiedSinceMs: 1234,
-    );
+          phase: phase,
+          generation: 'epoch-1',
+          reason: phase,
+          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+          subscriptionConfirmed: phase == 'quiet',
+          unverifiedSinceMs: 1234,
+        );
     for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
       monitor.observeIngressHealth('dev-a', health(phase));
       zeroSession(monitor);
@@ -1087,10 +1085,7 @@ void main() {
       final monitor = makeMonitor(transferRetry: () async {});
       final stalledAt = now;
       monitor.observeWalBacklog(
-        pendingCount: 5,
-        oldestPendingAt: now.subtract(const Duration(hours: 3)),
-        pendingSeconds: 47 * 60,
-      );
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 47 * 60);
       await pumpEventQueue();
 
       expect(monitor.uploadStall?.pendingCount, 5);
@@ -1100,10 +1095,7 @@ void main() {
 
       now = now.add(const Duration(minutes: 20));
       monitor.observeWalBacklog(
-        pendingCount: 6,
-        oldestPendingAt: now.subtract(const Duration(minutes: 200)),
-        pendingSeconds: 50 * 60,
-      );
+          pendingCount: 6, oldestPendingAt: now.subtract(const Duration(minutes: 200)), pendingSeconds: 50 * 60);
       await pumpEventQueue();
 
       expect(monitor.uploadStall?.pendingCount, 6, reason: 'the row shows the latest backlog');
@@ -1114,10 +1106,7 @@ void main() {
     test('a backlog under the silence threshold never engages the row', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(
-        pendingCount: 5,
-        oldestPendingAt: now.subtract(const Duration(minutes: 119)),
-        pendingSeconds: 600,
-      );
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(minutes: 119)), pendingSeconds: 600);
       await pumpEventQueue();
       expect(monitor.uploadStall, isNull);
       expect(monitor.hasCaptureAttention, isFalse);
@@ -1128,10 +1117,7 @@ void main() {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
       monitor.observeWalBacklog(
-        pendingCount: 5,
-        oldestPendingAt: now.subtract(const Duration(hours: 3)),
-        pendingSeconds: 600,
-      );
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 600);
       await pumpEventQueue();
       expect(monitor.hasCaptureAttention, isTrue);
 
@@ -1147,10 +1133,7 @@ void main() {
       now = now.add(const Duration(hours: 3));
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
       monitor.observeWalBacklog(
-        pendingCount: 4,
-        oldestPendingAt: now.subtract(const Duration(hours: 3)),
-        pendingSeconds: 600,
-      );
+          pendingCount: 4, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 600);
       await pumpEventQueue();
       expect(monitor.hasCaptureAttention, isTrue);
 
@@ -1194,11 +1177,7 @@ void main() {
 
       // The same condition persisting stays seen; a later engagement is news again.
       monitor.observeStorageAtRisk(
-        engagedAt: now.add(const Duration(minutes: 1)),
-        blockedCount: 3,
-        retainedCount: 720,
-        reason: 'disk_reserve',
-      );
+          engagedAt: now.add(const Duration(minutes: 1)), blockedCount: 3, retainedCount: 720, reason: 'disk_reserve');
       expect(monitor.hasUnseenCaptureAttention.value, isTrue);
       monitor.dispose();
     });
@@ -1219,11 +1198,8 @@ void main() {
       now = now.add(const Duration(minutes: 1));
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
       monitor.markCaptureAttentionSeen(through: builtAt);
-      expect(
-        monitor.hasUnseenCaptureAttention.value,
-        isTrue,
-        reason: 'a stale callback cannot extinguish the bell for an incident it never rendered',
-      );
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue,
+          reason: 'a stale callback cannot extinguish the bell for an incident it never rendered');
 
       // The seen timestamp never rewinds: marking through an older build is a no-op.
       monitor.markCaptureAttentionSeen();
@@ -1234,10 +1210,7 @@ void main() {
     test('reset clears the rows and the bell', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(
-        pendingCount: 5,
-        oldestPendingAt: now.subtract(const Duration(hours: 3)),
-        pendingSeconds: 600,
-      );
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 600);
       await pumpEventQueue();
       expect(monitor.hasCaptureAttention, isTrue);
       expect(monitor.hasUnseenCaptureAttention.value, isTrue);
@@ -1324,10 +1297,8 @@ void main() {
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNotNull);
-      expect(
-        forEvent('Capture Wedge Detected').map((e) => e['trigger']),
-        containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
-      );
+      expect(forEvent('Capture Wedge Detected').map((e) => e['trigger']),
+          containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]));
 
       monitor.dismissVisibleEpisode(CaptureWedgeMonitor.localWalDeviceId);
 
@@ -1350,13 +1321,13 @@ void main() {
 
     test('a dismissed ingress episode stays dismissed across native re-ticks of the same incident', () async {
       CaptureIngressHealth snapshot(String generation) => CaptureIngressHealth(
-        phase: 'actionRequired',
-        generation: generation,
-        reason: 'subscription_timeout',
-        validUntilMs: 0,
-        subscriptionConfirmed: false,
-        unverifiedSinceMs: 60000,
-      );
+            phase: 'actionRequired',
+            generation: generation,
+            reason: 'subscription_timeout',
+            validUntilMs: 0,
+            subscriptionConfirmed: false,
+            unverifiedSinceMs: 60000,
+          );
       final monitor = makeMonitor(withRetry: true);
       monitor.observeIngressHealth('dev-a', snapshot('g1'));
       await pumpEventQueue();
@@ -1374,11 +1345,8 @@ void main() {
       // A new incident (new connection generation) alerts again.
       monitor.observeIngressHealth('dev-a', snapshot('g2'));
       await pumpEventQueue();
-      expect(
-        monitor.visiblePrompt?.trigger,
-        CaptureWedgeMonitor.triggerIngressRecoveryFailed,
-        reason: 'a genuinely new incident is a new alert',
-      );
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+          reason: 'a genuinely new incident is a new alert');
     });
 
     test('a positive session during retry resolves without a prompt', () async {

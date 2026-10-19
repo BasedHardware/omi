@@ -65,9 +65,9 @@ class HomePendingRow extends StatelessWidget {
           final subtitle = SyncPendingWork.shouldShow(p) ? SyncPendingWork.stageLabel(p, l) : l.processing;
           final now = DateTime.now();
           void open() => routeToPage(
-            context,
-            OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync, pendingWork: pendingWork),
-          );
+                context,
+                OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync, pendingWork: pendingWork),
+              );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,

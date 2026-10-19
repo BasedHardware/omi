@@ -54,16 +54,16 @@ class CaptureRecoveryStatus extends StatelessWidget {
         // message and explanation make no audio-saved claim.
         final message = isTransferRecovery
             ? (wedge.storageAtRisk?.reason == 'disk_space_unknown'
-                  ? l10n.activityAttentionStorageUnknownTitle
-                  : l10n.capturePhoneStorageFull)
+                ? l10n.activityAttentionStorageUnknownTitle
+                : l10n.capturePhoneStorageFull)
             : isIngressFailure
-            ? l10n.captureIngressNeedsReconnect
-            : l10n.captureRecoveryBannerTitle;
+                ? l10n.captureIngressNeedsReconnect
+                : l10n.captureRecoveryBannerTitle;
         final explanation = isTransferRecovery
             ? l10n.recordingsNotSynced
             : isIngressFailure
-            ? l10n.captureIngressNeedsReconnectExplanation
-            : l10n.captureWedgeBleExplanation;
+                ? l10n.captureIngressNeedsReconnectExplanation
+                : l10n.captureWedgeBleExplanation;
         return Padding(
           key: const Key('capture_recovery_status'),
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

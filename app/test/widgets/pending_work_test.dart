@@ -34,14 +34,14 @@ class _IdleSync extends ChangeNotifier implements SyncProvider {
 }
 
 AttentionItem _item(String id, {String? title, bool seen = false}) => AttentionItem(
-  id: id,
-  kind: 'conversation_summary_failed',
-  conversationId: 'c-$id',
-  title: title,
-  retryable: true,
-  seen: seen,
-  retryState: AttentionRetryState.none,
-);
+      id: id,
+      kind: 'conversation_summary_failed',
+      conversationId: 'c-$id',
+      title: title,
+      retryable: true,
+      seen: seen,
+      retryState: AttentionRetryState.none,
+    );
 
 Future<PendingWorkStore> _store({
   List<PendingWorkItem> pending = const [],
@@ -67,21 +67,21 @@ Future<PendingWorkStore> _store({
 }
 
 ConversationProvider _conversations({List<ServerConversation> processing = const []}) => ConversationProvider(
-  conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-  isSignedIn: () => true,
-)..processingConversations = processing;
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    )..processingConversations = processing;
 
 Widget _app(Widget child, {ConversationProvider? conversations, SyncProvider? sync}) => MultiProvider(
-  providers: [
-    ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _IdleSync()),
-    ChangeNotifierProvider<ConversationProvider>.value(value: conversations ?? _conversations()),
-  ],
-  child: MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: Scaffold(body: SingleChildScrollView(child: child)),
-  ),
-);
+      providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _IdleSync()),
+        ChangeNotifierProvider<ConversationProvider>.value(value: conversations ?? _conversations()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SingleChildScrollView(child: child)),
+      ),
+    );
 
 ServerConversation _processing(String id) {
   final now = DateTime.now();
@@ -99,11 +99,7 @@ void main() {
     testWidgets('a processing conversation shows the one calm row', (tester) async {
       final store = await _store();
       await tester.pumpWidget(
-        _app(
-          HomePendingRow(pendingWork: store),
-          conversations: _conversations(processing: [_processing('a')]),
-        ),
-      );
+          _app(HomePendingRow(pendingWork: store), conversations: _conversations(processing: [_processing('a')])));
       expect(find.byKey(const Key('home_pending_row')), findsOneWidget);
       expect(find.text('Conversations on the way'), findsOneWidget);
       expect(find.text('Processing'), findsOneWidget);
@@ -111,19 +107,17 @@ void main() {
     });
 
     testWidgets('server work the phone did not start also shows the row', (tester) async {
-      final store = await _store(
-        pending: const [PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: [])],
-      );
+      final store = await _store(pending: const [
+        PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
       await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
       expect(find.byKey(const Key('home_pending_row')), findsOneWidget);
     });
 
     testWidgets('On the Way lists the server work the row stands for', (tester) async {
-      final store = await _store(
-        pending: const [
-          PendingWorkItem(id: 'conv:a', kind: 'conversation', state: 'summarizing', conversationIds: ['a']),
-        ],
-      );
+      final store = await _store(pending: const [
+        PendingWorkItem(id: 'conv:a', kind: 'conversation', state: 'summarizing', conversationIds: ['a']),
+      ]);
       await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
       await tester.tap(find.byKey(const Key('home_pending_row')));
       await tester.pumpAndSettle();
@@ -144,10 +138,7 @@ void main() {
       final retried = <String>[];
       final retriedAll = <String>[];
       final store = await _store(
-        attention: [
-          _item('x', title: 'Launch planning'),
-          _item('y'),
-        ],
+        attention: [_item('x', title: 'Launch planning'), _item('y')],
         retried: retried,
         retriedAll: retriedAll,
       );

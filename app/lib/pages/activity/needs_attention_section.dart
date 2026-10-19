@@ -83,11 +83,8 @@ class NeedsAttentionSection extends StatelessWidget {
                       child: Text(
                         l.activityNeedsAttention.toUpperCase(),
                         // The same header as Activity's day groups: the row icons carry the warning.
-                        style: OmiType.footnote.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: OmiColors.textSecondary,
-                          letterSpacing: 0.4,
-                        ),
+                        style: OmiType.footnote
+                            .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
                       ),
                     ),
                   ),
@@ -150,11 +147,9 @@ class NeedsAttentionSection extends StatelessWidget {
                       subtitle: retentionPlausible ? l.activityAttentionLinkStalledSubtitle : '',
                       actionLabel: ingressFailure ? null : l.reconnect,
                       onTap: ingressFailure
-                          ? () => LiveCaptureCard.showDetails(
-                              context,
+                          ? () => LiveCaptureCard.showDetails(context,
                               title: l.captureIngressNeedsReconnect,
-                              explanation: l.captureIngressNeedsReconnectExplanation,
-                            )
+                              explanation: l.captureIngressNeedsReconnectExplanation)
                           : () {
                               monitor.onRecoveryActioned(surface: 'activity');
                               monitor.retryVisibleEpisode();
@@ -258,7 +253,11 @@ class _AttentionRow extends StatelessWidget {
                 child: OmiSpinner(size: OmiSpinnerSize.small),
               )
             else if (onRetry != null)
-              OmiButton.secondary(label: context.l10n.tryAgain, onPressed: onRetry, size: OmiButtonSize.compact)
+              OmiButton.secondary(
+                label: context.l10n.tryAgain,
+                onPressed: onRetry,
+                size: OmiButtonSize.compact,
+              )
             else if (onTap != null)
               Icon(Icons.chevron_right, color: OmiColors.textTertiary),
           ],

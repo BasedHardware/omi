@@ -44,12 +44,7 @@ class _FailingCopyFile implements File {
 }
 
 Wal _wal(int timerStart) => Wal(
-  timerStart: timerStart,
-  codec: BleAudioCodec.opus,
-  seconds: 60,
-  status: WalStatus.miss,
-  storage: WalStorage.disk,
-);
+    timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, storage: WalStorage.disk);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -101,20 +96,17 @@ void main() {
     await WalFileManager.saveWals([_wal(1000), _wal(2000)]); // Ensures backupFile exists before we read it
     final beforeBackup = backupFile.readAsStringSync();
 
-    await IOOverrides.runZoned(
-      () async {
-        await WalFileManager.init();
-        // The save operation calls _createBackup, which will fail during copy()
-        await WalFileManager.saveWals([_wal(1000), _wal(2000), _wal(3000)]);
-      },
-      createFile: (path) {
-        final realFile = Zone.root.run(() => File(path));
-        if (path.endsWith('wals.json')) {
-          return _FailingCopyFile(realFile);
-        }
-        return realFile;
-      },
-    );
+    await IOOverrides.runZoned(() async {
+      await WalFileManager.init();
+      // The save operation calls _createBackup, which will fail during copy()
+      await WalFileManager.saveWals([_wal(1000), _wal(2000), _wal(3000)]);
+    }, createFile: (path) {
+      final realFile = Zone.root.run(() => File(path));
+      if (path.endsWith('wals.json')) {
+        return _FailingCopyFile(realFile);
+      }
+      return realFile;
+    });
 
     // We verify the saveWals completed successfully (no uncaught exception)
     // The backup file shouldn't be updated due to the simulated copy failure

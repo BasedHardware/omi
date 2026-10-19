@@ -27,18 +27,18 @@ const _summaryTab = ConversationTab.summary;
 const _transcriptTab = ConversationTab.transcript;
 
 List<SingleChildWidget> _detailProviders(ServerConversation conversation, {ConversationProvider? provider}) => [
-  ChangeNotifierProvider<ConversationProvider>.value(
-    value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation]),
-  ),
-  ChangeNotifierProvider(
-    create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt),
-  ),
-];
+      ChangeNotifierProvider<ConversationProvider>.value(
+        value: provider ?? (ConversationProvider(isSignedIn: () => true)..conversations = [conversation]),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(conversation.createdAt),
+      ),
+    ];
 
 Future<void> _pumpDetail(AuditRun a, ServerConversation conversation, {ConversationTab tab = _summaryTab}) => a.pump(
-  ConversationDetailPage(conversation: conversation, initialTab: tab),
-  providers: _detailProviders(conversation),
-);
+      ConversationDetailPage(conversation: conversation, initialTab: tab),
+      providers: _detailProviders(conversation),
+    );
 
 TranscriptSegment _segment(String id, String text, String speaker, {bool isUser = false, String? personId}) {
   final start = double.parse(id) * 3;
@@ -66,15 +66,15 @@ Future<void> _pumpDesignConversation(AuditRun a) async {
   final now = DateTime.now();
   final startedAt = DateTime(now.year, now.month, now.day, 12, 40);
   TranscriptSegment line(String id, int minute, double until, String text, {bool mine = false}) => TranscriptSegment(
-    id: id,
-    text: text,
-    speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
-    isUser: mine,
-    personId: null,
-    start: minute * 60.0,
-    end: until * 60,
-    translations: [],
-  );
+        id: id,
+        text: text,
+        speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
+        isUser: mine,
+        personId: null,
+        start: minute * 60.0,
+        end: until * 60,
+        translations: [],
+      );
   final conversation = ServerConversation(
     id: 'audit-design',
     createdAt: startedAt,
@@ -147,8 +147,7 @@ final conversationDetailScenarios = <AuditScenario>[
     id: 'conversation-detail-design',
     title: 'The Omi v8 conversation: title, chips, Summary | Transcript, one bottom bar',
     page: _page,
-    state:
-        'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
+    state: 'The mock’s conversation (today 12:40 PM, 14 min, Work folder, two headed summary sections, eight lines, '
         'a 14 min recording)',
     run: (a) async {
       await _pumpDesignConversation(a);

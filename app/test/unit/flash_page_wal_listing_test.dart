@@ -33,11 +33,8 @@ class _FakePendant implements LimitlessDeviceConnection {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Map<String, int> _flash({required int oldest, required int newest}) => {
-  'oldest_flash_page': oldest,
-  'newest_flash_page': newest,
-  'current_storage_session': 1,
-};
+Map<String, int> _flash({required int oldest, required int newest}) =>
+    {'oldest_flash_page': oldest, 'newest_flash_page': newest, 'current_storage_session': 1};
 
 FlashPageWalSyncImpl _syncFor(_FakePendant pendant) => FlashPageWalSyncImpl(_Listener())
   ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)

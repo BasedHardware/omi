@@ -52,25 +52,25 @@ Future<PendingWorkStore> _noWork() async {
 
 /// The section only reads the store; empty attention needs no refresh.
 PendingWorkStore _emptyStore() => PendingWorkStore(
-  loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
-  loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
-);
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+    );
 
 CaptureWedgeMonitor _monitor() => CaptureWedgeMonitor(
-  featureGate: () async => true,
-  track: (_, __) {},
-  bleRetry: (_) async {},
-  transferRetry: () async {},
-  appBuild: () => '1',
-  platform: () => 'ios',
-);
+      featureGate: () async => true,
+      track: (_, __) {},
+      bleRetry: (_) async {},
+      transferRetry: () async {},
+      appBuild: () => '1',
+      platform: () => 'ios',
+    );
 
 void _seedStorage(CaptureWedgeMonitor monitor, {int blockedCount = 3}) => monitor.observeStorageAtRisk(
-  engagedAt: DateTime.now().subtract(const Duration(minutes: 30)),
-  blockedCount: blockedCount,
-  retainedCount: 720,
-  reason: 'disk_reserve',
-);
+      engagedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+      blockedCount: blockedCount,
+      retainedCount: 720,
+      reason: 'disk_reserve',
+    );
 
 void _seedUploadStall(CaptureWedgeMonitor monitor, {int pendingCount = 5, int pendingSeconds = 47 * 60}) =>
     monitor.observeWalBacklog(
@@ -80,26 +80,26 @@ void _seedUploadStall(CaptureWedgeMonitor monitor, {int pendingCount = 5, int pe
     );
 
 ConversationProvider _conversations() => ConversationProvider(
-  conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-  isSignedIn: () => true,
-);
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
 
 Widget _app(Widget child, {CaptureWedgeMonitor? monitor, NavigatorObserver? observer}) => MultiProvider(
-  providers: [
-    ChangeNotifierProvider<SyncProvider>.value(value: _IdleSync()),
-    ChangeNotifierProvider<ConversationProvider>.value(value: _conversations()),
-  ],
-  child: MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    navigatorObservers: observer == null ? const [] : [observer],
-    home: Scaffold(
-      body: SingleChildScrollView(
-        child: NeedsAttentionSection(store: _emptyStore(), captureMonitor: monitor),
+      providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: _IdleSync()),
+        ChangeNotifierProvider<ConversationProvider>.value(value: _conversations()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        navigatorObservers: observer == null ? const [] : [observer],
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: NeedsAttentionSection(store: _emptyStore(), captureMonitor: monitor),
+          ),
+        ),
       ),
-    ),
-  ),
-);
+    );
 
 /// Counts pushes so a tap can be proven to open exactly one page without depending on the
 /// destination page's own provider needs.
@@ -122,10 +122,10 @@ void main() {
   final yesterday = DateTime.now().subtract(const Duration(days: 1));
 
   Widget pageApp(Widget home) => MaterialApp(
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: home,
-  );
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: home,
+      );
 
   group('NeedsAttentionSection capture rows', () {
     testWidgets('storage at risk renders its row without an attempt count', (tester) async {
@@ -224,11 +224,8 @@ void main() {
       await tester.pump();
       expect(bleRetries, retriesBefore + 1, reason: 'the row retries the episode in place');
       expect(pushes.count - baseline, 0, reason: 'a stalled link is fixed where the reader stands');
-      expect(
-        find.byKey(const Key('activity_attention_capture_link')),
-        findsNothing,
-        reason: 'the row leaves while the retry runs',
-      );
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsNothing,
+          reason: 'the row leaves while the retry runs');
       held.complete();
       await tester.pump();
     });
@@ -268,11 +265,8 @@ void main() {
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(monitor.acuteEpisode?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
       expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
-      expect(
-        find.text('Still recording on your Omi'),
-        findsNothing,
-        reason: 'nothing proves the pendant keeps live frames while it looks connected',
-      );
+      expect(find.text('Still recording on your Omi'), findsNothing,
+          reason: 'nothing proves the pendant keeps live frames while it looks connected');
       // The open session's watchdog timer must not outlive the test.
       await tester.pumpWidget(const SizedBox());
       monitor.dispose();
@@ -301,11 +295,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('activity_attention_capture_link')));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('could not restore the connection automatically'),
-        findsOneWidget,
-        reason: 'the row opens the explanation',
-      );
+      expect(find.textContaining('could not restore the connection automatically'), findsOneWidget,
+          reason: 'the row opens the explanation');
     });
 
     testWidgets('an upload stall without known seconds shows only the count', (tester) async {
@@ -359,11 +350,8 @@ void main() {
       _seedStorage(monitor);
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       await tester.pumpAndSettle();
-      expect(
-        monitor.visiblePrompt?.trigger,
-        CaptureWedgeMonitor.triggerStorageAtRisk,
-        reason: 'the capturing page banner shows the storage problem',
-      );
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk,
+          reason: 'the capturing page banner shows the storage problem');
 
       // The disk recovers: the row ends, and with it the episode — the banner
       // must stop reporting a recovered problem, and a later disk incident
@@ -374,11 +362,8 @@ void main() {
 
       _seedStorage(monitor);
       await tester.pumpAndSettle();
-      expect(
-        monitor.visiblePrompt?.trigger,
-        CaptureWedgeMonitor.triggerStorageAtRisk,
-        reason: 'a returning disk failure declares a fresh episode',
-      );
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk,
+          reason: 'a returning disk failure declares a fresh episode');
     });
 
     test('hasContent stays consistent with the rows', () async {
@@ -393,11 +378,8 @@ void main() {
       expect(NeedsAttentionSection.hasContent(store, idle, storage), isTrue);
 
       storage.onUploadCompleted();
-      expect(
-        NeedsAttentionSection.hasContent(store, idle, storage),
-        isTrue,
-        reason: 'the storage row survives uploads',
-      );
+      expect(NeedsAttentionSection.hasContent(store, idle, storage), isTrue,
+          reason: 'the storage row survives uploads');
       storage.clearStorageAtRisk();
       expect(NeedsAttentionSection.hasContent(store, idle, storage), isFalse);
 
@@ -419,15 +401,9 @@ void main() {
       final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
 
       _seedStorage(monitor);
-      await tester.pumpWidget(
-        pageApp(
-          Scaffold(
-            body: Center(
-              child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor),
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(pageApp(Scaffold(
+        body: Center(child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor)),
+      )));
       expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsOneWidget);
       expect(find.bySemanticsLabel('Activity, needs attention'), findsOneWidget);
 
@@ -443,15 +419,9 @@ void main() {
       var stored = yesterday.millisecondsSinceEpoch;
       final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
 
-      await tester.pumpWidget(
-        pageApp(
-          Scaffold(
-            body: Center(
-              child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor),
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(pageApp(Scaffold(
+        body: Center(child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor)),
+      )));
       expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
 
       for (var i = 0; i < 3; i++) {
@@ -461,22 +431,16 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(monitor.acuteEpisode, isNotNull);
-      expect(
-        find.byKey(const ValueKey('home_activity_attention_dot')),
-        findsOneWidget,
-        reason: 'Home has no banner, so the bell carries an acute stall',
-      );
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsOneWidget,
+          reason: 'Home has no banner, so the bell carries an acute stall');
 
       final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
       monitor.onTranscriptObserved('dev-a');
       monitor.onCaptureSessionEnded(handle, binaryBytesSent: 64);
       await tester.pump();
       expect(monitor.acuteEpisode, isNull);
-      expect(
-        find.byKey(const ValueKey('home_activity_attention_dot')),
-        findsNothing,
-        reason: 'a resolved stall is no longer attention',
-      );
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing,
+          reason: 'a resolved stall is no longer attention');
     });
   });
 
@@ -491,27 +455,20 @@ void main() {
       _seedUploadStall(monitor);
       expect(monitor.hasUnseenCaptureAttention.value, isTrue);
 
-      await tester.pumpWidget(
-        pageApp(
-          ActivityPage(
-            pendingWork: store,
-            seen: seen,
-            captureWedgeMonitor: monitor,
-            probeDreamReport: () async => false,
-            loadRecaps: () async => (items: <DailySummary>[], ok: true),
-            loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
-          ),
-        ),
-      );
+      await tester.pumpWidget(pageApp(ActivityPage(
+        pendingWork: store,
+        seen: seen,
+        captureWedgeMonitor: monitor,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
-      expect(
-        monitor.hasUnseenCaptureAttention.value,
-        isFalse,
-        reason: 'opening Activity marks the capture rows seen; a new episode re-lights the bell',
-      );
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse,
+          reason: 'opening Activity marks the capture rows seen; a new episode re-lights the bell');
     });
   });
 }

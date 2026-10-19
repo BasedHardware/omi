@@ -152,16 +152,16 @@ void main() {
   });
 
   Wal makeWal({required int totalBytes, int seconds = 5}) => Wal(
-    timerStart: 1000,
-    codec: BleAudioCodec.opus,
-    seconds: seconds,
-    status: WalStatus.miss,
-    storage: WalStorage.sdcard,
-    device: 'devkit-1',
-    fileNum: 1,
-    storageOffset: 0,
-    storageTotalBytes: totalBytes,
-  );
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: seconds,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'devkit-1',
+        fileNum: 1,
+        storageOffset: 0,
+        storageTotalBytes: totalBytes,
+      );
 
   SDCardWalSyncImpl syncWith(_FakeLocalSync local, _FakeSdCard card, Wal wal, {String firmware = '3.0.10'}) {
     final sync = SDCardWalSyncImpl(_Listener())

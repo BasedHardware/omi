@@ -20,10 +20,9 @@ final settingsScenarios = <AuditScenario>[
     page: 'lib/pages/settings/settings_drawer.dart (SettingsDrawer)',
     state: 'Signed-in fixture account; a device connected',
     run: (a) async {
-      await a.pump(
-        const SettingsDrawer(),
-        providers: [ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true))],
-      );
+      await a.pump(const SettingsDrawer(), providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
+      ]);
       await a.scrollSeries('Open the Settings sheet');
     },
   ),
@@ -43,10 +42,9 @@ final settingsScenarios = <AuditScenario>[
     page: 'lib/pages/settings/settings_groups.dart (DeviceGroupPage)',
     state: 'Signed-in fixture account; a device connected',
     run: (a) async {
-      await a.pump(
-        const DeviceGroupPage(),
-        providers: [ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true))],
-      );
+      await a.pump(const DeviceGroupPage(), providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
+      ]);
       await a.scrollSeries('Open Device from the Settings sheet');
     },
   ),

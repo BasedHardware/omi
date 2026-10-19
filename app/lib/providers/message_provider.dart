@@ -40,14 +40,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
-typedef ChatReplyStreamer =
-    Stream<ServerMessageChunk> Function(
-      String text, {
-      String? appId,
-      List<String>? filesId,
-      ChatPageContext? context,
-      String? chatSessionId,
-    });
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+  String? chatSessionId,
+});
 typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
@@ -88,12 +87,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     VoiceAudioFileSaver? voiceAudioFileSaver,
     Duration voiceReplyTimeout = const Duration(seconds: 60),
     ChatReplyReadAloud? readAloud,
-  }) : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
-       _filesUploader = filesUploader ?? uploadFilesServer,
-       _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
-       _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
-       _voiceReplyTimeout = voiceReplyTimeout,
-       _readAloud = readAloud ?? ChatReplyReadAloud.instance;
+  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+        _filesUploader = filesUploader ?? uploadFilesServer,
+        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+        _voiceReplyTimeout = voiceReplyTimeout,
+        _readAloud = readAloud ?? ChatReplyReadAloud.instance;
 
   @override
   final ChatSessionsApi chatSessionsApi;
@@ -639,9 +638,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     // app or session, so the backend saves the question and answer to the main Omi chat. Its
     // playback may continue while Past chats or an app's thread (Mentor included) is open, but its
     // transient reply must never become a row in that other thread.
-    final voiceMessages = chatSessionId == null && !isFreshChat && (currentAppId ?? '').isEmpty
-        ? messages
-        : <ServerMessage>[];
+    final voiceMessages =
+        chatSessionId == null && !isFreshChat && (currentAppId ?? '').isEmpty ? messages : <ServerMessage>[];
     final visibleVoice = identical(voiceMessages, messages);
     final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
     var chatAttemptCompleted = false;
@@ -775,8 +773,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                chatAtCap?.title ??
+            message.text = chatAtCap?.title ??
                 l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
@@ -952,8 +949,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             // Keep the user's message visible; replace AI placeholder with quota message
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                chatAtCap?.title ??
+            message.text = chatAtCap?.title ??
                 l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
@@ -985,10 +981,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     if (!chatAttemptCompleted) {
       _logChatFailure(ChatStreamFailureClass.server, stage: 'eof');
       if (message.text.isEmpty) {
-        _markReplyFailed(
-          message,
-          _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server),
-        );
+        _markReplyFailed(message,
+            _FailedReply(text: text, context: context, fileIds: fileIds, failure: ChatStreamFailureClass.server));
         notifyListeners();
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
@@ -996,22 +990,22 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   ChatStreamFailureClass _chunkFailureClass(ServerMessageChunk chunk) => switch (chunk.errorCode) {
-    'offline' => ChatStreamFailureClass.offline,
-    'server_error' => ChatStreamFailureClass.server,
-    'timeout' => ChatStreamFailureClass.timeout,
-    'quota_exceeded' => ChatStreamFailureClass.quota,
-    'not_signed_in' => ChatStreamFailureClass.notSignedIn,
-    _ => ChatStreamFailureClass.server,
-  };
+        'offline' => ChatStreamFailureClass.offline,
+        'server_error' => ChatStreamFailureClass.server,
+        'timeout' => ChatStreamFailureClass.timeout,
+        'quota_exceeded' => ChatStreamFailureClass.quota,
+        'not_signed_in' => ChatStreamFailureClass.notSignedIn,
+        _ => ChatStreamFailureClass.server,
+      };
 
   ProductFailure _productFailureFor(ChatStreamFailureClass failure) => switch (failure) {
-    ChatStreamFailureClass.offline => ProductFailure.network,
-    ChatStreamFailureClass.server => ProductFailure.server,
-    ChatStreamFailureClass.timeout => ProductFailure.timeout,
-    ChatStreamFailureClass.quota => ProductFailure.quota,
-    ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
-    ChatStreamFailureClass.unknown => ProductFailure.unknown,
-  };
+        ChatStreamFailureClass.offline => ProductFailure.network,
+        ChatStreamFailureClass.server => ProductFailure.server,
+        ChatStreamFailureClass.timeout => ProductFailure.timeout,
+        ChatStreamFailureClass.quota => ProductFailure.quota,
+        ChatStreamFailureClass.notSignedIn => ProductFailure.unauthorized,
+        ChatStreamFailureClass.unknown => ProductFailure.unknown,
+      };
 
   void _logChatFailure(ChatStreamFailureClass failure, {required String stage, int? status}) {
     Logger.warning('mobile_chat_failure class=${failure.name} stage=$stage status=$status');

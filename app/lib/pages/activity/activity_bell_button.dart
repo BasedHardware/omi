@@ -48,9 +48,7 @@ class ActivityBellButton extends StatelessWidget {
           onTap: () {
             OmiHaptics.selection();
             routeToPage(
-              context,
-              ActivityPage(seen: seen, pendingWork: pendingWork, captureWedgeMonitor: captureMonitor),
-            );
+                context, ActivityPage(seen: seen, pendingWork: pendingWork, captureWedgeMonitor: captureMonitor));
           },
         );
         if (!hasNew) return button;

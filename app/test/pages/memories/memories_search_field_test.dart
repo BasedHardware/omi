@@ -19,19 +19,19 @@ const _coffee = 'Coffee with Sam on Friday';
 const _gym = 'Gym at 7am';
 
 Memory _memory(String id, String content) => Memory(
-  id: id,
-  uid: 'memories-search-user',
-  content: content,
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 10, 1),
-  updatedAt: DateTime(2026, 10, 1),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'memories-search-user',
+      content: content,
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
+      visibility: MemoryVisibility.private,
+    );
 
 MemoriesProvider _memoriesProvider() => MemoriesProvider(
-  fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
-      GetMemoriesResult([_memory('mem-coffee', _coffee), _memory('mem-gym', _gym)], true),
-);
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([_memory('mem-coffee', _coffee), _memory('mem-gym', _gym)], true),
+    );
 
 /// The providers sit above the navigator, as in main.dart, so they outlive every Memories page
 /// pushed on top of it.

@@ -54,32 +54,31 @@ class _FakeWalService implements IWalService {
   dynamic getSyncs() => syncs;
 }
 
-Wal _wal(
-  int startSeconds, {
-  WalStatus status = WalStatus.miss,
-  WalStorage storage = WalStorage.disk,
-  bool onDeviceOnly = false,
-  int seconds = 60,
-  int retryCount = 0,
-}) => Wal(
-  timerStart: startSeconds,
-  codec: BleAudioCodec.opus,
-  seconds: seconds,
-  status: status,
-  storage: storage,
-  onDeviceOnly: onDeviceOnly,
-  retryCount: retryCount,
-  device: 'phone',
-);
+Wal _wal(int startSeconds,
+        {WalStatus status = WalStatus.miss,
+        WalStorage storage = WalStorage.disk,
+        bool onDeviceOnly = false,
+        int seconds = 60,
+        int retryCount = 0}) =>
+    Wal(
+      timerStart: startSeconds,
+      codec: BleAudioCodec.opus,
+      seconds: seconds,
+      status: status,
+      storage: storage,
+      onDeviceOnly: onDeviceOnly,
+      retryCount: retryCount,
+      device: 'phone',
+    );
 
 CaptureWedgeMonitor _monitor() => CaptureWedgeMonitor(
-  featureGate: () async => true,
-  track: (_, __) {},
-  bleRetry: (_) async {},
-  transferRetry: () async {},
-  appBuild: () => '1',
-  platform: () => 'ios',
-);
+      featureGate: () async => true,
+      track: (_, __) {},
+      bleRetry: (_) async {},
+      transferRetry: () async {},
+      appBuild: () => '1',
+      platform: () => 'ios',
+    );
 
 Future<SyncProvider> _provider(_FakeSyncs syncs, CaptureWedgeMonitor monitor) async {
   SharedPreferences.setMockInitialValues({});

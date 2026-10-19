@@ -54,11 +54,11 @@ class UserProvider with ChangeNotifier {
     Future<Map<String, dynamic>?> Function()? trainingDataFetcher,
     Future<Map<String, dynamic>?> Function()? transcriptionPreferencesFetcher,
     Future<bool> Function(List<String> vocabulary)? vocabularySetter,
-  }) : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
-       _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled,
-       _trainingDataFetcher = trainingDataFetcher ?? getTrainingDataOptIn,
-       _transcriptionPreferencesFetcher = transcriptionPreferencesFetcher ?? getTranscriptionPreferences,
-       _vocabularySetter = vocabularySetter ?? ((vocabulary) => setTranscriptionPreferences(vocabulary: vocabulary));
+  })  : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
+        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled,
+        _trainingDataFetcher = trainingDataFetcher ?? getTrainingDataOptIn,
+        _transcriptionPreferencesFetcher = transcriptionPreferencesFetcher ?? getTranscriptionPreferences,
+        _vocabularySetter = vocabularySetter ?? ((vocabulary) => setTranscriptionPreferences(vocabulary: vocabulary));
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;

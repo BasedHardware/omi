@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 /// This bridge has no capture/device-start dependency.
 class PeriodicRecordingSync {
   PeriodicRecordingSync({required this.coordinator, required this.cancel, bool? isIOS})
-    : _isIOS = isIOS ?? Platform.isIOS;
+      : _isIOS = isIOS ?? Platform.isIOS;
 
   static const channel = MethodChannel('com.omi/periodic_recording_sync');
   final RecordingTransferCoordinator coordinator;
