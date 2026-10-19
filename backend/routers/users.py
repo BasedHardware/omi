@@ -1294,10 +1294,6 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
-        if response.processing_backlog and response.processing_backlog.state == 'processing':
-            from utils.processing_backlog_worker import kick as kick_processing_backlog
-
-            kick_processing_backlog(uid)
     return response
 
 
@@ -1309,14 +1305,11 @@ def process_waiting_recordings(
     if not funded_processing_enabled():
         raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
-    from utils.processing_backlog_worker import kick as kick_processing_backlog
 
-    result = processing_backlog.choose(uid, request_key=idempotency_key)
+    processing_backlog.choose(uid, request_key=idempotency_key)
     snapshot = processing_backlog.snapshot(uid)
     if snapshot is not None and snapshot.state == 'capped':
         raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
-    if result is not None:
-        kick_processing_backlog(uid)
     return snapshot
 
 

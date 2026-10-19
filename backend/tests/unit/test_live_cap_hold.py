@@ -30,7 +30,7 @@ def host():
 @pytest.fixture
 def persistence(monkeypatch, tmp_path):
     persisted = []
-    monkeypatch.setattr(cap_hold_recovery, 'continue_after_cooldown', Mock())
+    monkeypatch.setattr(live, 'fragments_enabled', lambda: False)
     monkeypatch.setattr(held_audio_summary, 'next_utc_month_start', lambda: 123)
     monkeypatch.setattr(cap_hold, 'ensure_summary', Mock())
     monkeypatch.setattr(
@@ -336,9 +336,8 @@ async def test_funded_resume_retries_recovery_after_final_live_group_seals(host,
     await hold.flush(force=True)
     await hold.notice(paused=False)
     assert not hold.pending and not hold.buffers
-    cap_hold_recovery.continue_after_cooldown.assert_called_once_with('synthetic')
     await hold.notice(paused=False)
-    cap_hold_recovery.continue_after_cooldown.assert_called_once()
+    assert hold.seconds == 0.5  # Scheduler discovers durable intent; no memory timer.
 
 
 async def test_two_contiguous_minutes_publish_two_objects_even_across_packet_boundary(host, persistence):
