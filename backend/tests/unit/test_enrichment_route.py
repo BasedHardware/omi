@@ -16,6 +16,7 @@ import pytest
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from routers import enrichment as route
 from tests.unit.test_sync_reprocess_coalesce import state  # noqa: F401
+from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
