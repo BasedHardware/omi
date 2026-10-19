@@ -2278,7 +2278,7 @@ environments:
           STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'true'}
           STT_ROUTING_MODE: {category: rollout, value: 'on'}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
-          STT_ROUTING_ON_PERCENT: {category: rollout, value: '100'}
+          STT_ROUTING_ON_PERCENT: {category: rollout, value: '90'}
           STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
