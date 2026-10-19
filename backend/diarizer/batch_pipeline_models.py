@@ -168,6 +168,7 @@ class StagedAudio:
     def __init__(self, fetch_audio):
         self.fetch_audio = fetch_audio
         self._streams: OrderedDict[str, str | None] = OrderedDict()
+        self._languages: OrderedDict[str, str | None] = OrderedDict()
 
     def decode(self, item):
         body = self.fetch_audio(item)
@@ -176,12 +177,25 @@ class StagedAudio:
         except Exception:
             context = None
         self._streams[item.segment_id] = capture_stream(item, context)
-        while len(self._streams) > self.MAX_PENDING:
-            self._streams.popitem(last=False)
+        self._languages[item.segment_id] = stt_language(context)
+        for pending in (self._streams, self._languages):
+            while len(pending) > self.MAX_PENDING:
+                pending.popitem(last=False)
         return decode_pcm16_wav(body)
 
     def stream(self, item):
         return self._streams.pop(item.segment_id, None)
+
+    def language(self, item):
+        """Intake's resolved STT language ('' unknown); None when intake did not record one."""
+        return self._languages.pop(item.segment_id, None)
+
+
+def stt_language(context):
+    if not isinstance(context, dict) or 'stt_language' not in context:
+        return None
+    value = context['stt_language']
+    return value if isinstance(value, str) else None
 
 
 def decode_pcm16_wav(body):
@@ -241,4 +255,5 @@ def create_local_worker(
         on_failure=on_failure,
         flight_models=flight,
         stream_of=staged.stream,
+        language_of=staged.language,
     )

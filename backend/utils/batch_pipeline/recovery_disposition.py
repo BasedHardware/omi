@@ -135,7 +135,10 @@ def padded_empty(job):
 
 
 def padded_skipped(job):
-    return job.get('worker_empty_evidence') == {'padded_retry': 'skipped_oversize', 'version': 1}
+    return job.get('worker_empty_evidence') in (
+        {'padded_retry': 'skipped_oversize', 'version': 1},
+        {'padded_retry': 'skipped_long_speech', 'version': 1},
+    )
 
 
 def terminal_empty_payload(duration, spans):
