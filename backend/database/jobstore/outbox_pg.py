@@ -275,7 +275,7 @@ class PostgresOutbox:
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         discarded = expired = 0
-        todo: list[tuple[str, str]] = []
+        to_wake: list[tuple[str, str]] = []
         with self.store.pool.connection() as conn, conn.transaction():
             rows = conn.execute(
                 'SELECT id, owner_id, payload, lease_until, wake_token, wake_pending FROM outbox '
@@ -297,11 +297,11 @@ class PostgresOutbox:
                         'WHERE id = %s',
                         (fresh, row_id),
                     )
-                    todo.append((str(row_id), fresh))
+                    to_wake.append((str(row_id), fresh))
                 elif pending:
-                    todo.append((str(row_id), wake_token))
+                    to_wake.append((str(row_id), wake_token))
         rewoken = errors = 0
-        for row_id, wake_token in todo:
+        for row_id, wake_token in to_wake:
             if self.create_wake is None:
                 rewoken += 1  # no task transport (pull-only): the row itself is re-armed
             elif self._try_wake(row_id, wake_token):

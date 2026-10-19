@@ -173,7 +173,7 @@ class SimOutbox:
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         discarded = expired = 0
-        todo: list[dict[str, Any]] = []
+        to_wake: list[dict[str, Any]] = []
         candidates = [
             r
             for r in self._open()
@@ -188,11 +188,11 @@ class SimOutbox:
             elif 0 < row['lease_until'] <= now:
                 expired += 1
                 row.update(lease_token=None, lease_until=0.0, wake_token=_token(), wake_pending=True)
-                todo.append(row)
+                to_wake.append(row)
             elif row['wake_pending']:
-                todo.append(row)
+                to_wake.append(row)
         rewoken = errors = 0
-        for row in todo:
+        for row in to_wake:
             if self.create_wake is None or self._try_wake(row):
                 rewoken += 1
             else:
