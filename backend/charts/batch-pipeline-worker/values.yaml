@@ -30,6 +30,8 @@ worker:
   apiUrl: ""
   audience: ""
   batchSize: 8
+  # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
+  pipelineDepth: 2
   unitSeconds: 3600
   paddedSeconds: 272
   emptyAsrRecoveryEnabled: false

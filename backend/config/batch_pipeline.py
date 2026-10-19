@@ -197,3 +197,21 @@ def recovery_tasks_enabled() -> bool:
 def projection_pagination_enabled() -> bool:
     """Ship-on fair discovery; false restores the legacy oldest-page scan."""
     return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'
+
+
+WORKER_PIPELINE_DEPTH_DEFAULT = 2
+WORKER_PIPELINE_DEPTH_MAX = 4
+
+
+def worker_pipeline_depth() -> int:
+    """Ship-on pump flights per GPU process; ``1`` restores the serial pump.
+
+    Only claim/admission and publication overlap: the GPU chain itself stays
+    exclusive, so device and host memory remain one flight. Malformed values
+    keep the default rather than silently serializing.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', str(WORKER_PIPELINE_DEPTH_DEFAULT)))
+    except ValueError:
+        return WORKER_PIPELINE_DEPTH_DEFAULT
+    return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT

@@ -33,6 +33,22 @@ are served at `/metrics`. C's legacy result projection and D's deletion outbox
 maintenance run separately on the backend, with durable restart sweeps; importing
 legacy provider clients into the GPU image is unnecessary.
 
+### Pump pipelining
+
+`BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
+`2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
+admission, completion and ordered merge of one lane overlap another lane's GPU
+chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
+quiescence) stays exclusive behind one asyncio lock, so device and host memory
+remain one flight. Each lane renews its own leases while it waits for the GPU.
+On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
+an attempt charge instead of starting another chain. Periodic recovery and
+metrics run in one lane at a time. Publication is unchanged: the transactional
+ordered merge remains the per-owner ordering authority across lanes, exactly as
+it already is across replicas and the serving reconciler. `1` restores the serial
+pump. A waiting lane may hold one already-claimed flight ahead of later fresh
+arrivals, so fresh work can wait up to one extra chain.
+
 ## Encrypted staging and results
 
 `utils.batch_pipeline.artifact_policy.create_artifact_store(store, storage_client,

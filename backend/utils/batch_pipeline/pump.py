@@ -40,8 +40,9 @@ class Pump:
         capacity: Callable[[], PoolCapacity] | None = None,
         project_pending: Callable[[], Any] | None = None,
         authorize_compute: Callable[[list[LeasedWork]], dict] | None = None,
+        flights: int = 1,
     ):
-        if not 1 <= batch_size <= 32 or not 0 < poll_seconds <= 30:
+        if not 1 <= batch_size <= 32 or not 0 < poll_seconds <= 30 or not 1 <= flights <= 4:
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
         self.worker = worker
@@ -55,9 +56,44 @@ class Pump:
         self.authorize_compute = authorize_compute
         self._last_recovery = float('-inf')
         self._last_metrics = float('-inf')
+        # ``flights`` pump lanes overlap claim/admission and result publication
+        # with another lane's GPU chain. The chain itself (decode through
+        # persist and CUDA quiescence) stays exclusive under ``_gpu``, so device
+        # and host memory remain those of one flight.
+        self.flights = flights
+        self._gpu = asyncio.Lock()
+        self._maintenance = asyncio.Lock()
 
     async def run(self, stop_event: asyncio.Event) -> None:
-        """SIGTERM sets stop_event; the current chain drains with heartbeats intact."""
+        """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
+        if self.flights == 1:
+            await self._lane(stop_event)
+            return
+        halt = asyncio.Event()
+
+        async def relay():
+            await stop_event.wait()
+            halt.set()
+
+        relaying = asyncio.create_task(relay())
+        lanes = [asyncio.create_task(self._lane(halt)) for _ in range(self.flights)]
+        try:
+            await asyncio.wait(lanes, return_when=asyncio.FIRST_EXCEPTION)
+        finally:
+            # One lane's fatal GPU error stops every sibling from pulling; a
+            # sibling already holding leases refunds them instead of computing.
+            halt.set()
+            outcomes = await asyncio.gather(*lanes, return_exceptions=True)
+            relaying.cancel()
+            await asyncio.gather(relaying, return_exceptions=True)
+        errors = [v for v in outcomes if isinstance(v, BaseException)]
+        for error in errors:
+            if isinstance(error, FatalGpuError):
+                raise error
+        if errors:
+            raise errors[0]
+
+    async def _lane(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             try:
                 count = await self.run_once(stop_event=stop_event)
@@ -100,6 +136,15 @@ class Pump:
             await asyncio.gather(*(renew_one(lease) for lease in leases))
 
     async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
+        if not self._maintenance.locked():
+            # Sibling lanes skip, never queue behind, periodic recovery/metrics.
+            async with self._maintenance:
+                await self._maintain()
+        if stop_event is not None and stop_event.is_set():
+            return 0
+        return await self._flight(stop_event)
+
+    async def _maintain(self) -> None:
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
             if self.project_pending:
@@ -116,8 +161,8 @@ class Pump:
         if self.metrics and sampled_at - self._last_metrics >= 15:
             await run_blocking(db_executor, self.metrics.refresh, self.scheduler.store, time.time())
             self._last_metrics = sampled_at
-        if stop_event is not None and stop_event.is_set():
-            return 0
+
+    async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
         snapshot = (
             self.capacity()
@@ -177,16 +222,42 @@ class Pump:
                     return set(receipt.get('allowed') or [])
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
-            compute = asyncio.create_task(
-                run_blocking(sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs)
-            )
-            # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal and
-            # wait for the bounded model operation before leaving this process.
             try:
-                results = await asyncio.shield(compute)
-            except asyncio.CancelledError:
-                results = await compute
-                raise
+                async with self._gpu:
+                    if stop_event is not None and stop_event.is_set() and self.flights > 1:
+                        # Claimed behind a sibling's chain when SIGTERM or a
+                        # fatal GPU error arrived: refund without an attempt
+                        # charge rather than start another chain.
+                        for lease in leases:
+                            if lease.item.segment_id in lost:
+                                continue
+                            try:
+                                await run_blocking(
+                                    db_executor,
+                                    self.scheduler.defer,
+                                    lease.item.segment_id,
+                                    lease.token,
+                                    time.time(),
+                                    1,
+                                )
+                            except Exception as error:
+                                logger.error(
+                                    'event=batch_flight outcome=lease_recovery exception_type=%s',
+                                    type(error).__name__,
+                                )
+                        return 0
+                    compute = asyncio.create_task(
+                        run_blocking(
+                            sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs
+                        )
+                    )
+                    # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal
+                    # and the GPU slot until the bounded model operation finishes.
+                    try:
+                        results = await asyncio.shield(compute)
+                    except asyncio.CancelledError:
+                        results = await compute
+                        raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
                 # without charging an attempt; preserve its ordered position.
