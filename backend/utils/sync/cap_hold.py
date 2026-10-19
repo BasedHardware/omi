@@ -370,7 +370,11 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
     def commit(tx: Any):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() if snapshot.exists else None
-        if not row or row.get('state') in {'completed', 'retained', 'purged'} or row.get('lease_until', 0) > now:
+        if (
+            not row
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('lease_until', 0) > now
+        ):
             return None
         token = uuid4().hex
         tx.update(ref, {'lease_until': now + 1800, 'lease_token': token})
@@ -417,7 +421,21 @@ def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
         with TemporaryDirectory(dir=Path(path).parent) as directory:
             compressed = str(Path(directory) / 'source.opus')
             _read_single_audio(uid, row, compressed)
-            decode(compressed, path, int(row['sample_rate']), int(row['source_frames']))
+            fragments = row.get('opus_fragments')
+            if fragments:
+                with open(compressed, 'rb') as source, wave.open(path, 'wb') as output:
+                    output.setparams((1, 2, int(row['sample_rate']), 0, 'NONE', 'not compressed'))
+                    for index, fragment in enumerate(fragments):
+                        opus = str(Path(directory) / f'{index}.opus')
+                        wav = str(Path(directory) / f'{index}.wav')
+                        Path(opus).write_bytes(source.read(fragment['bytes']))
+                        decode(opus, wav, int(row['sample_rate']), fragment['frames'])
+                        with wave.open(wav, 'rb') as audio:
+                            output.writeframesraw(audio.readframes(fragment['frames']))
+                    if source.read(1):
+                        raise ValueError('unexpected live fragment source tail')
+            else:
+                decode(compressed, path, int(row['sample_rate']), int(row['source_frames']))
         return
     parts = row.get('audio_parts')
     if not parts:
