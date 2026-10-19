@@ -5126,3 +5126,33 @@ sibling of the escape above: an escape that cannot rescue its batch must
 terminate the batch, not multiply generations. Instances in
 `backend/routers/listen/transcripts.py` (legacy live persist arm, post-escape
 attempts; v2 unplaced-fallback lane, deterministic per-item budget).
+
+#### The speaker-map flush owns the same split
+
+The drain boundary used to answer every `flush_speaker_assignments` exception
+identically: one `Live speaker flush failed type=%s` ERROR and no backoff at
+all, so the next eligible drain tick (~1.7/s with empty buffers) re-called the
+flush immediately. A deterministically failing flush — a row the strict decode
+cannot read, a segment shape pydantic refuses, a permanent Firestore write
+rejection — therefore re-fired that ERROR once per tick for the rest of the
+recording (prod backend-listen 2026-10: `Live speaker flush failed
+type=ValueError` x14/30m on a steady one-call-per-tick cadence). The flush now
+classifies with the same predicate pair the persist arm uses
+(`_is_deterministic_persist_defect` / `_handle_oversized_legacy_persist`):
+deterministic refusals absorb `SPEAKER_FLUSH_DETERMINISTIC_ATTEMPT_BUDGET` (3)
+quick retries per generation and then park the lane on an exponential interval
+(60s base, doubling, 600s cap) with one truthful
+`omi_fallback_total{component="other",from_mode="live_speaker_flush",to_mode="none",reason="malformed_doc",outcome="exhausted"}`
+per park episode; transient faults keep the small backoff ladder and never
+count. The park is keyed to the conversation that refused: any generation
+change (rollover escape, lifecycle sweep) invalidates it, and a committed
+flush resets the budget through the success path. The park is also
+generation-refusal evidence for the batch arm — while the key names the
+current conversation, a failing batch persist front-loads the mid-session
+rollover probe to the park boundary and may escape at it, instead of waiting
+the normal 60s cadence on top of the park.
+
+Failure-Class: FC-permanent-write-rejection-retried-forever — sibling
+instance in `backend/routers/listen/transcripts.py` (live speaker-map flush,
+drain boundary): an unclassified deterministic refusal rode the tick cadence
+forever because the boundary had no retry policy of its own.

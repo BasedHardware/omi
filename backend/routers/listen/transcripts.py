@@ -81,6 +81,14 @@ OVERSIZED_ROLLOVER_PROBE_SECONDS = 60.0
 # retried (the tail drop buys nothing once the batch is small) and above it the
 # newest segment is dropped per attempt so the oldest speech can land.
 LEGACY_PERSIST_SHRINK_FLOOR = 4
+# Deterministic attempts the live speaker-map flush may absorb for one
+# generation before it is parked until the rollover adopts a fresh row. The
+# flush re-reads the whole conversation row (`cache.get(force_refresh=True)`)
+# and rewrites its segments, so a deterministic refusal — the strict
+# stored-transcript decode, a segment shape pydantic refuses, a permanent
+# Firestore write rejection — is a property of the CURRENT generation: replaying
+# it sooner than a generation change cannot succeed.
+SPEAKER_FLUSH_DETERMINISTIC_ATTEMPT_BUDGET = 3
 # Rejections a full-cap backlog may absorb before the loop probes the rollover
 # even though the batch never shrank — the all-day storm shape where every
 # dropped tail is instantly replaced by fresh speech. At the 8s backoff cap
@@ -217,6 +225,19 @@ class TranscriptProcessor:
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
+        # Deterministic attempts the current generation's speaker-map flush has
+        # absorbed. A committed flush (fresh row accepted the map) resets it; a
+        # rollover that adopts a fresh conversation resets it through the same
+        # success path. Counted only for deterministic refusals — transient
+        # faults keep the plain retry cadence and never count.
+        self._speaker_flush_defect_attempts = 0
+        # Parked-until timestamp while the current generation is deterministically
+        # refusing the speaker-map flush; the rollover probe (below) is the escape.
+        # Keyed to the conversation that refused: any generation change (rollover,
+        # lifecycle sweep) invalidates the park automatically, so a fresh row's
+        # flush is attempted immediately no matter which path rolled the recording.
+        self._speaker_flush_park_until = 0.0
+        self._speaker_flush_park_conversation: Optional[str] = None
         self._v2_retry_counts: Dict[str, int] = {}
         self._v2_legacy_fallback: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self._v2_legacy_fallback_ids: set[str] = set()
@@ -688,6 +709,12 @@ class TranscriptProcessor:
         if isinstance(written, list):
             serialised = written
         self.cache.update_segments(serialised)
+        # A committed flush proves the current generation accepts the map:
+        # clear the deterministic budget and any park so the lane is fully
+        # re-armed for whatever comes next (rollover-probe resets follow).
+        self._speaker_flush_defect_attempts = 0
+        self._speaker_flush_park_until = 0.0
+        self._speaker_flush_park_conversation = None
         changed_while_writing = getattr(self.host.state, 'speaker_map_version', 0) != speaker_version
         if not changed_while_writing:
             self.host.state.speaker_map_dirty = False
@@ -943,6 +970,74 @@ class TranscriptProcessor:
         """
         return _is_deterministic_persist_defect(error)
 
+    def _handle_speaker_flush_failure(self, error: Exception) -> None:
+        """Classify one failed live speaker-map flush and set its own retry time.
+
+        The loop boundary used to answer every exception identically: one
+        ``Live speaker flush failed type=%s`` ERROR and no backoff of any kind,
+        so the next eligible drain tick re-called the flush immediately. A
+        deterministically failing flush — a row the strict decode cannot read,
+        a segment shape pydantic refuses, a permanent Firestore write
+        rejection — therefore re-fired the ERROR once per drain tick (~1.7/s)
+        for the rest of the recording (prod backend-listen 2026-10:
+        ``Live speaker flush failed type=ValueError`` at x14/30m on a steady
+        one-call-per-tick cadence).
+
+        The split is "can a retry against this same conversation row succeed"
+        and is identical to the persist arm's classification:
+
+        - deterministic (`_is_deterministic_persist_defect`, or a permanent
+          Firestore write rejection): a bounded per-generation budget
+          (``SPEAKER_FLUSH_DETERMINISTIC_ATTEMPT_BUDGET``) absorbs the refusals
+          and then parks the flush on an exponentially growing interval with
+          its own truthful ``omi_fallback_total`` counter. The park is keyed to
+          the conversation that refused and is the generation-refusal signal
+          the rollover arm reads (see ``_speaker_flush_park_until`` in the
+          rollover escape): front-loading the probe to the park boundary rolls
+          the recording to a fresh generation, whose first committed flush
+          resets the budget through the success path.
+        - transient: the existing small backoff ladder — a slow provider or a
+          lost socket plausibly heals between attempts, nothing is parked and
+          nothing counts toward the budget.
+        """
+        if _is_deterministic_persist_defect(error) or self._handle_oversized_legacy_persist(error):
+            # getattr defaults keep bare-constructed instances (test harnesses
+            # build processors via object.__new__) on the safe path.
+            attempts = getattr(self, '_speaker_flush_defect_attempts', 0) + 1
+            self._speaker_flush_defect_attempts = attempts
+            if attempts <= SPEAKER_FLUSH_DETERMINISTIC_ATTEMPT_BUDGET:
+                # Within the budget the retry stays quick — the defect may have
+                # been a one-off shape crossing the boundary (a manual
+                # assignment racing a persist, a write observed mid-commit)
+                # and an early retry is still cheap.
+                self._flush_backoff_until = time.monotonic() + min(2.0, 0.5 * attempts)
+                return
+            # Past the budget the flush parks: the drain-boundary eligibility
+            # check (`time.monotonic() >= self._speaker_flush_park_until`) stops
+            # re-calling it, and the rollover probe reads the park as its
+            # generation-refusal signal. The park is keyed to the conversation
+            # that refused, so any generation change invalidates it.
+            park = min(60.0 * (2 ** min(attempts - SPEAKER_FLUSH_DETERMINISTIC_ATTEMPT_BUDGET - 1, 4)), 600.0)
+            self._speaker_flush_park_until = time.monotonic() + park
+            self._speaker_flush_park_conversation = getattr(self.host.state, 'current_conversation_id', None)
+            record_fallback(
+                component='other',
+                from_mode='live_speaker_flush',
+                to_mode='none',
+                reason='malformed_doc',
+                outcome='exhausted',
+            )
+            logger.error(
+                'Live speaker flush rejected by the current conversation after %d attempts; '
+                'parking the flush until the recording rolls over (parked %.0fs)',
+                attempts,
+                park,
+            )
+            return
+        # Transient: keep the legacy small ladder, count nothing.
+        self._flush_backoff_until = time.monotonic() + min(5.0, 0.6 * (2 ** min(self._flush_failures, 4)))
+        self._flush_failures = min(self._flush_failures + 1, 4)
+
     def _requeue_legacy_persist(self, segments, photos) -> None:
         """Retain a failed legacy drain for the next tick (buffers are bounded deques)."""
         for raw in segments or []:
@@ -1037,11 +1132,22 @@ class TranscriptProcessor:
             ):
                 continue
             if not self.segment_buffer and not self.photo_buffer:
-                if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
+                # The park is keyed to the conversation that refused it: a
+                # generation change (any rollover path) invalidates the park,
+                # so the fresh row's flush is attempted immediately. getattr
+                # defaults keep bare-constructed instances (test harnesses
+                # build processors via object.__new__) unparked.
+                now = time.monotonic()
+                park_valid = (
+                    now < getattr(self, '_speaker_flush_park_until', 0.0)
+                    and getattr(self, '_speaker_flush_park_conversation', None)
+                    == self.host.state.current_conversation_id
+                )
+                if self.host.state.speaker_map_dirty and not park_valid and now >= self._flush_backoff_until:
                     try:
                         await self.flush_speaker_assignments(self.host.state.current_conversation_id)
                     except Exception as error:
-                        logger.error('Live speaker flush failed type=%s', type(error).__name__)
+                        self._handle_speaker_flush_failure(error)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
             # Pristine copies (pre-offset, capture windows intact) so a failed legacy persist can
@@ -1209,6 +1315,30 @@ class TranscriptProcessor:
                         and self._legacy_persist_rejects >= LEGACY_PERSIST_STALL_REJECTS
                     )
                     requeue: Optional[List[Dict[str, Any]]] = legacy_retry_segments
+                    # The parked speaker-map flush is this generation's own
+                    # refusal evidence: the row is deterministically refusing
+                    # the flush (strict decode / validation / permanent write
+                    # rejection), so a batch persist that just failed the same
+                    # deterministic way against the same row will fail its
+                    # next whole-batch replay too. Front-load the probe to
+                    # the park boundary so the recording rolls to a fresh
+                    # generation when the park expires instead of replaying
+                    # the batch into a row the flush already proved poisoned
+                    # for the probe's normal 60s cadence on top of the park;
+                    # the requeued batch rides the existing retry ladder until
+                    # then and the fresh generation takes it after the roll.
+                    # The park is keyed to the conversation that refused: a
+                    # generation change (the escape itself, or any lifecycle
+                    # rollover) invalidates it.
+                    park_open = (
+                        time.monotonic() < getattr(self, '_speaker_flush_park_until', 0.0)
+                        and getattr(self, '_speaker_flush_park_conversation', None) == conversation_id
+                    )
+                    if park_open:
+                        self._oversized_rollover_probe_at = min(
+                            self._oversized_rollover_probe_at,
+                            self._speaker_flush_park_until,
+                        )
                     # A generation-poisoned batch escapes through the rollover.
                     # A batch the FRESH generation deterministically refuses too
                     # is poisoned in its own segment data: every later
@@ -1247,8 +1377,16 @@ class TranscriptProcessor:
                         requeue = requeue[:-1]
                     self._requeue_legacy_persist(requeue, photos)
                     escaped = False
+                    # Probe evidence is conversation-scoped: while the flush
+                    # park's key still names this conversation (it clears on a
+                    # committed flush or a generation change), the row is under
+                    # an unrefuted flush refusal and the armed probe may fire.
+                    probe_window_open = (
+                        getattr(self, '_speaker_flush_park_conversation', None) is not None
+                        and getattr(self, '_speaker_flush_park_conversation', None) == conversation_id
+                    )
                     if (
-                        (saturated or stalled)
+                        (saturated or stalled or probe_window_open)
                         and time.monotonic() >= self._oversized_rollover_probe_at
                         and (conversation_id)
                     ):
@@ -1264,6 +1402,13 @@ class TranscriptProcessor:
                                 escaped = True
                                 self._legacy_persist_escaped = True
                                 self._legacy_persist_batch_attempts = 0
+                                # The old generation is gone; its flush park
+                                # and refusal budget belonged to it. Reset so
+                                # the fresh row's first flush is attempted
+                                # immediately and the budget starts clean.
+                                self._speaker_flush_park_until = 0.0
+                                self._speaker_flush_park_conversation = None
+                                self._speaker_flush_defect_attempts = 0
                                 logger.warning(
                                     'Live transcript rollover escaped an over-limit conversation; '
                                     'retried %d retained segment(s) on a fresh generation',
