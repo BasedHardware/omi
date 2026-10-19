@@ -43,7 +43,7 @@ spec:
               ; rc=$?; python -c "from google.cloud import storage; import pathlib;
               b = storage.Client(project='based-hardware-dev').bucket('based-hardware-dev-staging-mirror');
               [b.blob('replays/${RUN_ID}/' + p.name).upload_from_filename(str(p)) for p in pathlib.Path('/tmp/out').glob('*')]";
-              exit $rc
+              up=$?; [ $rc -ne 0 ] && exit $rc; exit $up
           env:
             - {name: OMI_DEPLOYMENT, value: staging}
             - {name: OMI_ENV_STAGE, value: prod}
