@@ -468,9 +468,8 @@ def test_private_get_only_router_and_main_registration(harness):
     assert export_openapi.app_client_contract_routes(harness.app) == []
     assert export_openapi.integration_public_contract_routes(harness.app) == []
     assert harness.app.openapi()['paths'] == {}
-    import app_roles
-
-    assert 'support.router' in {mount.key for mount in app_roles.ROUTER_MOUNTS}
+    backend = Path(__file__).resolve().parents[2]
+    assert 'Mount(support)' in (backend / 'app_roles.py').read_text()  # static: app_roles imports every router
     assert 'mount_routers(app, OMI_APP_ROLE' in (Path(__file__).resolve().parents[2] / 'main.py').read_text()
 
 
