@@ -96,7 +96,7 @@ rebuilt (verified against `{dev,prod}_omi_pusher_values.yaml`):
 - prod `strategy: RollingUpdate { maxUnavailable: 1, maxSurge: 2 }`
   (dev is `{ maxUnavailable: 0, maxSurge: 1 }`).
 - `terminationGracePeriodSeconds: 120` in both charts.
-- prod autoscaling `minReplicas: 12`, `maxReplicas: 40`,
+- prod autoscaling `minReplicas: 30`, `maxReplicas: 60`,
   `activeConnectionsPerPod: 30`; dev `minReplicas: 1`, `maxReplicas: 3`.
 - `podDisruptionBudget.minAvailable: 80%` in both charts.
 
