@@ -140,6 +140,9 @@ that span, it has no batch transcript words and no invented placeholder. Other
 successful units use normal assignment. The durable upload status is `failed`,
 with `failed_segments` and the closed `batch_worker_quarantined` error, no success
 result and no further polling delay. This is a transcript gap, not recovery.
+Once fenced recovery (below) owns the unit, recovery states `held`, `prepared`
+and `running` poll as `processing` with a nonzero `poll_after_ms`; only a
+terminal quarantine such as `failed_held` reports `failed`.
 
 No legacy transcription is dispatched in this change. The upload-wide
 `dispatch_protocol=batch_v1` claim and run fence remain intact; duplicate
