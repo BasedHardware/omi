@@ -84,6 +84,9 @@ export function useConversations(
 
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
+  // Cache key of the filters the list belongs to. A fetch that returns after the
+  // filters changed was for another list, so its response is dropped.
+  const activeKeyRef = useRef(cacheKey);
 
   // Group conversations by date - memoized for performance
   const groupedConversations = useMemo<GroupedConversations>(() => {
@@ -114,6 +117,13 @@ export function useConversations(
 
       const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
 
+      // A callback from before the filters changed (a refresh after an await) must not
+      // load the old filters' list into the new one
+      if (key !== activeKeyRef.current) {
+        fetchingRef.current = false;
+        return;
+      }
+
       try {
         // Only show loading spinner if not a background refresh and no cached data
         if (!backgroundRefresh) {
@@ -131,6 +141,9 @@ export function useConversations(
           folderId: params.folderId,
           starred: params.starred,
         });
+
+        // The filters changed while this fetch was in flight
+        if (key !== activeKeyRef.current) return;
 
         // Sort by date descending
         const sorted = data.sort((a, b) => {
@@ -151,11 +164,15 @@ export function useConversations(
           return newConversations;
         });
       } catch (err) {
+        if (key !== activeKeyRef.current) return;
         setError(err instanceof Error ? err.message : 'Failed to load conversations');
         console.error('Failed to fetch conversations:', err);
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        // Loading and the guard belong to the current filters, not to a dropped fetch
+        if (key === activeKeyRef.current) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     },
     // Only depend on primitive values, not objects
@@ -177,6 +194,13 @@ export function useConversations(
 
     const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
     const cached = getFromCache(key);
+
+    // The list now belongs to the new filters. A fetch still in flight for the old
+    // ones must not hold back theirs, and its response is dropped when it returns.
+    if (key !== activeKeyRef.current) {
+      activeKeyRef.current = key;
+      fetchingRef.current = false;
+    }
 
     // If filter params changed, check cache for new filter
     if (startDateChanged || endDateChanged || folderIdChanged || starredChanged) {
