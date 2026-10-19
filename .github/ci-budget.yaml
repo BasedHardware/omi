@@ -3873,7 +3873,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3897,6 +3897,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "image_digest": {
+              "default": "",
+              "description": "batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree",
+              "required": "false"
             },
             "release_version": {
               "default": "",
