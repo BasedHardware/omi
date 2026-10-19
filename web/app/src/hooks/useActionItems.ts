@@ -430,33 +430,42 @@ export function useActionItems(): UseActionItemsReturn {
   );
 
   // Toggle completion
-  const toggleComplete = useCallback(async (id: string, completed: boolean) => {
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              completed,
-              completed_at: completed ? new Date().toISOString() : null,
-            }
-          : item,
-      ),
-    );
+  const toggleComplete = useCallback(
+    async (id: string, completed: boolean) => {
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
 
-    try {
-      await toggleActionItemCompleted(id, completed);
-    } catch (err) {
-      console.error('Failed to toggle completion:', err);
-      // Revert on error
+      // Optimistic update
       setItems((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, completed: !completed, completed_at: null } : item,
+        prev.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                completed,
+                completed_at: completed ? new Date().toISOString() : null,
+              }
+            : i,
         ),
       );
-      setError(err instanceof Error ? err.message : 'Failed to update task');
-    }
-  }, []);
+
+      try {
+        await toggleActionItemCompleted(id, completed);
+      } catch (err) {
+        console.error('Failed to toggle completion:', err);
+        // Revert on error to the values this toggle replaced, so a task that
+        // fails to reopen keeps the date it was completed on
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === id
+              ? { ...i, completed: item.completed, completed_at: item.completed_at }
+              : i,
+          ),
+        );
+        setError(err instanceof Error ? err.message : 'Failed to update task');
+      }
+    },
+    [items],
+  );
 
   // Snooze (add days to due date)
   const snooze = useCallback(
