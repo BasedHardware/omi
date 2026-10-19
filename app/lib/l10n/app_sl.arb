@@ -10916,7 +10916,6 @@
     "captureBannerTryReconnect": "Poskusi znova povezati",
     "captureBannerRetrySync": "Ponovi sinhronizacijo",
     "captureWedgeBleExplanation": "Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.",
-    "captureLinkStalledTranscribesLater": "Avdio povezava se je ustavila — prepis se nadaljuje, ko se obnovi",
     "captureIngressNeedsReconnect": "Zvok ne dosega aplikacije — znova priključite Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikacija ne more več prejemati zvoka iz naprave Omi in ni uspela samodejno obnoviti povezave. Izklopite in znova priključite napravo — v nastavitvah naprave ali z izklopom in vklopom. Zvok, shranjen v napravi, se bo sinhroniziral pozneje.",
     "captureStillRecording": "Snemanje se nadaljuje",

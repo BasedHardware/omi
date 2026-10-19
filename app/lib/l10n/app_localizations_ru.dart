@@ -11128,10 +11128,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Связь Bluetooth с вашим Omi прервалась, поэтому звук не попадает в приложение. Omi продолжает записывать на устройстве и синхронизируется, когда связь восстановится. Повторная попытка переподключает связь; если она продолжает сбиваться, проверьте устройство в разделе Настройки > Устройство.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Аудиосвязь прервалась — расшифровка продолжится после восстановления';
-
-  @override
   String get captureIngressNeedsReconnect => 'Звук не доходит до приложения — переподключите Omi';
 
   @override

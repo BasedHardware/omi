@@ -3528,7 +3528,6 @@
     "captureBannerTryReconnect": "Spróbuj ponownie połączyć",
     "captureBannerRetrySync": "Ponów synchronizację",
     "captureWedgeBleExplanation": "Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.",
-    "captureLinkStalledTranscribesLater": "Połączenie audio przerwane — transkrypcja wznowi się po jego odzyskaniu",
     "captureIngressNeedsReconnect": "Dźwięk nie dociera do aplikacji — połącz ponownie urządzenie Omi",
     "captureIngressNeedsReconnectExplanation": "Aplikacja nie może już odbierać dźwięku z urządzenia Omi i nie udało się automatycznie przywrócić połączenia. Odłącz i ponownie podłącz urządzenie — w ustawieniach urządzenia lub wyłączając i włączając je. Dźwięk zapisany na urządzeniu zostanie zsynchronizowany później.",
     "captureStillRecording": "Nagrywanie trwa",

@@ -63,6 +63,11 @@ class NeedsAttentionSection extends StatelessWidget {
         final upload = monitor.uploadStall;
         final acute = monitor.acuteEpisode;
         final ingressFailure = acute?.trigger == CaptureWedgeMonitor.triggerIngressRecoveryFailed;
+        // "Still recording on your Omi" only where the pendant is off the link and keeps audio on
+        // the device. A pendant that is connected but silent may be discarding live frames, and an
+        // exhausted ingress recovery proves ingress, not durability (INV-CAP-1): no claim for either.
+        final retentionPlausible =
+            acute != null && !ingressFailure && acute.trigger != CaptureWedgeMonitor.triggerConnectedNoBytes;
         final retryable = store.attention.where((i) => i.retryable && i.retryState == AttentionRetryState.none);
         return Column(
           key: const Key('activity_needs_attention'),
@@ -139,7 +144,7 @@ class NeedsAttentionSection extends StatelessWidget {
                       key: const Key('activity_attention_capture_link'),
                       icon: Icons.bluetooth_disabled,
                       title: ingressFailure ? l.captureIngressNeedsReconnect : l.captureRecoveryBannerTitle,
-                      subtitle: ingressFailure ? '' : l.activityAttentionLinkStalledSubtitle,
+                      subtitle: retentionPlausible ? l.activityAttentionLinkStalledSubtitle : '',
                       actionLabel: ingressFailure ? null : l.reconnect,
                       onTap: ingressFailure
                           ? () => LiveCaptureCard.showDetails(context,

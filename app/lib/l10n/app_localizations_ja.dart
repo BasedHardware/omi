@@ -10920,9 +10920,6 @@ class AppLocalizationsJa extends AppLocalizations {
       'OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。';
 
   @override
-  String get captureLinkStalledTranscribesLater => 'オーディオ接続が停滞しています — 復旧後に文字起こしが再開されます';
-
-  @override
   String get captureIngressNeedsReconnect => 'オーディオがアプリに届いていません — Omiを再接続してください';
 
   @override

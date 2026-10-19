@@ -29,7 +29,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -42,7 +41,6 @@ import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_recovery_status.dart';
-import 'capture_state_header.dart';
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
@@ -170,8 +168,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
-          appBar: _WedgeAwareAppBar(
-            monitor: CaptureWedgeMonitor.instance,
+          appBar: CaptureWedgeAppBar(
             showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
@@ -791,45 +788,4 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.outsideRecoveryWindow ||
       state == WalSyncDisplayState.unsupportedAudio ||
       state == WalSyncDisplayState.uploadRejected;
-}
-
-/// The live header, listening to the wedge monitor on its own so a stall re-labels the header
-/// without rebuilding the transcript. While an acute link episode is open and the page would
-/// otherwise read live, the header reads "Reconnecting": audio is not reaching the app, and the
-/// [CaptureRecoveryStatus] line under it names why. A reader pause or a call keeps its own label.
-class _WedgeAwareAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _WedgeAwareAppBar({
-    required this.monitor,
-    required this.showStatus,
-    required this.state,
-    required this.bufferingFor,
-    required this.sourceLabel,
-  });
-
-  final CaptureWedgeMonitor monitor;
-  final bool showStatus;
-  final CaptureDisplayState state;
-  final Duration? bufferingFor;
-  final String? sourceLabel;
-
-  static const _live = {CaptureDisplayState.listening, CaptureDisplayState.capturing, CaptureDisplayState.recording};
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: monitor,
-      builder: (context, _) {
-        final stalled = _live.contains(state) && CaptureRecoveryStatus.overridesHeader(monitor);
-        return ConversationStateAppBar(
-          showStatus: showStatus || stalled,
-          state: stalled ? CaptureDisplayState.reconnecting : state,
-          bufferingFor: bufferingFor,
-          sourceLabel: sourceLabel,
-        );
-      },
-    );
-  }
 }

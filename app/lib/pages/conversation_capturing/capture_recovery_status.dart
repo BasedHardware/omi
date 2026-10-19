@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:omi/pages/conversation_capturing/capture_state_header.dart';
+import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/ui/ui.dart';
@@ -21,9 +23,10 @@ class CaptureRecoveryStatus extends StatelessWidget {
   final CaptureWedgeMonitor? monitor;
 
   /// Whether the header should read "Reconnecting" instead of its live state: an acute link
-  /// episode means audio is not reaching the app, whatever the socket says. A storage episode
-  /// does not; recording to the device continues and the header stays live.
-  static bool overridesHeader(CaptureWedgeMonitor monitor) => monitor.acuteEpisode != null;
+  /// episode means audio is not reaching the app, whatever the socket says, including while the
+  /// reader's retry runs. A storage episode does not; recording continues and the header stays
+  /// live.
+  static bool overridesHeader(CaptureWedgeMonitor monitor) => monitor.linkStalled;
 
   void _retry(CaptureWedgeMonitor wedge) {
     wedge.onRecoveryActioned(surface: 'live_status');
@@ -110,6 +113,50 @@ class CaptureRecoveryStatus extends StatelessWidget {
                 ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+/// The live page's header, listening to the wedge monitor on its own so a stall re-labels it
+/// without rebuilding the transcript. While an acute link episode is open and the page would
+/// otherwise read live, the header reads "Reconnecting": audio is not reaching the app, and the
+/// [CaptureRecoveryStatus] line under it names why. A reader pause or a call keeps its own label.
+class CaptureWedgeAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const CaptureWedgeAppBar({
+    super.key,
+    this.monitor,
+    required this.showStatus,
+    required this.state,
+    this.bufferingFor,
+    this.sourceLabel,
+  });
+
+  /// Injectable for tests; defaults to [CaptureWedgeMonitor.instance].
+  final CaptureWedgeMonitor? monitor;
+  final bool showStatus;
+  final CaptureDisplayState state;
+  final Duration? bufferingFor;
+  final String? sourceLabel;
+
+  static const _live = {CaptureDisplayState.listening, CaptureDisplayState.capturing, CaptureDisplayState.recording};
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final wedge = monitor ?? CaptureWedgeMonitor.instance;
+    return ListenableBuilder(
+      listenable: wedge,
+      builder: (context, _) {
+        final stalled = _live.contains(state) && CaptureRecoveryStatus.overridesHeader(wedge);
+        return ConversationStateAppBar(
+          showStatus: showStatus || stalled,
+          state: stalled ? CaptureDisplayState.reconnecting : state,
+          bufferingFor: bufferingFor,
+          sourceLabel: sourceLabel,
         );
       },
     );

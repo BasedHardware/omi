@@ -11079,9 +11079,6 @@ class AppLocalizationsSk extends AppLocalizations {
       'Bluetoothové prepojenie s vaším zariadením Omi sa zastavilo, takže zvuk sa do aplikácie nedostáva. Omi naďalej nahráva na zariadení a po obnovení prepojenia sa synchronizuje. Opätovný pokus prepojenie znovu naviaže; ak to naďalej zlyháva, skontrolujte zariadenie v Nastavenia > Zariadenie.';
 
   @override
-  String get captureLinkStalledTranscribesLater => 'Zvukové spojenie sa zastavilo — prepis pokračuje po jeho obnovení';
-
-  @override
   String get captureIngressNeedsReconnect => 'Zvuk sa do aplikácie nedostáva — znovu pripojte Omi';
 
   @override

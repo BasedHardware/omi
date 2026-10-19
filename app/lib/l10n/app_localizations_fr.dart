@@ -11180,10 +11180,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'La liaison Bluetooth avec votre Omi s\'est interrompue, l\'audio n\'atteint donc pas l\'application. Omi continue d\'enregistrer sur l\'appareil et se synchronisera dès que la liaison sera rétablie. Réessayer rétablit la liaison ; si cela échoue toujours, vérifiez votre appareil dans Réglages > Appareil.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Liaison audio interrompue — la transcription reprendra une fois rétablie';
-
-  @override
   String get captureIngressNeedsReconnect => 'L\'audio n\'atteint pas l\'application — rebranchez votre Omi';
 
   @override

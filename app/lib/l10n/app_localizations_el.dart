@@ -11161,10 +11161,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Η σύνδεση ήχου διακόπηκε — η απομαγνητοφώνηση συνεχίζεται όταν επανέλθει';
-
-  @override
   String get captureIngressNeedsReconnect => 'Ο ήχος δεν φτάνει στην εφαρμογή — συνδέστε ξανά το Omi';
 
   @override

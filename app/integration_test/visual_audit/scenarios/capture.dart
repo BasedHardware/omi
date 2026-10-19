@@ -558,6 +558,7 @@ final captureScenarios = <AuditScenario>[
       // settle so its row is on screen with the others.
       await a.tester.pump();
       await a.tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
       await a.shot('Open the bell: capture problems sit under Needs attention');

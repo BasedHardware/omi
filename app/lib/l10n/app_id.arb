@@ -3528,7 +3528,6 @@
     "captureBannerTryReconnect": "Coba sambungkan kembali",
     "captureBannerRetrySync": "Coba sinkronkan lagi",
     "captureWedgeBleExplanation": "Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.",
-    "captureLinkStalledTranscribesLater": "Tautan audio terputus — transkripsi berlanjut saat pulih",
     "captureIngressNeedsReconnect": "Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda",
     "captureIngressNeedsReconnectExplanation": "Aplikasi tidak lagi bisa menerima audio dari perangkat Omi dan tidak dapat memulihkan koneksi secara otomatis. Putuskan lalu sambungkan kembali perangkat — dari pengaturan perangkat, atau dengan mematikan lalu menyalakannya. Audio yang tersimpan di perangkat akan disinkronkan nanti.",
     "captureStillRecording": "Masih merekam",

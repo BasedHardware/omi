@@ -157,6 +157,18 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     return null;
   }
 
+  /// Whether an acute link episode is open at all, prompt shown or not: it also holds while the
+  /// reader's retry is in flight (the prompt steps aside until that retry settles), so the live
+  /// header keeps saying "Reconnecting" instead of falling back to a live label while no audio
+  /// reaches the app.
+  bool get linkStalled {
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.trigger != triggerStorageAtRisk) return true;
+    }
+    return false;
+  }
+
   bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
 
   /// True while a capture attention row is newer than the last Activity visit:

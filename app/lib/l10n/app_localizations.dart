@@ -20157,12 +20157,6 @@ abstract class AppLocalizations {
   /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
   String get captureWedgeBleExplanation;
 
-  /// Capture recovery banner, second line for a BLE-health wedge: the link stalled and transcripts resume once it recovers. Does not promise the audio was saved.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio link stalled — transcribes when it recovers'**
-  String get captureLinkStalledTranscribesLater;
-
   /// Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim.
   ///
   /// In en, this message translates to:

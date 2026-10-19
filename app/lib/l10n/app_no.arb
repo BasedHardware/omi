@@ -3493,7 +3493,6 @@
     "captureBannerTryReconnect": "Prøv å koble til på nytt",
     "captureBannerRetrySync": "Prøv synkronisering igjen",
     "captureWedgeBleExplanation": "Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.",
-    "captureLinkStalledTranscribesLater": "Lydkoblingen stanset — transkriberingen fortsetter når den er gjenopprettet",
     "captureIngressNeedsReconnect": "Lyden når ikke appen — koble til Omi-enheten din på nytt",
     "captureIngressNeedsReconnectExplanation": "Appen kan ikke lenger motta lyd fra Omi-enheten og klarte ikke å gjenopprette forbindelsen automatisk. Koble fra og til igjen enheten — fra enhetsinnstillingene eller ved å slå den av og på. Lyd som er lagret på enheten, synkroniseres senere.",
     "captureStillRecording": "Tar fortsatt opp",

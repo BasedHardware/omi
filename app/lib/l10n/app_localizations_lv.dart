@@ -11115,10 +11115,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Audio savienojums pārtrūka — transkripcija turpināsies pēc tā atjaunošanas';
-
-  @override
   String get captureIngressNeedsReconnect => 'Audio nesasniedz lietotni — atkārtoti pievienojiet Omi';
 
   @override

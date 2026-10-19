@@ -3535,7 +3535,6 @@
     "captureBannerTryReconnect": "Prøv at forbinde igen",
     "captureBannerRetrySync": "Prøv synkronisering igen",
     "captureWedgeBleExplanation": "Bluetooth-forbindelsen til din Omi er gået i stå, så lyden når ikke frem til appen. Omi optager videre på enheden og synkroniseres, når forbindelsen er tilbage. Prøv igen opretter forbindelsen igen; hvis det fortsat fejler, tjek din enhed under Indstillinger > Enhed.",
-    "captureLinkStalledTranscribesLater": "Lydbindingen er gået i stå — transskriptionen fortsætter, når den er genoprettet",
     "captureIngressNeedsReconnect": "Lyden når ikke appen — tilslut din Omi igen",
     "captureIngressNeedsReconnectExplanation": "Appen kan ikke længere modtage lyd fra Omi-enheden og kunne ikke gendanne forbindelsen automatisk. Frakobl og tilslut enheden igen — fra enhedsindstillingerne eller ved at slå den fra og til. Lyd, der er gemt på enheden, synkroniseres senere.",
     "captureStillRecording": "Optager stadig",

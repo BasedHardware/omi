@@ -11090,9 +11090,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
 
   @override
-  String get captureLinkStalledTranscribesLater => 'Ääneyhteys katkesi — tekstitys jatkuu yhteyden palattua';
-
-  @override
   String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
 
   @override

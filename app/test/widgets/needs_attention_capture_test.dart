@@ -246,6 +246,32 @@ void main() {
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
     });
 
+    testWidgets('a connected-but-silent pendant makes no still-recording claim', (tester) async {
+      var now = DateTime(2026, 10, 19);
+      final monitor = CaptureWedgeMonitor(
+        now: () => now,
+        featureGate: () async => true,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        appBuild: () => '1',
+        platform: () => 'ios',
+      );
+      monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+      now = now.add(const Duration(minutes: 5));
+      monitor.runConnectedWatchdog();
+      await tester.pump();
+      await tester.pump();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(monitor.acuteEpisode?.trigger, CaptureWedgeMonitor.triggerConnectedNoBytes);
+      expect(find.byKey(const Key('activity_attention_capture_link')), findsOneWidget);
+      expect(find.text('Still recording on your Omi'), findsNothing,
+          reason: 'nothing proves the pendant keeps live frames while it looks connected');
+      // The open session's watchdog timer must not outlive the test.
+      await tester.pumpWidget(const SizedBox());
+      monitor.dispose();
+    });
+
     testWidgets('an exhausted ingress recovery row explains, with no retry and no saved-audio claim', (tester) async {
       final monitor = _monitor();
       addTearDown(monitor.dispose);

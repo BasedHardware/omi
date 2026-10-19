@@ -11097,10 +11097,6 @@ class AppLocalizationsSr extends AppLocalizations {
       'Bluetooth веза са вашим Omi је стала, па звук не стиже до апликације. Omi наставља да снима на уређају и синхронизоваће се када се веза опорави. Поновни покушај поново успоставља везу; ако и даље не успева, проверите уређај у Подешавања > Уређај.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Аудио веза је прекинута — транскрипција се наставља када се опорави';
-
-  @override
   String get captureIngressNeedsReconnect => 'Аудио не стиже до апликације — поново повежите Omi';
 
   @override

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
+import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -242,8 +243,6 @@ void main() {
       expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
       expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
           reason: 'the storage title already says what is unsynced');
-      expect(find.text(AppLocalizations.of(context).captureLinkStalledTranscribesLater), findsNothing,
-          reason: 'the storage title already says what is unsynced');
     });
 
     testWidgets('stale upload backlog retries transfer without a duplicate banner', (tester) async {
@@ -355,6 +354,65 @@ void main() {
       await tester.pump();
       expect(bleRetries, ble + 1, reason: 'Reconnect retries the stalled link');
       expect(transferRetries, transfer, reason: 'not the storage transfer behind it');
+    });
+
+    testWidgets('the header reads Reconnecting for a stall, including while the retry runs', (tester) async {
+      var bleRetries = 0;
+      final held = Completer<void>();
+      final monitor = makeMonitor(bleRetry: (_) {
+        bleRetries++;
+        return bleRetries == 1 ? Future.value() : held.future;
+      });
+      wedge(monitor);
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: CaptureWedgeAppBar(
+            monitor: monitor,
+            // A pendant whose capture is not yet verified: the stall must still force the status.
+            showStatus: false,
+            state: CaptureDisplayState.listening,
+            sourceLabel: 'Pendant',
+          ),
+          body: CaptureRecoveryStatus(monitor: monitor),
+        ),
+      ));
+      await tester.pump();
+      final l10n = AppLocalizations.of(tester.element(find.byType(CaptureRecoveryStatus)));
+      final reconnecting = l10n.captureStatusWithSource(l10n.reconnecting, 'Pendant');
+      expect(find.text(reconnecting), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture_recovery_status_retry')));
+      await tester.pump();
+      expect(find.byKey(const Key('capture_recovery_status')), findsNothing);
+      expect(find.text(reconnecting), findsOneWidget,
+          reason: 'no live label while the retry runs and no audio reaches the app');
+
+      held.complete();
+      await tester.pump();
+      final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-a', source: 'omi');
+      monitor.onTranscriptObserved('dev-a');
+      monitor.onCaptureSessionEnded(handle, binaryBytesSent: 64);
+      await tester.pump();
+      expect(find.text(reconnecting), findsNothing, reason: 'audio flows again: the header is live');
+    });
+
+    testWidgets('a storage episode leaves the header live', (tester) async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: CaptureWedgeAppBar(
+              monitor: monitor, showStatus: true, state: CaptureDisplayState.listening, sourceLabel: 'Pendant'),
+        ),
+      ));
+      await tester.pump();
+      final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+      expect(find.text(l10n.captureStatusWithSource(l10n.listening, 'Pendant')), findsOneWidget);
     });
 
     testWidgets('stays hidden for a phone capture source', (tester) async {

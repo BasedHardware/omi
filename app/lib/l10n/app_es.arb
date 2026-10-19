@@ -3493,7 +3493,6 @@
     "captureBannerTryReconnect": "Intentar reconectar",
     "captureBannerRetrySync": "Reintentar sincronización",
     "captureWedgeBleExplanation": "El enlace Bluetooth con tu Omi se ha detenido, por lo que el audio no llega a la aplicación. Omi sigue grabando en el dispositivo y se sincronizará cuando el enlace se recupere. Reintentar vuelve a conectar el enlace; si sigue fallando, revisa tu dispositivo en Ajustes > Dispositivo.",
-    "captureLinkStalledTranscribesLater": "Enlace de audio detenido — se transcribirá cuando se recupere",
     "captureIngressNeedsReconnect": "El audio no llega a la aplicación — vuelve a conectar tu Omi",
     "captureIngressNeedsReconnectExplanation": "La aplicación ya no puede recibir audio del dispositivo Omi y no pudo restaurar la conexión automáticamente. Desconecta y vuelve a conectar el dispositivo — desde los ajustes del dispositivo o apagándolo y encendiéndolo. El audio guardado en el dispositivo se sincronizará más tarde.",
     "captureStillRecording": "Sigue grabando",

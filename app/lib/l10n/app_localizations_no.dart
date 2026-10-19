@@ -11089,10 +11089,6 @@ class AppLocalizationsNo extends AppLocalizations {
       'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Lydkoblingen stanset — transkriberingen fortsetter når den er gjenopprettet';
-
-  @override
   String get captureIngressNeedsReconnect => 'Lyden når ikke appen — koble til Omi-enheten din på nytt';
 
   @override

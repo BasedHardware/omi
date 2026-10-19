@@ -11088,9 +11088,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.';
 
   @override
-  String get captureLinkStalledTranscribesLater => 'Kết nối âm thanh bị gián đoạn — sẽ chép lại tiếp khi khôi phục';
-
-  @override
   String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
 
   @override

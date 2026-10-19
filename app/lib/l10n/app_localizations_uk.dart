@@ -11111,10 +11111,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Зв\'язок Bluetooth із вашим Omi перервався, тому звук не потрапляє в застосунок. Omi продовжує запис на пристрої та синхронізується, коли зв\'язок відновиться. Повторна спроба знову встановлює зв\'язок; якщо він і далі не працює, перевірте пристрій у розділі Налаштування > Пристрій.';
 
   @override
-  String get captureLinkStalledTranscribesLater =>
-      'Зв\'язок аудіо перервався — розшифровка продовжиться після відновлення';
-
-  @override
   String get captureIngressNeedsReconnect => 'Звук не доходить до застосунку — перепід\'єднайте Omi';
 
   @override
