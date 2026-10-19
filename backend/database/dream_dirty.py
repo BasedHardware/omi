@@ -3,7 +3,7 @@
 import functools
 import inspect
 import logging
-from typing import Any, cast
+from typing import Any, List, Optional, Tuple, cast
 from contextvars import ContextVar
 from prometheus_client import Counter
 
@@ -29,7 +29,36 @@ def _dirty_counter() -> Counter:
 DIRTY = _dirty_counter()
 
 
+def _clean_token(value: object) -> str:
+    if not isinstance(value, str):
+        return ''
+    cleaned = value.strip()
+    if (
+        not cleaned
+        or len(cleaned) > 128
+        or any(ch in cleaned for ch in ('/', '\\', '\x00', '\r', '\n'))
+        or '..' in cleaned
+    ):
+        return ''
+    return cleaned
+
+
+def _clean_ids(values: object) -> List[str]:
+    if not isinstance(values, (list, tuple)):
+        return []
+    cleaned: List[str] = []
+    for item in values:
+        if item is None or isinstance(item, bool):
+            continue
+        token = _clean_token(str(item) if isinstance(item, (str, int)) else item)
+        if token:
+            cleaned.append(token)
+    return cleaned
+
+
 def after_write(collection: str):
+    clean_collection = _clean_token(collection)
+
     def decorate(fn):
         signature = inspect.signature(fn)
         parameters = tuple(signature.parameters)
@@ -37,24 +66,36 @@ def after_write(collection: str):
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
             result: Any = fn(*args, **kwargs)
-            if mode() != 'off' and not dream_writing.get() and result is not False:
-                bound = signature.bind(*args, **kwargs).arguments
-                uid = bound[parameters[0]]
-                data = bound[parameters[1]]
+            if clean_collection and mode() != 'off' and not dream_writing.get() and result is not False:
+                try:
+                    bound_args = signature.bind(*args, **kwargs)
+                    bound_args.apply_defaults()
+                    bound = bound_args.arguments
+                except TypeError:
+                    return result
+                uid: Optional[Any] = bound.get(parameters[0]) if len(parameters) >= 1 else None
+                data: Optional[Any] = bound.get(parameters[1]) if len(parameters) >= 2 else None
+                clean_uid = _clean_token(uid)
+                if not clean_uid:
+                    return result
                 rows = data if isinstance(data, list) else [data]
-                ids = [str(row['id']) for row in rows if isinstance(row, dict) and row.get('id')]
+                ids = _clean_ids([row.get('id') for row in rows if isinstance(row, dict) and row.get('id')])
                 if isinstance(data, str):
-                    ids = [data]
-                if collection == 'action_items' and not isinstance(data, str):
-                    ids = [result] if isinstance(result, str) else result if isinstance(result, list) else ids
-                if collection == 'memory_items' and isinstance(result, str):
-                    ids = [result]
-                if collection == 'candidates':
+                    ids = _clean_ids([data])
+                if clean_collection == 'action_items' and not isinstance(data, str):
+                    if isinstance(result, str):
+                        ids = _clean_ids([result])
+                    elif isinstance(result, list):
+                        ids = _clean_ids(result)
+                if clean_collection == 'memory_items' and isinstance(result, str):
+                    ids = _clean_ids([result])
+                if clean_collection == 'candidates':
                     from models.candidate import CandidateRecord
 
                     if isinstance(result, CandidateRecord):
-                        ids = [result.candidate_id]
-                notify(uid, [(collection, value) for value in ids])
+                        ids = _clean_ids([result.candidate_id])
+                if ids:
+                    notify(clean_uid, [(clean_collection, value) for value in ids])
             return result
 
         return wrapped
@@ -63,10 +104,27 @@ def after_write(collection: str):
 
 
 def notify(uid: str, refs: list[tuple[str, str]]) -> None:
-    if mode() == 'off' or dream_writing.get() or not refs:
+    if mode() == 'off' or dream_writing.get() or not refs or not isinstance(refs, (list, tuple)):
+        return
+    clean_uid = _clean_token(uid)
+    if not clean_uid:
+        return
+    clean_refs: List[Tuple[str, str]] = []
+    for item in refs:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            continue
+        col_token = _clean_token(item[0])
+        id_token = _clean_token(item[1])
+        if col_token and id_token:
+            clean_refs.append((col_token, id_token))
+    if not clean_refs:
         return
     try:
-        if mark_dirty(uid, refs, canary=True) if canary_writing.get() else mark_dirty(uid, refs):
+        if (
+            mark_dirty(clean_uid, clean_refs, canary=True)
+            if canary_writing.get()
+            else mark_dirty(clean_uid, clean_refs)
+        ):
             DIRTY.labels('ok').inc()
     except Exception as exc:
         DIRTY.labels('failed').inc()
