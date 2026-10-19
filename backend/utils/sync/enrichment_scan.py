@@ -1,46 +1,12 @@
-"""CAS keyset checkpoint for bounded enrichment watchdog passes."""
+"""Compatibility alias for ``utils.enrichment.scan`` (plan C2); delete when the last importer moves.
 
-import math
-from typing import Any
+The alias is the same module object, so attribute patches through either name reach the implementation.
+The star import only gives type checkers the public names; the module object replaces this one.
+"""
 
-from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
-from google.cloud import firestore
+import sys
 
+from utils.enrichment import scan as _module
+from utils.enrichment.scan import *  # noqa: F401,F403
 
-def begin(client: Any, collection: str) -> tuple[Any, dict[str, Any] | None]:
-    snapshot = client.collection('sync_reprocess_scan').document('cursor').get()
-    value = snapshot.to_dict() or {}
-    due, document_id = value.get('due_at'), value.get('document_id')
-    cursor = None
-    if (
-        isinstance(due, (int, float))
-        and not isinstance(due, bool)
-        and math.isfinite(due)
-        and isinstance(document_id, str)
-        and len(document_id) == 64
-        and '/' not in document_id
-    ):
-        cursor = {'due_at': due, '__name__': client.collection(collection).document(document_id)}
-    return snapshot, cursor
-
-
-def finish(previous: Any, last: Any, exhausted: bool) -> None:
-    if last is None and not exhausted:
-        return
-    value = (
-        {'due_at': None, 'document_id': None}
-        if exhausted
-        else {
-            'due_at': last.to_dict()['due_at'],
-            'document_id': last.id,
-        }
-    )
-    try:
-        if previous.exists:
-            previous.reference.update(value, option=firestore.LastUpdateOption(previous.update_time))
-        else:
-            previous.reference.create(value)
-    except (AlreadyExists, FailedPrecondition, NotFound):
-        # Another replica advanced the shared pass. Per-row CAS still owns all
-        # wake repairs; a lost cursor race may repeat reads, never skip custody.
-        pass
+sys.modules[__name__] = _module
