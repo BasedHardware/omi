@@ -108,6 +108,11 @@ from utils.sync.files import get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
+from utils.sync.ledger_completion import (  # noqa: F401  (re-exported seam)
+    SyncJobRunLeaseLost,
+    _require_run_owner,
+    bind_or_converge_sync_ledger_completion,
+)
 from utils.sync.recording_lineage import (
     ambiguous_binding_pending,
 )
