@@ -14,6 +14,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 def state(monkeypatch, tmp_path):
     checkpoint, renew = recovery.cap_hold.checkpoint, recovery.cap_hold.renew
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(recovery.cap_hold, 'ensure_summary', lambda uid: {'version': 2, 'seconds': 0, 'count': 0})
 
     async def immediate(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -52,9 +53,12 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, 'finalize_recovered_sync_segment', Mock())
     monkeypatch.setattr(recovery, 'record_usage', Mock())
     monkeypatch.setattr(recovery, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
+    row = {'lease_token': 'owner-token', 'state': 'held'}
+    reference = Mock()
+    reference.get.return_value.to_dict.side_effect = lambda: dict(row)
     return SimpleNamespace(
-        snapshot=SimpleNamespace(id='hold', reference=Mock()),
-        row={'lease_token': 'owner-token', 'state': 'held'},
+        snapshot=SimpleNamespace(id='hold', reference=reference),
+        row=row,
         checkpoint=checkpoint,
         renew=renew,
     )
@@ -259,7 +263,7 @@ async def test_lost_completion_lease_cannot_settle_or_erase_audio(state, monkeyp
     monkeypatch.setattr(recovery, '_recover_row', AsyncMock(return_value=True))
     monkeypatch.setattr(recovery, '_settle_and_erase', Mock())
     recovery.cap_hold.checkpoint.return_value = False
-    await recovery.recover('synthetic')
+    await recovery.recover_selected('synthetic', state.snapshot)
     recovery._settle_and_erase.assert_not_called()
     recovery.cap_hold.release.assert_called_once_with('synthetic', state.snapshot.reference, 'owner-token')
 
@@ -437,3 +441,77 @@ def test_reconciled_retention_waits_for_ledger_settlement_and_retries_failure(st
     recovery._settle_and_erase('synthetic', state.snapshot, state.row)
     assert state.snapshot.reference.update.call_args.args[0]['state'] == 'retained'
     recovery._erase.assert_not_called()
+
+
+async def test_ladder_only_recovery_waits_for_budget_reset_then_releases(state, monkeypatch):
+    from utils import stt_cap_dispatch, ladder_v1
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    snapshot = {'budget_percent': 100, 'budget_units': 100, 'used_units': 100}
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: snapshot)
+    monkeypatch.setattr(recovery, 'sync_allowed', stt_cap_dispatch.sync_allowed)
+    assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_not_called()
+    snapshot.update(budget_percent=0, used_units=0)
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_called_once()
+    assert state.row['finalized'] is True
+
+
+async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt(state, monkeypatch):
+    from utils.sync import cap_recovery_audio
+
+    meta = {
+        'origin': 'live',
+        'full_capture': True,
+        'timestamp': 100,
+        'source': 'phone',
+        'channel': 0,
+        'live_storage_month': '2026-10',
+    }
+    monkeypatch.setattr(recovery.cap_hold, 'metadata', Mock(return_value=meta))
+    monkeypatch.setattr(recovery, 'prepare_audio', cap_recovery_audio.prepare)
+    monkeypatch.setattr(cap_recovery_audio, 'retrieve_vad_segments', Mock())  # Real branch, no speech windows.
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap_recovery_audio, 'run_blocking', leaf)
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert state.row['piece_plan'] == {}
+    assert not state.row['failed_reconciliation']
+    recovery.process_segment.assert_not_called()
+    assert recovery.cap_hold.remaining_seconds({**state.row, 'seconds': 60}) == 0
+
+
+async def test_legacy_wake_only_resumes_an_explicit_backlog_runner(monkeypatch):
+    monkeypatch.setattr(recovery, 'enabled', lambda: True)
+    runner = AsyncMock()
+    monkeypatch.setattr(recovery, '_backlog_runner', runner)
+    await recovery.recover('synthetic')
+    runner.assert_awaited_once_with('synthetic')
+
+
+async def test_owner_budget_stops_before_second_frozen_piece_and_resumes(state, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(recovery.cap_work_budget.time, 'monotonic', lambda: now[0])
+    state.row['piece_plan'] = {
+        'a.wav': {'audio_path': 'source-a', 'seconds': 20},
+        'b.wav': {'audio_path': 'source-b', 'seconds': 20},
+    }
+    original = recovery.process_segment.side_effect
+
+    def slow(*args, **kwargs):
+        result = original(*args, **kwargs)
+        now[0] += 901
+        return result
+
+    recovery.process_segment.side_effect = slow
+    with recovery.cap_work_budget.visit(900):
+        assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 1
+    assert state.row['processed_paths'] == ['a.wav'] and not state.row.get('finalized')
+    with recovery.cap_work_budget.visit(900):
+        assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 2 and state.row['finalized']

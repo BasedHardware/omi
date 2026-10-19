@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_serializer
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -27,6 +27,7 @@ from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
@@ -69,6 +70,12 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
+from utils.observability.external_lists import (
+    observe_action_items_page,
+    observe_action_items_rows,
+    observe_action_items_shape,
+)
+from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
@@ -842,22 +849,29 @@ def get_action_items(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
-    budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-    cached = external_lists.cached_external_list(request, response, auth, locals())
-    if cached is not None:
-        return cached
-    action_items = action_items_db.get_action_items(
-        uid=uid,
-        conversation_id=conversation_id,
-        completed=completed,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset,
-        budget=budget,
-    )
+    observe_action_items_page(limit, offset)
+    with read_component(ReadComponent.OTHER):
+        budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
+        cached = external_lists.cached_external_list(request, response, auth, locals())
+        observe_action_items_shape(
+            conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
+        )
+        if cached is not None:
+            return cached
+        action_items = action_items_db.get_action_items(
+            uid=uid,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+            budget=budget,
+            probe_filtered_legacy=external_lists.lever_enabled('OMI_DEV_ACTION_ITEMS_FILTERED_LEGACY_PROBE_ENABLED'),
+        )
 
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
+    observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
     return valid_action_items
 
@@ -1146,6 +1160,14 @@ class ConversationResponse(BaseModel):
     status: str
     discarded: bool
     meeting_treatment_eligible: bool = False
+    processing_deferred: bool = False
+
+    @model_serializer(mode='wrap')
+    def serialize_processing_deferred(self, handler):
+        data = handler(self)
+        if not self.processing_deferred:
+            data.pop('processing_deferred', None)
+        return data
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1163,6 +1185,7 @@ class UpdateConversationRequest(BaseModel):
 
 
 class DevTranscriptSegment(BaseModel):
+    stt_provider: Optional[str] = Field(default=None, max_length=120)
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
 
     text: str = Field(description="The text spoken in this segment")
@@ -1743,6 +1766,7 @@ def create_conversation(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
     )
 
 
@@ -1844,6 +1868,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        processing_deferred=bool(conversation.get('processing_deferred', False)),
         meeting_treatment_eligible=projected_meeting_treatment_eligible(conversation),
     )
 
@@ -1901,7 +1926,7 @@ def _log_client_projection_rejected(reason: str, raw: Any) -> None:
 
 def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
     """Validate an untrusted projection payload. Invalid means drop, never 422."""
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         return ClientProcessing.model_validate(raw)
@@ -1946,8 +1971,8 @@ def _accepted_client_projection(
     """Bind a client projection to the stored transcript, or drop it.
 
     Schema failure and hash mismatch are not request errors: the conversation
-    still lands, with the projection discarded and the coordinator storing the
-    deterministic minimum. The warning is content-free (reason plus provenance
+    still lands, with the projection discarded and the coordinator retaining
+    ordinary funded processing or raw budget deferral. The warning is content-free (reason plus provenance
     only — never transcript or body). Provenance itself may be missing.
     The digest is over ``segments`` — the canonical rows ingest persists —
     so a client hashing the same canonicalization as ``canonical_segment``
@@ -2297,6 +2322,7 @@ def _create_conversation_from_segments(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
         meeting_treatment_eligible=meeting_treatment_eligible,
     )
 

@@ -344,6 +344,7 @@ class SonioxIdleMetrics(NamedTuple):
     latency: Histogram
     failures: Counter
     avoided: Counter
+    closes_by_trigger: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
@@ -367,5 +368,12 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                 Counter(
                     'omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'
                 ),
+                Counter(
+                    'omi_soniox_idle_closes_by_trigger_total',
+                    'Planned paid transport closes by trigger (vad silence or no client frames)',
+                    ['trigger'],
+                ),
             )
+            for _trigger in ('vad', 'no_frames'):
+                _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
     return _soniox_idle_metrics

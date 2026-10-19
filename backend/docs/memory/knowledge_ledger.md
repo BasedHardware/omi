@@ -1,9 +1,9 @@
 # Intent-backed knowledge ledger
 
-This is the proposed target architecture for Omi knowledge. It is additive
-until the evaluation, migration, supported-client, and zero-consumer gates in
-the JIT project plan pass; the currently locked tiered lifecycle remains product
-authority before that cutover. The proposed physical authority remains
+This describes the retained knowledge-ledger data contract. The JIT migration
+and on-demand conversation-retrieval paths were retired on 2026-10-18; no
+runtime migration is active. Existing ledger rows remain subject to the normal
+read, export, deletion, and retention paths. The physical authority remains
 canonical `memory_items` plus its apply control, operation journal, evidence,
 commits, graph/assertion compatibility, privacy state, and outbox. No second
 `MemoryDB` collection is introduced.
@@ -15,7 +15,7 @@ Every `knowledge_ledger.v1` row is one of:
 | `kind` | `content` | Optional data | Current-view rule |
 |---|---|---|---|
 | `fact` | One durable fact or episodic observation | `slot`, validity, subject | Only open, intent-backed, primary-user slotted facts render into profile |
-| `document` | One-line playbook description | bounded `body` | Profile exposes only `memory_id: description`; `read_playbook` loads body |
+| `document` / `trigger` | Legacy stored kinds | bounded body/condition | Retained for stored-data compatibility; no active JIT tool surface writes or reads these kinds |
 | `trigger` | Standing-intent description | bounded structured condition | Compiles into the local watchlist; never injected as a profile fact |
 
 Common fields are `memory_id`, `kind`, `content`, `subject_scope`,
@@ -60,48 +60,19 @@ Keyword and vector providers return candidate IDs only. Authoritative rows are
 hydrated and policy-filtered before use. Current fact, historical fact,
 document, and trigger searches are semantic filters over the same authority.
 
-Omi chat currently exposes the additive `search_knowledge` and
-`read_playbook` tools. Search is owner-scoped, policy-filtered, and restricted
-to active `knowledge_ledger.v1` rows; it returns bounded handles and
-descriptions without document bodies or trigger payloads. Reading a playbook
-is an explicit second, owner-scoped lookup and admits only active primary-user
-documents. Historical ledger search remains gated on its separate retention
-and privacy policy, so these tools do not authorize a capture cutover.
-
-`get_entity_timeline` is a separate, owner-scoped multi-source read for an
-agent that has already selected a stable entity. The agent explicitly chooses
-ledger, conversation-summary, calendar-title, or screen-app/window sources;
-there is no query-word heuristic and the default remains the cheap ledger-only
-path. A people document ID is the entity authority. Current names, bounded
-retained names, and emails are exact match-only aliases and are never returned
-as timeline content. Aliases that collide with the owner or another bounded
-owner-scoped person record are suppressed; if the people scan is not exhaustive,
-alias joins fail closed while stable person-ID joins remain available. Source
-readers perform exact owner/entity joins, merge by
-stable time/source/record ordering, disclose unavailable or truncated sources,
-and return only compact source-appropriate facts, summaries, titles, and
-app/window metadata. Transcript text, calendar notes and attendees, OCR text,
-pixels, playbook bodies, and trigger payloads remain excluded. Closed or
-rejected ledger rows require the explicit history and audit flags; wording in
-the agent's query never enables them.
+Current runtime retrieval and memory mutation stay on their existing owner-scoped services. The retired JIT-only search, playbook, entity-timeline, and on-demand write tools are no longer exposed. Historical ledger rows remain available to account export and deletion paths.
 
 The deterministic prompt view sorts open, intent-backed, primary-user slotted
 facts by descending curation weight, slot, validity time, and ID, then fits
-whole lines into 2,400 characters. The playbook index fits whole one-line
-handles into 800 characters. Closed facts, unslotted observations, third-party
-facts, document bodies, and trigger bodies are excluded.
+whole lines into 2,400 characters. Closed facts, unslotted observations,
+third-party facts, document bodies, and trigger bodies are excluded.
 
 ## Capture and retrieval
 
-At the target cutover, conversation finalization produces the user-facing
-summary/action items and required indexes, but no memory. The released
-finalizer still runs memory extraction until the replacement quality gates
-pass; this contract does not authorize disabling it. Bounded JIT conversation
-retrieval remains explicitly default-off. When its gate is enabled, the agent
-prompt directs bounded literal, entity, semantic, and date-only summary
-triage, one bounded reformulation before reporting no result, and selective
-hydration of at most 24 transcript segments or three matched snippets per
-conversation. The target first-open flow preserves the same no-memory fence.
+Conversation finalization continues to run eager memory extraction and required
+indexes for every eligible user. The retired JIT conversation-retrieval and
+first-open paths do not gate or replace that processing, and this document does
+not authorize a change to the independent demand-driven processing system.
 
 Screen OCR/app/window/time/vector metadata stays local/searchable. Pixels are
 interpreted only after a relevant frame is selected, except one

@@ -220,6 +220,7 @@ participant lists, the speaker filter and every copied, shared or exported trans
   the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
   transcript heading omits its speaker count. A saved transcript names each speaker once per turn
   (consecutive lines from the same voice), so a change of voice is still visible.
+- On-device overflow transcripts (`stt_provider=on_device:<engine>`) have one **unlabeled** voice: omit speaker names and the speaker count. Local engines never imply diarization or identity.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

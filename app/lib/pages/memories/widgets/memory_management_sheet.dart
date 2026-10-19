@@ -48,30 +48,28 @@ class MemoryManagementSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: Divider(height: 1, color: OmiColors.border),
         ),
-        if (provider.memoryBeliefEnabled) ...[
-          _buildFilterOption(
-            context,
-            context.l10n.current,
-            isSelected: provider.collectionView == MemoryCollectionView.usefulNow,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.usefulNow),
-          ),
-          _buildFilterOption(
-            context,
-            context.l10n.memoryHistory,
-            isSelected: provider.collectionView == MemoryCollectionView.history,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.history),
-          ),
-          _buildFilterOption(
-            context,
-            context.l10n.allMemories,
-            isSelected: provider.collectionView == MemoryCollectionView.all,
-            onTap: () => provider.setCollectionView(MemoryCollectionView.all),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Divider(height: 1, color: OmiColors.border),
-          ),
-        ],
+        _buildFilterOption(
+          context,
+          context.l10n.current,
+          isSelected: provider.collectionView == MemoryCollectionView.usefulNow,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.usefulNow),
+        ),
+        _buildFilterOption(
+          context,
+          context.l10n.memoryHistory,
+          isSelected: provider.collectionView == MemoryCollectionView.history,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.history),
+        ),
+        _buildFilterOption(
+          context,
+          context.l10n.allMemories,
+          isSelected: provider.collectionView == MemoryCollectionView.all,
+          onTap: () => provider.setCollectionView(MemoryCollectionView.all),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Divider(height: 1, color: OmiColors.border),
+        ),
         _buildFilterOption(
           context,
           context.l10n.memoryThisDevice,

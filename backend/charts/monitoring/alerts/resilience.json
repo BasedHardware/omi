@@ -1266,7 +1266,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
+          "expr": "(sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) - (sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\",lane_id=\"omi:auto:proactive-notification\",error_class=\"invalid_request\",provider=\"none\"}[1h])) or sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) * 0)) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1345,7 +1345,7 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "13",
       "summary": "One gateway lane is failing more than a quarter of its real requests over an hour",
-      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane",
+      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane. Excludes omi:auto:proactive-notification pre-provider invalid_request refusals (error_class=invalid_request, provider=none: proactivity_admission.call_limit per-user/per-item caps, no provider call, no cost; ~47/h on 2026-10-19).",
       "user_impact": "The Omi capability served by this lane may be unavailable or degraded for the users who reach it.",
       "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
       "verification": "Confirm the failing lane and its provider rejection class in the linked panel before intervention.",
@@ -3515,6 +3515,150 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-reason-unknown-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Reason enums - unknown reason ratio elevated",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "reducer": "last"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.02
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A reason family has an unknown share above 2% with enough events to evaluate.",
+      "user_impact": "A known reason mapped to unknown can misroute retries or provider fallback. The Parakeet cancelled-to-connection_lost mislabel caused about $75/day of false Soniox routing for five days.",
+      "scope": "Evaluated per family: unknown reason rate divided by total reason rate over 30m, with a same-window total-volume guard.",
+      "verification": "Inspect the family and emitting site; compare unknown and total reason rates with the reason mapping and route outcomes.",
+      "safe_next_action": "Find the emitting site that maps a known reason to unknown; verify its enum mapping before changing provider routing.",
+      "threshold": "Unknown share >2% and more than 50 total reason events in the rolling 30m window; the condition must persist for 30m.",
+      "incident": "Parakeet cancelled-to-connection_lost mislabel: about $75/day of false Soniox routing for five days. See backend/docs/runbooks/live-stt-routing.md for the reason contract.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-resilience-fallbacks",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md"
+    },
+    "labels": {
+      "alert_identity": "omi-reason-unknown-ratio",
+      "component": "backend",
+      "impact": "product",
+      "instatus_component": "api",
+      "severity": "warning"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

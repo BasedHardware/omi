@@ -1,11 +1,14 @@
 """One gateway tool/verifier turn; reserved policy and configured fallback stay gateway-owned."""
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+
 import json
 from typing import Any
 
 import httpx
 
 from config.dream_agent import admission_for
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils import dream_capacity
 from utils.dream_cost import (
     charge_attempts,
@@ -14,6 +17,7 @@ from utils.dream_cost import (
     price_attempt,
     price_weighted_tokens,
 )
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.shaped_agent import Turn
@@ -213,6 +217,10 @@ async def model_turn(
     prior_message_count=0,
     cached_tokens_estimate=None,
 ):
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
+    ):
+        raise CapacityWait('usage_budget_exhausted')
     if lane not in {MAIN_LANE, VERIFY_LANE}:
         raise ValueError('dream_invalid_lane')
     _estimate, completion = attempt_room(
@@ -224,6 +232,7 @@ async def model_turn(
         completion_limit=completion_limit,
     )
     ceiling = _estimate + completion
+    await warm_rollout_cohorts(uid)
     mode, allowlisted = admission_for(uid)
     model = await dream_capacity.available_model(mode=mode, owner_allowlisted=allowlisted)
     if model is None:

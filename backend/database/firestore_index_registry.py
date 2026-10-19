@@ -33,6 +33,15 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_predecessor',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
@@ -314,7 +323,7 @@ INDEX_ONLY_REQUIREMENTS = (
     # GET /v1/action-items?start_date=...&completed=... orders created_at
     # newest-first (``_apply_action_item_date_filters``). The ascending
     # composite above serves the ``get_scores`` count but not that ordering;
-    # a database provisioned from this manifest alone (isolated jit-qa,
+    # a database provisioned from this manifest alone (an isolated development database,
     # 2026-09-10) failed the read with FailedPrecondition until this existed.
     FirestoreIndexRequirement(
         'action_items_completed_created_newest_first',
@@ -395,7 +404,7 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('state'), _asc('cleanup_state'), _asc('cleanup_next_attempt_at'), _asc('__name__')),
     ),
-    # Adopted from the live prod inventory on 2026-09-30. These exist in prod (hand-created) but were never declared, so fresh databases (self-host, jit-qa) fail. Serving callers are mapped in a later wave.
+    # Adopted from the live prod inventory on 2026-09-30. These exist in prod (hand-created) but were never declared, so fresh databases fail. Serving callers are mapped in a later wave.
     # caller: database/action_items.py due-date reads
     FirestoreIndexRequirement(
         'action_items_completed_asc_due_at_desc_name_desc',
@@ -788,6 +797,14 @@ INDEX_ONLY_REQUIREMENTS = (
         'conversations',
         'COLLECTION',
         (_asc('source'), _asc('status'), _asc('created_at'), _asc('__name__')),
+    ),
+    # Held-audio page: newest held manifests for one user. The exact total is a
+    # separate summary document, so this query stays bounded.
+    FirestoreIndexRequirement(
+        'stt_cap_holds_state_asc_listed_at_desc',
+        'stt_cap_holds',
+        'COLLECTION',
+        (_asc('state'), _desc('listed_at'), _desc('__name__')),
     ),
 )
 
@@ -1450,44 +1467,6 @@ SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
     ),
 )
 
-ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
-    identifier='conversations_entity_timeline_completed',
-    collection_group='conversations',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('discarded', '==', 'discarded'),
-        FirestoreQueryFilter('status', '==', 'status'),
-    ),
-    index_fields=(
-        _asc('discarded'),
-        _asc('status'),
-        _desc('created_at'),
-        _desc('__name__'),
-    ),
-)
-
-ENTITY_TIMELINE_MEETINGS_QUERY = FirestoreQuerySpec(
-    identifier='meetings_entity_timeline',
-    collection_group='meetings',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(
-        _desc('start_time'),
-        _desc('__name__'),
-    ),
-)
-
-ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
-    identifier='screen_activity_entity_timeline',
-    collection_group='screen_activity',
-    query_scope='COLLECTION',
-    filters=(),
-    index_fields=(
-        _desc('timestamp'),
-        _desc('__name__'),
-    ),
-)
-
 SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY = FirestoreQuerySpec(
     identifier='screen_activity_keyword_timestamp_range',
     collection_group='screen_activity',
@@ -1734,17 +1713,6 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
-FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY = FirestoreQuerySpec(
-    identifier='conversations_first_open_folder_active_count',
-    collection_group='conversations',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('folder_id', '==', 'folder_id'),
-        FirestoreQueryFilter('discarded', '==', 'discarded'),
-    ),
-    index_fields=(_asc('folder_id'), _asc('discarded'), _asc('__name__')),
-)
-
 CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
     identifier='conversation_keyframe_jobs_device_state',
     collection_group='conversation_keyframe_jobs',
@@ -1964,9 +1932,6 @@ QUERY_SPECS = (
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
-    ENTITY_TIMELINE_CONVERSATIONS_QUERY,
-    ENTITY_TIMELINE_MEETINGS_QUERY,
-    ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
     SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
@@ -1977,7 +1942,6 @@ QUERY_SPECS = (
     NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     HOURLY_USAGE_UTC_DAY_QUERY,
-    FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
@@ -2108,6 +2072,9 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_staging_cleanup', 'stt_cap_holds', 'staging_cleanup', ('ASCENDING',)),
     FieldIndexRequirement(
         'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
     ),

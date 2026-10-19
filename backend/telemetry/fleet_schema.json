@@ -1960,33 +1960,6 @@
             "type": "object",
             "properties": {
               "event": {
-                "const": "jit_proactivity_admission"
-              },
-              "outcome": {
-                "enum": [
-                  "observed",
-                  "success",
-                  "failure",
-                  "skipped"
-                ]
-              },
-              "count": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1000000
-              }
-            },
-            "required": [
-              "event",
-              "outcome",
-              "count"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "event": {
                 "const": "Notification Delivery Skipped"
               },
               "outcome": {

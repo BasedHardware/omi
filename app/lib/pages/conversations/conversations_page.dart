@@ -10,6 +10,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
@@ -617,6 +619,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               ),
               // Today is always below the recaps. With no list to sit in, the pending row brings its own
               // Today header, spaced like the list's first day so nothing moves when the list arrives.
+              // Recordings waiting on this phone sit with that row; nothing while the on-device flag is off.
+              const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
+              const SliverToBoxAdapter(child: HeldAudioHomeSection()),
               if (pendingOpensToday)
                 SliverToBoxAdapter(
                   child: Padding(

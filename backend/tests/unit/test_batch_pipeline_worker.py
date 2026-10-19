@@ -33,6 +33,14 @@ from utils.stt import local_vad as vad
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 
+@pytest.fixture(autouse=True)
+def _full_gpu_stages(monkeypatch):
+    # This suite pins the full-stage chain. The ship-on GPU skips have their own
+    # contract in test_batch_pipeline_diarization_gate.py.
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
+
+
 class Samples:
     def __init__(self, seconds):
         self.size = int(seconds * 16000)
@@ -750,10 +758,12 @@ def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkey
     assert words.calls == [[2]]
 
 
-def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
+@pytest.mark.parametrize('dispatch', [False, True])
+def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch, dispatch):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     worker, words, saved, _, diarized, failures = setup_worker()
     checks = []
 

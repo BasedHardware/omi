@@ -1027,6 +1027,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.shareAsAudio(wal);
   }
 
+  Future<void> shareRecordingAsWav(List<Wal> wals) => _audioPlayerUtils.shareRecordingAsAudio(wals);
+
   Future<void> seekToPosition(Duration position) async {
     await _audioPlayerUtils.seekToPosition(position);
   }

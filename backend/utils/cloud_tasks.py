@@ -70,7 +70,9 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # Present only when the upload carried parsed S1 capture-evidence claims
 # (routers/sync.py). An exact-set check without this key raised ValueError at
 # enqueue for every claims-bearing upload and wedged that uid's sequencer.
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims'})
+# ``budget_deferrals`` rides only on handler-budget replacement tasks: the count
+# of whole-budget attempts the job has already spent (routers/sync.py).
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals'})
 
 
 def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
@@ -296,6 +298,30 @@ def enqueue_named_task(
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
+def named_task_exists(queue: str, task_id: str) -> bool:
+    """Probe scheduling custody only; never request a task's FULL payload view.
+
+    Only an authoritative NotFound permits replacing an exhausted wake. A
+    permission/transport error must preserve the old name and durable debt.
+    """
+    project, location = os.getenv('SYNC_TASKS_PROJECT', ''), os.getenv('SYNC_TASKS_LOCATION', '')
+    if not all((project, location, queue, task_id)):
+        raise RuntimeError('Cloud Tasks watchdog binding is incomplete')
+    client = _get_tasks_client()
+    try:
+        client.get_task(
+            request=tasks_v2.GetTaskRequest(
+                name=client.task_path(project, location, queue, task_id),
+                response_view=tasks_v2.Task.View.BASIC,
+            ),
+            retry=None,
+            timeout=3,
+        )
+        return True
+    except NotFound:
+        return False
+
+
 def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
     """Enqueue one named HTTP task for a sync job.
 
@@ -331,7 +357,11 @@ def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> N
         if sequencer_epoch is None or dispatch_attempt < 0:
             raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
         task_id += f'-d{dispatch_attempt}'
-    schedule_at = direct_schedule_at(payload)
+    _enqueue_sync_job_routed(payload, task_id, direct_schedule_at(payload))
+
+
+def _enqueue_sync_job_routed(payload: Dict[str, Any], task_id: str, schedule_at: Optional[int]) -> None:
+    """Create one named sync-job task, preferring the gated backfill queue."""
     schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
@@ -347,6 +377,21 @@ def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> N
             )
             return
     enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload, **schedule_options)
+
+
+def enqueue_sync_job_budget_replacement(payload: Dict[str, Any], schedule_at: int) -> None:
+    """Schedule the delayed replacement for a handler-budget expiry.
+
+    The completing task's own name stays tombstoned by Cloud Tasks for about
+    an hour, so the replacement embeds the schedule in its ``-rb`` name:
+    concurrent expiries deduplicate, and a later expiry of the same job gets a
+    fresh name instead of being swallowed. The caller schedules past the
+    preserved run lock's TTL so the replacement never defers against its own
+    predecessor.
+    """
+    if not sync_job_payload_keys_valid(payload):
+        raise ValueError('sync job payload does not match the durable worker schema')
+    _enqueue_sync_job_routed(payload, f"{payload['job_id']}-rb{schedule_at}", schedule_at)
 
 
 def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:

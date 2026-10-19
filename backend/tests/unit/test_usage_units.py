@@ -56,7 +56,13 @@ def test_stt_fractional_funding_and_estimation_are_distinct(units):
     assert byok['shadow_v1']['features']['transcription']['funding']['byok']['micro_units'] == 0
 
 
-def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
+def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units, monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 17, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(units, 'datetime', Clock)
     uid = 'u'
     month = datetime(2026, 10, 15, tzinfo=timezone.utc)
     e = {
@@ -94,7 +100,7 @@ def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
     assert result['budget_units'] is None
     assert result['by_feature']['chat'] > 0 and result['by_feature']['transcription'] > 0
     assert result['completeness']['status'] == 'partial'
-    assert store.writes == 0 and store.reads == 33
+    assert store.writes == 0 and store.reads == 19
     planned = units.get_usage_units(
         uid,
         month,
@@ -420,6 +426,7 @@ def test_mixed_old_and_new_hour_and_day_documents_report_unprojected_residuals(u
     assert completeness['unprojected_transcription_seconds'] == 70
     assert completeness['unprojected_hourly_docs'] == 1
     assert completeness['unprojected_gateway_attempts'] == 5
+    assert type(completeness['unprojected_gateway_attempts']) is int
     assert completeness['unprojected_gateway_days'] == 1
 
 
@@ -524,3 +531,278 @@ def test_gateway_pricing_failure_preserves_attempt_and_day_writes(units, monkeyp
     assert day['shadow_v1']['hours']['08']['features']['chat']['funding']['omi']['status_counts'] == {'missing': 1}
     assert not ledger.record_llm_gateway_attempt(event, firestore_client=store)
     assert store.writes == 2
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_ladder_residuals_are_charged_conservatively_only_when_enforcing(units, monkeypatch, enforce):
+    from config.rate_card import price_transcription, standard_chat_units
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(enforce).lower())
+    store = Store()
+    month = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    hourly = {}
+    merge(
+        hourly,
+        units.hourly_shadow(
+            {'transcription_seconds': 12},
+            {'funding': 'omi', 'provider': 'parakeet', 'source': 'test'},
+        ),
+    )
+    hourly.update(year=2026, month=10, transcription_seconds=82)
+    store.docs['users/u/hourly_usage/2026-10-01-08'] = hourly
+    store.docs['users/u/hourly_usage/2026-10-02-08'] = dict(year=2026, month=10, transcription_seconds=100)
+    store.docs['llm_gateway_user_days/2026-10-01_' + hashlib.sha256(b'u').hexdigest()[:16]] = {'attempts': 2}
+    entitlement = {'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 10}}
+    before = repr(store.docs)
+    result = units.get_usage_units('u', month, firestore_client=store, entitlements=entitlement)
+    projected = hourly['shadow_v1']['features']['transcription']['funding']['omi']['micro_units']
+    residual = price_transcription(170, provider='unknown', accepted=True)['micro_units']
+    attempts = int(2 * standard_chat_units() * 1_000_000)
+    expected = projected + (residual + attempts if enforce else 0)
+    assert result['used_units'] == float(Decimal(expected) / 1_000_000)
+    assert result['by_funding']['omi'] == result['used_units']
+    assert result['completeness']['unprojected_transcription_seconds'] == 170
+    assert result['completeness']['unprojected_gateway_attempts'] == 2
+    assert ('ambiguous_priced_transcription_seconds' in result['completeness']) is enforce
+    assert ('ambiguous_priced_gateway_attempts' in result['completeness']) is enforce
+    assert repr(store.docs) == before and store.writes == 0
+    # Legacy reads remain shadow-only with either switch setting.
+    entitlement['entitlement_version'] = 'legacy'
+    legacy = units.get_usage_units('u', month, firestore_client=store, entitlements=entitlement)
+    assert legacy['used_units'] == float(Decimal(projected) / 1_000_000)
+    assert 'ambiguous_priced_transcription_seconds' not in legacy['completeness']
+    assert 'ambiguous_priced_gateway_attempts' not in legacy['completeness']
+
+
+def test_ladder_missing_price_and_unknown_funding_do_not_claim_coverage(units, monkeypatch):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    store = Store()
+    for hour, funding, status in [(1, 'omi', 'missing'), (2, 'unknown', 'missing'), (3, 'byok', 'complete')]:
+        store.docs[f'users/u/hourly_usage/2026-10-01-0{hour}'] = {
+            'year': 2026,
+            'month': 10,
+            'transcription_seconds': 60,
+            'shadow_v1': {
+                'features': {
+                    'transcription': {
+                        'funding': {
+                            funding: {
+                                'micro_units': 0,
+                                'legacy_counter_seconds': 60,
+                                'status_counts': {status: 1},
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 10}},
+    )
+    assert result['completeness']['unprojected_transcription_seconds'] == 120
+    assert (
+        result['used_units']
+        == units.price_transcription(120, provider='unknown', accepted=True)['micro_units'] / 1_000_000
+    )
+
+
+def test_mixed_six_events_only_reprices_the_unpriced_hundred_seconds(units, monkeypatch):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    hourly = dict(year=2026, month=10, transcription_seconds=600)
+    for _ in range(5):
+        merge(
+            hourly,
+            units.hourly_shadow(
+                {'transcription_seconds': 100},
+                {'funding': 'omi', 'provider': 'modulate', 'source': 'test', 'accepted_speech_seconds': 100},
+            ),
+        )
+    original = units.price_transcription
+    monkeypatch.setattr(units, 'price_transcription', lambda *a, **k: dict(micro_units=0, status='missing', reasons=[]))
+    merge(hourly, units.hourly_shadow({'transcription_seconds': 100}, {'funding': 'omi', 'source': 'test'}))
+    monkeypatch.setattr(units, 'price_transcription', original)
+    store = Store({'users/u/hourly_usage/2026-10-01-08': hourly})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    priced = hourly['shadow_v1']['features']['transcription']['funding']['omi']['micro_units']
+    assert result['completeness']['unprojected_transcription_seconds'] == 100
+    assert result['used_units'] == (priced + original(100, accepted=True)['micro_units']) / 1_000_000
+
+
+def test_missing_gateway_annotation_with_priced_units_is_never_charged_twice(units, monkeypatch):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(
+        units, 'price_llm_attempt', lambda *args, **kwargs: dict(micro_units=123456, status='missing', reasons=[])
+    )
+    _, patch = units.gateway_shadow({'payer': 'omi', 'feature': 'chat_agent', 'occurred_at': 'bad'})
+    day = {'attempts': 1}
+    merge(day, patch)
+    store = Store({'llm_gateway_user_days/2026-10-01_' + hashlib.sha256(b'u').hexdigest()[:16]: day})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    assert result['used_units'] == 0.123456
+    assert result['completeness']['unprojected_gateway_attempts'] == 0
+
+
+@pytest.mark.parametrize('month,day,elapsed', [(10, 1, 1), (10, 17, 17), (11, 1, 31)])
+def test_month_reader_batches_only_elapsed_days(units, monkeypatch, month, day, elapsed):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, month, day, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(units, 'datetime', Clock)
+    store = Store()
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    assert store.reads == 2 * elapsed
+    assert store.batch_reads == 1
+    assert result['used_units'] == 0
+
+
+@pytest.mark.parametrize('priced', [123456, 1_000_000_000])
+@pytest.mark.parametrize('attributed', [0, 2_000_000_000])
+def test_historical_mixed_priced_leaf_charges_once_at_the_conservative_max(units, monkeypatch, priced, attributed):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    leaf = {
+        'micro_units': priced + attributed,
+        'legacy_counter_seconds': 600 + (100 if attributed else 0),
+        'status_counts': {'complete': 5, 'missing': 1},
+        'quantity_attributed_seconds': 100 if attributed else 0,
+        'quantity_attributed_micro_units': attributed,
+    }
+    hourly = {
+        'year': 2026,
+        'month': 10,
+        'transcription_seconds': 600 + (100 if attributed else 0),
+        'shadow_v1': {'features': {'transcription': {'funding': {'omi': leaf}}}},
+    }
+    store = Store({'users/u/hourly_usage/2026-10-01-08': hourly})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    assert (
+        result['used_units']
+        == (attributed + max(priced, units.price_transcription(600, accepted=True)['micro_units'])) / 1_000_000
+    )
+    assert result['completeness']['unprojected_transcription_seconds'] == 0
+    assert result['completeness']['ambiguous_priced_transcription_seconds'] == 600
+
+
+@pytest.mark.parametrize('old_priced', [False, True])
+@pytest.mark.parametrize('new_status,new_units', [('missing', 0), ('complete', 0), ('complete', 2000000)])
+def test_historical_and_new_seconds_remain_disjoint(units, monkeypatch, old_priced, new_status, new_units):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    old = {
+        'micro_units': 1000000 if old_priced else 0,
+        'legacy_counter_seconds': 100,
+        'status_counts': {'complete' if old_priced else 'missing': 1},
+    }
+    hourly = {
+        'year': 2026,
+        'month': 10,
+        'transcription_seconds': 200,
+        'shadow_v1': {'features': {'transcription': {'funding': {'omi': old}}}},
+    }
+    original = units.price_transcription
+    monkeypatch.setattr(
+        units,
+        'price_transcription',
+        lambda *a, **k: {'micro_units': new_units, 'status': new_status, 'reasons': []},
+    )
+    merge(hourly, units.hourly_shadow({'transcription_seconds': 100}, {'funding': 'omi', 'source': 'test'}))
+    monkeypatch.setattr(units, 'price_transcription', original)
+    store = Store({'users/u/hourly_usage/2026-10-01-08': hourly})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    residual = 100 * ((not old_priced) + (new_status == 'missing'))
+    expected = (1000000 if old_priced else 0) + new_units + original(residual, accepted=True)['micro_units']
+    assert result['completeness']['unprojected_transcription_seconds'] == residual
+    assert result['completeness']['ambiguous_priced_transcription_seconds'] == 0
+    assert result['used_units'] == expected / 1_000_000
+
+
+@pytest.mark.parametrize('old_priced', [False, True])
+@pytest.mark.parametrize('new_status,new_units', [('missing', 0), ('complete', 0), ('complete', 2000000)])
+def test_historical_and_new_gateway_attempts_remain_disjoint(units, monkeypatch, old_priced, new_status, new_units):
+    from config.rate_card import standard_chat_units
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    old = {
+        'micro_units': 1000000 if old_priced else 0,
+        'events': 1,
+        'status_counts': {'complete' if old_priced else 'missing': 1},
+    }
+    day = {'attempts': 2, 'shadow_v1': {'hours': {'08': {'features': {'chat': {'funding': {'omi': old}}}}}}}
+    monkeypatch.setattr(
+        units,
+        'price_llm_attempt',
+        lambda *a, **k: {'micro_units': new_units, 'status': new_status, 'reasons': []},
+    )
+    _, patch = units.gateway_shadow(
+        {'payer': 'omi', 'feature': 'chat_agent', 'occurred_at': '2026-10-01T08:00:00Z', 'date': '2026-10-01'}
+    )
+    merge(day, patch)
+    store = Store({'llm_gateway_user_days/2026-10-01_' + hashlib.sha256(b'u').hexdigest()[:16]: day})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    residual = (not old_priced) + (new_status == 'missing')
+    expected = (1000000 if old_priced else 0) + new_units + int(residual * standard_chat_units() * 1_000_000)
+    assert result['completeness']['unprojected_gateway_attempts'] == residual
+    assert type(result['completeness']['unprojected_gateway_attempts']) is int
+    assert result['completeness']['ambiguous_priced_gateway_attempts'] == 0
+    assert result['used_units'] == expected / 1_000_000
+
+
+@pytest.mark.parametrize('priced', [123456, 2_000_000])
+@pytest.mark.parametrize('attributed', [0, 20_000_000])
+def test_ambiguous_gateway_historical_max_does_not_absorb_new_priced_attempts(units, monkeypatch, priced, attributed):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    leaf = {
+        'micro_units': priced + attributed,
+        'events': 6 + bool(attributed),
+        'status_counts': {'complete': 5 + bool(attributed), 'missing': 1},
+        'quantity_attributed_events': int(bool(attributed)),
+        'quantity_attributed_micro_units': attributed,
+    }
+    day = {
+        'attempts': 6 + bool(attributed),
+        'shadow_v1': {'hours': {'08': {'features': {'chat': {'funding': {'omi': leaf}}}}}},
+    }
+    store = Store({'llm_gateway_user_days/2026-10-01_' + hashlib.sha256(b'u').hexdigest()[:16]: day})
+    result = units.get_usage_units(
+        'u',
+        datetime(2026, 10, 1, tzinfo=timezone.utc),
+        firestore_client=store,
+        entitlements={'entitlement_version': 'ladder_v1', 'budget': {'kind': 'units', 'value': 100}},
+    )
+    proxy = int(units.standard_chat_units() * 1_000_000)
+    assert result['used_units'] == (attributed + max(priced, proxy)) / 1_000_000
+    assert result['completeness']['unprojected_gateway_attempts'] == 0
+    assert result['completeness']['ambiguous_priced_gateway_attempts'] == 1

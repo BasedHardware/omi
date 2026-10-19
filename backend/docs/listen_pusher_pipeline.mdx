@@ -31,6 +31,53 @@ as failed reconciliation. Successful siblings finalize independently. Flagged
 oversized GPU empty-result retries become held work without a failure attempt;
 the unflagged retry follows main's behavior.
 
+## Ladder budget refresh and execution admission (default off)
+
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, funded ladder/Free live sessions
+install the shared provider admission state even when legacy dispatch remains off.
+It carries remaining units and debits accepted PCM at the pinned provider speech
+rate. A packet exceeding the estimate is suppressed while capture continues.
+There is no per-audio-chunk I/O. Full scans run at session start, every 900 seconds,
+and on subscription invalidation. At >=90% used or below two minutes at the maximum
+managed speech rate, the 60-second flush refreshes only the current hour, today's
+gateway day and today's API day, combining them with the session's closed-bucket
+sum. Rollover closes the old buckets once; backdated writes reconcile at 900 seconds.
+The existing flush subscription is reused. Unavailable snapshots retry after
+60 / 120 / 240 / 480 / 900 seconds, capped at 900; successful reads reset backoff.
+Custom STT without a funded socket keeps the 900-second cache.
+
+Near-cap external usage is detected within a 60-second flush plus persistence
+latency. Far from cap, concurrent external spending can remain unseen for 900
+seconds. This is not a distributed reservation; accepted provider queues and
+already-admitted batch work may drain. Sync execution and each GPU ASR microbatch
+reauthorize with the current ladder allowance. Exhausted uploads use durable
+holds instead of a ladder 402 or locked transcript; explicit backlog choice or a
+fitting upgrade intent recovers them and checks the current allowance again.
+Reset does not process backlog. All conversation sources preserve capped transcripts
+with `processing_deferred=true`; first-open cannot consume that backlog. See
+[funded halt and choice](ladder-v1-cutover.md#funded-halt-and-user-chosen-backlog-david-2026-10-18). Ladder-only activation bypasses legacy monthly seconds.
+
+The month reader batches only elapsed day refs, never future days. A normal near-cap
+minute costs three ledger reads plus the existing subscription read. The required
+900-second full scans still add periodic spikes: at H=408 hourly documents / D=17
+elapsed days, ordinary / amortized reads per minute are 1 / 30.47 at 0% and 50%,
+and 4 / 33.27 at 95%, versus the prior 30.53 / 30.53 / 444 averages. Rollover adds
+one closing-hour read and, at midnight, two closing-day reads. See the complete
+[failure/read-cost model](stt-cap-dispatch.md#ladder-v1-admission-in-21488).
+
+Unprojected seconds receive the pinned provisional speech rate without a silence
+ratio; unpriced gateway attempts receive the standard-chat estimate. Atomic
+unpriced-quantity counters keep priced seconds/events out of residuals. Newly
+attributed quantities and units remain separate from history. For each ambiguous
+historical leaf, charge `max(historical priced units, unknown-provider proxy)`
+once, plus separately attributed new units. Ambiguity never raises a 503 or denies
+a paying account until reset. Residual and historical ambiguity histograms
+(`omi_ladder_unprojected_*`, `omi_ladder_ambiguous_priced_*`) and the shared degraded
+fallback metric expose uncertainty without user labels or historical writes.
+Repeated evaluations are observations, not unique usage.
+With ladder flags off, shadow totals and #21866 dispatch behavior remain unchanged.
+No switch or deployment binding is activated.
+
 ## Windowed live transcription deadlines
 
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`
@@ -76,8 +123,8 @@ identity. Hidden state remains valid while the socket heartbeats. Stale/missing
 presence and dependency failures require a vendor. Deploy presence globally at
 zero allocation and drain older pods/sockets before admitting a canary.
 
-`STT_LIVE_DEMAND_PERCENT` and comma-separated `STT_LIVE_DEMAND_UID_ALLOWLIST`
-select the cohort. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
+`STT_LIVE_DEMAND_PERCENT` and the private Firestore `stt-live-demand` cohort
+select routing membership. The old UID env list is a migration fallback only. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
 hidden demand admits the existing Parakeet window leg, while visible/unknown
 or consumer demand returns to vendors immediately. Existing window allocation,
 capacity, pressure and recovery controls remain authoritative. Non-English,
@@ -132,7 +179,7 @@ accounted media duration admitted per request. The finite allowance check bounds
 normally narrows it further. The semaphore is not shared across replicas, and an
 accounting-write outage does not have this finite cumulative bound.
 
-> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by the private Firestore sync-lineage-resolve cohort, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation
 when `OMI_SHAPED_AGENT_MODE=on` on prod backend, backend-sync,
@@ -156,7 +203,9 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
-Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
+Backend-listen and pusher share the private Firestore `dream-agent` cohort in
+their deployment environment; no UID env binding is required. Existing
+conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
@@ -298,17 +347,20 @@ query set and log format — no probe, no stage counts, no stamp-append marker
 or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
-Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
-empty admits everyone) limits per-segment binding to listed owners; other uids
-use the kill-switch-off binding behavior.
-Sync appends to live targets always preserve the live origin,
-and fresh live speech on any `sync_live_target` always advances its revision,
-independent of this allowlist or kill switch. Open-live enrichment stays deferred.
-The listen origin stamp is metadata only and ignores the list, so widening finds
-lineage stamped. Prod lists one uid on all five identical services (unset
-admits everyone); dev leaves it unset. Refused eligible uploads log
+Staged rollout uses the private Firestore `sync-lineage-resolve` cohort to limit
+per-segment binding. Missing Firestore fields retain legacy env membership;
+empty or absent legacy lineage keys preserve enable-all, including dev.
+The kill switch wins over binding admission. Sync appends to live targets always
+preserve the live origin, and fresh speech on any `sync_live_target` always
+advances its revision regardless of cohort membership or the lineage kill
+switch. The metadata-only listen origin stamp stays under the kill switch alone.
+Cloud Run preserves omitted live allowlists; listen retains its legacy chart
+value until a separate removal PR after seed and verification. Read errors deny
+cohort membership. Refused eligible uploads log
 `event=sync_lineage_resolve outcome=not_allowlisted` with no ids. The metric
 comes from backend-sync, which is not scraped, so logs are the watch source.
+See [private rollout cohorts](runbooks/rollout-cohorts.md) for seeding, cache
+expiry, deploy ordering and rollback.
 `SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank on, explicit on-tokens
 on, any unrecognized value including a typo off) additionally requires, inside
 `lineage_resolution_requested` after the kill switch and the allowlist, a
@@ -595,7 +647,7 @@ utterances before longer ones.
 Realtime mentor dispatch validates `MENTOR_PIPELINE=cohort` locally before
 running `process_mentor_notification`, the shared paid/opt-in, buffering and
 debounce admission. Only when admission returns conversation messages does the
-cohort resolve the PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
+cohort resolve the independent PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
 false, unknown or a flag error dispatches nothing (fail closed) — the legacy
 mentor lane was deleted after v2 reached 100%. Any other env value invokes
 neither path. The shared bounded flag cache, failure diagnostics and rollback
@@ -840,8 +892,9 @@ The finalizer writes summary vectors only after successful lifecycle persistence
 and a winning fanout claim, after smart-merge donor handling. It indexes every
 structured, non-discarded, non-deleted conversation it processes, including
 already-completed replays and rows whose intelligence bundle is suppressed.
-JIT deferral does not defer this write: `FIRST_OPEN_EFFECTS` remains folder
-assignment and app fanout only, and indexing does not mutate obligation receipts.
+A separate first-open processing path no longer defers this write; indexing
+runs in the normal conversation processing pass and does not mutate processing
+receipts.
 A persistence loss or losing fanout claim emits no vector or other canonical
 side effect. Completed fanout replays do not repeat the write.
 
@@ -1061,7 +1114,7 @@ the fanout claim is `claimed` and before duplicate-capture linking or any derive
 effect. `CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
 variable is unset or blank), `shadow` (decide and record, never merge) or `off`
 (the kill switch: one env read, no I/O; an unrecognized value also means `off`);
-`CONVERSATION_SMART_MERGE_UID_ALLOWLIST` optionally narrows the users.
+
 
 The candidate is the newest visible conversation of the same source created
 before this one, then the first row of the same device partition; a busy
@@ -1108,48 +1161,14 @@ read rows before planning or any write, so a discard committed between the
 decision and the absorb still rejects with the same reason. No flags or
 thresholds changed.
 
-`CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
-unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
-narrow case: two rows proven to be generations of the same client recording.
-Live creators stamp `external_data.recording_session_id` (per server rollover
-generation) and `external_data.recording_origin_id` (the client's stable
-recording id); proof requires both stamps nonempty on both rows plus equal
-origin ids — generation ids are never equated — and the usual source,
-device-partition and lock gates still apply. Under `on` the legacy gate runs
-first and the wall-clock path is rescue-only: a pair the legacy gate accepts
-keeps the exact legacy result (same reason, recorded and speech gaps, Jev
-state and metrics as `off`), and the wall-clock check runs only on a legacy
-skip. There the gap is `new.created_at` minus the newest fragment's own row
-`finished_at`,
-where "newest" is the maximum `finished_at` in the survivor's
-`smart_merge.fragments` ledger (the ledger stays on the drifted speech axis,
-so selection never trusts `started_at`). When that fragment is a donor
-tombstone rather than the survivor, its full row is read once at decision
-time — only when the rescue path actually runs — and re-read inside the
-absorb transaction — reusing the flatten ancestry
-read when possible — and the plan re-verifies lineage, wall times and span
-against that fresh row, so a mutation such as a moved `finished_at` is
-decided on the transaction's current data rather than the decision-time
-read. The absorb transaction re-applies the same union rule — legacy pass
-or wall-clock pass — so planning and the transaction cannot disagree.
-Gaps of `0..3600` s are eligible, negative or malformed wall times get
-the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
-the 3 h span cap is measured on `created_at`/`finished_at`. The existing
-`event=smart_merge` lines carry `gap_path=legacy` or `gap_path=wallclock`
-under `on` (absent otherwise): the decision-time keep line names the gate
-that admitted the pair at planning, while the absorb transaction's
-merged/kept lines name the gate that admitted it on the transaction's
-fresh rows. `shadow` keeps
-the legacy verdict but asks Jev once with corrected timing for proven pairs
-the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
-counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting
-ships `off` in the shared base and `shadow` in both the dev and prod
-overlays on all six smart-merge hosts (`backend`, `backend-sync`,
-`backend-sync-backfill`, `backend-integration`, `backend-listen`,
-`pusher`). No timestamp computation changes: `started_at` still anchors
-rebasing and stored ledger fragments; only the decision-time gap and the
-Jev state endpoints use server wall times. No further timestamp behavior
-changes are intended here.
+For a pair proven to share a client recording, the wall-clock rescue now runs
+unconditionally when the legacy gate skips it. The legacy gate runs first and
+keeps its exact verdict when it accepts; otherwise the rescue uses the new row's
+`created_at` and newest fragment's own `finished_at`. The absorb transaction
+rechecks that same legacy-first decision on fresh rows. Existing smart-merge
+logs retain `gap_path=legacy|wallclock`; the shadow-only log and metric were
+removed. This admits about 800 additional merges per day fleet-wide. The
+`CONVERSATION_SMART_MERGE_MODE=off` kill switch still stops merging.
 
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the
@@ -1574,6 +1593,23 @@ count, and is bounded to 10,000 recent UIDs. Every socket still increments
 `omi_live_session_transcript_outcome_total{outcome="no_transcript"}` before
 coalescing; that Prometheus series remains the authoritative outage signal.
 
+### Listen loop health metrics
+
+Four process-level series gate the listen HPA retune (CPU 70%, more sockets per pod):
+
+- `omi_listen_event_loop_lag_seconds` (histogram): `asyncio.sleep` drift beyond the probe interval, one probe per process.
+- `omi_listen_frame_processing_seconds{codec}` (histogram): wall time from receiving one client audio frame to being ready for the next receive. `codec` is a closed set: `opus`, `aac`, `lc3`, `pcm8`, `pcm16`, `multi_channel`, `other`; anything else maps to `other`.
+- `omi_vad_windows_total` (counter): Silero windows inferred by the streaming VAD gate.
+- `omi_vad_inference_seconds_total` (counter): wall seconds inside VAD gate inference, including conversion and buffering calls that complete no window.
+
+No series carries uid, session or conversation labels.
+
+`LISTEN_LOOP_METRICS_ENABLED` is the kill switch. It is on by default; `false`, `0`, `off` or `no` disables it. It is read when the probe starts, once per session for frame timing and once per VAD gate, so a change takes effect at the next process start.
+
+The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
+
+D0b gate: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h before the HPA retune proceeds.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted
@@ -1917,8 +1953,7 @@ once its transcript fixes a trusted content window), and the judge stores
 `visible_participant_names` and `screen_summary` on approved frame docs only.
 Tile names join the roster as
 `screen_activity` participants where no better source named them and each frame
-adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
-`MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
+adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; up to four frames (≤1024 px JPEG,
 6 s total GCS read budget) ride the notes call as image parts. Frame docs record
 `storage_bucket`; every host reads only docs whose bucket equals its own
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
@@ -2037,8 +2072,8 @@ the document, so they are added only when its estimated size stays under the
 blank `user_title` is no override on read or in the processing persists that
 re-apply it; the user-facing title writes are unchanged. Clients then offer "Summary failed · Retry", which
 calls `/reprocess`. `recovery_structure_unavailable` never sets it, because the
-model ran and a retry gives the same answer. Enrichment and the free-tier
-terminal persist clear the marker with an explicit null.
+model ran and a retry gives the same answer. Successful enrichment clears the marker with an explicit null. Budget deferral
+retains the retry marker and any display projection until chosen funded work completes.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
@@ -2547,6 +2582,65 @@ an active worker, override standby, or replace a concurrent completed result.
 Inline coordinators retain their own terminal-write authority. The recovery
 and retained-audio limits are documented in the
 [two-lane sync runbook](runbooks/sync-two-lane.md).
+
+### Sync backfill handler-budget deferral (Cloud Run request timeout)
+
+`backend-sync-backfill` runs each Cloud Tasks sync job inside one
+`POST /v2/sync-jobs/run` request. Starlette's `TimeoutMiddleware` answers its
+route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
+cancelling the downstream pipeline, so an over-budget job would hold the ASGI
+request until Cloud Run kills it at the platform's maximum request timeout.
+The handler therefore ends the attempt itself: one budget
+(`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit strictly below
+the route cap, the Cloud Tasks dispatch deadline, and the run lock's TTL minus
+`SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps payload parsing, lock admission,
+staged-file downloads, and the pipeline as a single deadline. For sequenced
+deliveries the deadline is captured before the wrapper's `begin_job` and
+prior-job reads and rides the attempt state into the body's timeout as
+remaining time, so a stalled setup read cannot buy the attempt a fresh full
+budget after it.
+
+On expiry the handler defers instead of failing: it persists the chain count
+on the sequencer owner FIRST (`budget_deferrals` in the task payload,
+`active_budget_deferrals` on the owner) — required before anything schedules
+a replacement, because the sweep's lease-expiry redrive re-dispatches the
+owner's original payload and a write that fails first returns the
+queue-owned 409 (`owner_write_failed`) with no replacement left orphaned —
+then writes a `deferred_until` marker on the Redis job (replacement time +
+`QUEUED_DISPATCH_STALE_SECONDS`), enqueues one delayed replacement task past
+the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), and acks 200
+with status `deferred_handler_budget`. One absolute post-budget deadline
+bounds the owner-count write, run-lock acquire drain, marker write, and
+enqueue together; a mid-flight executor leaf (lock acquire or marker CAS) is
+drained or fenced rather than racing the cleanup clear, and an acquire that
+cannot be settled returns the queue-owned 409 (`acquire_unsettled`) because
+no replacement schedule can be proven past the lock. When the enqueue
+definitively failed, the compensating marker clear is best-effort: a clear
+that also fails or times out records its own fallback (`marker_clear_failed`)
+on top of the enqueue failure, because the surviving marker keeps
+suppressing stale recovery after the queue-owned retries exhaust.
+
+Status polling honors the marker: a deferred job — `processing` or `queued`,
+direct or sequenced-excluded — is not stale until `deferred_until` passes
+(polls must not terminalize the planned silent window). Once the marker is
+overdue the job resumes normal staleness so a lost replacement self-heals
+through the poll's run-lease finalizer; for a queued job the overdue marker
+is itself the recovery signal even when earlier retryable failures left
+`attempt`/`started_at` populated. When the chain spends the whole attempt
+contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
+409, and the UID sequencer's sweep terminalizes the abandoned Redis job
+(reason `sync_budget_chain_exhausted`) before releasing its owner. The
+persisted count denotes a successfully scheduled next attempt, not a
+completed one, and the replacement is deliberately delayed past the lease —
+so a still-future `deferred_until` marker keeps the owner until its horizon
+instead of terminalizing the final paid-for delivery as a stale epoch. A
+fence job whose content ledger durably completed before the terminal write
+converges that result instead of failing (`ledger_converged`). The terminal
+handoff is required before the lane advances, retried on transient Redis
+failures and on a terminalization CAS whose re-read still shows a nonterminal
+job, and fenced by an atomically acquired run lock (an unacquirable lock
+retains the owner — the holder's own terminal write always wins) so the
+finalization never races a live attempt.
 
 ### Conversation playback artifact
 
@@ -3862,37 +3956,15 @@ request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
 
-### Jev population measurement (EXP-004)
+### Jev relevance control
 
-Conversation processing assigns stable per-conversation keep-all selection and
-otherwise uses the existing per-user Jev relevance ramp (`relevance_arm`).
-The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
-stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
-relevance and universal owner live percentages to zero for shadow coverage.
-Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
-values fail closed. Malformed keep-all percentages select no conversations;
-malformed Jev percentages admit no Jev users. The ambiguous model tier can be
-policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
-rules, restores, calendar retention and plan gates retain their precedence.
-
-Both processing hosts submit advisory relevance/owner questions through
-`utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
-sample conversation IDs for relevance and conversation+full-scoring hashes for
-owner (candidate, speaker-labelled evidence/context, question owner name and
-pipeline subject metadata). Same text with different evidence remains distinct.
-Defaults are off, and Redis atomically dedupes these identities and caps
-daily calls (60000 per lane). Owner hash selection sees the complete eligible
-batch before submission and selects at most eight unique candidates; eight owner
-slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
-changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
-are text-free and have a 60-day expiry. Owner records carry integer candidate
-position/population metadata: original extraction index and unique eligible
-scoring identities before percentage filtering and the cap. First-write-wins records preserve scores and expiry
-on retries; aborted concurrent commit losers count as `deduped` while preserving
-the transactional deletion fence. Late commits after a worker timeout are valid and counted once by
-(uid, document ID), separately from attempt metrics. Drops are coverage losses.
-The protocol and TTL deployment prerequisite
-are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+The ambiguous relevance tier uses Jev when the stable conversation bucket is
+below `CONVERSATION_RELEVANCE_JEV_PERCENT`. That percentage is the sole Jev
+relevance control; unset means 0, production remains at 100, and dev remains at
+0. Restores, deterministic rules, calendar retention, and plan gates keep their
+precedence. Owner flips, relevance shadows, keep-all, and keep-rescue were
+retired under David's 2026-10-18 rulings. Existing shadow records are not
+migrated or deleted and expire under their existing TTL. See [EXP-004 closure](experiments/EXP-004-jev-relevance-owner-ramp.md).
 
 ### Empty-title presentation and diagnosis
 
@@ -3916,20 +3988,43 @@ its 30-minute denominator and dwell rather than adding a raw-count page.
 
 ### Soniox idle transport
 
-`SONIOX_IDLE_CLOSE_SECONDS` is default-off (unset, zero, invalid or negative
-values preserve the existing adapter and keepalive wire behavior). Prod listen
-sets `45` after a 3h51m canary; every other service leaves it unset. Positive
-values below `20` seconds clamp to `20`, with
-one warning per process. `SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds
-and cannot be set below `60`: after a successful reopen, the socket stays
-connected for at least that interval even if VAD flaps. Non-finite or invalid
-rearm values use `60`. `SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned
-closes per logical session in a rolling monotonic hour; invalid or non-positive
-values use `12`. Both legacy and managed connectors retain one receiver-owned
-budget through provider leg rotation/recovery. When either limit blocks a close, the transport stays open and
-continues normal audio/keepalive handling. Expired hourly slots rearm naturally
-without resetting the silence timer. Only active VAD on a Soniox leg participates; shadow,
-VAD-off, Modulate and Deepgram continue their existing paths.
+Soniox bills a real-time stream for every connected second, keepalive silence
+included, so the idle close is default-on. `SONIOX_IDLE_CLOSE_SECONDS` defaults
+to `45` seconds, the value prod listen ran since 2026-10-06; `0`, a negative
+value, `inf` or `off`/`false` is the kill switch and preserves the
+always-connected adapter and keepalive wire behavior. Unset, blank or unreadable
+values keep the default. Positive values below `20` seconds clamp to `20`, with
+one warning per process. No environment overrides it.
+
+Two triggers start a planned close:
+
+- **VAD silence.** Continuous active-VAD silence for the threshold, after the
+  gate's hangover has released the word boundary.
+- **No client frames.** `SONIOX_IDLE_NO_FRAMES_SECONDS` (default `60`, floor
+  `10`, `0` disables only this trigger) of wall time in which the client sent no
+  frames at all, in any VAD mode. VAD only runs on arriving frames, so a
+  backgrounded app or a dropped pendant otherwise holds a billed socket open on
+  keepalives until the session ends. If the last frame carried speech or its
+  hangover tail (or any ungated audio), the close waits the 4 s VAD hangover on
+  top of the interval, so it never finalizes inside that tail. A per-socket
+  watchdog wakes once per interval; the next frame reopens through the same
+  onset path below.
+
+`SONIOX_IDLE_REARM_SECONDS` defaults to `60` seconds (floor `5`): after a
+successful reopen, the socket stays connected for at least that interval even
+if VAD flaps. Non-finite or invalid rearm values use `60`.
+`SONIOX_IDLE_MAX_CLOSES_PER_HOUR` defaults to `12` planned closes per logical
+session in a rolling monotonic hour, shared by both triggers; invalid or
+non-positive values use `12`. Both legacy and managed connectors retain one
+receiver-owned budget through provider leg rotation/recovery. When a limit
+blocks a close, the transport stays open and continues normal audio/keepalive
+handling. Expired hourly slots rearm naturally without resetting the silence
+timer. Only Soniox legs participate; Modulate, Parakeet and Deepgram continue
+their existing paths.
+
+Every reopen starts a new provider speaker scope (see below), so the VAD policy
+keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
+reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
 
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
@@ -3955,9 +4050,15 @@ pre-roll survives without duplicate delivery. Account/config rejections remain
 real failures even if they arrive during the planned drain.
 Shutdown while closed never opens a socket just to finalize the session.
 
-The `omi_soniox_idle_*` close/reopen/failure counters, reopen latency histogram
-and estimated connected-seconds avoided counter register only for flag-on
-Soniox transports. Avoided seconds measure the actual closed interval, excluding
+The `omi_soniox_idle_*` close/reopen/failure counters (including
+`omi_soniox_idle_closes_by_trigger_total{trigger="vad"|"no_frames"}`), reopen latency
+histogram and estimated connected-seconds avoided counter register only for
+flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort}`
+counts the wall time every Soniox websocket is actually open, flag on or off,
+flushed by the writer about every 10 s and once at close. That is the billed
+quantity: compare Soniox by connected hour, and divide
+`omi_stt_provider_wire_audio_seconds_total{provider="soniox"}` by it for the
+share of billed time that carried audio. Avoided seconds measure the actual closed interval, excluding
 the close drain. These are estimated connection savings, not vendor invoices.
 The fake-mode local soak establishes byte preservation and lifecycle behavior;
 it does not measure real provider handshake latency or acoustic quality.
@@ -4700,16 +4801,18 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
-Production stage B binds David-only authoritative diarization on backend,
+Production stage B binds authoritative diarization for the private
+`transcription-final-pass` cohort on backend,
 backend-sync, backend-sync-backfill and pusher through the shared Gateway
 `/diarizer-batch` prefix. Sync is enabled from B onward; A disables both sync
-and live authoritative promotion. David's offline/backfill recordings bypass
+and live authoritative promotion. Offline/backfill recordings bypass
 pusher shadow admission, so acceptance checks the sync pipeline output. Exact env stages, caps,
 acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
 
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
-paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
-`TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
+paths. `pyannote_shadow` admits the private `transcription-final-pass` cohort or
+`TRANSCRIPTION_FINAL_PASS_PERCENT`. The former UID env list remains a migration
+fallback only. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
 `pyannote` (default), `legacy_ahc`, or the contract-compatible `nemotron` HTTP
 adapter. The latter requires its own serving endpoint and qualification.
 
@@ -4763,6 +4866,32 @@ Rollback: disable authoritative/sync flags first, set mode to `legacy`, then res
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
 
+### Flagged ladder usage admission
+
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` (default OFF) lets the shared allowance
+resolver use the monthly blended ledger for Free and ladder-price subscribers.
+At 100% it selects the on-device allowance, never a captured-content lock. Raw
+sync admission returns the structured at-cap choice before consuming device
+WALs. `LADDER_V1_LANE_METERING_ENABLED` (default OFF) attributes hourly shadow
+writes to live, batch, on-device or unknown lanes without double-charging the
+feature total. See [ladder cutover](ladder-v1-cutover.md) for ramp prerequisites,
+partial-coverage limits, the choice API and rollback.
+### Flagged mobile on-device overflow
+
+`mobile-on-device-overflow` is default off. Mobile phone-only WAL records
+exclude audio from automatic and manual cloud drains; native batch files use
+`omibatchoverflow` in the existing recordings directory. The runner decodes
+bounded 30-second windows without diarization and submits transcript text to
+`POST /v1/conversations/from-segments` with a stable `client_session_id`.
+`stt_provider=on_device:<engine>` survives the canonical ingest seam. Identity
+remains one unnamed voice; the engine token is provenance, not a speaker claim.
+Optional Foundation Models summaries use the existing hash-bound
+`client_processing` display projection (`runtime=local`). Unsupported devices
+submit text for ordinary cloud processing; this path does not send audio to live
+STT or charge live transcription hours. Phone-only mode submits nothing and
+keeps transcript-only conversations in the account-owned local WAL index.
+`/reprocess` processes the existing transcript and does not re-transcribe audio;
+mobile therefore hides the cloud re-transcription action for these recordings.
 ### Mobile Standard batch admission (default off)
 
 New Flutter clients reuse `client_state` visibility and add
@@ -4771,8 +4900,9 @@ control channel (renewed every 60 seconds). Listen's `service_status` events
 `ready` and `mobile_batch_admission` carry the optional boolean
 `mobile_standard_batch`; absent/false means normal streaming. Permission expires
 on the client after two minutes without renewal and on every socket close.
-`MOBILE_STANDARD_BATCH_ENABLED`, `MOBILE_STANDARD_BATCH_PERCENT` and
-`MOBILE_STANDARD_BATCH_UIDS` default to off/0/empty. Admission also requires
+`MOBILE_STANDARD_BATCH_ENABLED` and `MOBILE_STANDARD_BATCH_PERCENT` default to
+off/0; the private Firestore `mobile-standard-batch` cohort selects explicit
+members. `MOBILE_STANDARD_BATCH_UIDS` remains a migration fallback only. Admission also requires
 private-cloud sync, ordinary STT and no enabled integrations or developer audio/
 realtime-transcript webhook. Inventory reads are limited to once per 30 seconds;
 unknown inventory keeps streaming. Transcript visibility and voice commands
@@ -4787,12 +4917,15 @@ unchanged bytes; the account-deletion storage gate/purge owns this prefix. It ha
 no application TTL. Sync playback and backend VAD's conversation assignment stay
 unchanged. Deploy archive acceptance on backend-sync before advertising permission
 on listen; rollback revokes new batching but continues accepting pending files.
-Production dogfood binds the three `MOBILE_STANDARD_BATCH_*` flags only on
-backend-listen: enabled, percentage zero, and David
-(`vi7SA9ckQCe4ccobWNxlbdcNdC23`) allowlisted. Sync archive acceptance is
-unconditional; backend, sync workers and pusher require no admission flags.
-Demand-driven STT presence must finish its empty-allowlist rollout and drain
-old sockets before the David-only listen cohort is deployed. Production Helm
+Production admission binds `MOBILE_STANDARD_BATCH_ENABLED=true` and
+`MOBILE_STANDARD_BATCH_PERCENT=0` only on backend-listen. Seed intended members
+in `rollout_cohorts/{uid}.cohorts.prod.mobile-standard-batch` with the
+[operator script](runbooks/rollout-cohorts.md); keep the UID env key absent.
+Dev membership uses its separate `cohorts.dev` map in the same customer project.
+Sync archive acceptance is unconditional; backend, sync workers and pusher
+require no admission flags. Demand-driven STT presence must finish its global
+presence rollout and drain old sockets before enabling the mobile cohort.
+Production Helm
 workflow source is pinned to `main`; its branch input cannot select an
 intermediate presence-only commit. The lead must pre-roll presence on the
 existing dark revision before dispatching the cohort workflow.
@@ -4935,8 +5068,9 @@ cannot claim the existing immutable manifest either.
 
 `SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
 batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
-capacity only for an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default
-empty), or a stable SHA-256 UID bucket in `SYNC_LEGACY_FRESH_PERCENT` (default
+capacity only for private `sync-legacy-fresh` cohort members (the old UID env
+list is a migration fallback), or a stable SHA-256 UID bucket in
+`SYNC_LEGACY_FRESH_PERCENT` (default
 zero). Buckets match transcription final pass; the master flag disables both.
 Malformed/non-finite percentages select nobody beyond the allowlist; finite
 percentages clamp to 0–100. The atomic Redis token reservation still applies to
@@ -5010,7 +5144,10 @@ instead of emitting a per-row repair error.
 
 `FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
 summary dispatch at original pending time + `FIRST_SUMMARY_DEADLINE_SECONDS`
-(default 120, bounded 60–120); `FIRST_SUMMARY_UID_ALLOWLIST` supports a canary.
+(default 120, bounded 60–120); the private `first-summary` cohort supports a
+canary. A nonempty old UID env list remains a migration fallback; both empty
+and absent keys deny nonmembers unless the independent percentage ramp admits
+them, preserving main #22113.
 First-summary work bypasses demand-tier waiting and uses a 120s lease, renewed
 every 30s for the same owner/task token while the request is alive. Only a
 replacement conversation owner fences persistence; the same owner's result can
@@ -5093,21 +5230,6 @@ behavior; legacy/single-speaker resolution stays on original clocks. The sync
 final-pass adapter receives existing words and does not add an STT request.
 No Nemotron cascade is routed. WAL pre-STT proof matching is unchanged; bounded
 coverage outcome/reason diagnostics now explain conservative abstention.
-
-### Default-off desktop call + pendant links
-
-`DESKTOP_PENDANT_CALL_LINK_MODE=off|shadow|on` adds a metadata-only path at the
-existing duplicate-capture finalizer seam, in either arrival order. A completed
-desktop `external_data.conversation_role=meeting` and same-owner `omi` capture
-need at least 30 seconds and 50% shorter-window overlap; complementary speech
-needs no text confirmation. One-to-one selection and transactional group fences
-preserve exclusions and prevent transitive bridging. Desktop is primary.
-`DESKTOP_PENDANT_CALL_LINK_PERCENT` selects a stable owner cohort under `on`;
-shadow observes everyone. Defaults ship `off`, with percentage 100 inert until
-mode changes. Grouped pendant continuations may join after normal smart-merge
-checks and Jev approval; genuine user edits stay protected. No transcripts or
-audio are combined. Rollout, rollback limits and the separate wall-clock shadow
-review are in [the runbook](runbooks/desktop-pendant-call-link.md).
 
 ### Repeat-work cuts (plan v3, default off)
 
@@ -5344,7 +5466,8 @@ capacity tradeoff, not a distributed projection fence (revision overlap remains 
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
-`BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` hash cohort. New in-progress rows
+`BATCH_PIPELINE_ENABLED` master switch, `BATCH_PIPELINE_PERCENT` hash ramp and
+private Firestore `batch-pipeline` cohort. New in-progress rows
 reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
 already in progress at enablement reserve the same owner from the finalizer's
 already-loaded revision using a conditional write, with zero extra reads on a
@@ -5435,7 +5558,8 @@ the new flag is on; there is no per-tick query to discover whether owners exist.
 Already admitted ready GPU work continues through the existing serving path.
 
 For rollback with pending registrations or first-WAL proofs to drain, close new
-admission with existing `BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` controls
+admission with the existing batch master/percentage controls and private
+`batch-pipeline` cohort membership
 while retaining the live flag and serving/recovery paths. Set the new flag false
 after those obligations resolve. Flag-off drains already-loaded owners and existing
 content aliases, but does not discover unknown owners. Do not roll back to an image
@@ -5555,8 +5679,41 @@ values add the same percentage bucket to the retained summary allowlist
 independently of batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`. A
 positive percentage with an empty summary allowlist is cohort-only; `100` admits
 all owners. Keep existing allowlists when ramping or rolling back.
-`SUMMARY_DEBT_REPAIR_ENABLED` remains false. The 120-second budget is dispatch,
-not model completion.
+Production config sets `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
+`FIRST_SUMMARY_DEADLINE_PERCENT=100` on backend-listen, pusher, backend,
+backend-sync, backend-sync-backfill and backend-integration. This prevents
+fleet traffic outside a canary from retaining the 600-second trailing settle
+and 1,800-second first-summary lease/repair policy. Later revisions and
+effects-only obligations retain their existing coalescing policy. The global
+enabled flag is the kill switch; setting the percentage to zero restores the
+explicit allowlist cohort.
+
+The scheduled backend-sync sweep has `SUMMARY_DEBT_REPAIR_ENABLED=true`.
+It admits at most ten eligible completed server-minimum rows per two-minute
+tick, rotating a page of at most 100 rows behind a global lease. It respects
+manual edits, deletion, privacy, BYOK, active owners and transcript revisions;
+it neither infers historical title provenance nor overrides finalization jobs.
+Setting the repair flag to false stops only that scan.
+
+A lease-admitted finalizer processes its own completed server minimum before
+finishing its job, using the same summary gate and existing retry/fanout fences.
+It still skips a completed row that already contains a summary or is excluded
+by the repair safety policy. `finalization_status=queued` on a conversation is
+an admission projection, not current job state: inspect its durable job and
+actual output presence before diagnosing missing summaries.
+
+The 120-second budget is dispatch, not model completion.
+With the same master flag on, both sync and finalization enrichment adapters
+use the existing `postprocess_executor`, matching ordinary conversation
+finalization. Long transcription work occupies `sync_executor`; sharing that
+pool made an on-time summary task wait behind STT after HTTP dispatch. No pool
+size, Cloud Tasks queue capacity or instance count is increased. The master
+flag off restores the prior sync-pool adapter on both routes.
+`omi_accept_to_summary_seconds` can include speech arriving after acceptance.
+`omi_closed_to_summary_seconds` measures from the later of acceptance and the
+persisted `finished_at` (last speech), excluding that overlap. It includes the
+silence-close delay; it is not a separately recorded close-transition timestamp.
+Unknown acceptance or future/missing finish timestamps emit no new sample.
 
 The dark [durable expiry custody guard](runbooks/sync-two-lane.md#durable-expiry-custody-dark)
 adds `SYNC_DURABLE_REDRIVE_GUARD` and `SYNC_LEGACY_COMPLETION_CONVERGENCE`
@@ -5583,6 +5740,23 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
 
+Private user rollout membership on Cloud Run, listen and pusher uses the shared
+[Firestore cohort cache](runbooks/rollout-cohorts.md). `OMI_ENV_STAGE` selects the
+separate dev/prod membership maps in the customer data plane. Cloud Run manifests
+omit private UID keys so live env survives a merge; Helm keeps every legacy
+allowlist until a separate removal PR after live seed and verification.
+OIDC sync tasks and delayed inline sync work await the first/expired cohort read
+before selecting lineage routing. Dream pass and model-turn admission, pusher
+shadow finalization, mobile batch renewals and
+live-demand handovers also warm membership before deciding; warm checks make
+zero reads. Live audio archive snapshots each phase decision for an admitted connection
+to avoid packet gaps at cache expiry; cohort changes apply to that archive
+connection on reconnect. Membership changes do not require a Helm env override. Seed the intended members
+in their original environment before deploying the cohort-aware image and its
+matching manifest/chart together. Preserve dev absent-lineage allow-all and
+the live iMessage policy. Cutover order is seed, verify, switch reads, then
+remove env in a separate PR.
+
 ### Deterministic batch worker validation disposition
 
 `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
@@ -5597,6 +5771,25 @@ context words outside ownership never establish silence by themselves.
 Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
 retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
+### Batch worker GPU skips (speech-only diarization, short single speaker)
+
+Two switches decide whether the batch worker runs diarization on the whole
+unit. They never change ASR input, words or speech accounting.
+`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` (on) diarizes the union of
+unpadded VAD speech and every emitted word clock, each padded by 1 s, with
+nearby regions joined and 0.5 s of zeros between retained pieces; turns map
+back to capture clocks. Units that would keep over 80% of their audio
+(`reason="kept_over_80pct"`), empty compacted output for a unit with words, and
+any compaction or mapping error (`reason="other"`) diarize the full unit and
+record `omi_fallback_total{component="vad",from="batch_speech_only_diarization"}`.
+`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` is **off** by default: when on,
+all speech and words forming one region of at most 2 s (pauses up to 0.5 s
+inclusive) take the existing `skipped_single` `SPEAKER_00` result. Enable it
+only after a paired prod-revision run qualifies it. Silence units (no VAD
+speech) already skip ASR and diarization. Set
+`worker.diarizeSpeechOnlyEnabled=false` to restore full-unit diarization.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
 ### Legacy sync double-empty recovery (dark)
@@ -5631,9 +5824,15 @@ double-empty segments even when recovery later fails; it is not ASR accuracy.
 ### Dark batch projection follow-ups
 
 `BATCH_PIPELINE_HEAD_PRIORITY_ENABLED` (default `false`) prioritizes a ready
-capture-order head within its existing scheduler class and bounded queue scan;
+capture-order head within its existing scheduler class using indexed pending-head
+and ready FIFO-predecessor queries (independent of backlog depth);
 duration, eligible unit kind and privacy are checked before any splice, so a
-head this pool cannot lease leaves FIFO intact. Strict ordered merge remains authoritative.
+head this pool cannot lease leaves FIFO intact. A 64-owner lookup budget bounds
+transaction work; it does not limit positions searched within an owner. The
+`head_not_found_total` and `head_budget_exhausted_total` counters plus
+`predecessor_ready_age_seconds` histogram use only priority/release/namespace
+labels. New ready-predecessor indexes must be READY before deploying this code.
+Strict ordered merge remains authoritative; compute remains concurrent per owner.
 `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
 owner claim to ordered multipart assignment. Persisted receipts then drive
 bounded tracked async bridge/playback/enrichment follow-ups, including a
@@ -5649,9 +5848,31 @@ client wire fields or live STT ownership rules.
 
 ### Paid quarantine recovery request lifetime
 
+Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
+candidates across cohorts (default 16, supported range 1–64; malformed values
+use 16). Held rows and dispatch errors consume the same budget. The global
+query cursor and rotating allowlisted cohorts keep later work discoverable.
+Set the value to 1 to restore the former all-admitted dispatch rate. This only
+changes discovery throughput: `RecoveryStore.start` still fences paid intent,
+and ordered merge still owns per-owner result order.
+
+A quarantined unit with recovery state `held`, `prepared`, or `running` polls
+as `processing` with `poll_after_ms: 3000`, including during admission rollback.
+Terminal quarantine states such as `failed_held` still report `failed`.
+Privacy-blocked polling returns HTTP 409 with `sync_batch_privacy_blocked`,
+using the same response as upload.
+
 `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
 serving reconciliation loop prepares the existing fenced recovery intent and
-queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
+to `SYNC_TASKS_QUEUE` when unset), using `SYNC_TASKS_INVOKER_SA`. Production
+integration declares `batch-quarantine-recovery`; the existing backend deploy
+action provisions it before the integration revision, with 16 concurrent
+dispatches, eight dispatches/second and five attempts. This keeps accepted-work
+recovery independent of legacy sync queue saturation without changing the paid
+intent or provider budget. Dev retains its existing queue. To roll back queue
+isolation, clear `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` on integration; keep
+request-based recovery enabled. Queued wakes in either queue remain fenced.
 The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
 origin, declared separately from the worker audience in dev and prod) plus
 `/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
@@ -5663,8 +5884,18 @@ to inline recovery with the same token. The task and inline path race through
 the same transactional start fence, so at most one can invoke paid STT. The
 shared fallback metric records this degraded inline execution. A disabled
 handler host or owner cohort returns retryable HTTP 503, never a successful ack.
-A two-minute wake-name generation repairs exhausted tasks without authorizing a
-second provider call. Existing privacy, lease, content ownership and intent-token
+Each prepared intent has at most one outstanding wake task. The sweep leases a
+wake on the job (`recovery_wake`, default 600 seconds,
+`BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`) and names the task by intent token
+and wake sequence (`-w<seq>`); while the lease is live the sweep reports
+`pending` and enqueues nothing. At lease expiry the sweep probes the previous
+task (`named_task_exists`, BASIC view): a task still waiting in a saturated queue
+keeps its lease, and only an authoritative NotFound mints the next sequence.
+Three consecutive failed probes mint one anyway, so a broken probe cannot strand
+the intent. A delivery of that same wake that leaves the intent
+prepared, or a failed enqueue, re-arms a 120-second wake; a stale delivery never
+shortens a newer wake. `0` restores the legacy two-minute wake-name generation on
+every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token
 fences apply to every delivery, including duplicates and admission rollback.
 
 Integration declares a 3,600-second Cloud Run request timeout in both manifests,
@@ -5700,3 +5931,141 @@ with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
 acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
 synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
 the kill switch on every sync-intake service; classification remains internal.
+
+Production routing-off rollout (2026-10-18): backend-listen restores static
+selection with `STT_ROUTING_MODE=off`; recovery and account quarantine remain
+enforced. Rollback and baseline outcome watches live in
+[the routing runbook](runbooks/live-stt-routing.md#production-routing-off-rollout-2026-10-18).
+Transport-open and settlement are independent: their arithmetic difference is
+an accounting diagnostic, not a serving-failure abort.
+
+### Projection discovery progress
+
+`BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
+`false` restores oldest-100 discovery). Assignment and async follow-ups each
+advance their own bounded 100-row keyset scan across pending, persisted and
+ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
+restart begins at the head without dropping any durable obligations. Follow-ups
+launch the whole bounded page before fetching the next one. Discovery order is
+only a hint: existing transactional predecessor, privacy, all-sibling readiness,
+receipt replay and paid-intent fences remain authoritative.
+
+The query reuses the declared prod/dev results composite index:
+`projection_state ASC, committed_at ASC, __name__ ASC` in
+`database/sync_pipeline_indexes.py` and the generated `firestore.indexes.json`.
+No new index or production index mutation is needed.
+
+With accepted-work serving enabled, committed pending/persisted/ready debt is
+rediscovered automatically after deployment; no one-time kick is needed for the
+page deadlock. `quarantine_held` obligations still require their ordinary fenced
+recovery to succeed; pagination neither retries uncertain paid intents nor
+resolves genuine held quarantines. Monitor falling pending age/count and durable
+content/client completion on the deployed release before expanding admission.
+
+
+
+### Static-routing first-text comparison
+
+Ship the instrumented binary with prod listen on/100 first. After at least
+60 minutes on that image, a separate stage-1 change keeps `STT_ROUTING_MODE=on`
+with `STT_ROUTING_ON_PERCENT=95` (approximately 5% static managed accounts),
+pinning `image_tag` to the same instrumented image.
+`omi_stt_routing_cohort_window_first_text_seconds{routing_arm}` mirrors the
+existing Parakeet-window first-speech-to-first-emitted-text timing once per
+emitting leg. Socket construction pins the existing intent-to-treat arm through
+background work and provider recovery. Labels are only `off`, `shadow`, `on`;
+unmanaged sockets do not contribute. Other providers' first-text timing remains
+outside this window metric. Existing histograms are unchanged. Stage gates,
+sample floors, inverse percentage direction, and same-image rollback are in
+[Live STT routing](runbooks/live-stt-routing.md#static-routing-cohort-ramp-stage-1).
+
+### Default-on free-tier capability fold (2026-10-18 ruling)
+
+`cloud_screen_vectors` is versioned in the plan catalog: ladder Free and Plus
+lack it; Pro/Architect and every recognized paid legacy price retain it. Legacy
+Plus is distinct from ladder Plus. The subscription response exposes the additive
+`cloud_screen_vectors` boolean from the real subscription, independent of the
+synthetic BYOK display plan and processing allowance. An unknown paid allowance
+still waits for server admission; capability is never a funding signal.
+
+The Gemini proxy refuses `embedContent`/`batchEmbedContents` with structured
+402 `plan_gated`, `trigger=screen_context`, `upgrade_plan=operator` only when
+`X-Omi-Local-Embeddings: 1` is present, the account lacks that capability, and
+`CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED` is not exact `false`. Absent or
+unknown headers preserve old-client behavior. Validated Gemini BYOK is exempt.
+Generate/stream gates retain their existing policy.
+
+When ladder budget admission or halt-at-cap denies processing, a valid schema-v1,
+transcript-hash-bound `client_processing` summary is a display projection only.
+The raw transcript and model-free title remain server-authored. The row is
+`processing_deferred=true`, `deferred=false`, `status=completed`: visible but
+waiting in the explicit-choice backlog, never a terminal deterministic minimum.
+No provider, canonical memory/task extraction, app fanout or first-open obligation
+is launched. Summary-vector indexing skips budget-waiting rows even after reset;
+automatic merges cannot consume them as donors or predecessors. No summary retains the same raw deferral. Unchosen retries, refresh
+and reset preserve both projection and backlog; only the existing month-scoped
+choice or fitting accepted upgrade intent permits funded processing.
+
+`CLIENT_SUMMARIES_AT_CAP_ENABLED` defaults on; exact `false` rejects new summaries
+on from-segments/finalize/late-bind ingress and keeps ordinary cap deferral.
+Stored projections survive rollback and processor persists omit them so a stale
+worker cannot overwrite a newer ingress mutation. The old basic embed/eager gates,
+local-processing flag and UID cohort are retired; their env values have no effect.
+Upstream retired memory suppression, leaving no backend cohort consumer;
+`FREE_TIER_EMERGENCY_STOP` and the unused backend control plane are retired too.
+The existing remote `free-tier-kill-switch-v1` still covers macOS local inference
+through its client adapter; it grants no cloud entitlement.
+
+### Terminal batch assignment supersession
+
+When sync assignment raises `SyncAssignmentSuperseded`, the batch projector
+persists a ready part receipt with `disposition=superseded` and zero speech usage.
+It writes no conversation content and schedules no playback or enrichment for
+that part. Multipart and sibling completion still use the ordered cursor and
+content ledger; successful parts retain their usage. Completed client results
+include `superseded_segments` with zero failures, rather than reporting silence.
+A fresh transaction rechecks privacy/deletion fences, immutable binding and
+ledger ownership before settlement; a concurrently committed assignment receipt
+wins. Account/protection revocation still follows the existing erasure path.
+
+
+## Cap-held live audio and durable redrive
+
+Listen owns denied PCM before provider replay. Its sink accepts at most 15 seconds
+of volatile PCM, persists short encrypted fragments and composes each continuous
+minute into one immutable held source. It freezes staging before composition;
+expired staging and post-publication fragment cleanup resume from server sweeps.
+Pusher receives admitted audio/transcripts and has no duplicate cap-held PCM sink.
+Both lifespans await the lightweight sink registry before background drain/HTTP
+teardown; socket close flushes tails. GKE grace is 120 seconds with a 15-second
+preStop and a 60-second uvicorn session-drain bound, leaving 45 seconds for the
+30-second custody flush plus existing 10-second drain. The flush coordinator
+returns after its wait bound without gathering cancellation-resistant closes;
+storage-executor publication leaves retain scratch/PCM until actual IO finishes,
+even if event-loop shutdown cancels the async publication task. Process hard
+termination can still lose the at-most-15-second undurable tail.
+
+`POST /v2/cap-hold-recovery/sweep` uses sync Tasks OIDC and awaits bounded work.
+Production Scheduler calls it every two minutes; independent persisted discovery
+cursors visit processing choices, abandoned staging and cleanup. Five owners run
+concurrently on existing executors, each considering up to 100 items over bounded
+ten-row pages with a monotonic 900-second next-item/next-piece budget. Durable
+intent remains processing after a budget stop; a pre-cutoff unsealed source keeps
+that choice open until sealing preserves its original creation/listing times. Only existing
+same-month user/upgrade consent may process audio. Existing UID/hold/text leases,
+cutoffs, reserved estimates, abuse and allowance checks still own admission.
+Process death cannot erase the choice or require a client wakeup. The fixed
+60-second memory wakeup and processing self-respawn are retired.
+
+Held STT uses one provider POST per persisted dispatch attempt and encrypts
+nonempty provider results before ingestion; restart reuses those results and the
+original provider/model. The whole proposed document cache budget is 768 KiB;
+a usable oversized or aggregate-budget-miss response proceeds directly to ordinary
+ingestion without caching, preserving earlier caches. Its crash uncertainty lasts
+through atomic ingest proof. No size-only failure forces another vendor call. A kill
+between vendor acceptance and the result checkpoint can still repeat a paid call.
+The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt bound,
+retained uncertainty, kill switches, three new group indexes, deployment order,
+15-second SIGKILL residual window and measured cost increase. Enforcement flags
+remain off; this source change does not activate the cap cohort.

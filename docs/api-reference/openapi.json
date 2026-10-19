@@ -243,6 +243,11 @@
             "title": "Meeting Treatment Eligible",
             "type": "boolean"
           },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -645,6 +650,18 @@
             "description": "Start time in seconds (e.g., 0.0, 1.5, 60.2)",
             "title": "Start",
             "type": "number"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
           },
           "text": {
             "description": "The text spoken in this segment",

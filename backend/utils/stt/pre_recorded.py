@@ -47,6 +47,18 @@ _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 _verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
 
+_held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
+
+
+@contextmanager
+def held_single_attempt():
+    """The durable held-piece coordinator alone owns paid dispatch retries."""
+    token = _held_single_attempt.set(True)
+    try:
+        yield
+    finally:
+        _held_single_attempt.reset(token)
+
 
 @contextmanager
 def verification_stt_deadline(deadline: float):
@@ -402,7 +414,7 @@ def deepgram_prerecorded(
 
     except Exception as e:
         logger.error('Deepgram prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return deepgram_prerecorded(
                 audio_url,
                 speakers_count,
@@ -537,7 +549,7 @@ def deepgram_prerecorded_from_bytes(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1 and _verification_deadline.get() is None:
+        if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return deepgram_prerecorded_from_bytes(
                 audio_bytes,
                 sample_rate,
@@ -627,7 +639,7 @@ def modulate_prerecorded_from_bytes(
 
     except Exception as e:
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 2 and _verification_deadline.get() is None:
+        if attempts < 2 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return modulate_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
             )
@@ -660,7 +672,7 @@ def modulate_prerecorded(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
         raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
 
@@ -905,7 +917,7 @@ def parakeet_prerecorded_from_bytes(
 
     except Exception as e:
         logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 1 and _verification_deadline.get() is None:
+        if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return parakeet_prerecorded_from_bytes(
                 original_audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, return_language
             )
@@ -952,7 +964,7 @@ def parakeet_prerecorded(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return parakeet_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
         raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts') from e
 

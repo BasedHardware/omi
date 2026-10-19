@@ -1,13 +1,17 @@
 # Developer API and MCP list reads
 
+Remaining action-item reads: [filtered compatibility scans and telemetry](dev-action-items-read-cost.md).
+
+Round 2 changes and the current savings model: [Developer API / promote read cuts](devapi-reads-r2.md).
+
 The three Developer API GET lists (`/v1/dev/user/conversations`, `/v1/dev/user/memories`,
-`/v1/dev/user/action-items`) and REST `GET /v1/mcp/memories` share a short response cache
+`/v1/dev/user/action-items`) and REST `GET /v1/mcp/memories` share an encrypted response cache (ten seconds except write-versioned action items at fifteen minutes)
 and HTTP outcome measurement. The staged-task promote POST uses the same HTTP counter and its
 own write-invalidated negative cache. Hosted MCP JSON-RPC tools are outside this cache and rollout.
 
 ## Behavior and rollback
 
-All five independent env levers default **on**. Only a case-insensitive, whitespace-trimmed
+All env levers default **on**. Only a case-insensitive, whitespace-trimmed
 `false` disables a lever; unset, `0`, and other values leave it on.
 
 | Lever | Disable with `false` |
@@ -18,9 +22,9 @@ All five independent env levers default **on**. Only a case-insensitive, whitesp
 | `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` | Restore unbudgeted Developer conversation offsets and omit new guidance/truncation headers. |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Restore control + full projection for every staged promote poll. |
 
-Full behavior rollback sets all five to `false`. No deployment/env values are changed by this PR.
+Full behavior rollback also disables the four round-2 levers documented in the linked runbook. No deployment/env values are changed by this PR.
 Cache keys include budget lever states, so switching either budget off cannot replay its headers/results.
-No data migration, extra Firestore write, index, rate-limit, boost, or daily ladder change is required.
+No mandatory data migration, extra serving-path Firestore write, index, rate-limit, boost, or daily ladder change is required. The optional task-completion backfill is separately authorized and never runs from a GET.
 The existing memory keyset paths and the existing Developer memory/action-item budgets stay in place.
 
 ## Cache contract
@@ -42,7 +46,7 @@ Redis uses the existing connection configuration with 200 ms socket/connect time
 final FastAPI response-model bytes, AES-GCM encrypted with the existing per-user derived key; the
 opaque cache key is authenticated as associated data. Neither identity nor query/content appears in
 Redis key names or metric labels. Entries have at most 256 KiB of body and 8 KiB of envelope allowance;
-larger responses are served normally. Entries expire after 10 seconds; there is no process-local payload
+larger responses are served normally. Base entries expire after 10 seconds; write-versioned Developer action-item entries expire after 900 seconds; there is no process-local payload
 cache. Global memory/eviction remains owned by Redis. Concurrent misses can duplicate origin work;
 there is no lock or single-flight guarantee. Successful eligible responses submit short cache
 populations with context to the existing db pool without awaiting them. A nonblocking 32-slot
@@ -51,8 +55,8 @@ or submission failure skips population; errors, truncation, oversized or expired
 Future completion, failure or cancellation releases the slot. Workers recheck the query-start expiry
 after queue delay; queueing never extends freshness or delays the completed origin response.
 
-**Up to 10 seconds of stale list data after any user write is accepted**, including deletes, edits,
-locked-state changes and writes from other clients. There is no write invalidation. The expiry is fixed
+**For unversioned memories, conversations and MCP entries, up to 10 seconds of stale list data after a user write is accepted**, including deletes, edits,
+locked-state changes and writes from other clients. These unversioned entries have no write invalidation. Task entries use the SDK commit fences documented in round 2. The expiry is fixed
 before the origin query and stored in the encrypted envelope. Redis `SET PX` receives only the remaining
 milliseconds after query/serialization time; the envelope rejects expired content even if socket delay
 makes Redis retain bytes slightly longer. Requests taking 10 seconds cannot populate the cache.
@@ -99,6 +103,33 @@ overshoot by up to one current bounded RPC window, which can contain 7000 histor
 billing ceiling.
 Auth/grants, fixed policy reads, and auxiliary render reads are outside this list-document allowance.
 
+## Developer memory tail: reuse read windows
+
+`OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED` defaults on; `false` restores the
+previous repeated-prefix implementation. This affects Developer memory reads only.
+No stored marker, migration, index, entitlement change, or serving-path write is needed.
+
+One admitted `MemoryService.read` attempt retains both historical metadata windows
+and their snapshot cursors across adapter, mixed-view, and sparse-category expansions.
+Only the suffix of a larger prefix is fetched; smaller rounds use the exact original
+prefix slice. Both timestamp streams remain: legacy rows missing `updated_at` still
+enter through `created_at`. Visibility, canonical precedence, final ordering,
+hydration of returned rows, and the 5000-row compatibility window are unchanged.
+Status lookups (including absent canonical/override results) are reused across category
+windows in that same attempt. Canonical queries and hydration retain their existing paths.
+
+State belongs to one user/client and is dropped on return, failure, or whole-operation
+retry. There is no cross-request negative cache or assumption that history was migrated.
+Retained snapshots contain the existing metadata projection, never content; each of the
+two windows is bounded by the existing 5000 candidates plus 2000 hidden-row slack.
+The existing incremental-window kill switch still disables seeking when set to `false`.
+The existing shared list budget charges every actual suffix/status/hydration fetch.
+Exhaustion keeps the truncated 200, `X-Omi-Has-More`, and in-window next offset rules.
+
+Physical-read parity and savings fixtures: `tests/unit/test_dev_memory_read_windows.py`.
+They cover mixed canonical/legacy rows, missing timestamps, tied timestamps, suppression,
+sparse categories, deep offsets, request isolation, and budget exhaustion.
+
 ## One injectable API document-limit resolver
 
 `utils.other.list_budget.resolve_list_read_max_documents(owner_uid=..., context=...)` is the single
@@ -132,8 +163,8 @@ non-staged Candidate history can therefore coexist with a cheap warm empty respo
 missing `completed`, timestamps or scores remain visible. Nonempty requests perform zero additional
 Firestore probe queries and retain the original selection. No response/user content is cached.
 
-The TTL is **90 seconds**, spanning a 60-second poll plus jitter. This is distinct from the four
-GET routes' ten-second response cache. The absolute Redis expiry (PXAT) is captured before the
+The TTL is **one hour**, spanning a 60-second poll plus jitter. This is independent of the
+unversioned GET routes' ten-second response cache and the versioned task cache. The absolute Redis expiry (PXAT) is captured before the
 origin projection; slow/expired fills cannot extend freshness. Cache I/O is synchronous in the
 existing sync route, uses a lazy Redis client with 100ms socket/connect bounds, and never queues
 executor work. Read, fill and invalidation faults record shared fallback telemetry and preserve
@@ -180,12 +211,12 @@ multi-batch writer may have committed a prefix. Writers invalidate even when the
 is off, protecting enabled readers on other revisions. With healthy Redis, a completed normal write
 is visible to the next poll. If compatibility invalidation fails after a confirmed busy fence,
 the original compatibility entry may still return its baseline stale empty result for its own TTL
-(default 30 seconds); it can never acquire a new 90-second negative lease. Recovery/expiry of that
+(default 30 seconds); it can never acquire a new one-hour negative lease. Recovery/expiry of that
 compatibility entry exposes pending work even while negative caching stays bypassed.
 
 Immediate visibility cannot be guaranteed when Redis does not confirm the pre-write fence itself,
 or when old deployed/external writers bypass these hooks. A previously published marker may then
-survive until its original 90-second deadline. Redis eviction/loss of coordinator metadata is also
+survive until its original one-hour deadline. Redis eviction/loss of coordinator metadata is also
 outside durable mutation authority: random versions prevent ABA reuse, and a missing completion
 token poisons rather than releases the cache, but simultaneous lost state and unavailable fences
 cannot provide a distributed visibility guarantee. Disable the read lever during a coordinated
@@ -194,9 +225,9 @@ negative-cache lease is published following a known dependency-invalidation fail
 
 If a cold empty projection costs R modeled billed Firestore reads (including its control read), a
 warm hit costs **one control read**, even with retained history. Stable polls every 60 seconds with
-90-second TTL alternate cold/warm: approximately half the origin projection scans are avoided;
-average reads become `(R + 1) / 2` before writes, jitter, cache faults or the independent Candidate
-cache affect the mix. The offline fixtures measure R=3 for physically empty stores and R=581 with
+a one-hour TTL avoid 59 of 60 unchanged-empty origin scans;
+average reads become `1 + (R - 1) / 60` before writes, jitter, cache faults or the independent Candidate
+cache affect the mix. The long-TTL kill switch restores the former 90-second model. The offline fixtures measure R=3 for physically empty stores and R=581 with
 retained history; warm hits cost 1 in both. No extra Firestore writes, new query, index, migration,
 rate limit or production configuration change is added. The supplied ~40M reads/day snapshot does
 not establish logical-empty frequency or R, so no 40M-read or deployed saving is claimed.
@@ -222,8 +253,7 @@ exported by the authenticated
 Prometheus for backend and backend-integration. The old `list_read_*` series do not match that filter.
 The in-cluster Stackdriver mirror only imports selected families from backend-integration; use the
 direct GMP query surface for these measurements. No exporter/workflow/deploy change is included.
-There is no new per-request read histogram: the existing read-origin scope has aggregate counters,
-not a cheap isolated per-request count. Use the existing origin metric as numerator.
+The new `omi_external_list_firestore_reads_per_request{route}` histogram uses the existing SDK read amounts and shared request trace holder. It includes dependency/auth reads and zero-read hits, and closes before response background work. See round 2 for query examples.
 
 After an **authorized** deploy, verify its reported `OMI_BACKEND_RELEASE_SHA` and actual counter samples
 in both services; code/tests alone do not establish collection. Compare a first clean hour and day,
@@ -246,7 +276,7 @@ caller totals to origin totals or mix hosted tool traffic with REST. Trace sampl
 empty-query billing mean this is an origin read proxy; reconcile with the Firestore origin aggregate
 and billing over the same window. Cache-hit metrics measure avoided list work, not billed savings.
 
-## Savings model, not a deployed result
+## Historical round-1 savings model, not a deployed result
 
 The supplied 2026-10-18 one-hour origin snapshot scaled to 24h reports 122,887,440 reads/day across
 these routes: conversations 32,618,424; Developer memories 31,421,808; action items 31,278,216;

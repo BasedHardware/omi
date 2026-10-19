@@ -37,6 +37,7 @@ KNOWN_LEVERS = frozenset(
         'historical_scan_memo',
         'ledger_purge_coalesce',
         'people_scan_dedupe',
+        'queue_age_sample_budget',
     }
 )
 

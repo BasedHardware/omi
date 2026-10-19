@@ -100,7 +100,7 @@ def test_unconfigured_gateway_makes_no_request(gateway, monkeypatch):
     requests, _, recorded = gateway
     monkeypatch.delenv('OMI_LLM_GATEWAY_URL')
 
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert requests == []
     assert [entry['outcome'] for entry in recorded] == ['unconfigured']
 
@@ -109,7 +109,7 @@ def test_a_timeout_is_retried_once_then_answers(gateway):
     requests, script, recorded = gateway
     script.extend([_raise(httpx.ReadTimeout('slow')), _respond(200, _ok_body())])
 
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is not None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is not None
     assert len(requests) == 2
     assert [entry['outcome'] for entry in recorded] == ['success']
 
@@ -118,7 +118,7 @@ def test_two_timeouts_return_none(gateway):
     requests, script, recorded = gateway
     script.extend([_raise(httpx.ReadTimeout('slow')), _raise(httpx.ReadTimeout('slow'))])
 
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert len(requests) == 2
     assert [entry['outcome'] for entry in recorded] == ['timeout']
 
@@ -126,12 +126,12 @@ def test_two_timeouts_return_none(gateway):
 def test_a_5xx_is_retried_and_a_4xx_is_not(gateway):
     requests, script, recorded = gateway
     script.extend([_respond(503, {}), _respond(502, {})])
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert len(requests) == 2
 
     requests.clear()
     script.append(_respond(404, {'error': 'auto lane not found'}))
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert len(requests) == 1
     assert [entry['outcome'] for entry in recorded] == ['http_error', 'http_error']
 
@@ -183,7 +183,7 @@ def test_an_unexpected_error_is_contained(gateway, monkeypatch):
     _, _, recorded = gateway
     monkeypatch.setattr(jev_client, 'llm_gateway_headers', lambda **_: (_ for _ in ()).throw(KeyError('boom')))
 
-    assert ask_jev('state', QUESTIONS, lane='memory_owner') is None
+    assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert [entry['outcome'] for entry in recorded] == ['transport_error']
 
 

@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
 import asyncio
 import hashlib
 import math
@@ -936,6 +937,8 @@ def _persona_gate_zone(uid: str):
 
 
 def update_personas_async(uid: str):
+    if not generated_compute_allowed(uid, 'persona_clone', allow_byok=False):
+        return
     if not can_update_persona(uid):
         logger.info(f"[PERSONAS] Rate limited - uid={uid} already updated today")
         return
@@ -963,6 +966,10 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, persona['uid'], 'persona_clone', allow_byok=False
+    ):
+        return
     uid = persona['uid']
     universal_memories = await run_blocking(
         db_executor,

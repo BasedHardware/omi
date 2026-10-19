@@ -9307,7 +9307,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
+          "expr": "(sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) - (sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\",lane_id=\"omi:auto:proactive-notification\",error_class=\"invalid_request\",provider=\"none\"}[1h])) or sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) * 0)) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -9386,7 +9386,7 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "13",
       "summary": "One gateway lane is failing more than a quarter of its real requests over an hour",
-      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane",
+      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane. Excludes omi:auto:proactive-notification pre-provider invalid_request refusals (error_class=invalid_request, provider=none: proactivity_admission.call_limit per-user/per-item caps, no provider call, no cost; ~47/h on 2026-10-19).",
       "user_impact": "The Omi capability served by this lane may be unavailable or degraded for the users who reach it.",
       "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
       "verification": "Confirm the failing lane and its provider rejection class in the linked panel before intervention.",
@@ -15649,7 +15649,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - managed leg lifecycle gap",
+    "title": "Live STT - managed leg duplicate settlement",
     "condition": "D",
     "data": [
       {
@@ -15685,7 +15685,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "abs(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}) / clamp_min(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}, 1)",
+          "expr": "omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -15705,7 +15705,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0.25",
+          "expression": "$A >= 0 && $B > 0",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -15755,22 +15755,22 @@
         }
       }
     ],
-    "updated": "2026-10-04T00:00:00Z",
+    "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "30m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT - managed leg lifecycle gap",
-      "user_impact": "Managed transports lack a matching open or settlement; routing evidence is incomplete.",
-      "scope": "omi_stt_managed_legs_opened_total, omi_stt_managed_legs_settled_total and omi_stt_managed_legs_open require the configured chain; per instance and target, never pooled.",
+      "summary": "Live STT - managed leg duplicate settlement",
+      "user_impact": "Duplicate settlement accounting may corrupt routing evidence; inspect serving outcome metrics separately.",
+      "scope": "Per instance and target, settled must not exceed handed-off opened legs. Transport release and settlement are independent; opened-minus-settled-minus-open is diagnostic only.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
+      "safe_next_action": "HOLD routing qualification and investigate duplicate settlement. Do not roll back serving solely for opened-minus-settled-minus-open; compare transcript, terminal-after-text and exhausted-chain outcomes with baseline.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0.25 for 30m, per instance and target. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: per-pod maximum B p50 1.1% / p90 16.7% / max 100% at pod start. A nonzero steady-state gap (p50 1.1%) is an accounting defect to investigate, not healthy; the sustained threshold filters pod-start transients.",
-      "evaluated_bad": "Managed legs opened on an instance/target with unexplained opened-minus-settled-minus-open ratio above 25%, sustained for 30m, fires.",
-      "evaluated_good": "No opened legs or per-instance/target gap at most 25% does not fire this alert. A nonzero steady-state gap remains an accounting defect to investigate, not healthy."
+      "threshold": "Settled minus opened >0 for 2m per instance and target. Grafana pending time supplies elapsed persistence; missing series are not proof of healthy accounting.",
+      "evaluated_bad": "More managed settlements than handed-off legs on the same instance/target, sustained for 2m.",
+      "evaluated_good": "Settled at most opened. This does not prove complete settlement: released-but-unsettled state and oldest age require direct instrumentation before omission alerts can qualify a rollout."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-lifecycle-gap",
@@ -15783,6 +15783,153 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-leg-settlement-omission",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - sustained new managed leg settlement gap",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min((omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"} offset 1h) or (0 * omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}), 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $A > $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT - sustained new managed leg settlement gap",
+      "user_impact": "A sustained new settlement accounting gap may omit routing evidence; compare serving outcomes before any rollback.",
+      "scope": "Per instance and target: opened minus settled minus currently open, above the nonnegative same-series carry-in one hour earlier. Live legs are subtracted; unchanged control debt does not page.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "HOLD routing qualification and investigate pending settlement ownership. Record both arms and their carry-in; compare transcript, terminal-after-text and exhausted-chain outcomes. Do not roll back serving for this accounting proxy alone.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "Positive accounting gap above its nonnegative one-hour carry-in for 15m of Grafana pending time. Missing historical series uses a label-matched zero baseline for new instances; missing current components remain no data.",
+      "evaluated_bad": "Run 5b shape: 29 opened, 24 settled, 4 open gives a new +1 above zero carry-in, sustained for at least 15m.",
+      "evaluated_good": "Balanced in-flight legs, negative gaps, unchanged positive control carry-in and transients shorter than 15m stay clear. The rolling one-hour baseline ages out old debt; this warning is not a complete released-but-unsettled inventory."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-leg-settlement-omission",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
     },
     "record": null
   },
@@ -18518,7 +18665,7 @@
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -18527,7 +18674,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+          "expr": "label_replace(((sum(increase(omi_listen_demand_failure_detail_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])), 1)) > 0.1) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])) >= 50), \"gate_scope\", \"admitted\", \"\", \"\") or label_replace(((sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])), 1)) > 0.6) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])) >= 100), \"gate_scope\", \"all_sessions_guard\", \"\", \"\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -18568,9 +18715,9 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  0
                 ],
-                "type": "gte"
+                "type": "gt"
               },
               "operator": {
                 "type": "and"
@@ -18622,15 +18769,15 @@
     ],
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "5m",
+    "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "2",
       "summary": "The live STT demand gate is unavailable; sessions are degrading to the vendor path.",
       "user_impact": "Live STT sessions are falling back to the vendor path because the demand gate is unavailable.",
-      "threshold": "At least 50 reason=gate_unavailable outcome=degraded events in 5m for 5m.",
-      "scope": "backend-listen omi_fallback_total; to_mode=vendor is the demand-gate sentinel, not a provider.",
+      "threshold": "Admitted cohort: omi_listen_demand_failure_detail_total{demand_cohort=admitted,reason=gate_unavailable} / admitted live sessions over 15m > 0.10 with >= 50 admitted sessions, for 15m. All-sessions guard (independent of the cohort label, so a missing label cannot hide an outage): gate_unavailable omi_fallback_total / all live sessions over 15m > 0.60 with >= 100 sessions. Baseline 2026-10-18/19 (all sessions, 15m windows): p10 9.6%, p50 23.9%, p90 50.5%, max 76.6%; that level came from demand_presence on non-admitted sessions and is no longer expected to page.",
+      "scope": "backend-listen omi_listen_demand_failure_detail_total (admitted cohort) plus the omi_fallback_total all-sessions guard; to_mode=vendor is the demand-gate sentinel, not a provider.",
       "verification": "Confirm the vendor sentinel events and demand-gate Redis health.",
       "safe_next_action": "Restore the demand-gate Redis path and confirm sessions return to normal provider routing."
     },
@@ -18962,6 +19109,150 @@
       "group_wait": "5m",
       "group_interval": "1h",
       "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-reason-unknown-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Reason enums - unknown reason ratio elevated",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "reducer": "last"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.02
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A reason family has an unknown share above 2% with enough events to evaluate.",
+      "user_impact": "A known reason mapped to unknown can misroute retries or provider fallback. The Parakeet cancelled-to-connection_lost mislabel caused about $75/day of false Soniox routing for five days.",
+      "scope": "Evaluated per family: unknown reason rate divided by total reason rate over 30m, with a same-window total-volume guard.",
+      "verification": "Inspect the family and emitting site; compare unknown and total reason rates with the reason mapping and route outcomes.",
+      "safe_next_action": "Find the emitting site that maps a known reason to unknown; verify its enum mapping before changing provider routing.",
+      "threshold": "Unknown share >2% and more than 50 total reason events in the rolling 30m window; the condition must persist for 30m.",
+      "incident": "Parakeet cancelled-to-connection_lost mislabel: about $75/day of false Soniox routing for five days. See backend/docs/runbooks/live-stt-routing.md for the reason contract.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-resilience-fallbacks",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md"
+    },
+    "labels": {
+      "alert_identity": "omi-reason-unknown-ratio",
+      "component": "backend",
+      "impact": "product",
+      "instatus_component": "api",
+      "severity": "warning"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

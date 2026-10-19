@@ -16,7 +16,7 @@ from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.demand_cohort import record_metric
-from utils.observability.demand_cohort import FAILURE_DETAIL, current_demand
+from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_reason import LIVE_STT_REASONS
 
@@ -141,6 +141,15 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'provider_5xx',
         'provider_429',
         'enqueue_failed',
+        'marker_failed',
+        'enqueue_uncertain',
+        'marker_timeout',
+        'acquire_unsettled',
+        'marker_clear_failed',
+        'owner_write_failed',
+        'pre_lock_expiry',
+        'preamble_timeout',
+        'deferrals_exhausted',
         'config_incomplete',
         'circuit_open',
         'last_resort',
@@ -165,6 +174,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'authorization_unavailable',
         'unmigrated_principal',
         'document_size_limit',
+        'kept_over_80pct',
         'other',
         'none',
     }
@@ -236,6 +246,7 @@ def record_fallback(
     replay_diagnostics: ReplayLagDiagnostics | None = None,
     first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
     failure_subtype: str | None = None,
+    demand_cohort: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -261,14 +272,26 @@ def record_fallback(
 
     try:
         demand = current_demand.get()
-        if demand is not None and component_label in {'stt_selection', 'stt_live_session'}:
-            if outcome_label == 'exhausted':
+        if component_label in {'stt_selection', 'stt_live_session'} and (
+            demand is not None or demand_cohort is not None
+        ):
+            if demand is not None and outcome_label == 'exhausted':
                 demand.exhausted = True
+            # An explicit cohort (the gate runs in a spawned task) beats the context var.
+            detail_cohort = (
+                demand_cohort
+                if demand_cohort in DEMAND_COHORTS
+                else (demand.cohort if demand is not None else 'ineligible')
+            )
             record_metric(
                 FAILURE_DETAIL,
                 {
-                    'demand_cohort': demand.cohort,
-                    'reason': reason_label if reason_label in {'first_text_deadline', 'capacity_full'} else 'other',
+                    'demand_cohort': detail_cohort,
+                    'reason': (
+                        reason_label
+                        if reason_label in {'first_text_deadline', 'capacity_full', 'gate_unavailable'}
+                        else 'other'
+                    ),
                     'capacity_subtype': (
                         (capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown')
                         if reason_label == 'capacity_full'

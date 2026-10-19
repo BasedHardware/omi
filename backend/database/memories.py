@@ -35,6 +35,11 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_list_index import (
+    MemoryListIndexState,
+    memory_passes_list_visibility as _memory_passes_list_visibility,
+    merge_memory_list_index_docs,
+)
 from database.legal_holds import external_write_fence
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
@@ -396,47 +401,19 @@ _MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
 _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK = 2000
 
 
-def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
-    """Return whether a historical memory row should appear in list/read results.
-
-    Product rule: exclude user-rejected rows (``user_review is False``) and, unless
-    ``include_invalidated``, exclude superseded/retracted rows (``invalid_at`` set).
-
-    This cannot be expressed as a Firestore ``where`` without changing results for
-    legacy documents: inequality / ``not-in`` / ``!=`` exclude docs missing the
-    field, while ``== None`` only matches an explicit null — not a missing field.
-    Missing ``user_review`` and missing ``invalid_at`` both mean "still visible"
-    (see #4498). Closest safe query: omit those predicates and filter here.
-    """
-    return memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
-
-
-def _memory_list_sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
-    value = memory.get('updated_at') or memory.get('created_at')
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            value = None
-    if not isinstance(value, datetime):
-        timestamp = float('-inf')
-    else:
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        timestamp = value.timestamp()
-    return (-timestamp, str(memory.get('id') or ''))
-
-
 def _stream_memory_list_index_window(
     memories_ref: Any,
     order_field: str,
     candidate_limit: int,
     *,
     budget: Optional[ListReadBudget] = None,
+    cursor_snapshot: Any = None,
 ) -> List[Any]:
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
+    if cursor_snapshot is not None:
+        query = query.start_after(cursor_snapshot)
     return budgeted_stream_list(query.limit(candidate_limit), budget)
 
 
@@ -445,21 +422,10 @@ def _merge_memory_list_index_docs(
     *,
     include_invalidated: bool,
 ) -> List[Dict[str, Any]]:
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for doc in candidate_docs:
-        payload = _typed_doc(doc)
-        doc_id = getattr(doc, 'id', None) or payload.get('id')
-        if not isinstance(doc_id, str) or not doc_id:
-            continue
-        payload.setdefault('id', doc_id)
-        by_id.setdefault(doc_id, payload)
-    return sorted(
-        (
-            memory
-            for memory in by_id.values()
-            if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
-        ),
-        key=_memory_list_sort_key,
+    return merge_memory_list_index_docs(
+        candidate_docs,
+        include_invalidated=include_invalidated,
+        typed_doc=_typed_doc,
     )
 
 
@@ -474,19 +440,24 @@ def list_memory_updated_or_created_index(
     *,
     firestore_client: Any = None,
     budget: Optional[ListReadBudget] = None,
+    index_state: Optional[MemoryListIndexState] = None,
 ) -> List[Dict[str, Any]]:
     """Newest-first historical index rows without content or decrypt.
 
     Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
     documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
     returns the requested slice. A window that hidden rows leave short of
-    ``limit+offset`` visible rows is re-read at double size, by at most the
+    ``limit+offset`` visible rows grows to double size via snapshot seeks, by at most the
     scoring scan's flat slack beyond the rows the page needs.
     Callers hydrate only the page they will emit.
     With a ``budget`` both windows charge their fetched rows and each stream
     gets the budget's per-RPC timeout (#11831).
     """
     database = _get_db(firestore_client)
+    if index_state is not None:
+        if index_state.uid != uid or (index_state.client is not None and index_state.client is not database):
+            raise ValueError("Memory list index state cannot cross users or clients")
+        index_state.client = database
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
@@ -502,14 +473,56 @@ def list_memory_updated_or_created_index(
         # visible rows returns a short page that callers read as end-of-data, so grow it
         # until it holds the page, its order is exhausted, or it spends the flat slack.
         window_limit = candidate_limit
+        window_docs: List[Any] = []
+        # Date inequalities can normalize additional SDK order fields for a
+        # snapshot cursor. Preserve the released prefix query for those callers.
+        incremental = (
+            start_date is None
+            and end_date is None
+            and os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
+        )
         while True:
-            window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+            if incremental and index_state is not None and not categories:
+                retained = index_state.windows.setdefault(order_field, [])
+                if len(retained) < window_limit and order_field not in index_state.exhausted:
+                    batch_limit = window_limit - len(retained)
+                    batch = _stream_memory_list_index_window(
+                        memories_ref,
+                        order_field,
+                        batch_limit,
+                        budget=budget,
+                        cursor_snapshot=retained[-1] if retained else None,
+                    )
+                    retained.extend(batch)
+                    if len(batch) < batch_limit:
+                        index_state.exhausted.add(order_field)
+                # Preserve this round's exact prefix even when a previous
+                # hidden-row expansion retained more metadata.
+                window_docs = retained[:window_limit]
+                exhausted = len(window_docs) < window_limit
+            elif incremental:
+                # Retain each fetched prefix and seek after its last snapshot.
+                # Projection contains both ordering fields; snapshots also carry
+                # the implicit document-name tiebreaker used by Firestore.
+                batch_limit = window_limit - len(window_docs)
+                batch = _stream_memory_list_index_window(
+                    memories_ref,
+                    order_field,
+                    batch_limit,
+                    budget=budget,
+                    cursor_snapshot=window_docs[-1] if window_docs else None,
+                )
+                window_docs.extend(batch)
+                exhausted = len(batch) < batch_limit
+            else:
+                window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+                exhausted = len(window_docs) < window_limit
             visible = sum(
                 1
                 for doc in window_docs
                 if _memory_passes_list_visibility(_typed_doc(doc), include_invalidated=include_invalidated)
             )
-            if visible >= candidate_limit or len(window_docs) < window_limit or window_limit >= window_cap:
+            if visible >= candidate_limit or exhausted or window_limit >= window_cap:
                 break
             window_limit = min(window_limit * 2, window_cap)
         candidate_docs.extend(window_docs)
