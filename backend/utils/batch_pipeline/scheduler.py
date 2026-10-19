@@ -10,7 +10,7 @@ from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from config.batch_pipeline import scheduler_control_key
 from config.policy import resolve_batch_policy
-from database.batch_pipeline_policy import stage_in_transaction
+from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -379,11 +379,7 @@ class Scheduler:
             return None, bool(eligible_queues), observations
 
         receipt, eligible, observations = self.store.run(commit)
-        from config.policy.telemetry import record_policy_source
-
-        for event, value in observations:
-            if event in {'policy_fallback', 'policy_stage'}:
-                record_policy_source('fallback' if event == 'policy_fallback' else 'stage', value)
+        record_policy_observations(observations)
         # Only committed attempts emit telemetry; Firestore may retry callbacks.
         if self.metrics:
             for event, age in observations:
@@ -453,16 +449,15 @@ class Scheduler:
             raise ValueError('invalid padded retry evidence')
 
         candidates = {}
+        observations = []
 
         def commit(tx):
+            observations.clear()
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if (
-                quarantine
-                or worker_failure is not None
-                or job['attempt'] >= stage_in_transaction(tx, job, 'scheduler', candidates=candidates).max_attempts
-            ):
+            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])
@@ -489,6 +484,7 @@ class Scheduler:
             return job['state'], job['attempt'], job['duration_seconds']
 
         outcome = self.store.run(commit)
+        record_policy_observations(observations)
         if outcome:
             state, attempt, seconds = outcome
             if state == 'quarantined':

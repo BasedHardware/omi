@@ -1,7 +1,8 @@
 """Persist a unit's first fallback through a canonical sibling fence."""
 
 import logging
-from typing import Literal, overload
+from typing import Any, Literal, overload
+from collections.abc import Iterable
 
 from config.policy import (
     BatchUnitPolicy,
@@ -168,11 +169,16 @@ def load_stage_policy(store, segment_id, stage):
         return job, policy
 
     job, policy = store.run(commit)
+    record_policy_observations(observations)
+    return job, policy
+
+
+def record_policy_observations(observations: Iterable[tuple[str, Any]]) -> None:
     from config.policy.telemetry import record_policy_source
 
     for event, policy_id in observations:
-        record_policy_source('fallback' if event == 'policy_fallback' else 'stage', policy_id)
-    return job, policy
+        if event in {'policy_fallback', 'policy_stage'}:
+            record_policy_source('fallback' if event == 'policy_fallback' else 'stage', policy_id)
 
 
 def load_job_policy(store, segment_id: str):

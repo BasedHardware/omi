@@ -185,3 +185,26 @@ def test_first_summary_fallback_preserves_an_existing_admitted_deadline():
         obligation={'summary_deadline_at': 120},
     )
     assert part.first_summary_enabled
+
+
+def test_first_scheduler_failure_stamps_legacy_lease_and_emits_committed_fallback(monkeypatch):
+    from config.policy import telemetry
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    customer = CustomerData()
+    customer.add_user('owner')
+    store = SimStore(customer)
+    queue = Scheduler(store)
+    queue.enqueue(WorkItem('old', 'owner', 1, 'sim://audio', 1, Priority.FRESH), 1)
+    lease = queue.pull(2)[0]
+    row = store.rows[('jobs', 'old')]
+    row.pop('policy')
+    row.pop('policy_parts')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    events = []
+    monkeypatch.setattr(telemetry, 'record_policy_source', lambda source, *_: events.append(source))
+    assert queue.fail('old', lease.token, 3, quarantine=True)
+    row = store.get('jobs', 'old')
+    assert row['policy_parts']['scheduler']['max_attempts'] == 2
+    assert row['policy_source'] == 'fallback' and events == ['fallback', 'stage']

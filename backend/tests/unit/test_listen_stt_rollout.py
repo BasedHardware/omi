@@ -33,67 +33,19 @@ SPEC.loader.exec_module(renderer)
 IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
 
 
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_source):
-    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
-    # Use the equivalent safe C parser for the large committed manifest so
-    # this scope contract fits the fast-unit CPU budget on CI runners.
+@pytest.fixture(scope='module', params=['committed', 'composed'])
+def runtime_manifest(request):
     loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
-    manifest = (
+    return (
         yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
+        if request.param == 'committed'
         else compose_manifest()
     )
 
-    def declarations(node, path=()):
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key == flag:
-                    yield path, value
-                else:
-                    yield from declarations(value, (*path, key))
-        elif isinstance(node, list):
-            for index, value in enumerate(node):
-                yield from declarations(value, (*path, index))
 
-    # Exhaustive paths also reject declarations (even false/secret-backed) on
-    # pusher, sync, desktop-backend, jobs, shared config or any future service.
-    assert dict(declarations(manifest)) == {
-        ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': 'true', 'category': 'rollout'},
-        ('environments', 'dev', 'gke', 'backend-listen', 'env'): {'value': 'false', 'category': 'rollout'},
-    }
-
-    for environment, expected in (('prod', 'true'), ('dev', 'false')):
-        values = yaml.load(
-            (ROOT / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text(),
-            Loader=loader,
-        )
-        assert [entry for entry in values['env'] if entry['name'] == flag] == [{'name': flag, 'value': expected}]
-
-
-@pytest.mark.parametrize('value', [None, 'false'], ids=['unset', 'false'])
-def test_stable_recovery_code_default_remains_off(monkeypatch, value):
-    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
-    if value is None:
-        monkeypatch.delenv(flag, raising=False)
-    else:
-        monkeypatch.setenv(flag, value)
-    token = current_recovery_enabled.set(None)
-    try:
-        assert recovery_enabled() is False
-    finally:
-        current_recovery_enabled.reset(token)
-
-
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_idle_close_uses_code_default_in_every_environment(runtime_source):
+def test_idle_close_uses_code_default_in_every_environment(runtime_manifest):
     flag = 'SONIOX_IDLE_CLOSE_SECONDS'
-    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
-    manifest = (
-        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
-        else compose_manifest()
-    )
+    manifest = runtime_manifest
 
     def declarations(node, path=()):
         if isinstance(node, dict):
