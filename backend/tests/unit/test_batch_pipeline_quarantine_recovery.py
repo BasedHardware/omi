@@ -893,7 +893,11 @@ def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monke
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     intent = deepcopy(row(client)['recovery'])
     clock[0] = 200.0
-    recovery.delivered('bad', 'held')  # Delivered, but e.g. allowance refused the start.
+    name = enqueue.call_args.args[2]
+    recovery.delivered('bad', 'held')  # An unnamed (legacy) delivery changes nothing.
+    assert row(client)['recovery_wake']['until'] == 700.0
+    # Delivered, but e.g. allowance refused the start: Cloud Tasks names the wake.
+    recovery.delivered('bad', 'held', f'projects/p/locations/l/queues/q/tasks/{name}')
     assert row(client)['recovery_wake']['until'] == 320.0
     clock[0] = 300.0
     assert recovery.dispatch('bad', binding.owner_id) == 'pending'
@@ -901,7 +905,7 @@ def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monke
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     assert enqueue.call_count == 2
     assert row(client)['recovery'] == intent
-    recovery.delivered('bad', 'recovered')  # Only a held delivery shortens a lease.
+    recovery.delivered('bad', 'recovered', enqueue.call_args.args[2])  # Only held shortens.
     assert row(client)['recovery_wake']['until'] == 921.0
     stt.assert_not_called()
 
@@ -941,3 +945,80 @@ def test_recovery_wake_lease_config_is_bounded(monkeypatch, value, expected):
     if value is not None:
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', value)
     assert recovery_wake_lease_seconds() == expected
+
+
+def test_enqueue_failure_rearms_the_former_cadence_instead_of_the_full_lease(setup, monkeypatch):
+    module, _ = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setattr(module, 'enqueue_named_task', Mock(side_effect=RuntimeError('synthetic rejected task')))
+    recovery.recover = Mock(return_value='held')  # Inline fallback could not start either.
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert row(client)['recovery_wake']['until'] == 100 + 120
+    stt.assert_not_called()
+
+
+def test_stack_harness_accepts_leased_and_legacy_wake_names():
+    from testing.sync_cloud_tasks_stack.cloud_tasks import _RECOVERY_TASK_ID
+
+    prefix = 'bpr-prod-' + 'a' * 64 + '-' + 'b' * 32
+    assert _RECOVERY_TASK_ID.fullmatch(prefix + '-w1')
+    assert _RECOVERY_TASK_ID.fullmatch(prefix + '-15000000')
+    assert not _RECOVERY_TASK_ID.fullmatch(prefix + '-wx')
+
+
+def test_stale_held_delivery_never_shortens_a_newer_wake(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    first = enqueue.call_args.args[2]
+    clock[0] = 701.0  # w1 is delayed past its lease; the sweep repairs with w2.
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert row(client)['recovery_wake']['seq'] == 2
+    clock[0] = 750.0
+    recovery.delivered('bad', 'held', first)  # The late w1 delivery is held.
+    assert row(client)['recovery_wake']['until'] == 1301.0
+    clock[0] = 900.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'  # w2 is still outstanding.
+    assert enqueue.call_count == 2
+    stt.assert_not_called()
+
+
+def test_wake_shortening_keeps_the_privacy_fence(setup, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    before = deepcopy(row(client)['recovery_wake'])
+    client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    with pytest.raises(BatchPrivacyBlocked):
+        recovery.delivered('bad', 'held', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake'] == before
+
+
+def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+
+    module, enqueue = _wake_env(monkeypatch)
+    client, store, binding, _, stt, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    monkeypatch.setattr(module, 'sync_allowed', lambda *args: False)  # Allowance refuses the start.
+    service = Serving(store, recovery=recovery)
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_worker] = lambda: 0
+    response = TestClient(app).post(
+        '/v2/batch-pipeline/recover-quarantine',
+        json={'stage': 'prod', 'segment_id': 'bad'},
+        headers={'X-CloudTasks-TaskName': f'projects/p/locations/l/queues/q/tasks/{enqueue.call_args.args[2]}'},
+    )
+    assert response.json() == {'status': 'held'}
+    assert row(client)['recovery_wake']['until'] == 100 + 120
+    stt.assert_not_called()

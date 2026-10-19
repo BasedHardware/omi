@@ -406,13 +406,13 @@ class Simulation:
                 self.counters['recovery_duplicate_deliveries'] += 1
             loop.call_later(
                 self.config.task_hop_seconds * (1 + n),
-                lambda sid=payload['segment_id']: loop.create_task(
-                    self.revision.request('recover-quarantine', self._recover_handler(sid))
+                lambda sid=payload['segment_id'], tid=task_id: loop.create_task(
+                    self.revision.request('recover-quarantine', self._recover_handler(sid, tid))
                 ),
             )
         return None
 
-    async def _recover_handler(self, segment_id: str) -> str:
+    async def _recover_handler(self, segment_id: str, task_id: str | None = None) -> str:
         """Mirrors routers/batch_pipeline.recover_quarantine (request-scoped paid STT)."""
         job = self.store.get('jobs', segment_id)
         if not job:
@@ -421,6 +421,11 @@ class Simulation:
             await self.modulate.occupy(job['duration_seconds'])
         outcome = self.recovery.recover(segment_id, job['owner_id'])
         self.counters[f'recovery_{outcome}'] += 1
+        if outcome == 'held':
+            try:  # Mirrors the handler's held re-arm, including its swallowed fence errors.
+                self.recovery.delivered(segment_id, outcome, task_id)
+            except Exception:
+                pass
         if outcome in {'recovered', 'reconciled'}:
             self.serving.reconcile()
         return outcome

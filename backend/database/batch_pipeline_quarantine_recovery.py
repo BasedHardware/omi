@@ -133,16 +133,20 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def shorten_wake(self, segment_id, now, rewake_seconds):
-        """A delivered wake that left the intent prepared may be re-woken soon."""
+    def shorten_wake(self, segment_id, seq, now, rewake_seconds):
+        """Re-arm sooner after wake ``seq`` was delivered (or failed to enqueue)
+        and left the intent prepared. Only that same wake is shortened, so a stale
+        delivery never cuts the lease of a newer outstanding wake."""
 
         def commit(tx):
-            job = tx.get('jobs', segment_id)
-            wake = job.get('recovery_wake') if job else None
+            job, _ = self.checked(tx, segment_id)
+            wake = job.get('recovery_wake')
             if (
                 not wake
+                or job.get('state') != 'quarantined'
                 or job.get('recovery_state') != 'prepared'
                 or wake.get('token') != job.get('recovery', {}).get('token')
+                or wake.get('seq') != seq
                 or wake.get('until', 0) <= now + rewake_seconds
             ):
                 return False

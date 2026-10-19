@@ -3,6 +3,7 @@
 from dataclasses import fields
 import hashlib
 import os
+import re
 from urllib.parse import urlsplit
 import io
 import logging
@@ -334,20 +335,32 @@ class QuarantineRecovery:
         else:
             # Kill switch: legacy time-bucketed wake on every sweep.
             task_id = f'bpr-{current_stage()}-{digest}-{token}-{int(self.clock() // 120)}'
-        enqueue_named_task(
-            os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
-            audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
-            task_id,
-            {'stage': current_stage(), 'segment_id': segment_id},
-            audience=audience,
-            invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
-        )
+        try:
+            enqueue_named_task(
+                os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
+                audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
+                task_id,
+                {'stage': current_stage(), 'segment_id': segment_id},
+                audience=audience,
+                invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
+            )
+        except Exception:
+            # The task may not exist. If the inline fallback leaves the intent
+            # prepared, re-wake on the 120s cadence rather than the full lease.
+            if lease:
+                try:
+                    self.protocol.shorten_wake(segment_id, seq, self.clock(), REWAKE_AFTER_HELD_SECONDS)
+                except Exception:
+                    pass
+            raise
         return 'queued'
 
-    def delivered(self, segment_id, outcome):
-        """A task delivery that left the intent prepared re-arms the legacy cadence."""
-        if outcome == 'held' and recovery_wake_lease_seconds():
-            self.protocol.shorten_wake(segment_id, self.clock(), REWAKE_AFTER_HELD_SECONDS)
+    def delivered(self, segment_id, outcome, task_name=None):
+        """A delivery of wake ``-w<seq>`` that left the intent prepared re-arms the
+        120s cadence for that wake only. Legacy or unnamed deliveries change nothing."""
+        match = re.search(r'-w([0-9]{1,9})$', str(task_name or '').rsplit('/', 1)[-1])
+        if outcome == 'held' and match and recovery_wake_lease_seconds():
+            self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
 
     def sweep(self):
         counts = {}

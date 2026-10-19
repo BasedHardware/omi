@@ -337,8 +337,9 @@ Each prepared intent has at most one outstanding wake task: the sweep leases a
 wake (`recovery_wake`, default 600s, `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`)
 and names the task by intent token and wake sequence, so a backlog no longer
 adds a new task per unit on every sweep. An expired lease repairs an exhausted or
-lost task with the next sequence; a delivery that leaves the intent prepared
-re-arms a 120-second wake. `0` restores the legacy two-minute wake-name
+lost task with the next sequence; a delivery of that same wake that leaves the
+intent prepared, or a failed enqueue, re-arms a 120-second wake, and a stale
+delivery never shortens a newer wake. `0` restores the legacy two-minute wake-name
 generation on every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token
 fences apply to every delivery, including duplicates and admission rollback.
 
