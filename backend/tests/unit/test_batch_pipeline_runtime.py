@@ -307,3 +307,15 @@ def test_cap_audio_counter_is_exported_by_the_worker_metrics_registry(monkeypatc
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [(None, None), ('', None), ('4', 4.0), ('0', 0.0), ('61', None), ('-1', None), ('soon', None)],
+)
+def test_release_on_stop_budget_defaults_to_full_drain(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv('BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS', raw)
+    assert runtime.release_on_stop_seconds() == expected

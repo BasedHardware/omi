@@ -105,6 +105,18 @@ worker requirement below. The image puts GKE's `/usr/local/nvidia/bin` on
 retaining `/usr/lib/x86_64-linux-gnu` for system libraries. The pinned torch
 wheels supply CUDA userspace; the host mount supplies `libcuda.so.1`.
 
+Spot overflow (`spot.enabled`, default off) renders a second Deployment,
+`<release>-spot`, on a separate operator-created Spot L4 pool (same labels and
+taints plus `cloud.google.com/gke-spot=true:NoSchedule`). The on-demand
+Deployment keeps its name, selector and full-flight SIGTERM drain, and is sized
+to carry fresh work alone. GKE gives preempted regular pods about 15s, so Spot
+pods set `BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS`: after SIGTERM the pump waits
+that long for the in-flight GPU batch, then returns every owned lease through
+`Scheduler.defer` (no attempt charge, token cleared so the abandoned flight can
+never publish) and exits without joining the CUDA thread. A hard kill before
+that falls back to lease expiry (120s) and a charged retry. Paid quarantine
+recovery runs on the Cloud Run serving tier, not on these pods.
+
 The worker cannot be installed over the live
 embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.

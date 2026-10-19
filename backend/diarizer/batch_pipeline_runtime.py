@@ -26,7 +26,7 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
-from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.errors import FatalGpuError, PreemptedFlight
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import shutdown_executors
@@ -34,6 +34,21 @@ from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
 
 logger = logging.getLogger(__name__)
+
+
+def release_on_stop_seconds() -> float | None:
+    """Preemptible (Spot) pods get ~15s after SIGTERM; on-demand pods drain fully.
+
+    Unset or malformed keeps the on-demand behaviour: finish the whole flight.
+    """
+    raw = os.getenv('BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS', '').strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if 0 <= value <= 60 else None
 
 
 class RuntimeState:
@@ -171,6 +186,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds
             ),
+            release_on_stop_seconds=release_on_stop_seconds(),
         )
         await supervise(pump, state, stop_event)
     finally:
@@ -201,13 +217,22 @@ def main() -> None:
     state = RuntimeState()
     registry = CollectorRegistry()
     server = health_server(state, registry, int(os.getenv('PORT', '8080')))
+    preempted = False
     try:
         asyncio.run(run_process(store, artifacts, registry, state))
+    except PreemptedFlight:
+        # Leases are already returned uncharged. Do not let interpreter exit
+        # join the executor thread still running the abandoned CUDA flight.
+        preempted = True
     finally:
         state.stopping = True
         server.shutdown()
         server.server_close()
         shutdown_executors()
+    if preempted:
+        logger.warning('event=batch_worker outcome=preempted_exit')
+        logging.shutdown()
+        os._exit(0)
 
 
 if __name__ == '__main__':

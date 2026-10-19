@@ -62,3 +62,25 @@ autoscaling:
     deep: 3600
 podMonitoring:
   enabled: true
+# Spot L4 overflow beside the on-demand baseline above. Off until an operator
+# creates the Spot pool (labels service/env as above, taints nvidia.com/gpu,
+# omi.ai/batch-pipeline and cloud.google.com/gke-spot) and David approves the
+# pool-type change. Every worker pulls every priority; the on-demand
+# replicaCount is sized to carry fresh work alone when all Spot is reclaimed.
+spot:
+  enabled: false
+  nodePool: batch-pipeline-spot-pool
+  replicaCount: 1
+  # GKE gives regular pods 15s on preemption; a larger grace is not honoured.
+  terminationGracePeriodSeconds: 15
+  # Wait this long for the in-flight GPU batch after SIGTERM, then return its
+  # leases uncharged (<=5s of Firestore writes) and exit.
+  releaseOnStopSeconds: 4
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    # Overflow follows backlog age, not the 30s fresh target the baseline owns.
+    targets:
+      recent: 300
+      deep: 3600

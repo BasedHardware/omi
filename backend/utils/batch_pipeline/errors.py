@@ -28,3 +28,11 @@ def validate_worker_failure(failure):
 
 class FatalGpuError(RuntimeError):
     """GPU process must restart; never turn this flight into a segment failure."""
+
+
+class PreemptedFlight(RuntimeError):
+    """Stop arrived and the GPU flight could not finish inside the release budget.
+
+    Every lease this process still owned has been returned without an attempt
+    charge. The process must exit without publishing the abandoned flight.
+    """
