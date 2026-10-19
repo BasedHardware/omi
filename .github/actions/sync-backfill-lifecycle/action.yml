@@ -49,7 +49,7 @@ inputs:
     required: false
     default: ''
   backfill_env_vars:
-    description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
+    description: Manifest-rendered backend-sync-backfill env overlay (worker env; platform and dispatch read its SYNC_BACKFILL_TASKS_QUEUE)
     required: false
     default: ''
   backfill_secrets:
@@ -91,13 +91,19 @@ runs:
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
+        # The manifest owns the live backfill queue (prod: sync-backfill-fresh since the 10-19
+        # 04:52Z stall); sync-backfill is only the default when the manifest declares none.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"
-          echo "SYNC_BACKFILL_TASKS_QUEUE=sync-backfill"
+          echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"
           echo "SYNC_BACKFILL_TASKS_HANDLER_URL=${URL}/v2/sync-jobs/run"
           echo "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${URL}/v2/sync-jobs/run"
           echo "EOF"
@@ -109,8 +115,8 @@ runs:
       shell: bash
       env:
         ENV_OVERLAY: |-
-          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_QUEUE=sync-backfill
+          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
@@ -243,8 +249,13 @@ runs:
       shell: bash
       env:
         BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
+        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
+        # retired sync-backfill queue is left as it is.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
         # The 15/s rate caps starts, not in-flight work; the concurrency limit below
         # independently prevents dispatch beyond worker capacity, including bursts.
@@ -259,22 +270,42 @@ runs:
         # sizing that compounded until queued recordings were scheduled almost
         # a day out. The bounded backoff keeps a transient rejection from
         # stranding a recording for hours.
-        if gcloud tasks queues describe sync-backfill --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
-          gcloud tasks queues update sync-backfill \
+        # --max-attempts must mirror utils/cloud_tasks.py
+        # get_sync_tasks_max_attempts() (default 5): omitted queue fields keep
+        # Google's default of 100, so a handler-budget deferral chain that has
+        # spent its attempt contract and ended through the 409 would keep
+        # retrying long after the preserved run lock expired, re-running
+        # whole-budget pipelines the code-side bound already gave up on.
+        if gcloud tasks queues describe "$BACKFILL_QUEUE" --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         else
-          gcloud tasks queues create sync-backfill \
+          gcloud tasks queues create "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
+        fi
+        # The fresh lane and the fallback route in _enqueue_sync_job_routed
+        # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
+        # throughput limits another team owns; update-only reconciliation
+        # here still caps attempts so a deferral chain ended through the 409
+        # cannot outlive the code-side contract the same way. Without this
+        # the queue keeps Google's default of 100 attempts.
+        if gcloud tasks queues describe sync-jobs --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update sync-jobs \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-attempts=5
         fi
 
     - name: Reconcile backfill UID sequencer sweep

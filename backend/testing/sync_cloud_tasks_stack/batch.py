@@ -384,6 +384,7 @@ class BatchStack(Stack):
                 headers={
                     'Authorization': f'Bearer {local_oidc_token(SERVING_ORIGIN, LOCAL_INVOKER_SA)}',
                     'X-CloudTasks-TaskRetryCount': str(retry_count),
+                    'X-CloudTasks-TaskName': str(task.get('task_id') or ''),
                 },
             )
         _record_job_event(

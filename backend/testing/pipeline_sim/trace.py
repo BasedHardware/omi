@@ -137,9 +137,9 @@ class _Recorder:
         sim.store.delete = recorded_delete  # instance attribute; purge() resolves it through self
         handler = sim._recover_handler
 
-        async def recorded_handler(segment_id: str) -> str:
+        async def recorded_handler(segment_id: str, task_id: str | None = None) -> str:
             try:
-                outcome = await handler(segment_id)
+                outcome = await handler(segment_id, task_id)
             except asyncio.CancelledError:
                 # Only the end of the run cancels a delivery (request-scoped work survives revision drain).
                 self.responses.setdefault(segment_id, []).append('unfinished_at_end')

@@ -78,6 +78,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -208,6 +212,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -258,8 +266,7 @@
    "owner": "owner-1",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
-    "held"
+    "recovered"
    ],
    "result_artifact": {
     "audio_seconds": 447.66,
@@ -339,6 +346,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -479,6 +490,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -548,9 +563,8 @@
  "totals": {
   "counters": {
    "asr_error": 20,
-   "recovery_held": 1,
    "recovery_recovered": 4,
-   "recovery_tasks_enqueued": 5
+   "recovery_tasks_enqueued": 4
   },
   "job_states": {
    "committed": 4
@@ -565,7 +579,7 @@
   "revision_drain": {
    "fire_and_forget:completed": 2,
    "fire_and_forget:stopped_at_horizon": 1,
-   "request_scoped:completed": 5
+   "request_scoped:completed": 4
   }
  },
  "uploads": [
