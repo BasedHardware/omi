@@ -20,6 +20,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
 
 import '../fakes.dart';
@@ -266,6 +268,46 @@ final offlineProcessingScenarios = <AuditScenario>[
       expect(find.text('On the Way'), findsOneWidget);
       expect(find.text('Sync details'), findsOneWidget);
       await a.shot('Open the pending row');
+    },
+  ),
+  AuditScenario(
+    id: 'on-the-way-server-work',
+    title: 'On the Way: work the phone did not start',
+    page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
+    state: 'No local recordings pending; the server reports one conversation summarizing and one '
+        'sync job transcribing (the state Home’s row draws for)',
+    run: (a) async {
+      final sync = _SyncAuditProvider();
+      final store = PendingWorkStore(
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: [
+          PendingWorkItem(
+            id: 'conv:a',
+            kind: 'conversation',
+            state: 'summarizing',
+            conversationIds: const ['a'],
+            startedAt: _at(0, 18, 41),
+            durationSeconds: 14 * 60,
+          ),
+          const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+        ])),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+      );
+      await a.tester.runAsync(store.refresh);
+      // Seeded through the app singleton so the same scenario renders on a revision whose page does
+      // not take the store yet (the before side).
+      final previous = PendingWorkStore.instance;
+      PendingWorkStore.instance = store;
+      try {
+        await a.pump(
+          OnTheWayPage(syncProvider: sync, multiFileSync: true),
+          scaffold: false,
+          providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
+        );
+        expect(find.text('On the Way'), findsOneWidget);
+        await a.shot('Open the pending row while only the server has work');
+      } finally {
+        PendingWorkStore.instance = previous;
+      }
     },
   ),
   AuditScenario(

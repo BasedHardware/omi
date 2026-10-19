@@ -187,12 +187,57 @@ jobs:
                 with self.assertRaisesRegex(ValueError, expected):
                     self.target()
 
+    def test_candidate_acceptance_path_is_strict_and_defaults_to_root(self) -> None:
+        self.assertEqual(self.target().candidate_acceptance.path, "/")
+        for candidate_path in (
+            "login",
+            "//example.com",
+            "https://example.com/login",
+            "/login?next=/admin",
+            "/login#section",
+            "/login with space",
+            "/login\\admin",
+            "/登录",
+        ):
+            with self.subTest(path=candidate_path):
+                contract = fixture_contract()
+                contract["targets"]["fake"]["candidate_acceptance"]["path"] = candidate_path
+                self.write_json("config/public-build-contract.json", contract)
+                with self.assertRaisesRegex(ValueError, "candidate_acceptance.path"):
+                    self.target()
+
+    def test_browser_smoke_joins_candidate_path_and_root_default_in_browser_argv(self) -> None:
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["path"] = "/login"
+        self.write_json("config/public-build-contract.json", contract)
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual(run.call_args.args[0][-1], "https://candidate.example/login")
+
+        self.write_json("config/public-build-contract.json", fixture_contract())
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual(run.call_args.args[0][-1], "https://candidate.example/")
+
     def test_shipped_targets_use_requested_app_timeout_and_default_frontend_timeout(self) -> None:
         contract = STATIC.load_contract(STATIC.DEFAULT_CONTRACT)
         app = contract.targets["app"].candidate_acceptance
         frontend = contract.targets["frontend"].candidate_acceptance
         self.assertEqual((app.timeout_seconds, app.retry_timeout_seconds), (120, 60))
         self.assertEqual((frontend.timeout_seconds, frontend.retry_timeout_seconds), (45, 19))
+        self.assertEqual(app.path, "/login")
+        self.assertEqual(frontend.path, "/")
 
     def test_manual_development_dispatch_on_an_exact_pr_head_uses_development(self) -> None:
         self.assertEqual(
