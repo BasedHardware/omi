@@ -171,18 +171,33 @@ class BatchStack(Stack):
         ]
         self._start_with(self.serving_name, command, 'batch-serving', {})
 
-    def start_worker(self) -> None:
+    def start_worker(self, extra: dict[str, str] | None = None) -> None:
+        self.worker_name = self._spawn_worker(extra)
+
+    def start_peer_worker(self, extra: dict[str, str] | None = None) -> str:
+        """A second concurrent replica; ``worker_name`` keeps naming the primary."""
+        return self._spawn_worker(extra)
+
+    def _spawn_worker(self, extra: dict[str, str] | None = None) -> str:
         self.worker_generation += 1
-        self.worker_name = f'batch-worker-{self.worker_generation}'
+        name = f'batch-worker-{self.worker_generation}'
         command = [str(PYTHON), '-m', 'testing.sync_cloud_tasks_stack.batch_worker']
-        self._start_with(self.worker_name, command, 'batch-worker', {'OMI_BATCH_STACK_WORKER_NAME': self.worker_name})
+        self._start_with(name, command, 'batch-worker', {**(extra or {}), 'OMI_BATCH_STACK_WORKER_NAME': name})
+        return name
+
+    def stop_worker(self, name: str) -> None:
+        self.signal(name, signal.SIGTERM)
+        if self.wait_exit(name, timeout=30.0) is None:
+            self.signal(name, signal.SIGKILL)
+            self.wait_exit(name, timeout=10.0)
+        self.forget(name)
 
     def wait_serving(self) -> None:
         _wait_for_port(self.serving_port, label='batch serving', timeout=120.0)
         self._assert_health(self.serving_url, role='batch-serving')
 
-    def wait_worker(self) -> None:
-        name = self.worker_name
+    def wait_worker(self, name: str | None = None) -> None:
+        name = name or self.worker_name
 
         def ready() -> bool:
             child = self.children.get(name)
@@ -927,6 +942,145 @@ def _burst_drain(stack: BatchStack) -> None:
     )
 
 
+def _unit_states(stack: BatchStack, uploads: list[Upload]) -> list[dict[str, Any]]:
+    """Sanitized durable states for diagnosing a stuck drain (no owner IDs)."""
+    rows = []
+    for upload in uploads:
+        for segment in upload.segment_ids:
+            job, result = stack.doc('jobs', segment), stack.doc('results', segment)
+            rows.append(
+                {
+                    'job': upload.job_id[:11],
+                    'segment': segment[:8],
+                    'owner_hash': _owner_hash(upload.uid),
+                    'state': job.get('state'),
+                    'attempt': job.get('attempt'),
+                    'merge_pending': job.get('merge_pending'),
+                    'log_sequence': result.get('log_sequence'),
+                    'previous': (result.get('previous_segment_id') or '')[:8],
+                    'projection_state': result.get('projection_state'),
+                    'failure': job.get('failure'),
+                    'fence': _fence_reason(
+                        stack, upload.uid, job.get('conversation_id'), job.get('privacy_generation')
+                    ),
+                }
+            )
+    return rows
+
+
+def _fence_reason(stack: BatchStack, uid: str, conversation_id: str | None, generation: int | None) -> str:
+    from google.cloud import firestore
+
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+
+    @firestore.transactional
+    def check(transaction):
+        return assert_batch_write_allowed(
+            stack.firestore,
+            transaction,
+            uid,
+            conversation_ids=(conversation_id,) if conversation_id else (),
+            expected_generation=generation,
+        )
+
+    try:
+        return f'open:{check(stack.firestore.transaction())}'
+    except BatchPrivacyBlocked as error:
+        return f'blocked:{error.reason.value}'
+
+
+# Prod keeps a 120s lease renewed every 20s. The emulator holds a
+# collection-wide lock for every transactional query, so two replicas plus
+# serving can stall one heartbeat for seconds; the 8s/2s compression used by
+# the kill scenario would then expire healthy leases (result_lease_lost). Keep
+# prod's 6:1 lease/heartbeat ratio at a scale the emulator can honour.
+TWO_WORKER_TIMING = {'OMI_BATCH_STACK_LEASE_SECONDS': '60', 'OMI_BATCH_STACK_HEARTBEAT_SECONDS': '10'}
+
+
+def _two_workers(stack: BatchStack) -> None:
+    """Two worker replicas drain one queue: once-only, capture order, one paid call."""
+    stack.stop_worker(stack.worker_name)
+    stack.start_worker(TWO_WORKER_TIMING)
+    peer = stack.start_peer_worker(TWO_WORKER_TIMING)
+    stack.wait_worker()
+    stack.wait_worker(peer)
+    try:
+        uid = stack.scenario_uid('batch-two-workers-burst')
+        started = time.monotonic()
+        burst = [_upload(stack, 'batch-two-workers-burst', uid=uid, latency_ms=2500) for _ in range(3)]
+        solos = [_upload(stack, f'batch-two-workers-solo-{n}', latency_ms=2500) for n in range(2)]
+        empty = _upload(stack, 'batch-two-workers-empty', words='empty')
+        for upload in [*burst, *solos]:
+            try:
+                _drive_to_status(stack, upload, 'completed', timeout=120.0)
+            except StackFailure:
+                _record_job_event({'event': 'batch_two_workers_stuck', 'units': _unit_states(stack, [*burst, *solos])})
+                raise
+        drain_ms = int((time.monotonic() - started) * 1000)
+        segments = [segment for upload in [*burst, *solos] for segment in upload.segment_ids]
+        events = stack.evidence_events('providers')
+        starts = [e for e in events if e.get('event') == 'worker_item_started' and e.get('segment_id') in segments]
+        results = [e for e in events if e.get('event') == 'worker_item_result' and e.get('segment_id') in segments]
+        workers = {e.get('worker_name') for e in starts}
+        if workers != {stack.worker_name, peer}:
+            raise StackFailure(f'expected both replicas to drain work, saw {sorted(map(str, workers))}')
+        for segment in segments:
+            if stack.words_calls(segment) != 1 or sum(e['segment_id'] == segment for e in results) != 1:
+                raise StackFailure('a segment was computed or completed more than once across replicas')
+            if stack.doc('jobs', segment).get('state') != 'committed':
+                raise StackFailure('a two-replica segment did not reach the committed result log')
+        chain = sorted(
+            (stack.doc('results', upload.segment_ids[0]) for upload in burst), key=lambda entry: entry['log_sequence']
+        )
+        # Capture order is (capture_at, segment_id); second-resolution capture
+        # names can tie, so upload order alone is not the commit contract.
+        expected = sorted((entry['capture_at'], entry['segment_id']) for entry in chain)
+        expected = [segment for _, segment in expected]
+        if [entry['segment_id'] for entry in chain] != expected:
+            raise StackFailure('two-replica burst was committed out of capture order')
+        if [entry['previous_segment_id'] for entry in chain[1:]] != expected[:-1]:
+            raise StackFailure('two-replica burst result log has a broken predecessor chain')
+        if any(entry.get('late_capture') for entry in chain):
+            raise StackFailure('two-replica burst marked an in-order capture late')
+
+        # Reconciles while the other captures drained may already have
+        # prepared this unit's recovery intent; accept either held state.
+        _wait_job(
+            stack,
+            empty,
+            lambda job: job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared'},
+            label='two-replica empty-ASR quarantine',
+            timeout=60.0,
+        )
+        task = _await_recovery_task(stack, empty)
+        for retry in range(2):
+            delivered = stack.deliver_recovery(task, retry_count=retry)
+            if delivered.status_code != 200:
+                raise StackFailure(f'two-replica recovery delivery returned HTTP {delivered.status_code}')
+        _drive_to_status(stack, empty, 'completed')
+        if stack.paid_calls(empty.pcm_digest) != 1:
+            raise StackFailure('two replicas produced other than exactly one paid recovery call')
+        _record_job_event(
+            {
+                'event': 'batch_two_workers_verified',
+                'segments': len(segments),
+                'replicas': len(workers),
+                'per_replica': {
+                    'primary': sum(e.get('worker_name') == stack.worker_name for e in starts),
+                    'peer': sum(e.get('worker_name') == peer for e in starts),
+                },
+                'drain_ms': drain_ms,
+                'paid_calls': 1,
+            }
+        )
+    finally:
+        stack.stop_worker(peer)
+        # Later scenarios expect one primary with the default compressed lease.
+        stack.stop_worker(stack.worker_name)
+        stack.start_worker()
+        stack.wait_worker()
+
+
 SCENARIOS: tuple[tuple[str, Callable[[BatchStack], None]], ...] = (
     ('batch-happy', _happy_path),
     ('batch-empty-asr-recovery', _empty_asr_recovery),
@@ -937,6 +1091,7 @@ SCENARIOS: tuple[tuple[str, Callable[[BatchStack], None]], ...] = (
     ('batch-serving-kill-paid-call', _serving_killed_mid_paid_call),
     ('batch-privacy-fence', _privacy_fenced),
     ('batch-burst', _burst_drain),
+    ('batch-two-workers', _two_workers),
 )
 
 
