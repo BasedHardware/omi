@@ -232,6 +232,47 @@ void main() {
     await sync.stop();
   });
 
+  test('StorageSync: clearing synced recordings never deletes by the index of a file the sync deleted', () async {
+    // Every read gets the same packets: device file 0 arrives whole, while file 1
+    // is twice as large, so its transfer is cut short and it stays pending.
+    final card = _FakeStorageDevice(
+      script: [
+        _dataPacket([40]),
+        [100],
+      ],
+    );
+    final local = _FakeLocalSync();
+    final transferred = storageWal()..fileNum = 0;
+    final pending = storageWal(totalBytes: 2 * 440)
+      ..fileNum = 1
+      ..timerStart = 1700000600;
+    final sync = storageSyncWith(local, card, transferred)..testWals = [transferred, pending];
+
+    await sync.syncAll();
+
+    expect(transferred.status, WalStatus.synced);
+    expect(card.deletes, [0]);
+    // The firmware re-indexed after that delete: the pending recording is file 0 now.
+    expect(card.writes, [
+      [0, 0x11, 0],
+      [0, 0x11, 0],
+    ]);
+    expect(pending.status, WalStatus.miss);
+    expect(pending.fileNum, 0);
+
+    // File 0 is the pending recording, so clearing synced recordings must not send a
+    // delete. A device delete goes through ServiceManager, which unit tests never
+    // start, so reaching the device would throw here.
+    await expectLater(sync.deleteAllSyncedWals(), completes);
+    expect(await sync.getMissingWals(), [pending]);
+
+    // Control: deleting the pending recording itself still reaches the device.
+    final reachedDevice = throwsA(predicate((e) => '$e'.contains('Service manager is not initiated')));
+    await expectLater(sync.deleteWal(pending), reachedDevice);
+    await card.controller.close();
+    await sync.stop();
+  });
+
   test('StorageSync: a device switch during persistence never issues DELETE on either connection', () async {
     final card = _FakeStorageDevice(
       script: [

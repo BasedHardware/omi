@@ -384,6 +384,12 @@ class StorageSyncImpl implements StorageSync {
           }
         }
 
+        // The recording is on the phone now, so it leaves the device list. After
+        // a delete the firmware re-indexes its files, so wal.fileNum then names
+        // another recording, which deleteAllSyncedWals would delete. A delete
+        // that timed out here can still finish on the device, so drop it either
+        // way; a file the device kept is listed again by the next refresh.
+        _wals = _wals.where((w) => !identical(w, wal)).toList();
         listener.onWalUpdated();
       }
     } catch (e) {
