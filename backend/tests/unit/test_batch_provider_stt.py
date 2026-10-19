@@ -33,19 +33,18 @@ JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
 
 
 @pytest.mark.parametrize(
-    'language,byok,expected',
+    'language,expected',
     [
-        ('en', False, ('parakeet', 'none', 'none', 'en')),
-        ('pt-BR', False, ('parakeet', 'none', 'none', 'pt')),
-        (None, False, ('parakeet', 'none', 'none', 'multi')),
-        ('', True, ('parakeet', 'byok', 'none', 'multi')),
-        ('en', True, ('parakeet', 'byok', 'none', 'en')),
-        ('ja', False, ('provider', 'unsupported_language', 'modulate', 'ja')),
-        ('zh_Hans', True, ('provider', 'unsupported_language', 'modulate', 'zh')),
+        ('en', ('parakeet', 'none', 'none', 'en')),
+        ('pt-BR', ('parakeet', 'none', 'none', 'pt')),
+        (None, ('parakeet', 'none', 'none', 'multi')),
+        ('', ('parakeet', 'none', 'none', 'multi')),
+        ('ja', ('provider', 'unsupported_language', 'modulate', 'ja')),
+        ('zh_Hans', ('provider', 'unsupported_language', 'modulate', 'zh')),
     ],
 )
-def test_route_is_decided_by_language_and_byok_never_changes_the_stt_route(language, byok, expected):
-    route = resolve_route(language, byok=byok)
+def test_route_is_decided_by_language_only(language, expected):
+    route = resolve_route(language)
     assert (route.stt_route, route.provider_reason, route.provider_service, route.language) == expected
 
 
@@ -92,6 +91,20 @@ class Artifacts:
 
     def load_result(self, item, uri):
         return self.results[uri]
+
+
+class Outbox:
+    """Records transactional enqueues; the row write itself is lane 9's (contract (b))."""
+
+    def __init__(self):
+        self.enqueued: list[tuple] = []
+
+    def enqueue(self, dedupe_key, owner_id, payload, available_at, *, tx=None, now):
+        assert tx is not None, 'provider rows must commit with their admission'
+        self.enqueued.append((dedupe_key, owner_id, dict(payload), available_at))
+        from database.outbox import EnqueueResult
+
+        return EnqueueResult(dedupe_key, False, f'wake-{dedupe_key}')
 
 
 class Vendor:
@@ -145,19 +158,12 @@ def item(segment_id, capture_at, *, compute=False):
 
 
 def admit(monkeypatch, store, items, content_id, route=None):
-    """The real admit() transaction with the admission ``enqueue`` hook lane 8 requests (design issue 2)."""
+    """The real admit() transaction with its ``enqueue`` hook."""
     binding = ProjectionBinding(
         OWNER, 'bp_' + content_id, content_id, tuple(i.segment_id for i in items), language='ja'
     )
-    if route is not None:
-        shim = type(
-            'ProviderScheduler', (), {'enqueue_in_transaction': staticmethod(provider_stt.provider_enqueue(route))}
-        )
-        monkeypatch.setattr(batch_pipeline_intake, 'Scheduler', shim)
-    try:
-        outcome = batch_pipeline_intake.admit(store, items, binding, 100.0, namespace=store.namespace)
-    finally:
-        monkeypatch.setattr(batch_pipeline_intake, 'Scheduler', Scheduler)
+    enqueue = provider_stt.provider_enqueue(route, Outbox(), {}) if route is not None else None
+    outcome = batch_pipeline_intake.admit(store, items, binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outcome['outcome'] == 'batch'
     return binding
 
@@ -193,10 +199,10 @@ def test_provider_unit_is_admitted_outside_the_gpu_ring(world, monkeypatch):
 def test_provider_enqueue_is_idempotent_and_immutable(world):
     _, store = world
     work = item('p1', 10)
-    enqueue = provider_stt.provider_enqueue(JA)
+    enqueue = provider_stt.provider_enqueue(JA, Outbox(), {})
     assert store.run(lambda tx: enqueue(tx, work, 100.0)) is True
     assert store.run(lambda tx: enqueue(tx, work, 101.0)) is False
-    other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'))
+    other = provider_stt.provider_enqueue(SttRoute('provider', 'unsupported_language', 'modulate', 'ko'), Outbox(), {})
     with pytest.raises(ValueError):
         store.run(lambda tx: other(tx, work, 102.0))
     with pytest.raises(ValueError):
@@ -230,8 +236,11 @@ def test_one_paid_call_then_result_ready_and_merge_in_capture_order(world, monke
     row = job(store, 'p1')
     assert row['state'] == 'result_ready' and row['result']['outcome'] == 'success'
     assert row['provider_intent']['service'] == 'modulate' and row['provider_intent']['settled_at'] == 200.0
-    assert merge.commit_next(OWNER, 201.0)['segment_id'] == 'p1'
-    assert merge.commit_next(OWNER, 202.0)['segment_id'] == 'g1'
+    provider_entry = merge.commit_next(OWNER, 201.0)
+    # Vendor speaker labels are used directly, so projection needs the recovered-result marker.
+    assert provider_entry['segment_id'] == 'p1' and provider_entry['recovery_version'] == 1
+    gpu_entry = merge.commit_next(OWNER, 202.0)
+    assert gpu_entry['segment_id'] == 'g1' and 'recovery_version' not in gpu_entry
 
     # A duplicate delivery after settlement never calls the vendor again.
     assert stage(store, artifacts, vendor).run('p1').reason == 'superseded'
@@ -386,10 +395,313 @@ def test_provider_golden_is_pinned_by_the_simulation(name):
 
 
 @pytest.mark.parametrize('language', ['', 'multi', 'en', 'pt', 'uk', 'ja', 'ko', 'zh', 'sw', 'xx'])
-@pytest.mark.parametrize('byok', [False, True])
-def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language, byok):
+def test_intake_fallback_condition_is_unchanged_at_legacy_sync_on(language):
     from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 
     before = language not in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
-    after = resolve_route(language, byok=byok).stt_route == 'provider' or language in {'', 'multi'}
+    after = resolve_route(language).stt_route == 'provider' or language in {'', 'multi'}
     assert before == after
+
+
+# --- admit() hooks --------------------------------------------------------------------------------
+
+
+def test_provider_enqueue_writes_the_outbox_row_in_the_admission_transaction(world):
+    _, store = world
+    outbox, wakes = Outbox(), {}
+    binding = ProjectionBinding(OWNER, 'bp_content-p', 'content-p', ('p1',))
+    enqueue = provider_stt.provider_enqueue(JA, outbox, wakes)
+    batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 100.0, namespace=store.namespace, enqueue=enqueue)
+    assert outbox.enqueued == [('p1', OWNER, {'segment_id': 'p1'}, 100.0)]
+    assert wakes == {'p1': 'wake-p1'}
+    # A retried upload finds the batch ledger and enqueues nothing new.
+    batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 101.0, namespace=store.namespace, enqueue=enqueue)
+    assert len(outbox.enqueued) == 1
+
+
+def _stranded(store, row):
+    store.run(lambda tx: tx.put('content', f'{OWNER}/content-s', row))
+
+
+def test_admit_adopts_only_what_the_hook_re_validates(world):
+    from utils.batch_pipeline.intake import stranded_adopter
+
+    _, store = world
+    stranded = {'status': 'retryable', 'job_id': 'legacy-1'}
+    _stranded(store, stranded)
+    binding = ProjectionBinding(OWNER, 'bp_content-s', 'content-s', ('s1',))
+    work = item('s1', 10, compute=True)
+    assert batch_pipeline_intake.admit(store, [work], binding, 100.0, namespace=store.namespace)['outcome'] == 'busy'
+    # The row changed after the caller classified it: no takeover.
+    changed = stranded_adopter({**stranded, 'job_id': 'legacy-0'})
+    outcome = batch_pipeline_intake.admit(store, [work], binding, 100.0, namespace=store.namespace, adopt=changed)
+    assert outcome['outcome'] == 'busy' and not job(store, 's1')
+    outcome = batch_pipeline_intake.admit(
+        store, [work], binding, 100.0, namespace=store.namespace, adopt=stranded_adopter(stranded)
+    )
+    assert outcome == {'outcome': 'batch', 'job_id': 'bp_content-s'}
+    ledger = store.get('content', f'{OWNER}/content-s')
+    assert ledger['dispatch_protocol'] == 'batch_v1' and ledger['job_id'] == 'bp_content-s'
+    assert job(store, 's1')['state'] == 'ready'
+    # Once only: a second adoption attempt sees the batch owner.
+    again = batch_pipeline_intake.admit(
+        store, [work], binding, 101.0, namespace=store.namespace, adopt=stranded_adopter(stranded)
+    )
+    assert again == {'outcome': 'batch', 'job_id': 'bp_content-s'}
+
+
+def test_active_legacy_rows_are_never_adoptable():
+    from datetime import datetime, timezone
+    from utils.batch_pipeline.intake import stranded_adopter
+
+    active = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': datetime.now(timezone.utc)}
+    assert stranded_adopter(active)(active) is False
+    from datetime import timedelta
+
+    paused = {
+        'status': 'retryable',
+        'job_id': 'legacy-1',
+        'repeat_failure_pause_until': active['updated_at'] + timedelta(hours=1),
+    }
+    assert stranded_adopter(paused)(paused) is False  # a repeat-failure pause keeps its purpose until it expires
+
+
+# --- consumer and route -----------------------------------------------------------------------------
+
+
+class StubStage:
+    def __init__(self, outcome):
+        self.outcome, self.seen = outcome, []
+
+    def run(self, segment_id):
+        self.seen.append(segment_id)
+        return self.outcome
+
+
+class PushOutbox:
+    """Minimal claim_key/ack/defer/release fake for run_push."""
+
+    def __init__(self, claim):
+        self.claim, self.calls = claim, []
+
+    def claim_key(self, row_id, wake_token, lease_seconds, *, now):
+        self.calls.append(('claim_key', row_id, wake_token, lease_seconds))
+        return self.claim
+
+    def ack(self, claim, reason, *, now):
+        self.calls.append(('ack', reason))
+        return True
+
+    def defer(self, claim, available_at, reason, *, now):
+        self.calls.append(('defer', available_at, reason))
+        return 'new-wake'
+
+    def release(self, claim, reason, *, now):
+        self.calls.append(('release', reason))
+        return True
+
+    def heartbeat(self, claim, lease_seconds, *, now):
+        return True
+
+
+def _claim(segment_id='p1', row_id='p1'):
+    from database.outbox import Claim, OutboxKind
+
+    return Claim(OutboxKind.PROVIDER_STT, row_id, 'lease', 'wake', 1, 2000.0, OWNER, {'segment_id': segment_id}, None)
+
+
+@pytest.mark.parametrize(
+    'unit,status,call',
+    [
+        (provider_stt.UnitOutcome('done', 'processed'), 200, ('ack', 'processed')),
+        (provider_stt.UnitOutcome('deferred', 'not_due', 260.0), 200, ('defer', 260.0, 'not_due')),
+        (provider_stt.UnitOutcome('discarded', 'privacy_blocked'), 200, ('ack', 'privacy_blocked')),
+        (provider_stt.UnitOutcome('retry', 'dependency_warming'), 409, ('release', 'dependency_warming')),
+    ],
+)
+def test_push_delivery_maps_stage_outcomes_onto_contract_d(unit, status, call):
+    from routers.batch_provider_stt import run_delivery
+    from utils.workers.consumer import http_response
+
+    stage = StubStage(unit)
+    outbox = PushOutbox(_claim())
+    consumer = provider_stt.ProviderSttConsumer(lambda: stage, clock=lambda: 100.0)
+    response = http_response(run_delivery('p1', 'wake', consumer=consumer, outbox=outbox))
+    assert response.status_code == status
+    assert outbox.calls[0] == ('claim_key', 'p1', 'wake', 1800.0)
+    assert outbox.calls[-1] == call
+    assert stage.seen == ['p1']
+
+
+def test_consumer_contract_and_malformed_rows_close_without_work():
+    from database.outbox import Outcome as RowOutcome
+
+    assert provider_stt.ProviderSttConsumer.lease_seconds > 1500
+    assert provider_stt.ProviderSttConsumer.heartbeat_seconds == 0
+    stage = StubStage(provider_stt.UnitOutcome('done', 'processed'))
+    consumer = provider_stt.ProviderSttConsumer(lambda: stage)
+    assert consumer.process(_claim(row_id='other'), lambda: True).outcome is RowOutcome.DISCARDED
+    assert stage.seen == []
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        {'kind': 'provider_stt', 'row_id': 'p1'},
+        {'kind': 'enrichment', 'row_id': 'p1', 'wake_token': 'w'},
+        {'kind': 'provider_stt', 'row_id': 'a/b', 'wake_token': 'w'},
+        {'kind': 'provider_stt', 'row_id': 'p1', 'wake_token': 'w', 'uid': 'x'},
+        ['provider_stt'],
+    ],
+)
+def test_route_rejects_malformed_tasks_with_400_and_requires_task_auth(body, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_provider_stt
+
+    app = FastAPI()
+    app.include_router(batch_provider_stt.router)
+    client = TestClient(app)
+    monkeypatch.delenv('PROVIDER_STT_TASKS_OIDC_AUDIENCE', raising=False)
+    monkeypatch.delenv('PROVIDER_STT_TASKS_HANDLER_URL', raising=False)
+    assert client.post(batch_provider_stt.ROUTE, json=body).status_code == 403  # not a task target here
+    app.dependency_overrides[batch_provider_stt.verify_provider_stt_task] = lambda: 0
+    monkeypatch.setattr(batch_provider_stt, 'run_delivery', lambda *a, **k: pytest.fail('malformed task ran'))
+    assert client.post(batch_provider_stt.ROUTE, json=body).status_code == 400
+
+
+# --- intake in draining/dark ------------------------------------------------------------------------
+
+
+UPLOAD = dict(
+    uid=OWNER,
+    job_id='retry',
+    content_id='content',
+    paths=['retained.bin'],
+    lane='fresh',
+    recording_age_seconds=60,
+    source='omi',
+    should_lock=False,
+    conversation_id=None,
+    client_device_id=None,
+    client_platform='ios',
+)
+
+
+@pytest.fixture
+def dark_intake(world, monkeypatch):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import intake
+    from utils.sync.legacy_dark import LegacySyncMode
+
+    customer, store = world
+    mode = {'value': LegacySyncMode.DRAINING}
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: mode['value'])
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **k: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    user = {'language': 'en'}
+
+    def authorize(_store, _seed, *, snapshots):
+        snapshots['user'] = user
+        snapshots['conversations'] = {}
+        return SimpleNamespace(generation=0, level='standard')
+
+    unit = SimpleNamespace(capture_at=10.0, duration_seconds=5.0, wav=b'synthetic')
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
+    )
+    monkeypatch.setattr(intake, 'decode_units', lambda paths, max_seconds: (u for u in [unit]))
+    monkeypatch.setattr(intake, 'with_context', lambda wav, context: wav)
+    monkeypatch.setattr(
+        intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
+    )
+    monkeypatch.setattr(
+        intake,
+        'durable_status',
+        lambda *a: {
+            'job_id': a[2],
+            'status': 'queued',
+            'total_files': 1,
+            'total_segments': 1,
+            'poll_after_ms': 3000,
+            'lane': 'fresh',
+        },
+    )
+    calls = []
+
+    def admit(store_, items, binding, now, **kwargs):
+        calls.append((items, kwargs))
+        return {'outcome': 'batch', 'job_id': binding.job_id}
+
+    monkeypatch.setattr(intake, 'admit', admit)
+    woken = []
+    outbox = SimpleNamespace(wake=lambda row_id, token: woken.append((row_id, token)))
+    monkeypatch.setattr(intake, 'outbox_for', lambda kind: outbox)
+    return SimpleNamespace(intake=intake, store=store, mode=mode, user=user, calls=calls, woken=woken)
+
+
+@pytest.mark.asyncio
+async def test_active_legacy_owner_is_acknowledged_never_readmitted(dark_intake):
+    from datetime import datetime, timezone
+
+    dark_intake.store.run(
+        lambda tx: tx.put(
+            'content',
+            f'{OWNER}/content',
+            {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': datetime.now(timezone.utc)},
+        )
+    )
+    response = await dark_intake.intake.accept_upload(**UPLOAD)
+    assert response.status_code == 409 and json.loads(response.body)['job_id'] == 'legacy-1'
+    assert dark_intake.calls == []
+
+
+@pytest.mark.asyncio
+async def test_stranded_legacy_row_is_admitted_with_the_adoption_fence(dark_intake):
+    dark_intake.store.run(
+        lambda tx: tx.put('content', f'{OWNER}/content', {'status': 'retryable', 'job_id': 'legacy-1'})
+    )
+    response = await dark_intake.intake.accept_upload(**UPLOAD)
+    assert response.status_code == 202
+    ((items, kwargs),) = dark_intake.calls
+    assert kwargs['adopt'] is not None and kwargs['enqueue'] is None
+    assert items[0].requires_compute_admission is True
+
+
+@pytest.mark.asyncio
+async def test_unsupported_language_takes_the_provider_route_and_wakes_after_commit(dark_intake, monkeypatch):
+    from utils.batch_pipeline import intake
+
+    dark_intake.user['language'] = 'ja'
+    seen = {}
+
+    def enqueue_hook(route, outbox, wakes):
+        seen['route'] = route
+        wakes['row-1'] = 'wake-1'  # as if the admission transaction committed one row
+        return lambda *a: True
+
+    monkeypatch.setattr(intake, 'provider_enqueue', enqueue_hook)
+    response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
+    assert response.status_code == 202
+    ((items, kwargs),) = dark_intake.calls
+    assert seen['route'].stt_route == 'provider' and kwargs['enqueue'] is not None
+    assert items[0].requires_compute_admission is False
+    assert dark_intake.woken == [('row-1', 'wake-1')]
+
+
+@pytest.mark.asyncio
+async def test_on_mode_keeps_todays_routes(dark_intake, monkeypatch):
+    from utils.sync.legacy_dark import LegacySyncMode
+
+    dark_intake.mode['value'] = LegacySyncMode.ON
+    dark_intake.store.run(
+        lambda tx: tx.put('content', f'{OWNER}/content', {'status': 'retryable', 'job_id': 'legacy-1'})
+    )
+    assert await dark_intake.intake.accept_upload(**UPLOAD) is None  # legacy claimant stays authoritative
+    dark_intake.store.run(lambda tx: tx.put('content', f'{OWNER}/content', {}))
+    dark_intake.user['language'] = 'ja'
+    response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'byok_enabled': True})
+    assert response.status_code == 202  # BYOK admitted like any upload; GPU route at 'on'
+    ((items, kwargs),) = dark_intake.calls
+    assert kwargs['enqueue'] is None and kwargs['adopt'] is None and items[0].requires_compute_admission is True
