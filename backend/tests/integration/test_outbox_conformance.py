@@ -32,7 +32,11 @@ def uid(ob):
 
 
 def put(ob, key='k', *, at=T0, now=T0, **kw):
-    return ob.outbox.enqueue(key, kw.pop('owner', None) or uid(ob), kw.pop('payload', {'n': 1}), at, now=now, **kw)
+    """Enqueue ``key``. ``ob.key`` / ``ob.payload`` adapt generic labels to a backend's row shape (the
+    Firestore enrichment outbox keys rows by (owner, conversation) and carries conversation_id + language)."""
+    owner = kw.pop('owner', None) or uid(ob)
+    extra = kw.pop('payload', None) or {}
+    return ob.outbox.enqueue(ob.key(owner, key), owner, ob.payload(key, **extra), at, now=now, **kw)
 
 
 def take(ob, key='k', *, at=T0, now=T0, lease=LEASE):
@@ -166,10 +170,10 @@ def test_enqueue_after_the_row_closed_starts_a_fresh_row(ob):
 
 
 def test_claim_carries_owner_payload_policy_and_attempt(ob):
-    queued = put(ob, payload={'conversation_id': 'c1', 'n': 2}, policy_id='pol-1')
+    queued = put(ob, 'c1', policy_id='pol-1')
     (claim,) = ob.outbox.claim(1, LEASE, now=T0)
     assert (claim.row_id, claim.owner_id, claim.policy_id, claim.attempt) == (queued.row_id, uid(ob), 'pol-1', 1)
-    assert dict(claim.payload) == {'conversation_id': 'c1', 'n': 2} and claim.wake_token == ''
+    assert claim.payload['conversation_id'] == 'c1' and claim.wake_token == ''
     assert claim.lease_until == T0 + LEASE and claim.kind == ob.outbox.kind
 
 
@@ -183,7 +187,7 @@ def test_pull_claims_are_ordered_by_due_time_limited_and_skip_future_rows(ob):
 
 def test_payload_must_be_small_and_content_free(ob):
     with pytest.raises(ValueError):
-        put(ob, payload={'blob': 'x' * 5000})
+        put(ob, payload={'blob': 'x' * 5000})  # a content-free payload never carries blobs
 
 
 # 4/5. Durable before wake; transactional enqueue ------------------------------------------------------------
@@ -265,6 +269,7 @@ def test_blocked_owner_is_discarded_on_delivery_and_by_sweep(ob):
 def test_deleted_conversation_in_the_payload_discards_the_row(ob):
     ob.store_harness.customer.add_conversation(uid(ob), 'gone')
     ob.store_harness.customer.delete_conversation(uid(ob), 'gone')
-    put(ob, 'dead', payload={'conversation_id': 'gone'})
-    put(ob, 'live', payload={'conversation_id': None})
-    assert [dict(c.payload) for c in ob.outbox.claim(5, LEASE, now=T0)] == [{'conversation_id': None}]
+    ob.store_harness.customer.add_conversation(uid(ob), 'live')
+    put(ob, 'gone')
+    put(ob, 'live')
+    assert [c.payload['conversation_id'] for c in ob.outbox.claim(5, LEASE, now=T0)] == ['live']

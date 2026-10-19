@@ -88,6 +88,21 @@ class ClientCustomerData:
     def delete_account(self, uid: str) -> None:
         self._doc('account_deletions', uid).set({'wipe_status': 'pending'})
 
+    def blocked(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> bool:
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+
+        try:
+            assert_batch_write_allowed(
+                self.client,
+                self.client.transaction(),
+                uid,
+                conversation_ids=tuple(conversation_ids),
+                expected_generation=expected_generation,
+            )
+        except BatchPrivacyBlocked:
+            return True
+        return False
+
 
 @dataclass
 class StoreHarness:
@@ -347,6 +362,9 @@ class OutboxHarness:
     store_harness: StoreHarness
     wakes: list[tuple[str, str, float]]
     fail_wakes: list[bool]
+    # Adapters from generic test labels to a backend's row shape. Defaults suit the Postgres and sim outboxes.
+    key: Callable[[str, str], str] = lambda owner, label: label
+    payload: Callable[..., dict] = lambda label, **extra: {'conversation_id': label, **extra}
 
     def run_tx(self, body: Callable[[Any], Any]) -> Any:
         if self.name == 'sim':
@@ -374,15 +392,31 @@ def build_outbox_backend(name: str, kind: Any) -> OutboxHarness:
         wakes.append((row_id, token, available_at))
 
     try:
+        harness = FACTORIES[name]()
         if name == 'emulator':
             try:
                 from database import outbox_firestore  # lane 9
             except ImportError as exc:
+                harness.close()
                 raise BackendUnavailable('database/outbox_firestore.py has not landed (lane 9)') from exc
             if not hasattr(outbox_firestore, 'FirestoreOutbox'):
-                raise BackendUnavailable('outbox_firestore.FirestoreOutbox constructor not provided (lane 9)')
-            raise BackendUnavailable('emulator customer probe for the Firestore outbox is wired by lane 9')
-        harness = FACTORIES[name]()
+                harness.close()
+                raise BackendUnavailable(
+                    'outbox_firestore.FirestoreOutbox(kind, client=, privacy_blocked=, create_wake=)'
+                )
+            outbox_cls: Any = outbox_firestore.FirestoreOutbox
+            probe = _privacy_probe(harness)
+            from utils.enrichment import outbox as enrichment_outbox  # row keys are (owner, conversation) hashes
+
+            return OutboxHarness(
+                name,
+                outbox_cls(kind, client=harness.customer.client, privacy_blocked=probe, create_wake=wake),
+                harness,
+                wakes,
+                fail_wakes,
+                key=lambda owner, label: enrichment_outbox.key(owner, label),
+                payload=lambda label, **extra: {'conversation_id': label, 'language': 'en', **extra},
+            )
     except BackendUnavailable as exc:
         if name in required_backends():
             pytest.fail(f'required outbox backend {name!r} unavailable: {exc}')
