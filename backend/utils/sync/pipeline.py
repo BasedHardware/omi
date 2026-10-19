@@ -39,6 +39,8 @@ from database._client import (
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
+from utils.sync import cap_recovery_provider
+
 from database import conversations as conversations_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
@@ -1529,7 +1531,10 @@ def process_segment(
                 # Explicit request-boundary signal survives later cap denial,
                 # parse/ingest errors, and the bounded empty-result retry.
                 deferred_outcome['provider_called'] = True
-            words, detected_language = prerecorded(
+            words, detected_language = cap_recovery_provider.transcribe(
+                uid,
+                cap_recovery_checkpoint if stt_cap_dispatch_enabled() and cap_recovery else None,
+                prerecorded,
                 url,
                 speakers_count=3,
                 attempts=0,

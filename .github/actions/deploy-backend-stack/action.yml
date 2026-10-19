@@ -796,6 +796,8 @@ runs:
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
+        # The manifest names the live backfill queue the reconcile step manages.
+        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}
         alert_notification_channels: ${{ inputs.sync_backfill_alert_channels }}
 
@@ -860,8 +862,8 @@ runs:
         gcloud tasks queues "$operation" "$queue" \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" \
-          --max-concurrent-dispatches=4 \
-          --max-dispatches-per-second=4 \
+          --max-concurrent-dispatches=16 \
+          --max-dispatches-per-second=8 \
           --max-attempts=5 \
           --min-backoff=5s --max-backoff=60s
 
