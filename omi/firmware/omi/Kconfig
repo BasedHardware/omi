@@ -113,4 +113,19 @@ config OMI_WATCHDOG_TIMEOUT_MS
          operations can run longer (e.g. SD/LFS pre-warm) to avoid false
          watchdog resets."
 
+config OMI_SDHC_SPI_CMD12_FIX
+    bool "SPI SD host driver with the CMD12 reply fix"
+    depends on DT_HAS_ZEPHYR_SDHC_SPI_SLOT_ENABLED
+    depends on !SPI_SDHC
+    select SPI
+    select CRC
+    select SDHC_SUPPORTS_SPI_MODE
+    default n
+    help
+        "Builds src/sdfix/sdhc_spi_cmd12_fix.c, Zephyr's drivers/sdhc/sdhc_spi.c
+         with the reply to CMD12 (STOP_TRANSMISSION) decoded even when it starts
+         partway through a byte, instead of the stock driver. Without it every
+         multi-block read fails with -EINVAL on cards that answer that way.
+         Needs CONFIG_SPI_SDHC=n."
+
 endmenu
