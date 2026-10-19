@@ -2,8 +2,8 @@
 """Legacy segment transcription core kept for cap-hold recovery after C11.
 
 Extracted verbatim from the deleted utils/sync/pipeline.py (legacy-retire C11).
-Only utils/sync/cap_hold_recovery.py, utils/sync/cap_recovery_audio.py and,
-until lane 9 moves it, the enrichment callback may import this module.
+Only utils/sync/cap_hold_recovery.py and utils/sync/cap_recovery_audio.py may import
+this module. The sr- enrichment callback lives in utils/enrichment/callback.py (lane 9).
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from database._client import (
     is_expired_transaction_error,
 )
 from pydub import AudioSegment
+from utils.sync import cap_recovery_provider
 from database import conversations as conversations_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
@@ -918,7 +919,10 @@ def process_segment(
                 # Explicit request-boundary signal survives later cap denial,
                 # parse/ingest errors, and the bounded empty-result retry.
                 deferred_outcome['provider_called'] = True
-            words, detected_language = prerecorded(
+            words, detected_language = cap_recovery_provider.transcribe(
+                uid,
+                cap_recovery_checkpoint if stt_cap_dispatch_enabled() and cap_recovery else None,
+                prerecorded,
                 url,
                 speakers_count=3,
                 attempts=0,

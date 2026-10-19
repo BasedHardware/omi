@@ -13,6 +13,8 @@ from pathlib import Path
 from utils.enrichment import callback
 
 BACKEND = Path(__file__).resolve().parents[2]
+# C11 step 1 (lane 10): the legacy copy moved with the cap-hold core; this test is deleted with pipeline.py.
+LEGACY = 'utils/sync/legacy_segment_core.py'
 
 
 def _function(path: str, name: str) -> ast.FunctionDef:
@@ -41,7 +43,7 @@ def _shape(node: ast.FunctionDef) -> str:
 
 
 def test_callback_body_matches_the_legacy_copy():
-    legacy = _function('utils/sync/pipeline.py', '_reprocess_conversation_after_update')
+    legacy = _function(LEGACY, '_reprocess_conversation_after_update')
     moved = _function('utils/enrichment/callback.py', 'enrich_conversation')
     assert ast.dump(legacy.args) == ast.dump(moved.args)
     assert _shape(legacy) == _shape(moved)
@@ -52,13 +54,13 @@ def test_callback_helpers_match_the_legacy_copy():
         ('_run_conversation_created_webhook', '_run_conversation_created_webhook'),
         ('_require_current_conversation_persistence', '_require_current_conversation_persistence'),
     ):
-        legacy = _function('utils/sync/pipeline.py', legacy_name)
+        legacy = _function(LEGACY, legacy_name)
         moved = _function('utils/enrichment/callback.py', moved_name)
         assert _shape(legacy) == _shape(moved), legacy_name
 
 
 def test_lineage_retry_language_matches_the_legacy_sentinel():
-    legacy = ast.parse((BACKEND / 'utils/sync/pipeline.py').read_text())
+    legacy = ast.parse((BACKEND / LEGACY).read_text())
     values = [
         node.value.value
         for node in legacy.body
