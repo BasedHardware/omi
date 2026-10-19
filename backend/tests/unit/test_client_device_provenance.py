@@ -173,3 +173,18 @@ def test_web_listen_forwards_first_message_device_provenance():
 
     assert "resolve_client_device_from_websocket_auth_message(first_message)" in source
     assert "client_device_context=client_device_context" in source
+
+
+def test_resolve_client_device_from_websocket_auth_message_error_paths():
+    # Missing text
+    assert resolve_client_device_from_websocket_auth_message({}).client_device_id is None
+    # Text is not a string
+    assert resolve_client_device_from_websocket_auth_message({"text": 123}).client_device_id is None
+    # Text is not valid JSON
+    assert resolve_client_device_from_websocket_auth_message({"text": "not json"}).client_device_id is None
+    # Text is valid JSON but not a dictionary
+    assert resolve_client_device_from_websocket_auth_message({"text": "[1, 2, 3]"}).client_device_id is None
+    # JSON has wrong type for device_id_hash
+    assert (
+        resolve_client_device_from_websocket_auth_message({"text": '{"device_id_hash": 123}'}).client_device_id is None
+    )

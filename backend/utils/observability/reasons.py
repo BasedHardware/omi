@@ -158,6 +158,9 @@ class LiveSttReason(StrEnum):
     SONIOX_NO_AUDIO_TEARDOWN = 'soniox_no_audio_teardown'
     SONIOX_ROTATION = 'soniox_rotation'
     CAPACITY_FULL = 'capacity_full'
+    # The session's capture replay ring outgrew its horizon before the leg emitted;
+    # session-local, never provider capacity or failure.
+    REPLAY_RING_OVERFLOW = 'replay_ring_overflow'
     ALLOCATION_REJECTED = 'allocation_rejected'
     CAPABILITY_MISMATCH = 'capability_mismatch'
     FIRST_TEXT_DEADLINE = 'first_text_deadline'
@@ -247,6 +250,7 @@ class FallbackReason(StrEnum):
     SONIOX_NO_AUDIO_TEARDOWN = 'soniox_no_audio_teardown'
     SONIOX_ROTATION = 'soniox_rotation'
     CAPACITY_FULL = 'capacity_full'
+    REPLAY_RING_OVERFLOW = 'replay_ring_overflow'
     ALLOCATION_REJECTED = 'allocation_rejected'
     CAPABILITY_MISMATCH = 'capability_mismatch'
     FIRST_TEXT_DEADLINE = 'first_text_deadline'

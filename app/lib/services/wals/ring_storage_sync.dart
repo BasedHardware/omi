@@ -377,18 +377,22 @@ class RingStorageSyncImpl implements RingStorageSync {
     try {
       progress?.onWalSyncedProgress(0.0);
       final complete = await _syncRing(wal, progress: progress);
-      if (complete) {
-        wal.status = WalStatus.synced;
+      if (!complete) {
+        // Like an incomplete syncAll: unadvanced records stay on the device and
+        // the wal stays miss, but the caller must not report a finished transfer.
+        throw Exception('Device transfer incomplete; recording kept on device');
       }
+      wal.status = WalStatus.synced;
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
-      listener.onWalUpdated();
     } catch (e) {
       Logger.debug('RingStorageSync.syncWal: error: $e');
+      rethrow;
     } finally {
       _isSyncing = false;
       for (final w in _wals) {
         w.deviceDownloadFraction = null;
       }
+      listener.onWalUpdated();
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }

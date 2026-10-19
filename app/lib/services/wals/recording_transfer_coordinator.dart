@@ -139,11 +139,16 @@ class RecordingTransferCoordinator {
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
   int _periodicGeneration = 0;
+  bool _periodicDrainInFlight = false;
 
   /// Retire an expired OS window before any further discovery/upload stage.
-  void cancelPeriodicWake() {
+  /// Returns true only while that window's own drain is running, the one
+  /// transfer the window may cancel. A pass another wake started, or a device
+  /// transfer the user started, keeps running after the window ends.
+  bool cancelPeriodicWake() {
     _periodicGeneration++;
     if (_pendingWake == WakeTrigger.periodic) _pendingWake = null;
+    return _periodicDrainInFlight;
   }
 
   /// Visible to tests and diagnostics; this is not persisted because timers are
@@ -363,7 +368,13 @@ class RecordingTransferCoordinator {
 
       final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
       if (drain == null) return;
-      final result = await drain();
+      final RecordingTransferDrainResult result;
+      _periodicDrainInFlight = trigger == WakeTrigger.periodic;
+      try {
+        result = await drain();
+      } finally {
+        _periodicDrainInFlight = false;
+      }
       if (expired()) return;
       await _refreshPending();
 
