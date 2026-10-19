@@ -1196,6 +1196,7 @@ jobs:
         self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [120, 60])
         self.assertEqual(sleep.call_args_list, [call(5)])
 
+        self.write_json("config/public-build-contract.json", fixture_contract())
         defaults = self.target().candidate_acceptance
         self.assertEqual((defaults.timeout_seconds, defaults.retry_timeout_seconds), (45, 19))
 
