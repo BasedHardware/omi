@@ -5812,8 +5812,11 @@ Each prepared intent has at most one outstanding wake task. The sweep leases a
 wake on the job (`recovery_wake`, default 600 seconds,
 `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`) and names the task by intent token
 and wake sequence (`-w<seq>`); while the lease is live the sweep reports
-`pending` and enqueues nothing. Lease expiry repairs an exhausted or lost task
-with the next sequence. A delivery of that same wake that leaves the intent
+`pending` and enqueues nothing. At lease expiry the sweep probes the previous
+task (`named_task_exists`, BASIC view): a task still waiting in a saturated queue
+keeps its lease, and only an authoritative NotFound mints the next sequence.
+Three consecutive failed probes mint one anyway, so a broken probe cannot strand
+the intent. A delivery of that same wake that leaves the intent
 prepared, or a failed enqueue, re-arms a 120-second wake; a stale delivery never
 shortens a newer wake. `0` restores the legacy two-minute wake-name generation on
 every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token

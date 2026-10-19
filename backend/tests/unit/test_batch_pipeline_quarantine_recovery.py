@@ -839,6 +839,8 @@ def _wake_env(monkeypatch, lease=None):
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', lease)
     enqueue = Mock()
     monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    # Default custody: the previous wake's task is gone (delivered or exhausted).
+    monkeypatch.setattr(module, 'named_task_exists', Mock(return_value=False))
     return module, enqueue
 
 
@@ -858,8 +860,16 @@ def test_waiting_unit_gets_one_task_across_sweeps_until_the_wake_lease_expires(s
     assert enqueue.call_count == 1
     intent = deepcopy(row(client)['recovery'])
     assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w1")
-    # Expiry repairs a lost/exhausted task with a new deterministic name, same paid intent.
+    # At expiry a task still waiting in a saturated queue keeps its lease.
+    module.named_task_exists.return_value = True
     clock[0] = 701.0
+    assert recovery.sweep() == {'pending': 1}
+    assert enqueue.call_count == 1
+    assert module.named_task_exists.call_args.args == ('batch-quarantine-recovery', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake']['wake_until'] == 701.0 + 600
+    # Only an authoritative NotFound repairs it with a new deterministic name.
+    module.named_task_exists.return_value = False
+    clock[0] = 1302.0
     assert recovery.sweep() == {'queued': 1}
     assert enqueue.call_count == 2
     assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w2")
@@ -896,10 +906,10 @@ def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monke
     clock[0] = 200.0
     name = enqueue.call_args.args[2]
     recovery.delivered('bad', 'held')  # An unnamed (legacy) delivery changes nothing.
-    assert row(client)['recovery_wake']['until'] == 700.0
+    assert row(client)['recovery_wake']['wake_until'] == 700.0
     # Delivered, but e.g. allowance refused the start: Cloud Tasks names the wake.
     recovery.delivered('bad', 'held', f'projects/p/locations/l/queues/q/tasks/{name}')
-    assert row(client)['recovery_wake']['until'] == 320.0
+    assert row(client)['recovery_wake']['wake_until'] == 320.0
     clock[0] = 300.0
     assert recovery.dispatch('bad', binding.owner_id) == 'pending'
     clock[0] = 321.0
@@ -907,7 +917,7 @@ def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monke
     assert enqueue.call_count == 2
     assert row(client)['recovery'] == intent
     recovery.delivered('bad', 'recovered', enqueue.call_args.args[2])  # Only held shortens.
-    assert row(client)['recovery_wake']['until'] == 921.0
+    assert row(client)['recovery_wake']['wake_until'] == 921.0
     stt.assert_not_called()
 
 
@@ -955,7 +965,7 @@ def test_enqueue_failure_rearms_the_former_cadence_instead_of_the_full_lease(set
     recovery.recover = Mock(return_value='held')  # Inline fallback could not start either.
     assert recovery.dispatch('bad', binding.owner_id) == 'held'
     assert row(client)['recovery_state'] == 'prepared'
-    assert row(client)['recovery_wake']['until'] == 100 + 120
+    assert row(client)['recovery_wake']['wake_until'] == 100 + 120
     stt.assert_not_called()
 
 
@@ -975,16 +985,46 @@ def test_stale_held_delivery_never_shortens_a_newer_wake(setup, monkeypatch):
     recovery.clock = lambda: clock[0]
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     first = enqueue.call_args.args[2]
-    clock[0] = 701.0  # w1 is delayed past its lease; the sweep repairs with w2.
+    clock[0] = 701.0  # w1 was lost before delivery; NotFound repairs with w2.
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     assert row(client)['recovery_wake']['seq'] == 2
     clock[0] = 750.0
-    recovery.delivered('bad', 'held', first)  # The late w1 delivery is held.
-    assert row(client)['recovery_wake']['until'] == 1301.0
+    recovery.delivered('bad', 'held', first)  # A late duplicate of w1 answers held.
+    assert row(client)['recovery_wake']['wake_until'] == 1301.0
+    module.named_task_exists.return_value = True
     clock[0] = 900.0
     assert recovery.dispatch('bad', binding.owner_id) == 'pending'  # w2 is still outstanding.
     assert enqueue.call_count == 2
     stt.assert_not_called()
+
+
+def test_unknown_task_custody_extends_a_bounded_number_of_times(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    module.named_task_exists.side_effect = PermissionError('synthetic missing tasks.get')
+    for attempt in range(1, 4):
+        clock[0] += 601
+        assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+        assert row(client)['recovery_wake']['probe_errors'] == attempt
+    clock[0] += 601
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'  # Never stranded.
+    assert row(client)['recovery_wake']['seq'] == 2
+    assert 'probe_errors' not in row(client)['recovery_wake']
+    assert enqueue.call_count == 2
+    stt.assert_not_called()
+
+
+def test_concurrent_sweepers_cannot_both_advance_an_expired_wake(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    token = row(client)['recovery']['token']
+    assert recovery.protocol.claim_wake('bad', token, 800, 600, expected_seq=1) == 2
+    # A second sweeper that inspected seq 1 loses the compare-and-set.
+    assert recovery.protocol.claim_wake('bad', token, 1500, 600, expected_seq=1) is None
 
 
 def test_wake_shortening_keeps_the_privacy_fence(setup, monkeypatch):
@@ -1021,5 +1061,5 @@ def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
         headers={'X-CloudTasks-TaskName': f'projects/p/locations/l/queues/q/tasks/{enqueue.call_args.args[2]}'},
     )
     assert response.json() == {'status': 'held'}
-    assert row(client)['recovery_wake']['until'] == 100 + 120
+    assert row(client)['recovery_wake']['wake_until'] == 100 + 120
     stt.assert_not_called()

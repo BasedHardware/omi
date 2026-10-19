@@ -301,6 +301,7 @@ class Simulation:
         self.backfill_used: dict[tuple[str, int], float] = {}
         self.backfill_reserved: dict[tuple[str, str], bool] = {}
         self._task_names: set[str] = set()
+        self._live_tasks: set[str] = set()  # created and not yet answered
         self._pumps: list[tuple[Pump, asyncio.Event, asyncio.Task]] = []
         self._supervisor: Any = None
         self.serving: Serving | None = None
@@ -343,6 +344,7 @@ class Simulation:
             (serving_module, 'time', self.clock.module()),
             (recovery_module, 'recovery_candidates', self._recovery_candidates),
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
+            (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
@@ -398,6 +400,7 @@ class Simulation:
         if task_id in self._task_names:
             return None
         self._task_names.add(task_id)
+        self._live_tasks.add(task_id)
         self.counters['recovery_tasks_enqueued'] += 1
         deliveries = 2 if self.rng['misc'].random() < self.config.recovery_duplicate_delivery_rate else 1
         loop = asyncio.get_running_loop()
@@ -411,6 +414,10 @@ class Simulation:
                 ),
             )
         return None
+
+    def _named_task_exists(self, queue, task_id):
+        """Cloud Tasks custody model: a named task exists until a delivery answers it."""
+        return task_id in self._live_tasks
 
     async def _recover_handler(self, segment_id: str, task_id: str | None = None) -> str:
         """Mirrors routers/batch_pipeline.recover_quarantine (request-scoped paid STT)."""
@@ -428,6 +435,7 @@ class Simulation:
                 pass
         if outcome in {'recovered', 'reconciled'}:
             self.serving.reconcile()
+        self._live_tasks.discard(task_id)
         return outcome
 
     def _cancel_fenced_recovery(self, store, segment_id):

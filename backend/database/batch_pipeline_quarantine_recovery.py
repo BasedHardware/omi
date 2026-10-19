@@ -107,12 +107,13 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def claim_wake(self, segment_id, token, now, lease_seconds):
-        """Reserve the single outstanding delivery wake for a prepared intent.
+    def claim_wake(self, segment_id, token, now, lease_seconds, *, queue='', expected_seq=0):
+        """Reserve the next delivery wake for a prepared intent.
 
         Scheduling metadata only: it never authorizes a provider call (start()
         remains the sole paid-intent fence). Returns the new wake sequence, or
-        None while an earlier wake for this intent is still leased.
+        None while a wake is still leased or another sweeper already advanced it
+        (``expected_seq`` is a compare-and-set on the wake the caller inspected).
         """
 
         def commit(tx):
@@ -124,12 +125,38 @@ class RecoveryStore:
             ):
                 return None
             wake = job.get('recovery_wake') or {}
-            if wake.get('token') == token and wake.get('until', 0) > now:
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current != expected_seq or (wake.get('token') == token and wake.get('wake_until', 0) > now):
                 return None
-            seq = (wake.get('seq', 0) if wake.get('token') == token else 0) + 1
-            job['recovery_wake'] = {'token': token, 'seq': seq, 'until': now + lease_seconds}
+            job['recovery_wake'] = {
+                'token': token,
+                'seq': current + 1,
+                'wake_until': now + lease_seconds,
+                'queue': queue,
+            }
             tx.put('jobs', segment_id, job)
-            return seq
+            return current + 1
+
+        return self.store.run(commit)
+
+    def extend_wake(self, segment_id, token, seq, now, lease_seconds, *, probe_error=False):
+        """Keep wake ``seq`` leased because its task still exists (or custody is unknown)."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            wake = job.get('recovery_wake') or {}
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or wake.get('token') != token
+                or wake.get('seq') != seq
+            ):
+                return False
+            errors = wake.get('probe_errors', 0) + 1 if probe_error else 0
+            job['recovery_wake'] = {**wake, 'wake_until': now + lease_seconds, 'probe_errors': errors}
+            tx.put('jobs', segment_id, job)
+            return True
 
         return self.store.run(commit)
 
@@ -147,10 +174,10 @@ class RecoveryStore:
                 or job.get('recovery_state') != 'prepared'
                 or wake.get('token') != job.get('recovery', {}).get('token')
                 or wake.get('seq') != seq
-                or wake.get('until', 0) <= now + rewake_seconds
+                or wake.get('wake_until', 0) <= now + rewake_seconds
             ):
                 return False
-            job['recovery_wake'] = {**wake, 'until': now + rewake_seconds}
+            job['recovery_wake'] = {**wake, 'wake_until': now + rewake_seconds}
             tx.put('jobs', segment_id, job)
             return True
 

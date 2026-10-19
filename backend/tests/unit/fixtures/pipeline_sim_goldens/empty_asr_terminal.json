@@ -26,8 +26,8 @@
     },
     "recovery_state": "recovered",
     "recovery_wake": {
-     "seq": 1,
-     "until": 1800000660.0
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
     },
     "requires_compute_admission": true,
     "result": {
@@ -117,8 +117,8 @@
     },
     "recovery_state": "recovered",
     "recovery_wake": {
-     "seq": 1,
-     "until": 1800000660.0
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
     },
     "requires_compute_admission": true,
     "result": {
@@ -208,8 +208,8 @@
     },
     "recovery_state": "recovered",
     "recovery_wake": {
-     "seq": 1,
-     "until": 1800001320.0
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
     },
     "requires_compute_admission": true,
     "result": {
@@ -299,8 +299,8 @@
     },
     "recovery_state": "recovered",
     "recovery_wake": {
-     "seq": 1,
-     "until": 1800001320.0
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
     },
     "requires_compute_admission": true,
     "result": {
@@ -390,8 +390,8 @@
     },
     "recovery_state": "recovered",
     "recovery_wake": {
-     "seq": 1,
-     "until": 1800001320.0
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
     },
     "requires_compute_admission": true,
     "result": {

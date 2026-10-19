@@ -40,7 +40,7 @@ from utils.batch_pipeline.recovery_disposition import (
     terminal_empty_payload,
 )
 
-from utils.cloud_tasks import enqueue_named_task
+from utils.cloud_tasks import enqueue_named_task, named_task_exists
 from utils.sync.stage import current_stage
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 # A delivered wake that could not start (allowance, cap or transient refusal)
 # is retried on the former 120s cadence rather than waiting out the lease.
 REWAKE_AFTER_HELD_SECONDS = 120
+# Consecutive failed custody probes before a new wake is minted regardless.
+MAX_WAKE_PROBE_ERRORS = 3
 
 
 def log_failure(failure):
@@ -319,16 +321,32 @@ class QuarantineRecovery:
             raise ValueError('recovery task requires the serving origin audience')
         token = job['recovery']['token']
         digest = hashlib.sha256(segment_id.encode()).hexdigest()
+        queue = os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', '')
         lease, seq = recovery_wake_lease_seconds(), 0
         if lease:
-            # One outstanding wake per intent: a still-leased wake is already
-            # queued or being delivered, so the sweep does not add another.
-            # Expiry repairs an exhausted or lost task with a new deterministic
-            # name. Parallel deliveries remain fenced by RecoveryStore.start.
+            # One outstanding wake per intent. A leased wake is queued or being
+            # delivered, so the sweep adds nothing. At expiry only an
+            # authoritative NotFound for that task permits the next wake: a
+            # task still waiting in a saturated queue keeps its lease. Parallel
+            # deliveries remain fenced by RecoveryStore.start.
+            now = self.clock()
             wake = job.get('recovery_wake') or {}
-            if wake.get('token') == token and wake.get('until', 0) > self.clock():
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current and wake.get('wake_until', 0) > now:
                 return 'pending'  # Read from prepare()'s snapshot: no extra transaction.
-            seq = self.protocol.claim_wake(segment_id, token, self.clock(), lease)
+            if current and wake.get('probe_errors', 0) < MAX_WAKE_PROBE_ERRORS:
+                previous = f'bpr-{current_stage()}-{digest}-{token}-w{current}'
+                probe_error = False
+                try:
+                    alive = named_task_exists(wake.get('queue') or queue, previous)
+                except Exception:
+                    # Unknown custody keeps the old wake; bounded so a broken
+                    # probe cannot strand the intent.
+                    alive, probe_error = True, True
+                if alive:
+                    self.protocol.extend_wake(segment_id, token, current, now, lease, probe_error=probe_error)
+                    return 'pending'
+            seq = self.protocol.claim_wake(segment_id, token, now, lease, queue=queue, expected_seq=current)
             if seq is None:
                 return 'pending'
             task_id = f'bpr-{current_stage()}-{digest}-{token}-w{seq}'
@@ -337,7 +355,7 @@ class QuarantineRecovery:
             task_id = f'bpr-{current_stage()}-{digest}-{token}-{int(self.clock() // 120)}'
         try:
             enqueue_named_task(
-                os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
+                queue,
                 audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
                 task_id,
                 {'stage': current_stage(), 'segment_id': segment_id},
