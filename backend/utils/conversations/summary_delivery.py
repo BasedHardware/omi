@@ -194,7 +194,17 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if not rich and not discarded:
+    # The fence guards an open first-summary obligation only. Rows outside the
+    # server-minimum protocol, already-enriched rows, and rows whose empty
+    # budget is exhausted have no caller that catches this exception — the
+    # sync outbox alone records empty-output strikes — so raising there
+    # strands the completed write instead of retaining recoverable debt.
+    obligation_open = (
+        write.get('summary_title_provenance') == 'server_minimum'
+        and not write.get('summary_completed_at')
+        and existing.get('summary_blocked_reason') != 'empty_output_exhausted'
+    )
+    if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
     if existing.get('summary_completed_at'):
         return None
