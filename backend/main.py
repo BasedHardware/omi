@@ -10,6 +10,7 @@ from utils.firebase_admin_runtime import (
     install_firebase_auth_mutation_guard,
     install_google_adc_guard,
 )
+from app_roles import mount_routers, role_from_env
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
@@ -231,119 +232,11 @@ app.add_middleware(
     ],
 )
 
-app.include_router(budget_choice.router)
-app.include_router(messaging.router)
-app.include_router(proactivity.router)
-app.include_router(dream_cohort.router)
-app.include_router(dream_report.router)
-app.include_router(dream_sweep.router)
-app.include_router(candidate_integration_sweep.router)
-app.include_router(transcribe.router)
-app.include_router(static_map.router)
-app.include_router(omni_relay.router)
-app.include_router(auto_model.router)
-app.include_router(conversations.router)
-app.include_router(conversation_mutations.router)
-app.include_router(public_shared_conversation_chat.router)
-app.include_router(action_items.router)
-app.include_router(account_cutover.router)
-app.include_router(candidates.router)
-app.include_router(chat_first.router)
-if is_chat_first_e2e_harness_runtime():
-    # The fixture router has its own runtime check as defense in depth.  It is
-    # intentionally absent from dev/prod route tables, not merely disabled.
-    app.include_router(chat_first_e2e.router)
-    # Same stage boundary, same defense in depth: the desktop memory-review flow
-    # needs a daily summary carrying `memories_learned`, which only the nightly
-    # job produces in a deployable environment.
-    app.include_router(daily_summary_e2e.router)
-app.include_router(task_integrations.router)
-app.include_router(integrations.router)
-app.include_router(x_connector.router)
-app.include_router(memories.router)
-app.include_router(chat.router)
-app.include_router(chat_receipts.router)
-app.include_router(speech_profile.router)
-app.include_router(speaker_tag_prompts.router)
-app.include_router(speaker_labels.router)
-app.include_router(people.router)
-app.include_router(notifications.router)
-app.include_router(integration.router)
-app.include_router(agents.router)
-app.include_router(users.router)
-app.include_router(support.router)
-app.include_router(referrals.router)
-app.include_router(csat.router)
-app.include_router(feedback_admin.router)
-app.include_router(email_preferences.router)
-app.include_router(mobile_feedback.router)
-app.include_router(device_diagnostics.router)
-app.include_router(desktop_prompts.router)
-app.include_router(conversation_finalization.router)
-app.include_router(pending_work.router)
-app.include_router(commitment_followup.router)
-app.include_router(trends.router)
-
-app.include_router(other.router)
-
-app.include_router(firmware.router)
-app.include_router(updates.router)
-app.include_router(sync.router)
-app.include_router(batch_pipeline.router)
-
-app.include_router(apps.router)
-app.include_router(calendar_meetings.router)
-app.include_router(google_calendar.router)
-app.include_router(calendar_onboarding.router)
-app.include_router(oauth.router)
-app.include_router(auth.router)
-
-app.include_router(payment.router)
-app.include_router(storefront.router)
-app.include_router(api_key_management.mcp_router)
-app.include_router(mcp.router)
-app.include_router(mcp_sse.router)
-app.include_router(api_key_management.developer_router)
-app.include_router(developer.router)
-app.include_router(developer_key.router)
-app.include_router(imports.router)
-app.include_router(wrapped.router)
-app.include_router(folders.router)
-app.include_router(search.router)
-app.include_router(knowledge_graph.router)
-app.include_router(goals.router)
-app.include_router(workstreams.router)
-app.include_router(announcements.router)
-app.include_router(phone_calls.router)
-app.include_router(agent_tools.router)
-app.include_router(tools.router)
-app.include_router(metrics.router)
-app.include_router(client_telemetry.router)
-app.include_router(fleet_telemetry.router)
-app.include_router(fair_use_admin.router)
-app.include_router(staged_tasks.router)
-app.include_router(focus_sessions.router)
-app.include_router(advice.router)
-app.include_router(chat_sessions.router)
-app.include_router(chat_generation.router)
-app.include_router(scores.router)
-app.include_router(stt.router)
-app.include_router(tts.router)
-app.include_router(memory_admin.router)
-app.include_router(memory_product.router)
-app.include_router(task_recommendations.router)
-app.include_router(desktop_core.router)
-app.include_router(desktop_agent_vm.router)
-app.include_router(desktop_chat.router)
-app.include_router(desktop_proxy.router)
-app.include_router(desktop_task_gate.router)
-app.include_router(desktop_realtime.router)
-app.include_router(desktop_screen_crisp.router)
-app.include_router(frame_requests.router)
-app.include_router(retired_app_client_contracts.router)
-app.include_router(desktop_tts_updates.router)
-app.include_router(screen_frames.router)
-app.include_router(review.router)
+# B8: OMI_ROLE selects the routers this process serves (default `all` = every router, today's order).
+# The route table and roles live in app_roles.py; the router imports above stay static so the image
+# source-closure and import-time checks still see every router. An unknown OMI_ROLE fails startup.
+OMI_APP_ROLE = role_from_env()
+mount_routers(app, OMI_APP_ROLE, globals(), include_harness=is_chat_first_e2e_harness_runtime())
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),

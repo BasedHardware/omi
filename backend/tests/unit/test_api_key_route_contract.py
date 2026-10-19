@@ -49,8 +49,12 @@ def test_lifecycle_route_metadata_and_auth_dependencies_are_stable(router, expec
 def test_lifecycle_routers_are_composed_only_at_main_boundary():
     main_source = (BACKEND_DIR / "main.py").read_text(encoding="utf-8")
     assert "api_key_management," in main_source
-    assert "app.include_router(api_key_management.mcp_router)" in main_source
-    assert "app.include_router(api_key_management.developer_router)" in main_source
+    # main.py mounts through the B8 role map; both named routers must stay in it.
+    assert "mount_routers(app, OMI_APP_ROLE, globals()" in main_source
+    import app_roles
+
+    keys = {mount.key for mount in app_roles.ROUTER_MOUNTS}
+    assert {"api_key_management.mcp_router", "api_key_management.developer_router"} <= keys
 
     for leaf_router in ("mcp.py", "developer.py"):
         leaf_source = (BACKEND_DIR / "routers" / leaf_router).read_text(encoding="utf-8")

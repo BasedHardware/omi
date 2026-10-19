@@ -172,3 +172,41 @@ def test_mount_routers_includes_in_order_from_the_namespace():
     assert count == len(app.routers)
     assert app.routers == [f'{m.module}.{m.attr}' for m in app_roles.mounts_for(AppRole.WORKERS)]
     assert 'sync.router' in app.routers and 'transcribe.router' not in app.routers
+
+
+def _main_router_imports() -> set[str]:
+    tree = ast.parse(MAIN.read_text(encoding='utf-8'))
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == 'routers':
+            names.update(alias.asname or alias.name for alias in node.names)
+    return names
+
+
+def test_every_imported_router_is_in_the_role_map_and_vice_versa():
+    """With main.py mounting through app_roles, an imported router missing from ROUTER_MOUNTS would never serve."""
+
+    if not _main_uses_role_mounts():
+        pytest.skip('main.py still includes routers directly')
+    mapped = {m.module for m in app_roles.ROUTER_MOUNTS}
+    imported = _main_router_imports()
+    assert mapped <= imported, f'role map names routers main.py does not import: {sorted(mapped - imported)}'
+    assert (
+        imported <= mapped | STUB_ROUTERS_PENDING_MOUNT
+    ), f'main.py imports routers no role mounts: {sorted(imported - mapped)}'
+
+
+def test_duplicate_route_checker_still_sees_main_routes():
+    """check_duplicate_routes.py must resolve role-map mounts, or it silently passes on an empty main app."""
+
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, str(BACKEND.parent / '.github/scripts/check_duplicate_routes.py')],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout
+    # The one load-bearing duplicate is only visible when main's mounts resolve.
+    assert '[main] DELETE /v1/conversations/{}/action-items' in result.stdout
