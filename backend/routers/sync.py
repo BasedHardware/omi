@@ -2041,6 +2041,11 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
+    if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
+        # Kill switch, before the sequencer lease and any lock, download or paid
+        # call: the task, staged audio and ledger claim stay retained.
+        logger.warning('event=sync_minimal_redrive outcome=refused reason=disabled')
+        return JSONResponse(status_code=409, content={'status': 'minimal_redrive_disabled'})
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
@@ -2981,11 +2986,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         # A malformed payload will not fix itself on retry — consume it.
         logger.error(f'sync job handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
-    if redrive_mode and not minimal_redrive.enabled():
-        # Kill switch: refuse before any lock, download or paid call; the task,
-        # staged audio and ledger claim stay retained for a later delivery.
-        logger.warning('event=sync_minimal_redrive outcome=refused reason=disabled')
-        return JSONResponse(status_code=409, content={'status': 'minimal_redrive_disabled'})
 
     # The persisted job mode, not ambient configuration after admission,
     # selects the protocol. A payload mode covers the expired-job recovery

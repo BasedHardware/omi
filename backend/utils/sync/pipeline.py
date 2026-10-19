@@ -1758,7 +1758,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             deferred_outcome, outcome=TranscriptionOutcome.SUCCESS, provider=provider, model=model, retryable=False
         )
         return False
-    except SyncConversationPersistenceFenced:
+    except (SyncConversationPersistenceFenced, minimal_redrive.ProviderUnavailable):
         raise
     except Exception as e:
         if is_destructive_operation_in_progress(e):
@@ -3139,7 +3139,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 seg_tasks = [run_blocking(sync_executor, _process_one_segment, path) for path in chunk]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for path, r in zip(chunk, seg_results):
-                    if isinstance(r, SyncJobRunLeaseLost):
+                    if isinstance(r, (SyncJobRunLeaseLost, minimal_redrive.ProviderUnavailable)):
                         raise r
                     # A lifecycle fence has a semantic terminal outcome at the
                     # task boundary; never reduce it to a retryable segment error.

@@ -9,6 +9,7 @@ instead of full post-processing. The ledger, dedupe and receipts are unchanged.
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -22,7 +23,10 @@ from config.stt_provider_policy import (
     parakeet_supports_language,
     provider_is_enabled,
 )
+from google.cloud import firestore
+
 from database import conversations as conversations_db
+from utils.byok import set_byok_keys
 from utils.conversations import lifecycle as lifecycle_service
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionFailure, is_destructive_operation_in_progress
@@ -42,6 +46,14 @@ _PROMPT = (
     'conversation, in the language it is spoken in. Reply with JSON only: {"title": "...", "overview": "..."}.'
     '\n\nTranscript:\n'
 )
+
+
+class ProviderUnavailable(TranscriptionFailure):
+    """Typed retryable job failure; segment and gather boundaries re-raise it to the task handler."""
+
+    def __init__(self) -> None:
+        super().__init__(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet', retryable=True)
+        self.error_code = PROVIDER_UNAVAILABLE
 
 
 def parse_mode(payload: Any) -> Optional[str]:
@@ -65,9 +77,7 @@ def parakeet_service(req_language: str) -> tuple[str, str, str]:
         STTServingSurface.PRERECORDED, language
     ):
         return PrerecordedSTTService.PARAKEET, language, 'parakeet'
-    failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet', retryable=True)
-    failure.error_code = PROVIDER_UNAVAILABLE
-    raise failure
+    raise ProviderUnavailable()
 
 
 def select_service(
@@ -124,12 +134,20 @@ def attach_target(uid: str, start: float, end: float, capture: dict) -> Optional
     return row['id'] if row else None
 
 
-def generate_title(uid: str, transcript: str) -> tuple[str, str]:
+def _company_title_call(uid: str, prompt: str) -> Any:
     # Deferred like the pipeline's other leaf imports: stubbed coordinator
     # harnesses load this module without the LLM client stack.
     from utils.llm.clients import get_llm
 
-    reply = get_llm('sync_redrive_title', uid=uid).invoke(_PROMPT + transcript[:_TRANSCRIPT_CHARS])
+    # Operator work never bills or routes through a user's own key: with no
+    # BYOK key in scope get_llm stays on the company gpt-5-nano lane.
+    set_byok_keys({})
+    return get_llm('sync_redrive_title', uid=uid).invoke(prompt)
+
+
+def generate_title(uid: str, transcript: str) -> tuple[str, str]:
+    # A copied context keeps the BYOK reset local to this one call.
+    reply = contextvars.copy_context().run(_company_title_call, uid, _PROMPT + transcript[:_TRANSCRIPT_CHARS])
     text = str(getattr(reply, 'content', reply))
     parsed = json.loads(text[text.index('{') : text.rindex('}') + 1])
     title, overview = str(parsed.get('title') or '').strip(), str(parsed.get('overview') or '').strip()
@@ -162,8 +180,12 @@ def _title_new_conversation(uid: str, conversation_id: str) -> str:
     payload: dict[str, Any] = {
         'id': conversation_id,
         'status': 'completed',
-        'structured': {'title': title, 'overview': overview},
+        # The generated title is no longer the disposable server minimum.
+        'structured': {'title': title, 'overview': overview, 'title_provenance': firestore.DELETE_FIELD},
     }
+    if data.get('data_protection_level') is not None:
+        # Keep the row's stored level; never re-stamp it from the current profile.
+        payload['data_protection_level'] = data['data_protection_level']
     if data.get('sync_content_revision') is not None:
         payload['sync_content_revision'] = data['sync_content_revision']
     return 'titled' if lifecycle_service.persist_processed_conversation(uid, payload) else 'fenced'

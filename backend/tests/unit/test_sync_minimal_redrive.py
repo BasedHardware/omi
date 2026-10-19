@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
+from google.cloud import firestore
+
 from database import conversations as conversations_db
+from utils import byok
 from models.transcript_segment import TranscriptSegment
 from routers import sync as sync_router
 from utils.llm import clients as llm_clients
@@ -59,24 +62,35 @@ def _task_request(**extra):
 
 
 @pytest.mark.asyncio
-async def test_kill_switch_off_refuses_minimal_job_retryably_before_any_work(monkeypatch):
+@pytest.mark.parametrize('sequenced', [False, True])
+async def test_kill_switch_off_refuses_before_sequencer_lease_and_any_work(monkeypatch, sequenced):
     monkeypatch.setenv('SYNC_MINIMAL_REDRIVE_ENABLED', 'false')
     monkeypatch.setattr(
-        sync_router, 'get_sync_ledger_fence_mode', Mock(return_value=sync_router.SyncLedgerFenceMode.ACTIVE)
+        sync_router.uid_sequencer,
+        'production_fence_mode',
+        Mock(return_value=sync_router.SyncLedgerFenceMode.ACTIVE),
     )
-    for name in ('get_sync_job', 'try_acquire_job_run_lock', 'try_acquire_sync_job_run_lock'):
-        monkeypatch.setattr(sync_router, name, Mock())
-    pipeline_run = AsyncMock()
-    monkeypatch.setattr(sync_router, '_run_full_pipeline_background_async', pipeline_run)
+    monkeypatch.setattr(sync_router, 'warm_rollout_cohorts', AsyncMock())
+    begin = Mock(return_value=True)
+    monkeypatch.setattr(sync_router.sync_backfill_sequencer, 'begin_job', begin)
+    body = AsyncMock()
+    monkeypatch.setattr(sync_router, '_run_sync_job_body', body)
+    extra = {'sequencer_epoch': 3} if sequenced else {}
 
-    response = await sync_router._run_sync_job_attempt(_task_request(redrive_mode='minimal'), 0, {})
+    response = await sync_router.run_sync_job(_task_request(redrive_mode='minimal', **extra), task_retry_count=0)
 
     assert response.status_code == 409
     assert json.loads(response.body) == {'status': 'minimal_redrive_disabled'}
-    sync_router.get_sync_job.assert_not_called()
-    sync_router.try_acquire_job_run_lock.assert_not_called()
-    sync_router.try_acquire_sync_job_run_lock.assert_not_called()
-    pipeline_run.assert_not_awaited()
+    begin.assert_not_called()  # No sequencer lease is taken or renewed.
+    body.assert_not_awaited()  # No lock, download or provider call.
+
+
+def test_redrive_mode_is_a_valid_optional_task_payload_key():
+    from utils.cloud_tasks import SYNC_JOB_TASK_PAYLOAD_KEYS, sync_job_payload_keys_valid
+
+    # Budget replacements and sequencer re-dispatch revalidate the stored payload.
+    assert sync_job_payload_keys_valid(SYNC_JOB_TASK_PAYLOAD_KEYS | {'redrive_mode'})
+    assert sync_job_payload_keys_valid(SYNC_JOB_TASK_PAYLOAD_KEYS | {'redrive_mode', 'sequencer_epoch'})
 
 
 @pytest.mark.asyncio
@@ -166,10 +180,9 @@ def test_normal_double_empty_keeps_selection_and_paid_recovery(monkeypatch):
 
 def test_minimal_unservable_language_never_dispatches(monkeypatch):
     stt, modulate, _, _ = _segment_fixture(monkeypatch, ([], 'ja'))
-    ok, _, errors = _run_segment(
-        redrive_mode='minimal', transcription_prefs={'language': 'ja', 'single_language_mode': True}
-    )
-    assert ok is False and errors
+    # Re-raised past the segment boundary so the task handler retries the job.
+    with pytest.raises(minimal_redrive.ProviderUnavailable):
+        _run_segment(redrive_mode='minimal', transcription_prefs={'language': 'ja', 'single_language_mode': True})
     stt.assert_not_called()
     modulate.assert_not_called()
 
@@ -310,7 +323,8 @@ def _stored(conversation_id, **extra):
         'status': 'completed',
         'sync_relevance': 'keep',
         'sync_content_revision': 3,
-        'structured': {'title': 'Hello there', 'overview': ''},
+        'data_protection_level': 'standard',
+        'structured': {'title': 'Hello there', 'overview': '', 'title_provenance': 'server_minimum'},
         'transcript_segments': [{'text': 'Hello there'}],
         **extra,
     }
@@ -327,8 +341,13 @@ def test_new_row_gets_exactly_one_cheap_llm_call_and_lifecycle_persist(monkeypat
     assert payload == {
         'id': 'new',
         'status': 'completed',
-        'structured': {'title': 'Lunch plans', 'overview': 'Agreed to meet at noon.'},
+        'structured': {
+            'title': 'Lunch plans',
+            'overview': 'Agreed to meet at noon.',
+            'title_provenance': firestore.DELETE_FIELD,
+        },
         'sync_content_revision': 3,
+        'data_protection_level': 'standard',  # Stored level, never re-stamped.
     }
     assert '_merged' not in response
 
@@ -419,7 +438,10 @@ async def _run_coordinator(module, **kwargs):
 
     module.process_segment = segment
     module.minimal_redrive = SimpleNamespace(
-        MINIMAL='minimal', parakeet_service=MagicMock(return_value=PARAKEET), finalize=MagicMock()
+        MINIMAL='minimal',
+        ProviderUnavailable=minimal_redrive.ProviderUnavailable,
+        parakeet_service=MagicMock(return_value=PARAKEET),
+        finalize=MagicMock(),
     )
     await module._run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
     return seen, module._finalize_sync_job_for_run.call_args.args[2]
@@ -455,3 +477,46 @@ def test_explicit_or_lineage_bound_targets_are_never_replaced(monkeypatch):
     assert minimal_redrive.segment_target(None, None, None, *args) is None
     attach.assert_not_called()
     assert minimal_redrive.segment_target('minimal', None, None, *args) == 'near'
+
+
+def test_title_call_never_uses_a_users_own_key(monkeypatch):
+    seen = []
+
+    def fake_get_llm(feature, uid=None):
+        seen.append(byok.get_byok_keys())
+        return Mock(invoke=Mock(return_value=Mock(content='{"title": "T", "overview": "O."}')))
+
+    monkeypatch.setattr(llm_clients, 'get_llm', fake_get_llm)
+    byok.set_byok_keys({'openrouter': 'user-key', 'anthropic': 'user-key'})
+    try:
+        assert minimal_redrive.generate_title('uid-1', 'hello') == ('T', 'O.')
+        assert seen == [{}]  # Company gpt-5-nano lane only.
+        assert byok.get_byok_keys() == {'openrouter': 'user-key', 'anthropic': 'user-key'}
+    finally:
+        byok.set_byok_keys({})
+
+
+@pytest.mark.asyncio
+async def test_coordinator_retries_provider_unavailable_instead_of_finalizing(coordinator):
+    from tests.unit.test_sync_geolocation_enrichment import _prepare
+
+    _prepare(coordinator, ['/tmp/1720000000.wav'])
+
+    async def same(value):
+        return value
+
+    coordinator.async_resolve_geolocation = same
+    coordinator._finalize_sync_job_for_run = MagicMock()
+
+    def segment(*_args, **_kwargs):
+        raise minimal_redrive.ProviderUnavailable()
+
+    coordinator.process_segment = segment
+    coordinator.minimal_redrive = minimal_redrive
+    with pytest.raises(TranscriptionFailure) as raised:
+        await coordinator._run_full_pipeline_background_async(
+            'job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', task_mode=True
+        )
+    assert raised.value.error_code == 'sync_minimal_provider_unavailable'
+    assert sync_failure_from_exception(raised.value).retryable is True
+    coordinator._finalize_sync_job_for_run.assert_not_called()
