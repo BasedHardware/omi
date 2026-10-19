@@ -53,7 +53,9 @@ def test_redis_down_socket_reaches_bootstrap_and_pin_is_reset(monkeypatch):
     @app.websocket('/listen')
     async def listen(websocket: WebSocket):
         await websocket.accept()
-        runtime = ListenSessionRuntime(ListenRequest(websocket, 'owner', client_conversation_id='conversation'))
+        runtime = ListenSessionRuntime(
+            ListenRequest(websocket, 'owner', client_conversation_id='00000000-0000-4000-8000-000000000001')
+        )
         await runtime.run()
         assert current_listen_policy.get() is None
         await websocket.close()
@@ -92,7 +94,7 @@ async def test_alias_persists_once_without_overwriting_existing(monkeypatch):
 
     @asynccontextmanager
     async def client(injected=None):
-        yield Redis()
+        yield injected if injected is not None else Redis()
 
     monkeypatch.setattr(store, '_client', client)
     host = SimpleNamespace(request=SimpleNamespace(uid='owner'), state=ListenSessionState(listen_policy=policy))
