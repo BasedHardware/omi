@@ -113,9 +113,11 @@ def test_run_push_settles_the_row_with_the_claim_lease_token(result, expected_ca
     [
         (Outcome.STALE, Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)),
         (Outcome.BUSY, Result(Outcome.BUSY, ConsumerReason.LEASE_HELD)),
+        (Outcome.DEFERRED, Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE)),
+        (Outcome.DISCARDED, Result(Outcome.DISCARDED, ConsumerReason.SUPERSEDED)),
     ],
 )
-def test_run_push_wrong_token_or_foreign_lease_is_a_200_no_op(claimed, expected):
+def test_run_push_claim_key_outcomes_are_200_without_processing(claimed, expected):
     outbox = FakeOutbox(claim_result=claimed)
     consumer = FakeConsumer(AssertionError('must not process'))
     got = run_push(consumer, outbox, 'row-1', 'wk-old', now=1_000.0)
@@ -168,13 +170,32 @@ def test_heartbeat_reports_lost_lease():
     [
         ({'outcome': Outcome.RETRY, 'reason': ConsumerReason.PROCESSED, 'available_at': 1.0}, TypeError),
         ({'outcome': Outcome.DONE, 'reason': RetryReason.LOCKED}, TypeError),
-        ({'outcome': Outcome.DEFERRED, 'reason': ConsumerReason.NOT_DUE}, ValueError),
         ({'outcome': Outcome.RETRY, 'reason': RetryReason.LOCKED}, ValueError),
     ],
 )
 def test_result_rejects_reason_family_and_missing_available_at(kwargs, error):
     with pytest.raises(error):
         Result(**kwargs)
+
+
+def test_consumer_deferring_without_available_at_is_rejected():
+    outbox = FakeOutbox()
+    with pytest.raises(ValueError):
+        run_push(FakeConsumer(Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE)), outbox, 'row-1', 'wk-1', now=1_000.0)
+    assert [c[0] for c in outbox.calls] == ['claim_key']
+
+
+def test_not_due_claim_key_maps_to_200_deferred_not_due():
+    got = run_push(FakeConsumer(AssertionError()), FakeOutbox(claim_result=Outcome.DEFERRED), 'r', 'w', now=1.0)
+    response = http_response(got)
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred', 'reason': 'not_due'}
+
+
+def test_outbox_protocol_has_idempotent_wake():
+    from database.outbox import Outbox
+
+    assert callable(getattr(Outbox, 'wake'))
 
 
 def test_http_response_mapping_is_200_or_409_only():
