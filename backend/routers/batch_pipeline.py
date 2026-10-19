@@ -167,6 +167,11 @@ async def recover_quarantine(body: RedriveRequest):
     if not job:
         return {'status': 'held'}
     outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
+    if outcome == 'held':
+        try:
+            await run_blocking(db_executor, service.recovery.delivered, body.segment_id, outcome)
+        except Exception:
+            pass  # The lease still expires; the sweep repairs the wake then.
     if outcome == 'disabled':
         raise HTTPException(status_code=503, detail='Recovery disabled for this owner')
     if outcome in {'recovered', 'reconciled'}:

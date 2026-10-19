@@ -25,6 +25,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800000740.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -112,6 +116,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800000740.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -199,6 +207,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800001060.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -286,6 +298,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800001060.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -373,6 +389,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800001400.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -460,6 +480,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800001400.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -547,6 +571,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "seq": 1,
+     "until": 1800001400.0
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"

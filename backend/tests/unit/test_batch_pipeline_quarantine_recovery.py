@@ -547,6 +547,7 @@ def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(set
     if queue is not None:
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', queue)
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic-invoker')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', '0')  # Legacy wake kill switch.
     enqueue = Mock()
     monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
@@ -824,3 +825,119 @@ def test_sweep_bounds_held_errors_and_rotates_allowlisted_owners(setup, monkeypa
     assert recovery.sweep() == {'held': 2}
     assert recovery.sweep() == {'queued': 2}
     assert [call.args[2] for call in query.call_args_list] == ['first', 'second']
+
+
+def _wake_env(monkeypatch, lease=None):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', 'batch-quarantine-recovery')
+    if lease is None:
+        monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', lease)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    return module, enqueue
+
+
+def test_waiting_unit_gets_one_task_across_sweeps_until_the_wake_lease_expires(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)]))
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    outcomes = []
+    # A backlog: the queued task is not delivered for ten minutes of 20s sweeps.
+    while clock[0] < 100 + 600:
+        outcomes.append(recovery.sweep())
+        clock[0] += 20
+    assert outcomes[0] == {'queued': 1}
+    assert all(sweep == {'pending': 1} for sweep in outcomes[1:])
+    assert enqueue.call_count == 1
+    intent = deepcopy(row(client)['recovery'])
+    assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w1")
+    # Expiry repairs a lost/exhausted task with a new deterministic name, same paid intent.
+    clock[0] = 701.0
+    assert recovery.sweep() == {'queued': 1}
+    assert enqueue.call_count == 2
+    assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w2")
+    assert row(client)['recovery'] == intent
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+
+
+def test_duplicate_wake_names_are_deterministic_and_deliveries_spend_once(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    first = enqueue.call_args.args[2]
+    # A concurrent sweeper that read the same pre-claim snapshot cannot add a wake.
+    token = row(client)['recovery']['token']
+    assert recovery.protocol.claim_wake('bad', token, 100, 600) is None
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+    assert enqueue.call_count == 1 and enqueue.call_args.args[2] == first
+    # Old-style and new-style deliveries of the same intent still spend once.
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'  # Settled: no further wakes.
+    assert enqueue.call_count == 1
+
+
+def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    intent = deepcopy(row(client)['recovery'])
+    clock[0] = 200.0
+    recovery.delivered('bad', 'held')  # Delivered, but e.g. allowance refused the start.
+    assert row(client)['recovery_wake']['until'] == 320.0
+    clock[0] = 300.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+    clock[0] = 321.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_count == 2
+    assert row(client)['recovery'] == intent
+    recovery.delivered('bad', 'recovered')  # Only a held delivery shortens a lease.
+    assert row(client)['recovery_wake']['until'] == 921.0
+    stt.assert_not_called()
+
+
+def test_wake_kill_switch_restores_time_bucketed_wakes(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch, lease='0')
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_count == 2
+    assert 'recovery_wake' not in row(client)
+    recovery.delivered('bad', 'held')
+    assert 'recovery_wake' not in row(client)
+
+
+def test_wake_claim_keeps_the_privacy_fence(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, artifacts, stt, recovery = setup
+    token = recovery.protocol.prepare('bad', binding.owner_id, 100)['recovery']['token']
+    client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    with pytest.raises(BatchPrivacyBlocked):
+        recovery.protocol.claim_wake('bad', token, 100, 600)
+    assert recovery.dispatch('bad', binding.owner_id) == 'cancelled'
+    enqueue.assert_not_called()
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'value,expected', [(None, 600), ('0', 0), ('120', 120), ('3600', 3600), ('119', 600), ('3601', 600), ('x', 600)]
+)
+def test_recovery_wake_lease_config_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_wake_lease_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', value)
+    assert recovery_wake_lease_seconds() == expected

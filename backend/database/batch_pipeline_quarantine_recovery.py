@@ -107,6 +107,51 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
+    def claim_wake(self, segment_id, token, now, lease_seconds):
+        """Reserve the single outstanding delivery wake for a prepared intent.
+
+        Scheduling metadata only: it never authorizes a provider call (start()
+        remains the sole paid-intent fence). Returns the new wake sequence, or
+        None while an earlier wake for this intent is still leased.
+        """
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+            ):
+                return None
+            wake = job.get('recovery_wake') or {}
+            if wake.get('token') == token and wake.get('until', 0) > now:
+                return None
+            seq = (wake.get('seq', 0) if wake.get('token') == token else 0) + 1
+            job['recovery_wake'] = {'token': token, 'seq': seq, 'until': now + lease_seconds}
+            tx.put('jobs', segment_id, job)
+            return seq
+
+        return self.store.run(commit)
+
+    def shorten_wake(self, segment_id, now, rewake_seconds):
+        """A delivered wake that left the intent prepared may be re-woken soon."""
+
+        def commit(tx):
+            job = tx.get('jobs', segment_id)
+            wake = job.get('recovery_wake') if job else None
+            if (
+                not wake
+                or job.get('recovery_state') != 'prepared'
+                or wake.get('token') != job.get('recovery', {}).get('token')
+                or wake.get('until', 0) <= now + rewake_seconds
+            ):
+                return False
+            job['recovery_wake'] = {**wake, 'until': now + rewake_seconds}
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
     def start(self, segment_id, token, now, *, provider="legacy_sync"):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
