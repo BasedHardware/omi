@@ -803,7 +803,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               maxTitleLines: 2,
               onTap: () {
                 _remember(_searchedQuery);
-                context.read<MemoriesProvider>().setSearchQuery(_searchedQuery);
+                context.read<MemoriesProvider>().setSearchQuery(_memoriesFilterFor(_searchedQuery, memory.content));
                 routeToPage(context, const MemoriesPage());
               },
             ),
@@ -866,6 +866,21 @@ Color? _hexColor(String hex) {
   final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
   if (value == null) return null;
   return Color(hex.length <= 7 ? 0xFF000000 | value : value);
+}
+
+/// What Memories is filtered by when a memory found for [query] is opened.
+///
+/// Memory search finds a memory that holds any one word of the query, but Memories only lists the
+/// memories that hold its whole filter. Keep the whole query when this memory holds it, otherwise
+/// use the longest query word it holds, so the memory that was tapped is in the list.
+String _memoriesFilterFor(String query, String content) {
+  final text = content.toLowerCase();
+  if (text.contains(query.toLowerCase())) return query;
+  String? word;
+  for (final candidate in query.split(RegExp(r'[\s.,]+'))) {
+    if (candidate.length > (word?.length ?? 0) && text.contains(candidate.toLowerCase())) word = candidate;
+  }
+  return word ?? query;
 }
 
 /// A browse tile: glyph, count, and a one-word label. No count when the server could not count.
