@@ -15,7 +15,7 @@ from tests.unit.memory_import_isolation import install_database_client_stub
 
 install_database_client_stub()
 
-from models.trend import Trend, TrendCategory, TrendType, valid_items
+from models.trend import Trend, TrendEnum, TrendType, valid_items
 import database.trends as trends_db
 
 
@@ -76,9 +76,9 @@ def test_save_trends_set_and_update_with_injected_client():
 
     names = sorted(valid_items)
     trend = Trend(
-        category=TrendCategory.ai_product,
+        category=TrendEnum.ai_product,
         topics=[names[0]],
-        type=TrendType.positive,
+        type=TrendType.best,
     )
 
     trends_db.save_trends("mem-123", [trend], firestore_client=mock_client)
@@ -87,7 +87,7 @@ def test_save_trends_set_and_update_with_injected_client():
     mock_cat_doc.set.assert_called_once()
     cat_payload = mock_cat_doc.set.call_args[0][0]
     assert cat_payload["category"] == "ai_product"
-    assert cat_payload["type"] == "positive"
+    assert cat_payload["type"] == "best"
     assert mock_cat_doc.set.call_args[1]["merge"] is True
 
     # Topic doc set called with merge=True
