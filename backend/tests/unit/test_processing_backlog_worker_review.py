@@ -20,6 +20,8 @@ from google.cloud.firestore_v1.types import Document, RunQueryRequest, RunQueryR
 import grpc
 import pytest
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 from utils import processing_backlog_worker as worker
 
 
@@ -172,7 +174,10 @@ def job_harness(monkeypatch):
         'reserved': {},
     }
     processed, finishes, scheduled = [], [], []
-    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
+    monkeypatch.setattr(worker, '_selected', AsyncMock(return_value=True))
     monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True))
     monkeypatch.setattr(worker.funded_processing, 'capacity', lambda current: (100, 100))
@@ -207,11 +212,15 @@ def job_harness(monkeypatch):
                 cutoff=pending['cutoff'],
                 pending_upgrade={},
                 reserved={},
+                scope_skipped=False,
                 cursor_audio=None,
                 cursor_text=None,
                 lease_until=0,
             )
             return True
+        if job.get('scope_skipped'):
+            job.update(cursor_audio=None, cursor_text=None, scope_skipped=False, lease_until=0)
+            return False
         job.update(state='waiting_choice', pending_upgrade={}, lease_until=0)
         return False
 
@@ -286,7 +295,8 @@ async def test_worker_merges_multiple_equal_timestamp_pages_without_drops_or_dou
 
 
 async def test_flags_off_worker_does_not_read_or_schedule(monkeypatch):
-    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda: False)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
     blocked = Mock(side_effect=AssertionError('Flag-off worker touched IO/scheduling'))
     monkeypatch.setattr(worker, 'run_blocking', blocked)
     await worker.run('synthetic')
@@ -753,3 +763,60 @@ async def test_prechoice_staging_remains_authorized_until_seal(monkeypatch, job_
     await worker.run('synthetic', max_items=100, time_budget=900)
     assert [p['id'] for p in harness.processed] == ['live']
     assert harness.job['state'] == 'waiting_choice'
+
+
+async def test_disabled_lane_does_not_spend_estimate_or_finish_choice(job_harness, monkeypatch):
+    job, processed, finishes = job_harness.job, job_harness.processed, job_harness.finishes
+    row = snapshot('old-sync', listed_at=20, created_at=10, state='held', seconds=30)
+    monkeypatch.setattr(worker, '_page', lambda uid, kind, cursor: [('audio', row)] if kind == 'audio' else [])
+    monkeypatch.setattr(worker, '_selected', AsyncMock(return_value=False))
+    before = job['remaining']
+    await worker.run('owner')
+    assert job['remaining'] == before and job['reserved'] == {}
+    assert job['state'] == 'processing' and len(finishes) == 1 and not processed
+    assert job['cursor_audio'] is None and job['scope_skipped'] is False
+
+
+async def test_skipped_lane_survives_restart_until_cursor_rewinds(job_harness, monkeypatch):
+    job, processed, finishes = job_harness.job, job_harness.processed, job_harness.finishes
+    job.update(scope_skipped=True, cursor_audio={'at': 20, 'id': 'excluded'})
+    monkeypatch.setattr(worker, '_page', lambda *args: [])
+    await worker.run('owner')
+    assert job['cursor_audio'] is None and job['scope_skipped'] is False
+    assert job['state'] == 'processing' and len(finishes) == 1
+
+
+@pytest.mark.parametrize('origin,selected', [('live', True), ('sync', False), ('batch', False), ('unknown', False)])
+async def test_worker_selects_original_encrypted_audio_lane(monkeypatch, origin, selected):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:owner')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    ref = Mock()
+    ref.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'metadata': 'cipher'})
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: ref)
+    monkeypatch.setattr(worker.cap_hold, 'metadata', lambda uid, row: {'origin': origin})
+    assert await worker._selected('owner', {'kind': 'audio', 'id': 'held'}) is selected
+
+
+async def test_post_cutoff_excluded_lane_does_not_stall_chosen_work(job_harness, monkeypatch):
+    job = job_harness.job
+    row = snapshot('later-sync', listed_at=200, created_at=200, state='held', seconds=30)
+    monkeypatch.setattr(worker, '_page', lambda uid, kind, cursor: [('audio', row)] if kind == 'audio' else [])
+    selection = AsyncMock(return_value=False)
+    monkeypatch.setattr(worker, '_selected', selection)
+    await worker.run('owner')
+    selection.assert_not_called()
+    assert job_harness.finishes and not job.get('scope_skipped')
+
+
+@pytest.mark.parametrize('failure', ['lookup', 'metadata'])
+async def test_unreadable_provenance_stays_paused_without_spend(monkeypatch, failure):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    ref = Mock()
+    ref.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'metadata': 'cipher'})
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: ref)
+    monkeypatch.setattr(worker.cap_hold, 'metadata', Mock(side_effect=OSError('synthetic storage failure')))
+    if failure == 'lookup':
+        ref.document.return_value.get.side_effect = OSError('synthetic manifest read failure')
+    assert not await worker._selected('owner', {'kind': 'audio', 'id': 'held'})

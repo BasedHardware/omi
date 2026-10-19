@@ -1,4 +1,4 @@
-from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
 import logging
 import mimetypes
@@ -337,7 +337,7 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """One Chat Completions stream: images as base64 image_url, documents as file parts."""
-        if generated_compute_enabled():
+        if generated_compute_configured():
             await run_blocking(db_executor, require_generated_compute, self.uid, 'file_chat_vision', allow_byok=False)
         assert callback is not None
         output_list: List[str] = []

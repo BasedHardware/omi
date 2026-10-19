@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Any, Callable
 
@@ -35,7 +36,12 @@ def rollout_environment() -> str:
 
 
 def valid_uid(uid: object) -> bool:
-    return isinstance(uid, str) and bool(uid) and uid.strip() == uid and '/' not in uid and len(uid.encode()) <= 256
+    if not isinstance(uid, str) or not uid or uid.strip() != uid or '/' in uid:
+        return False
+    try:
+        return len(uid.encode()) <= 256
+    except UnicodeError:
+        return False
 
 
 _membership_resolver: Callable[..., bool] | None = None
@@ -84,3 +90,46 @@ def load_rollout_cohorts(uid: str) -> None:
 async def warm_rollout_cohorts(uid: str) -> None:
     if valid_uid(uid) and _warm_resolver is not None:
         await _warm_resolver(uid)
+
+
+# The free-tier policy retired in #22238. Retain its pure token grammar and
+# stable bucket here for environment-owned rollouts, without its retired remote
+# control plane or any database membership reads.
+def parse_cohort(raw: str | None) -> tuple[frozenset[str], int] | None:
+    """Parse uid:<uid>,pct:<integer 0..100>; explicit all is the sole wildcard.
+
+    Empty or any malformed token denies the entire configuration.
+    """
+    if raw is None or not raw.strip():
+        return None
+    if raw.strip().lower() == 'all':
+        return frozenset(), 100
+    uids: set[str] = set()
+    percent: int | None = None
+    for token in raw.split(','):
+        kind, sep, value = token.strip().partition(':')
+        kind, value = kind.strip().lower(), value.strip()
+        if not sep or not value:
+            return None
+        if kind == 'uid' and valid_uid(value):
+            uids.add(value)
+        elif kind == 'pct' and value.isascii() and value.isdigit():
+            normalized = value.lstrip('0') or '0'
+            if percent is not None or len(normalized) > 3 or int(normalized) > 100:
+                return None
+            percent = int(normalized)
+        else:
+            return None
+    return frozenset(uids), percent or 0
+
+
+def cohort_bucket(uid: str) -> int:
+    """Existing free-tier-cohort salt/bucket; stable across hosts and widening."""
+    return int(hashlib.sha256(('free-tier-cohort:' + uid).encode()).hexdigest()[:8], 16) % 100
+
+
+def cohort_admits(uid: str, raw: str | None) -> bool:
+    if not valid_uid(uid):
+        return False
+    parsed = parse_cohort(raw)
+    return parsed is not None and (uid in parsed[0] or cohort_bucket(uid) < parsed[1])
