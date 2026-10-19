@@ -560,17 +560,39 @@ def tick(
     return TickResult(decisions, verdict, new_revision, wrote)
 
 
-def read_heartbeat(path: Path) -> float | None:
+UNAVAILABLE_ESCALATE_TICKS = 3  # C1 ruling: escalate a gate that cannot run for 3 consecutive ticks (~30 min)
+
+
+def gate_unavailable(verdict: GateVerdict | None) -> bool:
+    """The gate (or prod-shadow parity) could not produce a cohort verdict; the controller holds (C1)."""
+    if verdict is None or verdict.status != 'FAIL':
+        return False
+    action, _ = classify_fail(verdict.reason)
+    return action is None
+
+
+def next_unavailable_streak(previous: int, verdict: GateVerdict | None) -> int:
+    return previous + 1 if gate_unavailable(verdict) else 0
+
+
+def should_escalate_unavailable(streak: int) -> bool:
+    return streak >= UNAVAILABLE_ESCALATE_TICKS and streak % UNAVAILABLE_ESCALATE_TICKS == 0
+
+
+def read_heartbeat(path: Path) -> tuple[float | None, int]:
+    """(last completed tick, consecutive gate-unavailable ticks); a missing/garbled file is (None, 0)."""
     try:
-        value = float(path.read_text(encoding='utf-8').strip())
-    except (OSError, ValueError):
-        return None
-    return value if math.isfinite(value) else None
+        parts = path.read_text(encoding='utf-8').split()
+        at = float(parts[0])
+        streak = int(parts[1]) if len(parts) > 1 else 0
+    except (OSError, ValueError, IndexError):
+        return None, 0
+    return (at if math.isfinite(at) else None), max(0, streak)
 
 
-def write_heartbeat(path: Path, at: float) -> None:
+def write_heartbeat(path: Path, at: float, unavailable_streak: int = 0) -> None:
     tmp = path.with_name(path.name + '.tmp')
-    tmp.write_text(f'{at:.3f}\n', encoding='utf-8')
+    tmp.write_text(f'{at:.3f} {unavailable_streak}\n', encoding='utf-8')
     tmp.replace(path)
 
 
@@ -687,10 +709,18 @@ def main(
     )
     while True:
         try:
-            last = read_heartbeat(heartbeat)
+            last, streak = read_heartbeat(heartbeat)
             gap = last is None or time.time() - last > args.max_gap
             result = tick(args.env, effects, hold_scale=args.hold_scale, apply=args.apply, resumed_after_gap=gap)
-            write_heartbeat(heartbeat, time.time())
+            # The streak survives a restart (it is in the heartbeat file) but a pause gap resets it.
+            streak = next_unavailable_streak(0 if gap else streak, result.verdict)
+            if should_escalate_unavailable(streak) and result.verdict is not None:
+                effects.notify(
+                    f'PAGE lead: ramp-controller {args.env} gate unavailable for {streak} consecutive ticks '
+                    f'(gate={result.verdict.status}:{result.verdict.reason}); holding at the current step',
+                    True,
+                )
+            write_heartbeat(heartbeat, time.time(), streak)
             print(
                 json.dumps(
                     {

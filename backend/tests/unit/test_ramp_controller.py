@@ -369,9 +369,13 @@ def test_prod_requires_parity_from_25():
 
 def test_heartbeat_round_trip(tmp_path):
     path = tmp_path / 'hb'
-    assert rc.read_heartbeat(path) is None
+    assert rc.read_heartbeat(path) == (None, 0)
     rc.write_heartbeat(path, 123.5)
-    assert rc.read_heartbeat(path) == 123.5
+    assert rc.read_heartbeat(path) == (123.5, 0)
+    rc.write_heartbeat(path, 124.0, 2)
+    assert rc.read_heartbeat(path) == (124.0, 2)
+    path.write_text('123.5\n')  # pre-streak format
+    assert rc.read_heartbeat(path) == (123.5, 0)
 
 
 def test_inject_gate_fires_once(tmp_path, capsys):
@@ -412,3 +416,15 @@ def test_ramp_set_cli_refuses_controller_actor_and_wrong_tier(monkeypatch):
     assert ramp_set.main(common + ['--actor', 'lead', '--apply'], client_factory=lambda **kw: db) == 0
     assert db.rows[('rollout_cohorts', '_ramp')]['envs']['prod']['legacy_sync'] == 'draining'
     assert math.isfinite(db.rows[('rollout_cohorts', '_ramp')]['revision'])
+
+
+def test_gate_unavailable_escalates_every_third_consecutive_tick():
+    unavailable = verdict('FAIL', 'ro_prod_unavailable')
+    streak, escalations = 0, []
+    for v in [unavailable] * 7 + [verdict('PASS'), unavailable]:
+        streak = rc.next_unavailable_streak(streak, v)
+        escalations.append(rc.should_escalate_unavailable(streak))
+    assert escalations == [False, False, True, False, False, True, False, False, False]
+    assert rc.gate_unavailable(verdict('FAIL', 'timeout_incomplete'))
+    assert not rc.gate_unavailable(verdict('FAIL', 'projection_error'))
+    assert not rc.gate_unavailable(verdict('FAIL', 'http_5xx_regression'))
