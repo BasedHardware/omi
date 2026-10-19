@@ -87,6 +87,8 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'
     assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED'] == 'false'
@@ -164,7 +166,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
-    assert deployment['spec']['replicas'] == 1
+    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
+    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
         'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',

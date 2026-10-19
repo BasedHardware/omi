@@ -204,34 +204,6 @@
       "why": "pre-existing; unreviewed"
     },
     {
-      "path": "utils/sync/cap_hold_recovery.py",
-      "function": "_schedule",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; LIVE RISK (dark: STT_CAP_DISPATCH_ENFORCEMENT default false): held-audio recovery spends paid pre-recorded STT in a fire-and-forget task"
-    },
-    {
-      "path": "utils/sync/cap_hold_recovery.py",
-      "function": "continue_after_cooldown",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed (#21488): not awaited; a 60s in-memory wake-up timer, then recover(uid) runs the processing-backlog worker, which spends paid pre-recorded STT. SIGKILL loses the wake-up and any in-flight STT call: the held audio itself is not lost (manifests stay state=held in Firestore/GCS, per-piece receipts and usage idempotency keys survive, the worker lease expires). But nothing server-side re-drives it: there is no sweep or scheduler, so recovery resumes only when the client next calls GET /v1/users/subscription (backlog state processing), the locked-content path, or a payment upgrade. An in-flight provider call is re-spent on retry. Gated by execution_admission_enabled (STT_CAP_DISPATCH_ENFORCEMENT or LADDER_V1_BUDGET_ENFORCEMENT_ENABLED)."
-    },
-    {
-      "path": "utils/sync/cap_hold_recovery.py",
-      "function": "kick",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; LIVE RISK (dark: STT_CAP_DISPATCH_ENFORCEMENT default false): held-audio recovery spends paid pre-recorded STT in a fire-and-forget task"
-    },
-    {
-      "path": "utils/sync/live_cap_hold.py",
-      "function": "LiveHeldAudio.flush",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed (#21488): awaited via asyncio.shield, so the publish outlives caller cancellation but never outlives a clean request/socket close. SIGKILL is not covered: buffered and pending live held PCM (bounded to about 60s per session, in process memory only) that has not reached live_cap_manifest.publish is lost with no recovery; the module docstring states this. Published seconds are durable and are the only seconds reported to the client. Not caused by the background task (an inline await would lose the same bytes)."
-    },
-    {
       "path": "utils/sync/pipeline.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",
