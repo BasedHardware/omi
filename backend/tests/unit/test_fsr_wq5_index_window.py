@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.firestore_v1 import Client
 
 from database import memories
 from tests.unit.test_external_list_nested_budget import Query, Ref, Snapshot, Store
@@ -169,3 +171,17 @@ def test_mixed_service_cursor_caps_two_windows_and_survives_visibility_changes(m
         pytest.fail('cursor did not terminate')
     assert ids == [f'm-{i:05}' for i in range(40) if i != 5]
     assert len(ids) == len(set(ids))
+
+
+def test_real_sdk_cursor_compilation_keeps_nanoseconds_without_a_document_read():
+    client = Client(project='wq5-hermetic', credentials=AnonymousCredentials())
+    collection = client.collection('users').document(UID).collection('memories')
+    stamp = DatetimeWithNanoseconds.from_rfc3339('2026-10-20T00:00:00.123456789Z')
+    query = (
+        collection.order_by('updated_at', direction='DESCENDING')
+        .order_by('__name__')
+        .start_after(BookmarkDict({'updated_at': stamp, '__name__': collection.document('deleted-boundary')}))
+    )
+    compiled = query._to_protobuf()
+    assert compiled.start_at.values[0].timestamp_value.nanosecond == 123456789
+    assert compiled.start_at.values[1].reference_value.endswith('/memories/deleted-boundary')

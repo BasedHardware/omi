@@ -394,3 +394,22 @@ def test_index_window_response_returns_existing_cursor_header_with_page():
     assert values == ['bounded-page']
     assert headers['X-Omi-Memory-Next-Cursor'] == 'next-window'
     service.read.assert_not_called()
+
+
+def test_index_window_off_preserves_invalid_cursor_400():
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(400, 'invalid_or_stale_cursor:malformed_cursor')
+    scope = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod.firestore_read_levers, 'lever_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+    ):
+        try:
+            mem_mod.get_memories(response=MagicMock(), uid='uid1', limit=7, offset=0, cursor='bad')
+        except HTTPException as exc:
+            assert exc.status_code == 400
+        else:
+            raise AssertionError('off requests must retain the released invalid-cursor response')
+    service.read.assert_not_called()

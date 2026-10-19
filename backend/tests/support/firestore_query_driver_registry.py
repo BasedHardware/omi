@@ -57,6 +57,10 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from utils.memory.index_window_cursor import (
+    encode_cursor as encode_memory_window_cursor,
+    query_scope as memory_window_scope,
+)
 from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
@@ -1635,13 +1639,22 @@ _add(
         reason='existence probe run for both stores on every count driver call',
     )
 )
+
+
+def _memory_window_bookmark(client, combo, trial):
+    if combo.get('cursor') == 'valid':
+        combo['cursor'] = encode_memory_window_cursor(
+            T0, 'mem-1', memory_window_scope({'uid': UID, 'order': combo['order_field']})
+        )
+
+
 _add(
     DriverEntry(
         'database.memories._stream_memory_list_index_window',
         base={'memories_ref': ref_collection(f'users/{UID}/memories'), 'uid': UID},
         domains={
             'order_field': ['updated_at', 'created_at'],
-            'cursor': [None, '', 'invalid'],
+            'cursor': [None, '', 'invalid', 'valid'],
             'full_documents': [False, True],
         },
         neutrals={
@@ -1649,7 +1662,12 @@ _add(
             'budget': _BUDGET,
             'cursor_snapshot': (None, 'legacy snapshot seeks covered by list consumer'),
         },
-        patchers=(_stub('config.firestore_read_levers.lever_enabled', True),),
+        setup=_memory_window_bookmark,
+        patchers=(
+            _stub('config.firestore_read_levers.lever_enabled', True),
+            _stub('utils.memory.index_window_cursor.time.time', int(T0.timestamp())),
+            lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
+        ),
     )
 )
 _add(DriverEntry('database.memories.count_default_visible_memories', base={'uid': UID}))
