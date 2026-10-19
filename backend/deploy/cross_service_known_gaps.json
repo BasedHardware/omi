@@ -6,8 +6,16 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
+      "key": "edge-declared|dev|enrichment/ENRICHMENT_DISPATCH_MODE",
+      "why": "Swarm lane-1 stub edge (legacy-sync retirement): no deployment dispatches yet. Lane 7's ops file declares the dispatch mode when the queue lands; delete this entry then."
+    },
+    {
       "key": "edge-declared|dev|listen-finalization/LISTEN_FINALIZATION_DISPATCH_MODE",
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|dev|provider-stt/PROVIDER_STT_DISPATCH_MODE",
+      "why": "Swarm lane-1 stub edge (legacy-sync retirement): no deployment dispatches yet. Lane 7's ops file declares the dispatch mode when the queue lands; delete this entry then."
     },
     {
       "key": "edge-declared|dev|sync-backfill/SYNC_BACKFILL_ROUTING_ENABLED",
@@ -20,6 +28,14 @@
     {
       "key": "edge-declared|dev|sync-jobs/SYNC_DISPATCH_MODE",
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
+    },
+    {
+      "key": "edge-declared|prod|enrichment/ENRICHMENT_DISPATCH_MODE",
+      "why": "Swarm lane-1 stub edge (legacy-sync retirement): no deployment dispatches yet. Lane 7's ops file declares the dispatch mode when the queue lands; delete this entry then."
+    },
+    {
+      "key": "edge-declared|prod|provider-stt/PROVIDER_STT_DISPATCH_MODE",
+      "why": "Swarm lane-1 stub edge (legacy-sync retirement): no deployment dispatches yet. Lane 7's ops file declares the dispatch mode when the queue lands; delete this entry then."
     },
     {
       "key": "edge-declared|prod|sync-backfill/SYNC_DISPATCH_MODE",
