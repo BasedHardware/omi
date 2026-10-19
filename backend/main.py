@@ -144,6 +144,7 @@ from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -354,6 +355,7 @@ methods_timeout = {
 
 # Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
+    "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
@@ -674,6 +676,7 @@ async def shutdown_event():
     if (serving_task := getattr(app.state, 'batch_pipeline_serving', None)) is not None:
         await stop_serving(serving_task)
     await batch_pressure.stop()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     from utils.other.fsr_leader_lease import release_loop_leases
     from utils.other.fsr_leader_lease import singleton_loops_enabled

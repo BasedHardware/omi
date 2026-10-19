@@ -54,4 +54,4 @@ COPY backend/pusher/ ./pusher/
 
 EXPOSE 8080
 USER 10001:10001
-CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]
+CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]
