@@ -4,7 +4,6 @@
 #
 #   bash backend/deploy/staging/bootstrap_iam.sh                 # dry run: print every action
 #   bash backend/deploy/staging/bootstrap_iam.sh --apply         # do it (idempotent; safe to re-run)
-#   bash backend/deploy/staging/bootstrap_iam.sh --apply --with-redis   # also S2: Memorystore (~$36/mo)
 #   bash backend/deploy/staging/bootstrap_iam.sh --verify        # read-only checks of the end state
 #
 # ROLLBACK (one line; deletes only what this script created, all named staging-*):
@@ -25,7 +24,11 @@
 #                        and copies of dev's vendor test keys (payloads piped, never printed)
 #     GKE dev-omi-gke    namespace `staging` + RoleBinding (ClusterRole edit, that namespace only)
 #                        for agent-dev-operator
-#     Memorystore        staging-redis, Basic 1 GB (only with --with-redis; decision S2)
+#     Redis (S2)         no cloud resource: Redis runs in-cluster (StatefulSet in namespace
+#                        `staging`, deployed by deploy.sh behind an internal LoadBalancer). This
+#                        script only generates its password (staging-redis-password) and puts it
+#                        in the k8s Secret staging/staging-redis. Staging Cloud Run reaches it by
+#                        Direct VPC egress on omi-dev-vpc-1 (same VPC as dev-omi-gke).
 #   based-hardware (prod):
 #     IAM deny policy    `staging-deny-all` denying the four staging-* SAs on prod services.
 #                        Nothing is granted in prod.
@@ -51,8 +54,9 @@
 #                          invoker policy); serviceAccountUser on the four staging SAs;
 #                          storage.objectAdmin on the three staging buckets (deploy lock, build
 #                          source, lane 4's mirror writes); edit in GKE namespace `staging`;
-#                          with --with-redis: compute.networkUser on the dev VPC subnet
-#                          (Direct VPC egress to reach staging-redis)
+#                          compute.networkUser on subnet omi-us-central1-dev-vpc-1-subnet-1 only
+#                          (Direct VPC egress so staging Cloud Run reaches in-cluster Redis;
+#                          the agent has compute.subnetworks.get there but not .use)
 set -euo pipefail
 
 DEV=based-hardware-dev
@@ -62,20 +66,19 @@ FIRESTORE_LOCATION=nam5
 DB=staging
 CLUSTER=dev-omi-gke
 NAMESPACE=staging
-VPC_NETWORK=omi-dev-vpc-1
 VPC_SUBNET=omi-us-central1-dev-vpc-1-subnet-1
 AGENT="agent-dev-operator@${DEV}.iam.gserviceaccount.com"
 SA_NAMES=(staging-runtime staging-worker staging-tasks-invoker staging-builder)
 BUCKETS=("${DEV}-staging-sync" "${DEV}-staging-batch" "${DEV}-staging-mirror")
 AR_REPO=staging
 DENY_POLICY_ID=staging-deny-all
-REDIS_INSTANCE=staging-redis
 
 # Fresh random secrets (new values; nothing shared with dev or prod).
 RANDOM_SECRETS=(
   ENCRYPTION_SECRET ADMIN_KEY METRICS_SECRET LIFECYCLE_EMAIL_SIGNING_SECRET
   MEMORY_V3_CURSOR_SECRET SCREEN_FRAME_SIGNING_SECRET DREAM_AGENT_FEEDBACK_SALT
   OMI_LLM_GATEWAY_SERVICE_TOKEN TELEGRAM_WEBHOOK_SECRET LINQ_WEBHOOK_SECRET
+  REDIS_PASSWORD
 )
 # Copied from dev Secret Manager (dev's vendor test keys). Spend caps live in the overlay env.
 DEV_COPY_SECRETS=(
@@ -98,13 +101,11 @@ DENY_SERVICES=(
 )
 
 MODE=dry-run
-WITH_REDIS=0
 ROLLBACK=0
 for arg in "$@"; do
   case "$arg" in
     --apply) MODE=apply ;;
     --verify) MODE=verify ;;
-    --with-redis) WITH_REDIS=1 ;;
     --rollback) ROLLBACK=1 ;;
     -h | --help)
       sed -n '2,60p' "$0"
@@ -168,7 +169,7 @@ run_delete() {
 
 preflight() {
   if [[ "$MODE" == dry-run ]]; then
-    echo "mode: dry-run (prints the plan; no gcloud calls)   rollback: $ROLLBACK   with-redis: $WITH_REDIS"
+    echo "mode: dry-run (prints the plan; no gcloud calls)   rollback: $ROLLBACK"
     return 0
   fi
   if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] || [[ -n "${GCP_AGENT_TIER:-}" && "${GCP_AGENT_TIER}" != human ]]; then
@@ -182,7 +183,7 @@ preflight() {
     echo "refusing: active gcloud account '$account' is not a human login" >&2
     exit 1
   fi
-  echo "account: $account   mode: $MODE   rollback: $ROLLBACK   with-redis: $WITH_REDIS"
+  echo "account: $account   mode: $MODE   rollback: $ROLLBACK"
 }
 
 copy_dev_secret() { # ENV_NAME: dev secret ENV_NAME -> staging-env-name, payload never printed
@@ -400,30 +401,19 @@ bootstrap() {
     echo "[dry-run] kubectl -n $NAMESPACE create rolebinding staging-agent-dev-operator-edit --clusterrole=edit --user=$AGENT"
   fi
 
-  if [[ "$WITH_REDIS" == 1 ]]; then
-    echo "== S2: Memorystore $REDIS_INSTANCE (Basic 1 GB, AUTH on, dev VPC)"
-    run gcloud services enable redis.googleapis.com --project="$DEV"
-    run_create gcloud redis instances create "$REDIS_INSTANCE" --project="$DEV" --region="$REGION" \
-      --tier=basic --size=1 --redis-version=redis_7_2 --network="$VPC_NETWORK" --enable-auth \
-      --labels=env=staging
-    run_create gcloud secrets create staging-redis-host --project="$DEV" --replication-policy=automatic --labels=env=staging
-    run_create gcloud secrets create staging-redis-password --project="$DEV" --replication-policy=automatic --labels=env=staging
-    if [[ "$MODE" == apply ]]; then
-      gcloud redis instances describe "$REDIS_INSTANCE" --region="$REGION" --project="$DEV" --format='value(host)' |
-        tr -d '\n' | gcloud secrets versions add staging-redis-host --project="$DEV" --data-file=- >/dev/null
-      gcloud redis instances get-auth-string "$REDIS_INSTANCE" --region="$REGION" --project="$DEV" --format='value(authString)' |
-        tr -d '\n' | gcloud secrets versions add staging-redis-password --project="$DEV" --data-file=- >/dev/null
-      echo "redis host/password stored in staging-redis-{host,password}"
-    else
-      echo "[dry-run] redis host and AUTH string piped into staging-redis-host / staging-redis-password"
-    fi
-    grant_secret staging-redis-host staging-runtime
-    grant_secret staging-redis-password staging-runtime
-    run gcloud compute networks subnets add-iam-policy-binding "$VPC_SUBNET" --region="$REGION" --project="$DEV" \
-      --member="serviceAccount:${AGENT}" --role=roles/compute.networkUser --quiet --format=none
+  echo "== S2 in-cluster Redis: k8s Secret staging/staging-redis from staging-redis-password"
+  if [[ "$MODE" == apply ]]; then
+    gcloud secrets versions access latest --secret=staging-redis-password --project="$DEV" |
+      with_dev_kubeconfig kubectl -n "$NAMESPACE" create secret generic staging-redis \
+        --from-file=password=/dev/stdin --dry-run=client -o yaml |
+      with_dev_kubeconfig kubectl apply -f - >/dev/null
+    echo "k8s secret staging/staging-redis applied"
   else
-    echo "== S2 not requested: no Redis created (re-run with --with-redis once S2 is approved)"
+    echo "[dry-run] secrets versions access staging-redis-password | kubectl -n $NAMESPACE create secret generic staging-redis --from-file=password=/dev/stdin | kubectl apply (never printed)"
   fi
+  echo "== Direct VPC egress for staging Cloud Run (the agent deploys with --network/--subnet)"
+  run gcloud compute networks subnets add-iam-policy-binding "$VPC_SUBNET" --region="$REGION" --project="$DEV" \
+      --member="serviceAccount:${AGENT}" --role=roles/compute.networkUser --quiet --format=none
 
   echo "== prod deny policy on $PROD (needs roles/iam.denyAdmin)"
   local deny_file
@@ -450,8 +440,7 @@ rollback() {
   echo "== ROLLBACK: removes only staging-* resources and the agent's staging-scoped grants"
   run_delete gcloud iam policies delete "$DENY_POLICY_ID" --kind=denypolicies \
     --attachment-point="cloudresourcemanager.googleapis.com/projects/${PROD}" --quiet
-  run_delete gcloud redis instances delete "$REDIS_INSTANCE" --region="$REGION" --project="$DEV" --quiet
-  for name in "${RANDOM_SECRETS[@]}" "${DEV_COPY_SECRETS[@]}" REDIS_HOST REDIS_PASSWORD; do
+  for name in "${RANDOM_SECRETS[@]}" "${DEV_COPY_SECRETS[@]}"; do
     run_delete gcloud secrets delete "$(secret_name "$name")" --project="$DEV" --quiet
   done
   run_delete gcloud artifacts repositories delete "$AR_REPO" --location="$REGION" --project="$DEV" --quiet
