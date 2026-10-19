@@ -25,6 +25,7 @@ class StorageSyncImpl implements StorageSync {
   BtDevice? _device;
 
   StreamSubscription? _storageStream;
+  Completer<bool>? _activeTransfer;
   String? _activeSyncDeviceId;
   DeviceConnection? _activeSyncConnection;
   int? _activeSyncEpoch;
@@ -76,6 +77,13 @@ class StorageSyncImpl implements StorageSync {
       final storageSub = _storageStream;
       if (storageSub != null) {
         unawaited(storageSub.cancel());
+      }
+      // The cancelled subscription delivers no more packets, so the data
+      // callback never sees _isCancelled. End the file transfer here, or it
+      // only ends at its 10-minute timeout.
+      final transfer = _activeTransfer;
+      if (transfer != null && !transfer.isCompleted) {
+        transfer.complete(false);
       }
       unawaited(_requestFirmwareStopSync());
     }
@@ -451,6 +459,7 @@ class StorageSyncImpl implements StorageSync {
     _totalBytesDownloaded = 0;
 
     final completer = Completer<bool>();
+    _activeTransfer = completer;
     List<List<int>> bytesData = [];
     int offset = wal.storageOffset;
     bool firstDataReceived = false;
@@ -630,6 +639,7 @@ class StorageSyncImpl implements StorageSync {
       }
       await _storageStream?.cancel();
       _storageStream = null;
+      if (identical(_activeTransfer, completer)) _activeTransfer = null;
       timeoutTimer.cancel();
       if (!endReached || hasError) wal.deviceDownloadFraction = null;
     }
