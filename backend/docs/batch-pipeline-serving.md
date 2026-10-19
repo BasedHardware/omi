@@ -14,6 +14,16 @@ secret and `BUCKET_BATCH_PIPELINE` durable artifact bucket. This bucket must not
 inherit the legacy syncing bucket's one-day lifecycle for pending objects.
 D's completion/deletion outboxes own removal; pending audio must survive backlog.
 
+With several serving instances, the periodic ticks (the supervisor and metrics
+scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
+quarantine discovery, lease recovery and the result-ready drain) on one instance
+per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
+gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+post-recovery drain always run. Every guarded step is already idempotent and
+transaction-fenced, so the lease saves reads and enqueues only. A lease-store
+error fails open to every instance running, and
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` restores that unconditionally.
+
 The GPU worker also needs explicit `BATCH_PIPELINE_API_URL` (HTTPS backend service base)
 and `BATCH_PIPELINE_WORKER_AUDIENCE`. A's Pump composes the Google service-OIDC
 client automatically for production-marked items; missing/unavailable policy
@@ -192,7 +202,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model

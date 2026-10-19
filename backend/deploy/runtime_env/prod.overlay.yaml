@@ -151,9 +151,6 @@ overlay:
         MOBILE_STANDARD_BATCH_UIDS:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
-        SONIOX_IDLE_CLOSE_SECONDS:
-          value: '45'
-          category: rollout
         STT_NO_TEXT_RESCUE_ENABLED:
           value: 'true'
           category: rollout
