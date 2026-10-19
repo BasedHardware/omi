@@ -42,8 +42,9 @@ chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
 quiescence) stays exclusive behind one asyncio lock, so device and host memory
 remain one flight. Each lane renews its own leases while it waits for the GPU.
 On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
-an attempt charge instead of starting another chain. Periodic recovery and
-metrics run in one lane at a time. Publication is unchanged: the transactional
+an attempt charge instead of starting another chain. Periodic recovery,
+result-ready drains and queue metrics run in their own task on the same 5s/15s
+cadence instead of inside a lane between flights. Publication is unchanged: the transactional
 ordered merge remains the per-owner ordering authority across lanes, exactly as
 it already is across replicas and the serving reconciler. `1` restores the serial
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh

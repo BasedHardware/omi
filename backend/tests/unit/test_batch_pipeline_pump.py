@@ -386,3 +386,28 @@ async def test_pipelined_fatal_gpu_refunds_every_lane_and_raises(monkeypatch):
         job = store.rows['jobs', segment]
         assert job['state'] == 'retry' and job['attempt'] == 0
         assert job['merge_pending'] and ('results', segment) not in store.rows
+
+
+@pytest.mark.asyncio
+async def test_pipelined_maintenance_runs_off_lane_and_recovers_persisted_results():
+    store, queue, pump = pipelined(ExclusiveWorker())
+    lease = queue.pull(time.time())[0]
+    queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, time.time())
+    lanes = []
+    original = pump.run_once
+
+    async def run_once(**kwargs):
+        lanes.append(kwargs.get('maintain'))
+        return await original(**kwargs)
+
+    pump.run_once = run_once
+    stop = asyncio.Event()
+    task = asyncio.create_task(pump.run(stop))
+    for _ in range(500):
+        if all(store.rows['jobs', v]['state'] == 'committed' for v in ('first', 'second')):
+            break
+        await asyncio.sleep(0.01)
+    stop.set()
+    await task
+    assert store.rows['results', 'second']['previous_segment_id'] == 'first'
+    assert lanes and not any(lanes)

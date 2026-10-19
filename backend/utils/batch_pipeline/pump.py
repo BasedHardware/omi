@@ -76,7 +76,10 @@ class Pump:
             halt.set()
 
         relaying = asyncio.create_task(relay())
-        lanes = [asyncio.create_task(self._lane(halt)) for _ in range(self.flights)]
+        # Periodic recovery and queue sampling get their own cadence so no
+        # lane spends a claim/publication window on them between flights.
+        maintaining = asyncio.create_task(self._maintain_loop(halt))
+        lanes = [asyncio.create_task(self._lane(halt, maintain=False)) for _ in range(self.flights)]
         try:
             await asyncio.wait(lanes, return_when=asyncio.FIRST_EXCEPTION)
         finally:
@@ -85,7 +88,7 @@ class Pump:
             halt.set()
             outcomes = await asyncio.gather(*lanes, return_exceptions=True)
             relaying.cancel()
-            await asyncio.gather(relaying, return_exceptions=True)
+            await asyncio.gather(maintaining, relaying, return_exceptions=True)
         errors = [v for v in outcomes if isinstance(v, BaseException)]
         for error in errors:
             if isinstance(error, FatalGpuError):
@@ -93,10 +96,22 @@ class Pump:
         if errors:
             raise errors[0]
 
-    async def _lane(self, stop_event: asyncio.Event) -> None:
+    async def _maintain_loop(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             try:
-                count = await self.run_once(stop_event=stop_event)
+                async with self._maintenance:
+                    await self._maintain()
+            except Exception as error:
+                logger.error('event=batch_maintenance outcome=retry exception_type=%s', type(error).__name__)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                pass
+
+    async def _lane(self, stop_event: asyncio.Event, *, maintain: bool = True) -> None:
+        while not stop_event.is_set():
+            try:
+                count = await self.run_once(stop_event=stop_event, maintain=maintain)
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
@@ -135,9 +150,8 @@ class Pump:
 
             await asyncio.gather(*(renew_one(lease) for lease in leases))
 
-    async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
-        if not self._maintenance.locked():
-            # Sibling lanes skip, never queue behind, periodic recovery/metrics.
+    async def run_once(self, *, stop_event: asyncio.Event | None = None, maintain: bool = True) -> int:
+        if maintain and not self._maintenance.locked():
             async with self._maintenance:
                 await self._maintain()
         if stop_event is not None and stop_event.is_set():
