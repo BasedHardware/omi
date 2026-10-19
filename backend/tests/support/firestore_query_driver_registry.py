@@ -237,6 +237,7 @@ _add(
     CoveredByEntry(
         'database.action_items._iter_query_pages',
         covered_by=(
+            'database.action_items.create_action_item',
             'database.action_items.get_action_item_ids',
             'database.action_items.get_active_action_item_by_description',
             'database.action_items.get_scores',

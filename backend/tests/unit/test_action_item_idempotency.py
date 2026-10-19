@@ -51,14 +51,13 @@ def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
 
     fake_query = MagicMock()
 
-    # Chain: .where(...).where(...).limit(N).stream() — every intermediate
-    # call returns the same fake so we don't have to model a query builder.
+    # Chain: .where(...).where(...).limit(N)[.start_after(doc)].stream() — where()
+    # returns the same fake so we don't have to model a query builder.
     def _where(*, filter):
         captured['filters'].append((filter.field_path, filter.op_string, filter.value))
         return fake_query
 
     fake_query.where.side_effect = _where
-    fake_query.limit.return_value = fake_query
 
     def _stream(**kwargs):
         # Match all equality filters, not just generation: ignoring completed
@@ -70,6 +69,21 @@ def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
         )
 
     fake_query.stream.side_effect = _stream
+
+    def _limit(count, after=None):
+        # Firestore returns key matches in document-id order and stops at the limit.
+        # Ignoring the limit made this fake certify a lookup that misses a live task
+        # sorted behind a full page of deleted ones.
+        def _page_stream(**kwargs):
+            matches = sorted(_stream(), key=lambda doc: doc.id)
+            return iter([doc for doc in matches if after is None or doc.id > after][:count])
+
+        page = MagicMock()
+        page.start_after.side_effect = lambda snapshot: _limit(count, snapshot.id)
+        page.stream.side_effect = _page_stream
+        return page
+
+    fake_query.limit.side_effect = _limit
 
     fake_action_items_ref = MagicMock()
     fake_action_items_ref.where.side_effect = _where
@@ -193,6 +207,30 @@ def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
     assert result == 'newly-created-id', "deleted match must not short-circuit"
     assert len(captured['added']) == 1
     assert captured['added'][0].get('idempotency_key') == 'abc123'
+
+
+@pytest.mark.parametrize(
+    'skipped',
+    [{'deleted': True}, {'account_generation': 4}],
+    ids=['deleted', 'other-generation'],
+)
+def test_idempotency_hit_behind_a_full_page_of_skipped_matches(monkeypatch, skipped):
+    """Rows the lookup skips keep their key, so they pile up ahead of the live task.
+
+    Firestore returns key matches in document-id order. The lookup read one
+    limit(5) page and skipped deleted (or other-generation) rows in Python, so
+    once five of them sorted first, a retry missed the live task and created a
+    duplicate.
+    """
+    earlier = [_make_doc(f'earlier-{index:02d}', {'completed': False, **skipped}) for index in range(12)]
+    captured = _stub_collection(monkeypatch, [*earlier, _make_doc('live-id', {'completed': False})])
+
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+
+    assert result == 'live-id'
+    assert captured['added'] == [], 'a retry must not duplicate the live task'
 
 
 def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
