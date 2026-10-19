@@ -1278,7 +1278,7 @@ def _recover_empty_segment(
     job_id: str | None,
     attempt_ref: str | None,
     cap_dispatch_lane: str = 'sync',
-) -> tuple[list[TranscriptSegment], str] | None:
+) -> tuple[list[TranscriptSegment], str, float] | None:
     def observe_inspection(duration: float | None, spans: list[dict] | None):
         logger.info(
             'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
