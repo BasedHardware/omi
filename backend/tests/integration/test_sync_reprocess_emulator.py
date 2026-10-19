@@ -38,19 +38,31 @@ def store(monkeypatch):
 
     monkeypatch.setattr(google.auth, 'default', lambda **_: (AnonymousCredentials(), 'demo-omi-reprocess'))
     monkeypatch.setenv('PROVIDER_MODE', 'offline')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     client = firestore.Client(project='demo-omi-reprocess', credentials=AnonymousCredentials())
+    client.collection('sync_reprocess_scan').document('cursor').delete()
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    from utils.batch_pipeline import enrichment
+
+    monkeypatch.setattr(enrichment, 'get_firestore_client', lambda: client)
     from database import _client
 
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
     monkeypatch.setenv('SYNC_REPROCESS_SETTLE_SECONDS', '600')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     tasks = []
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
     uid = 'test-' + uuid.uuid4().hex
+    client.collection('users').document(uid).set({'data_protection_level': 'enhanced'})
     yield client, uid, tasks
     for row in client.collection(reprocess.COLLECTION).where('uid', '==', uid).stream():
         row.reference.delete()
+    client.collection('sync_reprocess_scan').document('cursor').delete()
+    client.collection('users').document(uid).delete()
     client.close()
 
 

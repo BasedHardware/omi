@@ -1,3 +1,4 @@
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect
 import io
@@ -50,6 +51,7 @@ from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
+from utils.observability.demand_cohort import MeteredSyncTransport, create_wire_meter, telemetry_call
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
 from utils.stt.live_router import target_circuit
 from utils.stt.provider_resilience import (
@@ -873,14 +875,14 @@ def _requested_stt_language(
 
 
 def _models_with_preferred_service(
-    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str], prefer_window: bool = False
 ) -> Tuple[str, ...]:
     """Honor a recognized client engine preference within the serving policy."""
-    normalized_preference = (preferred_service or '').strip().lower()
-    if normalized_preference != STTService.parakeet.value:
+    normalized_preference = 'parakeet-window' if prefer_window else (preferred_service or '').strip().lower()
+    if not prefer_window and normalized_preference != STTService.parakeet.value:
         return tuple(models)
-    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
-        model for model in models if model.strip() != STTService.parakeet.value
+    return tuple(model for model in models if model.strip() == normalized_preference) + tuple(
+        model for model in models if model.strip() != normalized_preference
     )
 
 
@@ -893,8 +895,10 @@ def get_stt_service_for_language(
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
     language_profile: LiveLanguageProfile | None = None,
+    prefer_window: bool = False,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
+    prefer_window = bool(prefer_window and surface == STTServingSurface.STREAMING and window_uid)
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -908,7 +912,7 @@ def get_stt_service_for_language(
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
-        preferred_service=preferred_service,
+        preferred_service='parakeet' if prefer_window else preferred_service,
     ):
         return STTService.soniox, requested_language, 'soniox'
 
@@ -916,7 +920,9 @@ def get_stt_service_for_language(
         models: List[str] | Tuple[str, ...],
     ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
         parakeet_fallback_reason: Optional[str] = None
-        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
+        for model in _models_with_preferred_service(
+            models, preferred_service=preferred_service, prefer_window=prefer_window
+        ):
             model = model.strip()
             if provider_for_model_token(model) in exclude:
                 continue
@@ -958,7 +964,7 @@ def get_stt_service_for_language(
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
-    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+    prefers_parakeet = prefer_window or (preferred_service or '').strip().lower() == STTService.parakeet.value
 
     def record_selected_fallback(
         selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]
@@ -1098,6 +1104,7 @@ def _deepgram_is_available() -> bool:
     return _managed_deepgram_client() is not None or bool(get_byok_key('deepgram'))
 
 
+@live_provider('deepgram', 2)
 async def process_audio_dg(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,
@@ -1158,6 +1165,18 @@ async def process_audio_dg(
         return None
 
     # Always wrap with SafeDeepgramSocket for dead-connection detection (#5870)
+    try:
+        wire_meter = create_wire_meter('deepgram', sample_rate, channels)
+        # SDK send() returns True even for some closed-socket exceptions. Count
+        # below that handler, only after the actual synchronous websocket write.
+        if (
+            wire_meter is not None
+            and wire_meter.telemetry is not None
+            and getattr(dg_connection, '_socket', None) is not None
+        ):
+            dg_connection._socket = MeteredSyncTransport(dg_connection._socket, wire_meter)
+    except Exception:
+        pass  # Instrumentation cannot reject an established provider socket.
     safe_conn = SafeDeepgramSocket(dg_connection)
 
     # Register close-reason handlers that feed into SafeDeepgramSocket
@@ -1433,7 +1452,10 @@ class SafeModulateSocket(STTSocket):
         stream_transcript: Callable[[List[Dict[str, Any]]], None],
         loop: asyncio.AbstractEventLoop,
         preseconds: int = 0,
+        *,
+        sample_rate: int = 16000,
     ) -> None:
+        self._demand_wire = create_wire_meter('modulate', sample_rate)
         self._ws: Any = ws
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
         self._loop: asyncio.AbstractEventLoop = loop
@@ -1632,6 +1654,16 @@ class SafeModulateSocket(STTSocket):
         except Exception:
             pass
 
+    def _note_wire_audio(self, data: bytes) -> None:
+        try:
+            header = self._wav_header
+            if header is not None and not getattr(self, '_wire_header_written', False) and data.startswith(header):
+                self._wire_header_written = True
+                data = data[len(header) :]
+            telemetry_call(self, '_demand_wire', 'written', data)
+        except Exception:
+            pass
+
     async def _send_loop(self) -> None:
         _EOS_SENTINEL = b'__EOS__'
         try:
@@ -1645,6 +1677,7 @@ class SafeModulateSocket(STTSocket):
                         await self._ws.send('')
                         break
                     await self._ws.send(data)
+                    self._note_wire_audio(data)
                     continue
                 if data == b'':
                     self._send_queue.discard(data)
@@ -1676,6 +1709,7 @@ class SafeModulateSocket(STTSocket):
                             raise
                     else:
                         await self._ws.send(data)
+                    self._note_wire_audio(data)
                     self._send_queue.note_written(data)
                     written = True
                     if pace is not None and type(data) is bytes:
@@ -1847,6 +1881,7 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
 
+@live_provider('modulate', 1)
 async def process_audio_modulate(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,
@@ -1872,7 +1907,7 @@ async def process_audio_modulate(
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     loop = asyncio.get_running_loop()
-    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
+    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
     logger.info('Modulate Velma-2 streaming connection established')
     return sock
 
@@ -2084,7 +2119,11 @@ class ParakeetStreamingSocket(STTSocket):
         try:
             client = get_stt_client()
             async with get_stt_semaphore():
-                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
+                resp = await client.post(
+                    self._url,
+                    files={'file': ('audio.wav', wav, 'audio/wav')},
+                    headers={'X-Omi-STT-Surface': 'live-stream'},
+                )
             resp.raise_for_status()
             loaded: object = resp.json()
         except Exception as e:
@@ -2320,6 +2359,7 @@ class ParakeetWebSocketSocket(STTSocket):
                 self._mark_dead(f"parakeet ws recv: {e}")
 
 
+@live_provider('parakeet', 2)
 async def process_audio_parakeet(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,

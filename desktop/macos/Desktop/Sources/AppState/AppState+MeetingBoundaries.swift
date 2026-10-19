@@ -54,7 +54,7 @@ extension AppState {
   /// Context side work for a meeting starting or ending: the early calendar-invite sync and the
   /// context-subject event.
   private static func noteMeetingContext(active: Bool) {
-    if active, SystemCalendarMeetingContextFeature.isEnabled {
+    if active {
       // Permission and calendar I/O live outside the detector/audio path. This early sync
       // normally stores the invite before the eventual conversation finalization begins.
       Task(priority: .utility) {

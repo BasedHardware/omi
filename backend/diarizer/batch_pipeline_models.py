@@ -22,8 +22,15 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
-from diarizer.batch_pipeline import PipelineWorker
-from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from diarizer.batch_pipeline import (
+    PipelineWorker,
+    SAMPLE_RATE,
+    crop_model_vad_spans,
+    padded_retry_fits,
+    padded_retry_seconds,
+    validate_words,
+)
+from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
 
 
 def pin_parakeet_decoding(model):
@@ -83,6 +90,41 @@ class ParakeetWords:
             result.append(words)
         return result
 
+    def recover_empty(self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None):
+        """One full-capture, single-item retry with synthetic silence at both edges.
+
+        TDT can emit all blanks for a fragment starting mid-utterance. Retain
+        all real samples, remove VAD cuts/core ownership, and change decoder
+        context without changing model policy. Bound the extra GPU quantum to
+        120s and the existing padded budget. Larger units remain held for the
+        fenced legacy recovery path; never truncate them to fit the retry.
+        """
+        duration = len(samples) / SAMPLE_RATE
+        left = 2 * SAMPLE_RATE
+        right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
+        padded_seconds = padded_retry_seconds(samples)
+        if not padded_retry_fits(samples, max_padded_seconds):
+            # Never return an empty hypothesis for audio that exceeded the
+            # padded recovery bound and was never submitted to the model.
+            return None
+        padded = np.pad(samples, (left, right))
+        if before_dispatch is not None and not before_dispatch():
+            return None  # Retain raw work without spending a provider-failure attempt.
+        hypotheses = self.transcribe_batch([padded])
+        if after_dispatch is not None:
+            after_dispatch(padded_seconds)
+        if len(hypotheses) != 1:
+            raise ValueError('provider recovery result cardinality mismatch')
+        words = validate_words(hypotheses[0], padded_seconds)
+        result = []
+        for word in words:
+            start, end = [t - 2 for t in word['timestamp']]
+            # Only the real capture owns words. Synthetic padding can never
+            # establish speech; intersect edge-straddling clocks with capture.
+            if 0 <= (start + end) / 2 < duration:
+                result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
+        return validate_words(result, duration)
+
 
 class PyannoteDiarizer:
     def __init__(self, model):
@@ -93,16 +135,7 @@ class PyannoteDiarizer:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        activity = [
-            {'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in output.speaker_diarization
-        ]
-        exclusive = getattr(output, 'exclusive_speaker_diarization', None)
-        turns = (
-            [{'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in exclusive]
-            if exclusive is not None
-            else exclusive_from_activity(activity)
-        )
-        return {'turns': turns, 'overlaps': overlap_regions(activity), 'backend': 'pyannote'}
+        return diarization_payload(output)
 
 
 class PyannoteVAD:
@@ -114,7 +147,9 @@ class PyannoteVAD:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        return [(float(t.start), float(t.end)) for t in output.get_timeline().support()]
+        return crop_model_vad_spans(
+            [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
+        )
 
 
 def decode_pcm16_wav(body):
@@ -154,14 +189,22 @@ def create_local_worker(
             'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
         )
     pin_parakeet_decoding(parakeet_model)
+    words = ParakeetWords(parakeet_model, enforce_eager=True)
+    flight = (
+        FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
+        if config.flight_batching
+        else None
+    )
     return PipelineWorker(
         decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
         vad=PyannoteVAD(vad_model),
-        words_providers={'parakeet': ParakeetWords(parakeet_model, enforce_eager=True)},
+        words_providers={'parakeet': words},
+        recover_words=words.recover_empty,
         diarizers={'pyannote': PyannoteDiarizer(pyannote_model)},
         persist=persist_result,
         config=config,
         live_words=live_words,
         single_speaker=single_speaker,
         on_failure=on_failure,
+        flight_models=flight,
     )

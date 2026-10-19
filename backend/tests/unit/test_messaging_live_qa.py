@@ -348,7 +348,6 @@ def test_channel_skips_discarded_legacy_prompt_but_keeps_tool_projection(monkeyp
         return 'Discarded legacy prompt'
 
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', cold_prompt)
-    monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False))
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *args: [])
 
     async def runner(*args):
@@ -401,13 +400,11 @@ def test_private_memories_empty_result_is_not_a_claim_no_facts_exist(monkeypatch
         def __init__(self, **kwargs):
             pass
 
-        def read_page(self, uid, **kwargs):
+        def read(self, uid, **kwargs):
             assert uid == 'test'
-            return SimpleNamespace(memories=[private], truncated=False, next_cursor=None)
+            return [private]
 
     monkeypatch.setattr(memory_tools, 'MemoryService', Service)
-    monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: True)
-    monkeypatch.setattr(memory_tools, 'memory_use_suppressed', lambda row: False)
     token = surface_runtime.set(
         SurfaceRuntime('channel:fixture', '', Principal('test'), withhold_private_memories=True)
     )
@@ -816,7 +813,6 @@ def test_channel_memory_search_empty_does_not_claim_no_facts(monkeypatch):
             return [Match()]
 
     monkeypatch.setattr(memory_tools, 'MemoryService', Service)
-    monkeypatch.setattr(memory_tools, 'belief_model_enabled', lambda: False)
     token = surface_runtime.set(
         SurfaceRuntime('channel:fixture', '', Principal('test'), withhold_private_memories=True)
     )

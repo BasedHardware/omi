@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Literal, Optional
 
+from pydantic.json_schema import SkipJsonSchema
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 MeetingType = Literal[
@@ -11,7 +12,7 @@ MeetingType = Literal[
 # Optional structured fields added for rich meeting notes are serialized only
 # when the producer actually set them: the flag-off note shape must stay
 # byte-identical in prompts, responses, and persisted documents.
-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims')
+_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance')
 
 
 def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
@@ -189,10 +190,13 @@ class NoteClaim(BaseModel):
     text: str = Field(description='Exact factual clause within that field')
     evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
     provenance: Literal['said', 'shown', 'written', 'inferred']
-    evidence_sources: Optional[List[NoteEvidenceRef]] = Field(default=None, description='Server-authored source metadata; model may omit')
+    evidence_sources: Optional[List[NoteEvidenceRef]] = Field(
+        default=None, description='Server-authored source metadata; model may omit'
+    )
 
 
 class Structured(BaseModel):
+    title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
     note_claims: Optional[List[NoteClaim]] = Field(
         default=None, description='Episode claim provenance; absent on legacy notes'
     )

@@ -1,0 +1,8 @@
+# Separate future prerequisite, NOT a kube-prometheus-stack overlay.
+# Apply to prod-omi-prometheus-stackdriver-exporter chart 4.13.0 with its normal
+# prod values BEFORE any exporter retirement. Verify this annotation in the
+# release's STORED manifest, not only on the live ServiceAccount, before uninstall.
+# The frontend and Cloud Run exporter both reuse this KSA; retain its WI binding.
+serviceAccount:
+  annotations:
+    helm.sh/resource-policy: keep

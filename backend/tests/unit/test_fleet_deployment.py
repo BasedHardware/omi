@@ -2,6 +2,10 @@
 
 import asyncio
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -88,6 +92,14 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
     script = steps[attach]['run']
     for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert name in script
+    assert '--config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"' in script
+    assert '--config-env' in script
+    assert '--config-secret' not in script
+    backend_attach = next(step for step in steps if step.get('id') == 'attach-backend-gmp-sidecar')
+    assert 'cloud_run_gmp_sidecar.yaml' in backend_attach['run']
+    assert '--config-env' in backend_attach['run']
+    assert '--config-secret' not in backend_attach['run']
+    assert 'cloud-run-gmp-sync-config' not in backend_attach['run']
     assert '--expected-env-state=' in script
     assert '--base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"' in script
     assert '--final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"' in script
@@ -107,7 +119,7 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
             )
         exporter = (
             ROOT
-            / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_omi_cloud_run_metrics_exporter.yaml'
+            / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_sync_omi_cloud_run_metrics_exporter.yaml'
         ).read_text()
         assert '"backend-integration"' in exporter
 
@@ -144,3 +156,88 @@ def test_upload_metrics_include_byok_admission_rejection(monkeypatch):
         )
     assert response.status_code == 403
     assert [child._value.get() for child in children] == [value + 1 for value in before]
+
+
+@pytest.mark.parametrize('failure', ['missing', None])
+def test_gmp_preflight_precedes_revision_mutations_without_secret_create(contracts, tmp_path, failure):
+    steps = contracts['action']['runs']['steps']
+    prepare = [
+        step
+        for step in steps
+        if step.get('id') in ('preflight-required-secrets', 'prepare-backend-gmp-config', 'prepare-sync-gmp-config')
+    ]
+    assert len(prepare) == 3
+    mutations = [
+        i
+        for i, step in enumerate(steps)
+        if step.get('uses') == 'google-github-actions/deploy-cloudrun@v3'
+        or step['name']
+        in (
+            'Migrate legacy public Cloud Run bindings',
+            'Deploy sync-backfill worker',
+            'Probe LLM gateway from the Cloud Run VPC before promotion',
+            'Preflight Cloud Run deploy',
+        )
+    ]
+    assert mutations
+    assert max(steps.index(step) for step in prepare) < min(mutations)
+    bindir = tmp_path / 'bin'
+    bindir.mkdir()
+    log = tmp_path / 'gcloud.jsonl'
+    output = tmp_path / 'github-output'
+    fake = bindir / 'gcloud'
+    fake.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
+args = sys.argv[1:]
+with open(os.environ['GMP_TEST_CALLS'], 'a') as log:
+    log.write(json.dumps(args) + '\\n')
+failure = os.environ['GMP_TEST_FAILURE']
+if args[:2] == ['secrets', 'create']:
+    sys.exit('secretmanager.secrets.create denied')
+if args[:2] == ['secrets', 'describe']:
+    if failure == 'missing':
+        sys.exit('NOT_FOUND')
+    print('projects/1/secrets/runtime-secret')
+elif args[:3] == ['secrets', 'versions', 'add']:
+    sys.exit('secretmanager.versions.add denied')
+elif args[:3] == ['secrets', 'versions', 'list']:
+    print('1')
+elif args[:3] == ['secrets', 'versions', 'describe']:
+    print('ENABLED')
+elif args[:3] != ['run', 'services', 'replace']:
+    sys.exit('unexpected command')
+''')
+    fake.chmod(0o755)
+    scripts = [
+        step['run'].replace('${{ inputs.project_id }}', 'based-hardware').replace('${{ inputs.runtime_env }}', 'prod')
+        for step in prepare
+    ]
+    # Execute the checked-in preflight scripts before a representative mutation.
+    # set -e must stop the shell before it when any preflight command fails.
+    result = subprocess.run(
+        ['bash', '-c', '\n'.join(scripts + ['gcloud run services replace candidate.yaml'])],
+        env={
+            **os.environ,
+            'PATH': f'{bindir}:{Path(sys.executable).parent}:' + os.environ['PATH'],
+            'DEPLOY_CONTROL_SCRIPTS': str(ROOT / 'backend/scripts'),
+            'GITHUB_OUTPUT': str(output),
+            'GITHUB_WORKSPACE': str(ROOT),
+            'GMP_TEST_CALLS': str(log),
+            'GMP_TEST_FAILURE': failure or '',
+        },
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any(call[:2] == ['secrets', 'create'] for call in calls)
+    assert not any(call[:3] == ['secrets', 'versions', 'add'] for call in calls)
+    assert not any('cloud-run-gmp-config' in argument for call in calls for argument in call)
+    mutations = [call for call in calls if call[:3] == ['run', 'services', 'replace']]
+    if failure:
+        assert result.returncode != 0
+        assert not mutations
+        assert 'not found' in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert mutations
+        assert output.read_text() == ''

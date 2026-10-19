@@ -7,6 +7,7 @@ from typing import Protocol, Sequence
 
 from config.batch_pipeline import Priority
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
+from utils.batch_pipeline.errors import validate_worker_failure
 
 MAX_PROJECTION_PARTS = 128
 
@@ -103,14 +104,56 @@ class WorkResult:
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
-        if self.outcome not in {'success', 'silence'}:
-            raise ValueError('failed items must retry, never become silence')
+        if self.outcome not in {'success', 'silence', 'no_recoverable_speech'}:
+            raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
 
 
+@dataclass(frozen=True)
+class HeldWork:
+    segment_id: str
+    retry_after: int = 60
+
+
+@dataclass(frozen=True)
+class RecoveryWork:
+    """Non-success handoff after speech VAD and an exhausted or skipped padded ASR retry."""
+
+    segment_id: str
+    padded_retry_empty: bool = False
+    padded_retry: str | None = None
+    reason: str = 'empty_asr'
+
+    def __post_init__(self):
+        if self.reason not in {'empty_asr', 'no_owned_words'}:
+            raise ValueError('closed empty worker reason required')
+        if self.padded_retry is None and self.padded_retry_empty:
+            object.__setattr__(self, 'padded_retry', 'empty')
+        elif self.padded_retry == 'empty' and not self.padded_retry_empty:
+            object.__setattr__(self, 'padded_retry_empty', True)
+        if self.padded_retry not in {None, 'empty', 'skipped_oversize'}:
+            raise ValueError('unsupported padded retry evidence')
+        if self.padded_retry_empty and self.padded_retry != 'empty':
+            raise ValueError('conflicting padded retry evidence')
+
+
+@dataclass(frozen=True)
+class ValidationFailureWork:
+    """Terminal for this GPU chain, retained for independent fenced recovery."""
+
+    segment_id: str
+    stage: str
+    reason: str
+
+    def __post_init__(self):
+        validate_worker_failure({'stage': self.stage, 'reason': self.reason})
+
+
 class BatchWorker(Protocol):
-    def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]: ...
+    def process_batch(
+        self, items: Sequence[WorkItem], **kwargs
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]: ...
 
 
 @dataclass(frozen=True)
@@ -138,6 +181,8 @@ class ProjectionBinding:
     run_epoch: int | None = None
     privacy_generation: int = 0
     language: str | None = None
+    record_origin: bool = False
+    native_record: bool = False
 
     def __post_init__(self):
         # Firestore caps transaction writes at 500; completion reads all siblings.

@@ -107,32 +107,20 @@ void main() {
       expect(prefs.pendingMemories.map((m) => m.id), ['pending-1']);
     });
 
-    test('cachedMemories preserves temporal assessment fields', () async {
+    test('cachedMemories ignores retired temporal assessment fields', () async {
       final prefs = await _prefs({'uid': 'user-1'});
-      prefs.cachedMemories = [
-        Memory(
-          id: 'cached-1',
-          uid: 'user-1',
-          content: 'cached',
-          category: MemoryCategory.manual,
-          createdAt: DateTime.utc(2026),
-          updatedAt: DateTime.utc(2026),
-          visibility: MemoryVisibility.private,
-          asOf: DateTime.utc(2026, 9, 12),
-          currency: 0.7,
-          currencyBand: 'fading',
-          beliefComputedAt: DateTime.utc(2026, 9, 13),
-        ),
-      ];
-      expect(prefs.cachedMemories.single.currencyBand, 'fading');
-      expect(
-        prefs.cachedMemories.single.beliefComputedAt?.toUtc(),
-        DateTime.utc(2026, 9, 13),
-      );
-      expect(
-        prefs.cachedMemories.single.asOf?.toUtc(),
-        DateTime.utc(2026, 9, 12),
-      );
+      final legacy = _memory('cached-1').toJson()
+        ..['as_of'] = DateTime.utc(2026, 9, 12).toIso8601String()
+        ..['currency'] = 0.7
+        ..['currency_band'] = 'fading'
+        ..['belief_computed_at'] = DateTime.utc(2026, 9, 13).toIso8601String();
+      await prefs.saveStringList('cachedMemories:user-1', [jsonEncode(legacy)]);
+
+      final cached = prefs.cachedMemories.single;
+      expect(cached.id, 'cached-1');
+      expect(cached.content, 'unsynced');
+      expect(cached.toJson().containsKey('as_of'), isFalse);
+      expect(cached.toJson().containsKey('currency'), isFalse);
     });
   });
 

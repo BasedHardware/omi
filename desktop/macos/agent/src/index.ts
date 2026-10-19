@@ -94,6 +94,7 @@ import {
   AcpError,
   AcpRuntimeAdapter,
   beginProviderAuthWithoutBlocking,
+  requestProviderAuthFromHost,
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -1484,12 +1485,6 @@ function buildMcpServers(
     }
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
-    }
-    if (context?.jitKnowledgeToolsEnabled === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
-    }
-    if (context?.jitProactivity === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_PROACTIVITY_MODE", value: "true" });
     }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
@@ -3946,6 +3941,16 @@ async function main(): Promise<void> {
         const invalidate = msg as InvalidateSessionMessage;
         invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
         transport.handleInvalidateSession(invalidate);
+        break;
+      }
+
+      case "start_provider_auth": {
+        requestProviderAuthFromHost({
+          activeAuthUrl: () => activeOAuthFlow?.authUrl,
+          announceAuthUrl: (authUrl) => send({ type: "auth_required", methods: authMethods, authUrl }),
+          startAuthFlow,
+          logErr,
+        });
         break;
       }
 

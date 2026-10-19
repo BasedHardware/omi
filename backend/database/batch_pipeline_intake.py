@@ -7,6 +7,7 @@ from config.batch_pipeline import enabled_for
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import Scheduler
 
@@ -45,8 +46,25 @@ def admit(
             # Never take a legacy content owner, including ambiguous/expired
             # Redis ownership. Its existing recovery path remains authoritative.
             return {'outcome': 'busy', 'job_id': existing.get('job_id')}
-        if not enabled_for(binding.owner_id):
+        pending = tx.get('jobs', binding.segment_ids[0])
+        reserved_recording = (
+            pending.get('state') == 'record_pending'
+            and pending.get('owner_id') == binding.owner_id
+            and pending.get('conversation_id') == binding.target_conversation_id
+            and pending.get('record_content_id') == binding.content_id
+        )
+        if not reserved_recording and not enabled_for(binding.owner_id):
             raise AdmissionDisabled('cohort no longer enabled')
+        if binding.record_origin:
+            key = f'{binding.owner_id}/{binding.target_conversation_id}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt'):
+                raise ValueError('registered record target unavailable')
+            expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
+            if row.get('record_lane_owner') not in {None, expected}:
+                raise ValueError('record owner is immutable')
+            if row.get('record_lane_owner') != expected:
+                tx.patch('conversations', key, {'record_lane_owner': expected})
         for item in items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)
@@ -87,9 +105,17 @@ def admit(
                 },
             },
         )
-        return {'outcome': 'batch', 'job_id': binding.job_id}
+        return {
+            'outcome': 'batch',
+            'job_id': binding.job_id,
+            '_admitted_seconds': sum(i.duration_seconds for i in items),
+        }
 
-    return store.run(commit)
+    outcome = store.run(commit)
+    seconds = outcome.pop('_admitted_seconds', None)
+    if seconds is not None:
+        record_correctness('admitted', seconds=float(seconds))
+    return outcome
 
 
 def cache_completed(store: Store, uid: str, content_id: str, job_id: str, intake: dict, now: float) -> bool:

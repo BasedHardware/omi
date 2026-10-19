@@ -7,11 +7,19 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
 
-from check_public_build_contract import ROOT, load_contract
+from check_public_build_contract import (
+    DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    DEFAULT_RETRY_TIMEOUT_SECONDS,
+    ROOT,
+    SMOKE_RETRY_ATTEMPTS,
+    SMOKE_RETRY_SLEEP_SECONDS,
+    load_contract,
+)
 
 
 class BrowserSmokeError(RuntimeError):
@@ -22,6 +30,7 @@ SAFE_BROWSER_SMOKE_REASONS = frozenset(
     {
         "candidate URL must be an absolute HTTPS URL",
         "headless browser did not run",
+        "headless browser timed out rendering the candidate",
         "headless browser could not render the candidate",
         "unknown public-build target",
         "client public-build canary did not become ready",
@@ -56,7 +65,35 @@ def browser_candidates(environment: dict[str, str] | None = None) -> tuple[str, 
     )
 
 
-def render_candidate(*, browser: str, base_url: str) -> str:
+def render_candidate(
+    *,
+    browser: str,
+    base_url: str,
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS,
+) -> str:
+    browser_label = Path(browser).name or "browser"
+    for attempt in range(SMOKE_RETRY_ATTEMPTS):
+        started = time.monotonic()
+        try:
+            document = _render_candidate_once(
+                browser=browser,
+                base_url=base_url,
+                timeout=timeout_seconds if attempt == 0 else retry_timeout_seconds,
+            )
+        except BrowserSmokeError:
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            if attempt == SMOKE_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(SMOKE_RETRY_SLEEP_SECONDS)
+        else:
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            return document
+
+
+def _render_candidate_once(*, browser: str, base_url: str, timeout: int) -> str:
     try:
         result = subprocess.run(
             [
@@ -73,9 +110,11 @@ def render_candidate(*, browser: str, base_url: str) -> str:
             check=False,
             capture_output=True,
             text=True,
-            timeout=45,
+            timeout=timeout,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        raise BrowserSmokeError("headless browser timed out rendering the candidate") from exc
+    except OSError as exc:
         raise BrowserSmokeError("headless browser did not run") from exc
     if result.returncode != 0:
         raise BrowserSmokeError("headless browser could not render the candidate")
@@ -120,7 +159,12 @@ def smoke(
     errors: list[BrowserSmokeError] = []
     for browser in browser_candidates(environment):
         try:
-            document = render_candidate(browser=browser, base_url=url)
+            document = render_candidate(
+                browser=browser,
+                base_url=url,
+                timeout_seconds=selected.candidate_acceptance.timeout_seconds,
+                retry_timeout_seconds=selected.candidate_acceptance.retry_timeout_seconds,
+            )
         except BrowserSmokeError as exc:
             errors.append(exc)
             continue

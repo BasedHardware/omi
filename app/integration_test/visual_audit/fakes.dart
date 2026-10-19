@@ -116,6 +116,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
+  @override
   int get batteryLevel => battery;
   @override
   bool get isCharging => charging;
@@ -155,6 +157,8 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => const [];
   @override
+  bool canPlayOrShareWal(Wal wal) => false;
+  @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override
   int get clearableWalsCount => 0;
@@ -162,6 +166,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   int get missingWalsInSeconds => 0;
   @override
   int get needsAttentionWalsCount => 0;
+  @override
+  List<Wal> get retryableAttentionWals =>
+      allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+  @override
+  Future<void> retryNeedsAttentionWals() async {}
   @override
   bool get isSyncing => false;
   @override

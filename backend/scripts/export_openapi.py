@@ -53,6 +53,8 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/pending-work',
+    '/v1/attention-items',
     '/v1/messaging/links',
     '/v1/messaging/link-proofs',
     '/v1/review',
@@ -82,6 +84,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/goals',
     '/v1/import',
     '/v1/integrations',
+    # Released JIT paths remain static 410 tombstones for client compatibility.
     '/v1/jit',
     '/v1/knowledge-graph',
     '/v1/mcp',

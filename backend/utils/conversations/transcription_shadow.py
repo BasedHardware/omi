@@ -12,6 +12,8 @@ import asyncio
 import hashlib
 import logging
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 import re
 import threading
 import time
@@ -23,6 +25,7 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from config.batch_pipeline import RecordOwnerContention, live_record_admission_enabled
 from config.transcription_final_pass import enabled_for, authoritative_for
 from utils.manual_speaker_assignments import manual_owner_reserved
 from database._client import db
@@ -41,7 +44,7 @@ from utils.executors import start_background_task
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
-from utils.stt.vad import offline_pcm_speech_segments
+from utils.stt.local_vad import offline_pcm_speech_segments
 from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
@@ -105,12 +108,11 @@ def _enabled(uid: str, conversation: Conversation) -> bool:
         return False
     if os.getenv('TRANSCRIPTION_SHADOW_ENABLED', 'false').lower() != 'true':
         return False
+    if getattr(conversation, 'record_lane_owner', None) in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if not conversation.private_cloud_sync_enabled or conversation.discarded or conversation.uses_custom_stt:
         return False
-    allowlist = {
-        item.strip() for item in os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', '').split(',') if item.strip()
-    }
-    if uid in allowlist:
+    if in_rollout_cohort(uid, 'transcription-shadow'):
         return True
     percent = max(0.0, min(100.0, float(os.getenv('TRANSCRIPTION_SHADOW_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
@@ -138,7 +140,14 @@ async def _run_later(uid: str, conversation_id: str) -> None:
     try:
         await asyncio.sleep(max(0.0, float(os.getenv('TRANSCRIPTION_SHADOW_UPLOAD_GRACE_SECONDS', '70'))))
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+                break
+            except RecordOwnerContention:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.1 * (attempt + 1))
     except asyncio.CancelledError:
         raise
     except Exception as error:
@@ -452,6 +461,29 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
+def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict) -> dict | None:
+    for _ in range(3):
+        owner = raw.get('record_lane_owner')
+        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+            return None
+        if owner == 'legacy_final_pass_v1' or not live_record_admission_enabled():
+            return raw
+        revision = conversations_db.claim_record_lane_owner(
+            uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
+        )
+        if revision is not None:
+            return {**raw, 'record_lane_owner': 'legacy_final_pass_v1', 'updated_at': revision}
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if not refreshed:
+            return None
+        raw = refreshed
+    if raw.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return None
+    if raw.get('record_lane_owner') == 'legacy_final_pass_v1':
+        return raw
+    raise RecordOwnerContention('shadow owner claim remains contended after three refreshed revisions')
+
+
 def _run_shadow(uid: str, conversation_id: str) -> None:
     began = time.monotonic()
     outcome = 'failed'
@@ -460,6 +492,11 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
     try:
         raw = conversations_db.get_conversation(uid, conversation_id)
         if not raw:
+            return
+        if not _enabled(uid, deserialize_conversation(raw)):
+            return
+        raw = _claim_shadow_owner(uid, conversation_id, raw)
+        if raw is None:
             return
         conversation = deserialize_conversation(raw)
         if not _enabled(uid, conversation):
@@ -512,6 +549,10 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                                     clock_offset=metadata['comparison']['clock_offset_seconds'],
                                 )
                         _store_result(uid, conversation_id, metadata, version='v2')
+    except RecordOwnerContention:
+        # Retry ownership before reserving provider budget or doing acoustic
+        # work. A metadata race must not silently discard the selected pass.
+        raise
     except TimeoutError:
         outcome = 'timeout'
     except _BudgetExceeded:

@@ -1,20 +1,24 @@
 """Ordered durable result log. Projection consumers must use stable segment IDs."""
 
 from database.batch_pipeline_store import Store
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
 
 
 class OrderedMerge:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None):
+    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, commit_source: str = 'ordered_merge'):
         self.store = store
         self.metrics = metrics
+        self.commit_source = commit_source
 
     def commit_next(self, owner_id: str, now: float) -> dict | None:
         key = owner_key(owner_id)
 
         def commit(tx):
             owner = tx.get('owners', key)
+            # Terminal quarantine atomically removes merge_pending; it never
+            # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
             if not candidate or candidate['state'] != 'result_ready':
                 return None
@@ -44,6 +48,8 @@ class OrderedMerge:
                 'committed_at': now,
                 'projection_state': 'pending',
             }
+            if job.get('recovery_state') == 'recovered':
+                entry['recovery_version'] = 1
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
@@ -57,8 +63,10 @@ class OrderedMerge:
             return entry
 
         entry = self.store.run(commit)
-        if entry and self.metrics:
-            self.metrics.record('committed')
+        if entry:
+            record_correctness('committed', source=self.commit_source)
+            if self.metrics:
+                self.metrics.record('committed')
         return entry
 
     def committed_result(self, segment_id: str) -> dict:

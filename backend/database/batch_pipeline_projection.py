@@ -9,12 +9,15 @@ from typing import Any
 
 from google.cloud import firestore
 
+from config.batch_pipeline import projection_contention_enabled
+from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
 )
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from database.batch_pipeline_projection_protocol import (
@@ -114,7 +117,7 @@ class ProjectionStore:
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
                 if receipt.get('state') == 'ready':
-                    return old or {}, True
+                    return {**(old or {}), '_wake': False}, True
                 row, result = operation(old)
                 if old is None and session.job.get('priority') != 0:
                     from utils.cloud_tasks import is_sync_backfill_routing_enabled
@@ -126,12 +129,15 @@ class ProjectionStore:
                         handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
                         if not queue or not handler:
                             raise ProjectionBlocked('backfill enrichment dispatch binding required')
-                        row['dispatch'] = {
+                        dispatch = {
                             'queue': queue,
                             'handler': handler,
                             'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
                             'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
                         }
+                        if not reprocess.valid_dispatch_binding(dispatch):
+                            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
+                        row['dispatch'] = dispatch
                         result = (row, result[1])
                 # The enrichment obligation and its exactly-once projection
                 # receipt commit together, fenced against account deletion.
@@ -150,13 +156,42 @@ class ProjectionStore:
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+        if (
+            not projection_contention_enabled()
+            and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
+        ):
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            operation,
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
             operation_name='batch_projection',
         )
+
+    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float) -> bool:
+        """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
+
+        @firestore.transactional
+        def commit(transaction):
+            session = self.session(segment_id, binding, now)
+            session.prepare(transaction, replay=False)
+            if session.receipt().get('state') != 'ready':
+                return False
+            held = False
+            for sibling in binding.segment_ids:
+                job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                if job.get('state') == 'quarantined':
+                    if (
+                        not job.get('projection_binding')
+                        or normalized_binding(job['projection_binding']) != binding
+                        or job.get('merge_pending') is not False
+                    ):
+                        raise ProjectionBlocked('quarantined sibling binding mismatch')
+                    held = True
+            if held:
+                transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
+            return held
+
+        return self.run(commit)
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -178,6 +213,8 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        if binding.native_record:
+            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
@@ -209,6 +246,8 @@ class ProjectionStore:
             receipts = []
             live_siblings = []
             erased_count = 0
+            captured_seconds = 0.0
+            terminal_empty_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -218,12 +257,15 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
+                    terminal_empty_count += 1
                 live_siblings.append(sibling)
+                captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
-                    return None
+                    return None, False, 0
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
             # Earlier receipt IDs can have become bridge donors. Follow the
@@ -255,6 +297,7 @@ class ProjectionStore:
                     mapped.append((cid, receipt['created'] and cid == original_id))
             new = sorted({cid for cid, created in mapped if created})
             updated = sorted({cid for cid, created in mapped if not created})
+            superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
             result = {
@@ -263,13 +306,21 @@ class ProjectionStore:
                 'failed_segments': 0,
                 'total_segments': len(receipts),
                 'errors': [],
-                'outcome': 'success' if new or updated or erased_count else 'expected_silence',
+                'outcome': (
+                    'success'
+                    if new or updated or erased_count or terminal_empty_count or superseded_count
+                    else 'expected_silence'
+                ),
             }
+            if terminal_empty_count:
+                result['no_recoverable_speech_segments'] = terminal_empty_count
+            if superseded_count:
+                result['superseded_segments'] = superseded_count
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
-                return old
+                return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
             seconds = sum(
@@ -305,7 +356,15 @@ class ProjectionStore:
                 run_epoch=binding.run_epoch,
             )
             for sibling in live_siblings:
+                # All assignment/enrichment receipts now exist. Wake held
+                # siblings in the same durable completion, including a crash
+                # before client publication or completion retention.
+                transaction.update(self.ref('results', sibling), {'projection_state': 'ready'})
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
-            return result
+            return result, True, captured_seconds
 
-        return self.run(commit)
+        with writing('usage_month_cache', binding.owner_id):
+            result, changed, seconds = self.run(commit)
+        if changed:
+            record_correctness('projection_completed', seconds=seconds)
+        return result

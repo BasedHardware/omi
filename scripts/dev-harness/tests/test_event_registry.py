@@ -170,3 +170,20 @@ def test_backend_payload_inventory_cannot_admit_arbitrary_fields_or_other_events
     doc = source()
     doc['events'][0]['backend_properties'] = registry.BILLING_BACKEND_PROPERTIES
     assert registry.validate(doc)
+
+
+def test_saved_reconnect_query_separates_attempts_outcomes_and_zero_denominators():
+    import sqlite3
+    consumer = json.loads((ROOT / 'contracts/analytics/consumers/saved-pendant-reconnect.json').read_text())
+    query = (ROOT / consumer['outcomes_query']).read_text()
+    with sqlite3.connect(':memory:') as db:
+        db.execute('CREATE TABLE events(event TEXT, app_namespace TEXT, build_number TEXT, trigger TEXT, result TEXT)')
+        rows = [('launch', 'attempted'), ('launch', 'failed_timeout'), ('launch', 'connected'),
+                ('resume', 'attempted'), ('native_retry', 'connected')]
+        db.executemany('INSERT INTO events VALUES (?, ?, ?, ?, ?)',
+                       [('Saved Pendant Reconnect', 'mobile-test', '1', trigger, result) for trigger, result in rows])
+        db.execute("INSERT INTO events VALUES ('Saved Pendant Reconnect', 'desktop-test', '1', 'launch', 'attempted')")
+        result = db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall()
+        assert result == [('dart', 2, 1, 0.5), ('native', 0, 1, None)]
+        db.execute('DELETE FROM events')
+        assert db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall() == []

@@ -78,8 +78,13 @@ Recovery migrates old global rings in bounded metadata-only transactions.
 ## Lease, merge and late-capture policy
 
 Leases last 120s; concurrent heartbeats renew every 20s. Lost ownership forbids
-publication. Failures/expiry retry indefinitely with exponential backoff capped
-at 600s, retaining `merge_pending`. Alert on first-failure age over 600s.
+publication. Explicit worker failures retry with exponential backoff capped at
+600s until the lease attempt reaches `BATCH_PIPELINE_MAX_ATTEMPTS` (default 5,
+valid integer 1–20; invalid values use 5). Configure the same ceiling on GPU
+workers and serving API hosts; a restart is required to change it. Policy denials
+and fatal-GPU deferrals refund the lease attempt. Lease expiry alone remains
+recoverable and does not quarantine; the ceiling is checked on explicit failure.
+Alert on first-failure age over 600s until success or terminal quarantine.
 Fenced recovery records move to `privacy_blocked` in a separate transaction
 that rechecks the fence; other owners continue. D still owns erasure.
 Authenticated internal `redrive-dead` and owner status polling redrive historical
@@ -108,6 +113,74 @@ Counts exclude retries/contention; empty priority probes add index reads.
 Each metric refresh uses nine bounded queries (GPU pump cadence 15s). No ordinary admission/pull
 writes the legacy global control; shard contention/load still needs qualification.
 
+## Terminal quarantine and the visible gap
+
+At the ceiling, one fenced transaction records `state=quarantined`,
+`quarantine_reason=worker_failed`, `quarantined_at` and `recovery_state=held`.
+`worker_failed` is a closed scheduler code; the worker's content-safe diagnostic
+log owns any more specific model reason. The transaction clears the lease token,
+clears `merge_pending`, removes retry age and increments the owner revision.
+This serializes the skip against admission/merge; it does not manufacture a
+result URI, silence receipt, successful log entry or projection watermark.
+Stale completion, heartbeat, historical-dead redrive and repeated status polls
+cannot revive this unit. Existing retries above the ceiling quarantine on their
+next explicit failure, rather than on deployment or a metadata scan.
+
+The successful result log links the successful unit before the gap directly to
+the next successful unit. Earlier unfinished successful captures still block;
+late-capture/high-watermark semantics are unchanged. A successful sibling of the
+failed upload still persists/enriches through normal assignment. Once ready it
+moves to `projection_state=quarantine_held`, retaining its ready receipt/cursor
+but leaving the bounded projection sweep. Later uploads can project normally.
+The failed upload cannot pass all-sibling accounting/client completion.
+
+**What the conversation shows:** the quarantined unit performs no conversation
+or transcript mutation. Existing live/legacy words remain; if none exist for
+that span, it has no batch transcript words and no invented placeholder. Other
+successful units use normal assignment. The durable upload status is `failed`,
+with `failed_segments` and the closed `batch_worker_quarantined` error, no success
+result and no further polling delay. This is a transcript gap, not recovery.
+Once fenced recovery (below) owns the unit, recovery states `held`, `prepared`
+and `running` poll as `processing` with a nonzero `poll_after_ms`; only a
+terminal quarantine such as `failed_held` reports `failed`.
+
+No legacy transcription is dispatched in this change. The upload-wide
+`dispatch_protocol=batch_v1` claim and run fence remain intact; duplicate
+uploads and legacy run binding cannot create a second projection. Quarantined
+units and their held siblings retain registered encrypted artifacts/metadata
+without completion TTL or cleanup. Privacy deletion still overrides retention.
+Successful siblings' upload-wide usage completion also remains held. Operators
+must track these retained obligations until recovery ships; flag rollback does
+not release them or erase their audio.
+
+`omi_batch_pipeline_events_total{event="quarantined"}` and
+`{event="recovery_held"}` count accepted transitions, with content-free
+`event=batch_quarantined reason=worker_failed attempt=<integer> recovery=held`
+and `event=batch_recovery outcome=held reason=handoff_not_implemented` logs.
+They emit after the transaction, outside worker exception scopes, with swallowed
+telemetry failures. Repeated/stale fail calls do not emit again. Counters/logs
+are best effort; durable quarantined job records are the authoritative census
+(including an ambiguous commit reply or process death before telemetry).
+
+### Fenced recovery follow-up
+
+The existing legacy claim/run entry points own an entire upload, not one batch
+unit. Clearing that claim or dispatching the whole upload could replay already
+projected siblings. Recovery therefore needs a separate per-unit intent, keyed
+by the immutable segment ID, atomically created only for a quarantined job with
+no result/assignment receipt. The intent must carry a generation/run token and
+privacy fence, keep ordinary batch pull/complete denied, and reuse the existing
+sync prerecorded STT client on that unit's registered audio. Its result must
+publish through the same stable batch assignment identity under the recovery
+fence, never through a second whole-upload legacy claim. Repeated or lost-reply
+handoffs must reconcile that durable result rather than transcribe/project twice.
+Because later captures may already have committed, publish through the existing
+late-capture log rules, preserving original clocks. Resume held sibling sweeps
+and all-sibling accounting/retention only after every recovered unit has a durable
+projection receipt. Validate intent retry, lease loss, privacy revocation,
+late capture, crash-after-persist and exactly-once billing before enabling this
+path. This follow-up is deliberately outside this quarantine-and-skip PR.
+
 ## Worker and protection interfaces
 
 `WorkItem` names segment/owner, capture time, encrypted audio URI, duration,
@@ -115,7 +188,15 @@ priority, unit kind, optional conversation and pinned privacy generation.
 `LeasedWork` adds token/attempt/deadline. B implements
 `process_batch(Sequence[WorkItem]) -> Sequence[WorkResult]`; results may arrive
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
-Missing/failed items retry; decode/provider failures never become silence.
+Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
+
+Inside one locked flight, artifact IO overlaps GPU work: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 3, `1` = serial, max 8) items
+fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
+writes run while later items diarize. Prefetch stays inside the existing
+two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
+ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
+fatal GPU error waits for outstanding IO before the flight raises.
 
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
@@ -165,3 +246,11 @@ Turning admission off returns new unowned uploads to legacy; existing batch
 claims drain through their recorded protocol. Never copy in-flight work into
 legacy or purge pending artifacts to roll back. Detailed RPC/index/operator
 settings are in `batch-pipeline-serving.md`; no merge/deploy is authorized here.
+
+With dark `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=true`, both exhausted
+padded `empty_asr` and `no_owned_words` hand off immediately to the existing
+fenced CPU recovery lane. Strict local VAD on the original unit makes the final
+silence decision; the GPU worker never infers silence from empty text or from
+words outside its core. Speech gets the once-only legacy recovery attempt.
+See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
+closed diagnostics, historical held-unit disposition and rollback semantics.

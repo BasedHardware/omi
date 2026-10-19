@@ -11,6 +11,7 @@ from contextlib import contextmanager, nullcontext
 from itertools import chain
 from config import audio_archive
 from utils.other.audio_singleflight import coalesce_rebuild
+from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
 from utils.other.raw_audio_read import list_packs, read_pack, verified_pcm_paths, pcm_for_span, invalidate_pack_index
 from utils.other.raw_audio import provenance, filename_provenance, packet_provenance
@@ -34,6 +35,7 @@ from database.legal_holds import external_write_fence, destructive_operation_gat
 from utils.other import audio_packs
 from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
+from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from database.audio_timeline import (
     chunk_span,
@@ -613,7 +615,7 @@ def upload_syncing_temporal_file(file_path: str):
 
 
 @sync_phase('gcs')
-def download_syncing_temporal_file(file_path: str) -> bool:
+def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = None) -> bool:
     """Download a staged blob back to its local relative path.
 
     Returns False when the blob no longer exists (e.g. deleted by the
@@ -622,13 +624,88 @@ def download_syncing_temporal_file(file_path: str) -> bool:
     directory = os.path.dirname(file_path)
     if directory:
         os.makedirs(directory, exist_ok=True)
+    prepared = staged_prefetch.take(file_path)
     for name in dict.fromkeys(filter(None, (os.getenv('BUCKET_AUDIO_DERIVED'), syncing_local_bucket))):
         try:
-            _get_storage_client().bucket(name).blob(file_path).download_to_filename(file_path)
+            blob = _get_storage_client().bucket(name).blob(file_path)
+            if prepared is not None and prepared.bucket == name:
+                # Lifecycle deletion, replacement, or a higher-priority derived
+                # object must win over cached bytes. Never resurrect expired audio.
+                blob.reload()
+                if int(blob.generation) == prepared.generation and not blob.content_encoding:
+                    if max_bytes is not None and len(prepared.data) > max_bytes:
+                        from utils.sync.input_limits import BackfillInputLimitExceeded
+
+                        raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
+                    _write_prefetched_bytes(file_path, prepared.data, map_pressure=max_bytes is not None)
+                    logger.info('event=sync_owner_prefetch outcome=hit')
+                    return True
+            if max_bytes is None:
+                blob.download_to_filename(file_path)
+            else:
+                _download_blob_bounded(blob, file_path, max_bytes)
             return True
         except BlobNotFound:
             continue
     return False
+
+
+def _write_prefetched_bytes(file_path: str, data: bytes, *, map_pressure: bool) -> None:
+    try:
+        with open(file_path, 'wb') as output:
+            output.write(data)
+    except Exception as error:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if map_pressure:
+            from utils.sync.input_limits import raise_sync_storage_pressure
+
+            raise_sync_storage_pressure(error)
+        raise
+
+
+def _download_blob_bounded(blob, file_path: str, max_bytes: int) -> None:
+    from utils.sync.input_limits import BackfillInputLimitExceeded, raise_sync_storage_pressure
+
+    # Metadata rejects obviously large legacy blobs without downloading;
+    # the streaming bound also protects against a changed generation.
+    blob.reload()
+    # Unknown size is not proof of excess; the capped read below enforces the bound.
+    if blob.size is not None and blob.size > max_bytes:
+        raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
+    written = 0
+    try:
+        with blob.open('rb', chunk_size=256 * 1024) as source, open(file_path, 'wb') as target:
+            while chunk := source.read(min(256 * 1024, max_bytes - written + 1)):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
+                target.write(chunk)
+    except Exception as error:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise_sync_storage_pressure(error)
+        raise
+
+
+def prefetch_syncing_temporal_file(file_path: str) -> StagedBytes | None:
+    """Read a small immutable generation; never write job paths or cloud state."""
+    for name in dict.fromkeys(filter(None, (os.getenv('BUCKET_AUDIO_DERIVED'), syncing_local_bucket))):
+        try:
+            blob = _get_storage_client().bucket(name).blob(file_path)
+            blob.reload(timeout=(1, 3), retry=None)
+            if blob.size is None or blob.size > MAX_FILE_BYTES or blob.content_encoding:
+                return None
+            generation = int(blob.generation)
+            data = blob.download_as_bytes(
+                start=0, end=MAX_FILE_BYTES, if_generation_match=generation, timeout=(1, 3), retry=None
+            )
+            if len(data) == blob.size:
+                return StagedBytes(data, name, generation)
+            return None
+        except BlobNotFound:
+            continue
+    return None
 
 
 # ************************************************
@@ -840,6 +917,8 @@ def upload_audio_chunks_batch(
         try:
             with owner_storage_write_gate(uid, bucket):
                 blob = bucket.blob(path)
+                if sample_rate is not None:
+                    blob.metadata = {'record_sample_rate': str(sample_rate)}
                 if span is not None:
                     payload = b''.join(chunk['data'] for chunk in sorted_chunks)
                     payload_digest = hashlib.sha256(payload)
@@ -872,7 +951,7 @@ def upload_audio_chunks_batch(
                             # Exit the playback gate before the optional archive.
                             break
                         raise ValueError(f'v2 audio blob content conflict at {path}')
-                    blob.metadata = span_blob_metadata(span)
+                    blob.metadata = {**(blob.metadata or {}), **span_blob_metadata(span)}
                 create_only = {'if_generation_match': 0} if span is not None else {}
                 if protection_level == 'enhanced':
                     # Encrypt each chunk individually (length-prefixed), stream to GCS
@@ -953,6 +1032,7 @@ def list_audio_chunks(
     retry: Any = None,
     deadline: Optional[float] = None,
     max_count: Optional[int] = None,
+    source_identity: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
@@ -1008,6 +1088,9 @@ def list_audio_chunks(
                     'is_batch': is_batch,
                     'generation': getattr(blob, 'generation', None),
                 }
+                if source_identity or playback_on_demand():
+                    chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
+                    chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
                 blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
                 if blob_bucket != private_cloud_sync_bucket:
                     chunk_entry['bucket'] = blob_bucket
@@ -1708,13 +1791,15 @@ def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) 
 
 
 def enqueue_conversation_audio_merge(
-    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str
+    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str, *, playback_epoch: str | None = None
 ) -> None:
     """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
 
     Enqueue failures are swallowed: the file stays pending and the next /urls
     poll re-enqueues it.
     """
+    if playback_on_demand() and caller not in {'precache_endpoint', 'sync_urls', 'sync_download'}:
+        return
     for af in audio_files:
         audio_file_id = af.get('id')
         timestamps = af.get('chunk_timestamps')
@@ -1728,7 +1813,10 @@ def enqueue_conversation_audio_merge(
                     'conversation_id': conversation_id,
                     'audio_file_id': audio_file_id,
                     'timestamps': timestamps,
+                    **({'source_fingerprint': af.get('source_fingerprint')} if playback_on_demand() else {}),
                     'caller': caller,
+                    **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
+                    **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
                 }
             )
         except Exception as e:
@@ -1746,7 +1834,9 @@ def enqueue_conversation_audio_merge(
 CONVERSATION_ARTIFACT_NAME = 'conversation'
 
 
-def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
+def compute_audio_files_fingerprint(
+    audio_files: List[Dict[str, Any]], *, origin: Any = None, source_identity: bool = False
+) -> str:
     """Content fingerprint of a conversation's audio_files (id + chunk count +
     last chunk timestamp per part, order-insensitive). Stamped on the doc at
     build time; a mismatch with the current audio_files means the artifact is
@@ -1754,6 +1844,19 @@ def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
     chunks aren't swallowed by named-task dedup. For v2 files the validated
     chunk_spans layout is part of the fingerprint, so a span change (not just
     last-timestamp/count) invalidates a stamped artifact."""
+    if source_identity or playback_on_demand():
+        # Keep the logical IDs in the manifest for old client aliases. New IDs
+        # already derive from every ordered source object generation/checksum.
+        manifest = [
+            {
+                key: af.get(key)
+                for key in ('id', 'source_fingerprint', 'chunk_timestamps', 'chunk_spans', 'started_at', 'duration')
+            }
+            for af in audio_files
+        ]
+        return hashlib.sha256(
+            json.dumps({'files': manifest, 'origin': origin}, sort_keys=True, default=str).encode()
+        ).hexdigest()
     parts = []
     for af in audio_files:
         if not (af.get('id') and af.get('chunk_timestamps')):
@@ -1778,6 +1881,8 @@ def maybe_invalidate_conversation_playback(
     """Re-enqueue the conversation artifact build if a stamped artifact went
     stale (audio_files changed). No stamp -> no-op, so live-conversation batch
     flushes never churn rebuilds; the first build happens at completion."""
+    if playback_on_demand():
+        return  # Invalidation is detected by /urls; background updates do no build work.
     stamp = (conversation or {}).get('conversation_audio') or {}
     stamped = stamp.get('audio_files_fingerprint')
     if not stamped:
@@ -1787,20 +1892,23 @@ def maybe_invalidate_conversation_playback(
         enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
 
 
-def _conversation_playback_blob(uid: str, conversation_id: str):
+def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str | None = None):
     bucket = _get_storage_client().bucket(audio_archive.regional_bucket(uid, private_cloud_sync_bucket))
-    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.mp3')
+    name = f'conversation-{fingerprint}' if fingerprint else CONVERSATION_ARTIFACT_NAME
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{name}.mp3')
 
 
-def get_conversation_playback_signed_url(uid: str, conversation_id: str):
-    blob = _conversation_playback_blob(uid, conversation_id)
+def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerprint: str | None = None):
+    blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     if not blob.exists():
         return None
     return _get_signed_url(blob, 60)
 
 
-def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
-    blob = _conversation_playback_blob(uid, conversation_id)
+def upload_conversation_playback_artifact(
+    uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None
+) -> None:
+    blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
         blob.upload_from_string(mp3_data, content_type='audio/mpeg')
 
@@ -1827,9 +1935,13 @@ def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id:
     return content.split(':', 1)[0] if content else None
 
 
-def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
+def enqueue_conversation_artifact_build(
+    uid: str, conversation_id: str, fingerprint: str, caller: str, *, playback_epoch: str | None = None
+) -> None:
     """Enqueue the conversation-level artifact build (named-task deduped on the
     fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
+    if playback_on_demand() and caller not in {'precache_endpoint', 'sync_urls', 'sync_download'}:
+        return
     try:
         enqueue_audio_merge_job(
             {
@@ -1838,6 +1950,8 @@ def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerpr
                 'conversation_id': conversation_id,
                 'fingerprint': fingerprint,
                 'caller': caller,
+                **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
+                **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
             }
         )
     except Exception as e:
@@ -1873,7 +1987,7 @@ def precache_conversation_audio(
         fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
         sample_rate: Audio sample rate in Hz (default 16000)
     """
-    if not audio_files:
+    if not audio_files or playback_on_demand():
         return
 
     if is_audio_merge_dispatch_enabled():

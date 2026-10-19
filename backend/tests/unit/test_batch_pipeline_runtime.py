@@ -132,6 +132,39 @@ def test_supervision_drains_after_stop_before_readiness_closes():
     asyncio.run(check())
 
 
+def test_queue_sampler_stays_fresh_while_pump_is_inside_a_long_batch(monkeypatch):
+    monkeypatch.setattr(runtime, 'METRICS_SAMPLE_SECONDS', 0.01)
+
+    async def check():
+        state = runtime.RuntimeState()
+        stop = asyncio.Event()
+
+        class Pump:
+            samples = 0
+            failures = 0
+
+            async def sample_metrics(self):
+                self.samples += 1
+                if self.samples == 2:
+                    self.failures += 1
+                    raise RuntimeError('transient Firestore error')
+
+            async def run(self, signal):
+                # One long GPU batch: run_once never returns to refresh inline.
+                while self.samples < 4:
+                    await asyncio.sleep(0.005)
+                signal.set()
+
+        pump = Pump()
+        await asyncio.wait_for(runtime.supervise(pump, state, stop), 2)
+        assert pump.samples >= 4 and pump.failures == 1  # A failed sample does not stop sampling.
+        sampled = pump.samples
+        await asyncio.sleep(0.05)
+        assert pump.samples == sampled  # Sampler stops with supervision.
+
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('message', ['CUDA illegal memory access', 'CUDA out of memory', 'CUBLAS_STATUS_ALLOC_FAILED'])
 def test_fatal_cuda_requests_restart_after_quiescence(message):
     calls = []
@@ -289,3 +322,21 @@ def test_memory_probe_separates_host_and_device_peaks():
     assert result['gpu_allocated_peak_bytes'] == 30
     assert result['gpu_reserved_peak_bytes'] == 40
     assert result['host_process_peak_bytes'] > 0
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_audio_counter_is_exported_by_the_worker_metrics_registry(monkeypatch, enforce):
+    from utils.observability.stt_cap_dispatch import record_audio
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    state = runtime.RuntimeState()
+    server = runtime.health_server(state, CollectorRegistry(), 0)
+    try:
+        record_audio('sync', 'accepted', 'parakeet', 5)
+        body = urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics').read().decode()
+        assert ('omi_stt_cap_provider_audio_seconds_total' in body) is enforce
+        if enforce:
+            assert 'path="sync"' in body and 'provider="parakeet"' in body
+    finally:
+        server.shutdown()
+        server.server_close()

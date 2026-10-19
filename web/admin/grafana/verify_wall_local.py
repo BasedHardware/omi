@@ -14,7 +14,7 @@ import tempfile
 
 ADMIN = Path(__file__).resolve().parents[1]
 RECORD = Path('/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics')
-NAME = 'omi-tv-v2-local'
+NAME = 'omi-tv-v3-local'
 
 
 def run(*args, **kwargs):
@@ -44,7 +44,7 @@ def serve(replay: str | None):
 
 def provision():
     # Unique project-owned name; intentionally no automatic replacement/removal.
-    run('docker','run','-d','--name',NAME,'--label','com.omi.task=omi-tv-v2',
+    run('docker','run','-d','--name',NAME,'--label','com.omi.task=omi-tv-v3',
         '-p','127.0.0.1:3207:3000','-e','GF_PLUGINS_PREINSTALL=yesoreyeram-infinity-datasource@4.1.1',
         '-e','GF_AUTH_ANONYMOUS_ENABLED=true','-e','GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer',
         '-e','GF_AUTH_DISABLE_LOGIN_FORM=true','grafana/grafana:13.1.3')
@@ -69,76 +69,68 @@ providers:
     options:
       path: /var/lib/grafana/boards
 ''')
+        run('docker','cp',str(tmp/'source.yaml'),f'{NAME}:/etc/grafana/provisioning/datasources/omi.yaml')
+        run('docker','cp',str(tmp/'provider.yaml'),f'{NAME}:/etc/grafana/provisioning/dashboards/omi.yaml')
+        run('docker','exec',NAME,'mkdir','-p','/var/lib/grafana/boards')
+    reload()
+    run('docker','restart',NAME)
+
+
+def reload():
+    """Copy the current board into the existing local container (file provider rescans)."""
+    with tempfile.TemporaryDirectory(prefix='omi-tv-v3-') as directory:
         board = json.loads((ADMIN/'grafana/dashboards/omi-tv-v2.json').read_text())
         for panel in board['panels']:
             for target in panel.get('targets',[]):
                 target['url'] = target['url'].replace('http://127.0.0.1:8899','http://host.lima.internal:3107')
-        (tmp/'board.json').write_text(json.dumps(board))
-        run('docker','cp',str(tmp/'source.yaml'),f'{NAME}:/etc/grafana/provisioning/datasources/omi.yaml')
-        run('docker','cp',str(tmp/'provider.yaml'),f'{NAME}:/etc/grafana/provisioning/dashboards/omi.yaml')
-        run('docker','exec',NAME,'mkdir','-p','/var/lib/grafana/boards')
-        run('docker','cp',str(tmp/'board.json'),f'{NAME}:/var/lib/grafana/boards/omi-tv-v2.json')
-    run('docker','restart',NAME)
+        path = Path(directory)/'board.json'
+        path.write_text(json.dumps(board))
+        run('docker','cp',str(path),f'{NAME}:/var/lib/grafana/boards/omi-tv-v2.json')
 
 
-def screens():
+def screens(out: Path | None = None):
+    """Render the real board; fail on scroll at 1920×1080, truncated titles or panel errors."""
     from playwright.sync_api import sync_playwright
-    out = RECORD/'build-screens'
+    out = out or RECORD/'build-screens'
     out.mkdir(parents=True,exist_ok=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        page = browser.new_page(viewport={'width':1440,'height':1000},device_scale_factor=1)
-        page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='domcontentloaded',timeout=60000)
-        page.get_by_text('Growth',exact=True).wait_for(timeout=60000)
-        page.get_by_text('Weekly active people',exact=True).first.wait_for(timeout=60000)
-        page.locator('svg[data-omi-card]').nth(22).wait_for(timeout=60000)
-        page.evaluate('document.fonts.ready')
-        page.wait_for_timeout(1000)
-        for width,height in [(1440,1000),(1920,1080)]:
-            page.set_viewport_size({'width':width,'height':height})
-            page.wait_for_timeout(1000)
-            clipped = page.locator('svg[data-omi-card]').evaluate_all('''svgs => svgs.flatMap(svg => Array.from(svg.querySelectorAll('text')).flatMap(t => {
-              const b=t.getBoundingClientRect(), root=svg.getBoundingClientRect();
-              return b.left < root.left || b.right > root.right || b.top < root.top || b.bottom > root.bottom ? [t.textContent] : [];
-            }))''')
-            overlap = page.locator('svg[data-omi-card]').evaluate_all('''svgs => svgs.flatMap(svg => {
-              const title=svg.querySelector('text'), chip=svg.querySelector('rect[fill="#26374d"]');
-              if (!title || !chip) return [];
-              const b=title.getBoundingClientRect();return b.right > chip.getBoundingClientRect().left-5 ? [title.textContent] : [];
-            })''')
-            text_collisions = page.locator('svg[data-omi-card]').evaluate_all("""svgs => svgs.flatMap(svg => {
-              const texts = Array.from(svg.querySelectorAll('text'));
-              const hits = [];
-              const intersects = (a,b) => a.left < b.right-0.5 && a.right > b.left+0.5 && a.top < b.bottom-0.5 && a.bottom > b.top+0.5;
-              texts.forEach((a,i) => texts.slice(i+1).forEach(b => {
-                if (intersects(a.getBoundingClientRect(),b.getBoundingClientRect())) hits.push([a.textContent,b.textContent]);
-              }));
-              svg.querySelectorAll('svg:has(path)').forEach(chart => texts.forEach(t => {
-                if (intersects(chart.getBoundingClientRect(),t.getBoundingClientRect())) hits.push(['sparkline',t.textContent]);
-              }));
-              return hits;
-            })""")
-            if text_collisions:
-                raise RuntimeError(f'Card text/sparkline overlap at {width}px: {text_collisions}')
-            if overlap:
-                raise RuntimeError(f'Card title overlaps its scope chip at {width}px: {overlap}')
-            if clipped:
-                raise RuntimeError(f'Card text outside its card at {width}px: {clipped}')
-            diagnostics = page.get_by_text('Diagnostics · definitions and coverage',exact=True)
-            if diagnostics.count() and diagnostics.bounding_box()['y'] < height:
-                raise RuntimeError(f'Diagnostics visible above the fold at {width}px')
-            page.screenshot(path=str(out/f'omi-tv-v2-prod-fix-rev1-{width}.png'))
+        for width,height in [(1920,1080),(1440,900)]:
+            page = browser.new_page(viewport={'width':width,'height':height},device_scale_factor=1)
+            page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
+            page.get_by_text('Data & coverage',exact=True).wait_for(timeout=60000)
+            page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=120000)
+            page.evaluate('document.fonts.ready')
+            page.wait_for_timeout(2000)
+            truncated = page.locator('[data-testid="data-testid header-container"] h2').evaluate_all(
+                'hs => hs.filter(h => h.scrollWidth > h.clientWidth + 1).map(h => h.textContent)')
+            if truncated:
+                raise RuntimeError(f'Truncated panel titles at {width}px: {truncated}')
+            errors = [t for t in ('Unable to find field','Data does not have','No data') if page.get_by_text(t).count()]
+            if errors:
+                raise RuntimeError(f'Panel errors at {width}px: {errors}')
+            # A kiosk TV cannot scroll: neither the page nor any panel (legend, table) may overflow.
+            overflow = page.evaluate("() => Array.from(document.querySelectorAll('*'))"
+                                     ".filter(e => getComputedStyle(e).overflowY !== 'visible' && e.scrollHeight - e.clientHeight > 4)"
+                                     ".map(e => (e.closest('[data-viz-panel-key]')?.innerText || 'page').split('\\n')[0])")
+            if width == 1920 and overflow:
+                raise RuntimeError(f'Content overflows at 1920×1080: {overflow}')
+            page.screenshot(path=str(out/f'omi-tv-v3-{width}.png'))
+            page.close()
         browser.close()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['serve','provision','screens'])
+    parser.add_argument('command',choices=['serve','provision','reload','screens'])
     parser.add_argument('--replay',help='Optional local aggregate wall payload; source timestamps are preserved')
+    parser.add_argument('--out',type=Path,help='Screenshot directory (default: the run record build-screens/)')
     args = parser.parse_args()
     if args.command == 'serve':
         serve(args.replay)
     elif args.command == 'provision':
         provision()
+    elif args.command == 'reload':
+        reload()
     else:
-        screens()
+        screens(args.out)

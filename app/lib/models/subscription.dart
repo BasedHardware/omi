@@ -329,6 +329,130 @@ class PhoneCallQuota {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
+class HeldAudioRecording {
+  final String id;
+  final int startedAt;
+  final int seconds;
+
+  const HeldAudioRecording({required this.id, required this.startedAt, required this.seconds});
+
+  factory HeldAudioRecording.fromGenerated(wire.GeneratedHeldAudioRecording generated) {
+    return HeldAudioRecording(id: generated.id, startedAt: generated.startedAt, seconds: generated.seconds);
+  }
+}
+
+class HeldAudioSummary {
+  final String state;
+  bool get isRecovering => state == 'recovering';
+  final int seconds;
+  final int resetAt;
+  final bool retainLive;
+  final int count;
+  final List<HeldAudioRecording> recordings;
+
+  const HeldAudioSummary({
+    this.state = 'paused',
+    required this.seconds,
+    required this.resetAt,
+    required this.retainLive,
+    this.count = 0,
+    this.recordings = const [],
+  });
+
+  factory HeldAudioSummary.fromGenerated(wire.GeneratedHeldAudioSummary generated) {
+    return HeldAudioSummary(
+      state: generated.state,
+      seconds: generated.seconds,
+      resetAt: generated.resetAt,
+      retainLive: generated.retainLive,
+      count: generated.count,
+      recordings: generated.recordings.map(HeldAudioRecording.fromGenerated).toList(),
+    );
+  }
+}
+
+/// Server-owned processing estimate and choice. Never infer a reset/upgrade
+/// decision from the legacy held_audio recovery state or a client clock.
+class ProcessingBacklog {
+  final String state;
+  final bool budgetExhausted;
+  final int heldAudioCount;
+  final int heldAudioSeconds;
+  final int deferredConversations;
+  final int deferredSeconds;
+  final double estimatedUnits;
+  final double estimatedHours;
+  final double estimatedPercent;
+  final double? remainingUnits;
+  final bool exceedsRemaining;
+
+  const ProcessingBacklog({
+    required this.state,
+    this.budgetExhausted = true,
+    this.heldAudioCount = 0,
+    this.heldAudioSeconds = 0,
+    this.deferredConversations = 0,
+    this.deferredSeconds = 0,
+    this.estimatedUnits = 0,
+    this.estimatedHours = 0,
+    this.estimatedPercent = 0,
+    this.remainingUnits,
+    this.exceedsRemaining = false,
+  });
+
+  int get waitingSeconds => heldAudioSeconds + deferredSeconds;
+
+  bool get isCapped => state == 'capped';
+  bool get isWaitingChoice => state == 'waiting_choice';
+  bool get isProcessing => state == 'processing';
+  bool get isVisible => isCapped || isWaitingChoice || isProcessing;
+
+  factory ProcessingBacklog.fromJson(Map<String, dynamic> json) =>
+      ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog.fromJson(json));
+
+  factory ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog generated) => ProcessingBacklog(
+        state: generated.state,
+        budgetExhausted: generated.budgetExhausted,
+        heldAudioCount: generated.heldAudioCount,
+        heldAudioSeconds: generated.heldAudioSeconds,
+        deferredConversations: generated.deferredConversations,
+        deferredSeconds: generated.deferredSeconds,
+        estimatedUnits: generated.estimatedUnits,
+        estimatedHours: generated.estimatedHours,
+        estimatedPercent: generated.estimatedPercent,
+        remainingUnits: generated.remainingUnits,
+        exceedsRemaining: generated.exceedsRemaining,
+      );
+
+  wire.GeneratedProcessingBacklog toGenerated() => wire.GeneratedProcessingBacklog(
+        state: state,
+        budgetExhausted: budgetExhausted,
+        heldAudioCount: heldAudioCount,
+        heldAudioSeconds: heldAudioSeconds,
+        deferredConversations: deferredConversations,
+        deferredSeconds: deferredSeconds,
+        estimatedUnits: estimatedUnits,
+        estimatedHours: estimatedHours,
+        estimatedPercent: estimatedPercent,
+        remainingUnits: remainingUnits,
+        exceedsRemaining: exceedsRemaining,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'state': state,
+        'budget_exhausted': budgetExhausted,
+        'held_audio_count': heldAudioCount,
+        'held_audio_seconds': heldAudioSeconds,
+        'deferred_conversations': deferredConversations,
+        'deferred_seconds': deferredSeconds,
+        'estimated_units': estimatedUnits,
+        'estimated_hours': estimatedHours,
+        'estimated_percent': estimatedPercent,
+        'remaining_units': remainingUnits,
+        'exceeds_remaining': exceedsRemaining,
+      };
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -339,6 +463,9 @@ class UserSubscriptionResponse {
   final int insightsGainedLimit;
   final List<SubscriptionPlan> availablePlans;
   final bool showSubscriptionUi;
+
+  /// Backend-confirmed: this reader can still get an introductory free trial on checkout.
+  final bool trialEligible;
   // Chat quota fields — populated from subscription endpoint
   final double chatQuotaUsed;
   final String? chatQuotaUnit;
@@ -347,6 +474,8 @@ class UserSubscriptionResponse {
   final int? chatQuotaResetAt;
   final PhoneCallQuota? phoneCallQuota;
   final TranscriptionAllowanceSnapshot? transcriptionAllowance;
+  final HeldAudioSummary? heldAudio;
+  final ProcessingBacklog? processingBacklog;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -358,6 +487,7 @@ class UserSubscriptionResponse {
     required this.insightsGainedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.trialEligible = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,
@@ -365,15 +495,18 @@ class UserSubscriptionResponse {
     this.chatQuotaResetAt,
     this.phoneCallQuota,
     this.transcriptionAllowance,
+    this.heldAudio,
+    this.processingBacklog,
   });
 
-  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
-    return UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
-  }
+  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
+      UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
 
   factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
     return UserSubscriptionResponse(
       subscription: Subscription.fromGenerated(generated.subscription),
+      processingBacklog:
+          generated.processingBacklog == null ? null : ProcessingBacklog.fromGenerated(generated.processingBacklog!),
       transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
       transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
       wordsTranscribedUsed: generated.wordsTranscribedUsed,
@@ -382,6 +515,7 @@ class UserSubscriptionResponse {
       insightsGainedLimit: generated.insightsGainedLimit,
       availablePlans: generated.availablePlans.map(SubscriptionPlan.fromGenerated).toList(),
       showSubscriptionUi: generated.showSubscriptionUi,
+      trialEligible: generated.trialEligible,
       chatQuotaUsed: generated.chatQuotaUsed,
       chatQuotaUnit: generated.chatQuotaUnit,
       chatQuotaPercent: generated.chatQuotaPercent,
@@ -391,12 +525,14 @@ class UserSubscriptionResponse {
       transcriptionAllowance: generated.transcriptionAllowance == null
           ? null
           : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
+      heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
     );
   }
 
   wire.GeneratedUserSubscriptionResponse toGenerated() {
     return wire.GeneratedUserSubscriptionResponse(
       subscription: subscription.toGenerated(),
+      processingBacklog: processingBacklog?.toGenerated(),
       transcriptionSecondsUsed: transcriptionSecondsUsed,
       transcriptionSecondsLimit: transcriptionSecondsLimit,
       wordsTranscribedUsed: wordsTranscribedUsed,
@@ -412,8 +548,26 @@ class UserSubscriptionResponse {
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
+      heldAudio: heldAudio == null
+          ? null
+          : wire.GeneratedHeldAudioSummary(
+              state: heldAudio!.state,
+              recordings: heldAudio!.recordings
+                  .map(
+                    (row) =>
+                        wire.GeneratedHeldAudioRecording(id: row.id, seconds: row.seconds, startedAt: row.startedAt),
+                  )
+                  .toList(),
+              resetAt: heldAudio!.resetAt,
+              retainLive: heldAudio!.retainLive,
+              seconds: heldAudio!.seconds,
+              count: heldAudio!.count,
+            ),
     );
   }
 
-  Map<String, dynamic> toJson() => toGenerated().toJson();
+  Map<String, dynamic> toJson() => {
+        ...toGenerated().toJson(),
+        if (processingBacklog != null) 'processing_backlog': processingBacklog!.toJson(),
+      };
 }

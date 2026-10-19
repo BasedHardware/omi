@@ -51,6 +51,36 @@ class QueueMetrics:
             registry=registry,
         )
 
+        self.head_not_found = Counter(
+            'omi_batch_pipeline_head_not_found_total',
+            'Capture head or unique ready FIFO predecessor not found',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.head_budget_exhausted = Counter(
+            'omi_batch_pipeline_head_budget_exhausted_total',
+            'Owner head lookup budget exhausted in a pull transaction',
+            ['priority', 'worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.predecessor_ready_age = Histogram(
+            'omi_batch_pipeline_predecessor_ready_age_seconds',
+            'Capture-order head ready age at scheduler visit',
+            ['priority', 'worker_release', 'namespace'],
+            buckets=(1, 10, 30, 60, 120, 300, 600, 900, 3600, 86400),
+            registry=registry,
+        )
+
+    def record_head(self, event: str, priority: Priority, *, age: float | None = None) -> None:
+        if event == 'ready_age' and age is not None:
+            self.predecessor_ready_age.labels(LABELS[priority], *self.scope).observe(age)
+        elif event == 'head_not_found':
+            self.head_not_found.labels(LABELS[priority], *self.scope).inc()
+        elif event == 'budget_exhausted':
+            self.head_budget_exhausted.labels(LABELS[priority], *self.scope).inc()
+        else:
+            raise ValueError('static head scheduling event required')
+
     def refresh(self, store: Store, now: float) -> None:
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
@@ -68,7 +98,16 @@ class QueueMetrics:
         self.refreshed_at.labels(*self.scope).set(now)
 
     def record(self, event: str, *, wait_seconds: float | None = None) -> None:
-        if event not in {'leased', 'completed', 'retry', 'lease_expired', 'dead', 'committed'}:
+        if event not in {
+            'leased',
+            'completed',
+            'retry',
+            'lease_expired',
+            'dead',
+            'committed',
+            'quarantined',
+            'recovery_held',
+        }:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:

@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_serializer
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -27,6 +27,7 @@ from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
@@ -48,6 +49,7 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
+    get_api_key_auth,
     check_conversation_transcript_read_limit,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
@@ -68,6 +70,16 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
+from utils.observability.external_lists import (
+    observe_action_items_page,
+    observe_action_items_rows,
+    observe_action_items_shape,
+)
+from utils.observability.firestore_request_reads import ReadComponent, read_component
+from utils import external_list_reads as external_lists
+from utils.mcp_server.handlers.conversations import conversation_cards_page_core
+from utils.mcp_server.errors import ToolExecutionError
+from utils.mcp_server.helpers import conversation_participants
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
@@ -108,7 +120,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -363,8 +375,7 @@ def get_memories(
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     category_list = []
     if categories:
         try:
@@ -373,7 +384,6 @@ def get_memories(
             logger.error(f"Invalid category in developer memories: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -393,6 +403,10 @@ def get_memories(
     allowed = {category.value for category in category_list} if category_list else None
     if offset + limit > 5000:
         raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+    budget = list_read_budget_for_request(request, route='developer-memories', owner_uid=uid, context=auth_context)
+    cached = external_lists.cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
     read_limit = min(limit + 1, 5000 - offset)
     memories = read_developer_memories(
         service,
@@ -812,12 +826,15 @@ class BatchActionItemsResponse(BaseModel):
 )
 def get_action_items(
     uid: str = Depends(get_uid_with_action_items_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get action items with optional filters. Locked action items are excluded.
@@ -831,37 +848,31 @@ def get_action_items(
     """
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
-    action_items = action_items_db.get_action_items(
-        uid=uid,
-        conversation_id=conversation_id,
-        completed=completed,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset,
-    )
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
+    observe_action_items_page(limit, offset)
+    with read_component(ReadComponent.OTHER):
+        budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
+        cached = external_lists.cached_external_list(request, response, auth, locals())
+        observe_action_items_shape(
+            conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
+        )
+        if cached is not None:
+            return cached
+        action_items = action_items_db.get_action_items(
+            uid=uid,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+            budget=budget,
+            probe_filtered_legacy=external_lists.lever_enabled('OMI_DEV_ACTION_ITEMS_FILTERED_LEGACY_PROBE_ENABLED'),
+        )
 
-    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
-    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
-    # already applied to GET /v1/dev/user/memories.
-    valid_action_items = []
-    for item in action_items:
-        if not isinstance(item, dict) or not item.get('id'):
-            logger.warning('Skipping malformed action item in Developer API action-item list')
-            continue
-        if item.get('is_locked', False):
-            continue
-        try:
-            valid_action_items.append(ActionItemResponse.model_validate(item))
-        except ValidationError as e:
-            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
-            )
-            continue
+    valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
+    observe_action_items_rows('returned', len(valid_action_items))
+    finish_list_budget(response, budget)
     return valid_action_items
 
 
@@ -1149,6 +1160,14 @@ class ConversationResponse(BaseModel):
     status: str
     discarded: bool
     meeting_treatment_eligible: bool = False
+    processing_deferred: bool = False
+
+    @model_serializer(mode='wrap')
+    def serialize_processing_deferred(self, handler):
+        data = handler(self)
+        if not self.processing_deferred:
+            data.pop('processing_deferred', None)
+        return data
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1166,6 +1185,7 @@ class UpdateConversationRequest(BaseModel):
 
 
 class DevTranscriptSegment(BaseModel):
+    stt_provider: Optional[str] = Field(default=None, max_length=120)
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
 
     text: str = Field(description="The text spoken in this segment")
@@ -1555,8 +1575,7 @@ def get_conversations(
 
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-        offset = max(0, offset)
-        limit = max(1, min(limit, 200))
+        offset, limit = external_lists.clamp_list_page(offset, limit, 200)
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
@@ -1564,9 +1583,13 @@ def get_conversations(
             logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-        from utils.mcp_server.handlers.conversations import conversation_cards_page_core
-        from utils.mcp_server.errors import ToolExecutionError
-        from utils.mcp_server.helpers import conversation_participants
+        budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
+        cached = external_lists.cached_external_list(request, response, auth, locals())
+        if cached is not None:
+            status = 200
+            returned_count = len(json.loads(bytes(cached.body)))
+            return cached
+        budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None
         if not include_transcript and folder_id is None and starred is None:
@@ -1581,6 +1604,7 @@ def get_conversations(
                     categories=[c.value for c in category_list],
                     cursor_kind="developer_conversations",
                     extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    **budget_kwargs,
                 )
             except ToolExecutionError as exc:
                 raise HTTPException(status_code=exc.http_status or 400, detail=exc.message) from exc
@@ -1601,14 +1625,18 @@ def get_conversations(
                 categories=[c.value for c in category_list],
                 folder_id=folder_id,
                 starred=starred,
+                **budget_kwargs,
             )
             has_more = len(conversations) > limit
             conversations = conversations[:limit]
+        if budget is not None:
+            finish_list_budget(response, budget)
+            has_more = has_more or budget.truncated
         pagination_headers(
             response,
             limit=limit,
             has_more=has_more,
-            next_offset=offset + len(conversations) if next_cursor is None else None,
+            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
             next_cursor=next_cursor,
         )
 
@@ -1738,6 +1766,7 @@ def create_conversation(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
     )
 
 
@@ -1839,6 +1868,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        processing_deferred=bool(conversation.get('processing_deferred', False)),
         meeting_treatment_eligible=projected_meeting_treatment_eligible(conversation),
     )
 
@@ -1896,7 +1926,7 @@ def _log_client_projection_rejected(reason: str, raw: Any) -> None:
 
 def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
     """Validate an untrusted projection payload. Invalid means drop, never 422."""
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         return ClientProcessing.model_validate(raw)
@@ -1941,8 +1971,8 @@ def _accepted_client_projection(
     """Bind a client projection to the stored transcript, or drop it.
 
     Schema failure and hash mismatch are not request errors: the conversation
-    still lands, with the projection discarded and the coordinator storing the
-    deterministic minimum. The warning is content-free (reason plus provenance
+    still lands, with the projection discarded and the coordinator retaining
+    ordinary funded processing or raw budget deferral. The warning is content-free (reason plus provenance
     only — never transcript or body). Provenance itself may be missing.
     The digest is over ``segments`` — the canonical rows ingest persists —
     so a client hashing the same canonicalization as ``canonical_segment``
@@ -2292,6 +2322,7 @@ def _create_conversation_from_segments(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
         meeting_treatment_eligible=meeting_treatment_eligible,
     )
 

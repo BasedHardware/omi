@@ -181,8 +181,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     assert pc._stored_meeting_context(conversation) == stamped
     # The stamp must stand on its own even without a subsequent provider read.
     monkeypatch.setattr(pc, '_stored_meeting_lookup_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_calendar_context_read_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_ocr_meeting_context_enabled', lambda: False)
     pc._enrich_meeting_context('u', conversation)
     assert pc._stored_meeting_context(conversation) == stamped
 
@@ -194,7 +192,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     # Isolate the persisted meeting stamp from optional roster/background reads.
     monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, ()))
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
-    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **kwargs: None)
     notes = Mock(return_value=Structured(title='Project launch', overview='Launch next week; review on Friday.'))
     monkeypatch.setattr(pc, 'get_conversation_notes', notes)
     prefix_builder = Mock(wraps=pc.build_conversation_prompt_prefix)

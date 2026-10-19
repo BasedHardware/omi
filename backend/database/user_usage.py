@@ -1,5 +1,8 @@
 import logging
+import math
+from database.fsr_read_cache import cache_writer, cached_read, plane_id, ttl
 from datetime import datetime, time, timedelta, timezone
+from functools import wraps
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 
 import pytz
@@ -351,6 +354,7 @@ def get_usage_by_plan(
     return report
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage(
     uid: str,
     date: datetime,
@@ -439,6 +443,7 @@ def _update_hourly_usage_once_transaction(
     return True
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage_once(
     uid: str,
     date: datetime,
@@ -477,6 +482,7 @@ def update_hourly_usage_once(
     return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
 
 
+@cache_writer('usage_month_cache')
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
     """Batch updates or creates usage stats for multiple hours."""
     batch_size = 400
@@ -566,6 +572,36 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
     return stats, document_count
 
 
+def _s4_valid_month_stats(value) -> bool:
+    fields = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
+    return isinstance(value, dict) and all(
+        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0 for key in fields
+    )
+
+
+def _s4_month_cache(since=False):
+    def decorate(fn):
+        @wraps(fn)
+        def read(uid, date, *args, **kwargs):
+            variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:all'
+            if since:
+                start_date = args[0] if args else kwargs['start_date']
+                variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:since:{start_date.date().isoformat()}'
+            return cached_read(
+                'usage_month_cache',
+                uid,
+                variant,
+                lambda: fn(uid, date, *args, **kwargs),
+                seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
+                cacheable=_s4_valid_month_stats,
+            )
+
+        return read
+
+    return decorate
+
+
+@_s4_month_cache()
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
     user_ref = db.collection('users').document(uid)
@@ -577,6 +613,7 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+@_s4_month_cache(since=True)
 def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
     user_ref = db.collection('users').document(uid)

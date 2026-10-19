@@ -9,6 +9,8 @@ REST surface (``apps_results``) without inflating the hosted tool reads.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -51,6 +53,7 @@ def get_mcp_conversation_cards(
     categories: Optional[List[str]] = None,
     firestore_client: Any = None,
     extra_field_paths: Optional[Sequence[str]] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """Return the transcript-free Firestore projection used by hosted MCP lists."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -74,14 +77,20 @@ def get_mcp_conversation_cards(
         .offset(offset)
     )
     conversations: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        conversation = document_data_with_revision(doc)
-        if conversation is None:
-            continue
-        if not is_visible_conversation(conversation):
-            continue
-        conversation.setdefault('id', doc.id)
-        conversations.append(conversation)
+    try:
+        if budget is not None and offset > 0:
+            # Refuse a too-expensive offset before issuing its billed skip.
+            budget.charge(offset)
+        for doc in budgeted_stream_iter(query, budget):
+            conversation = document_data_with_revision(doc)
+            if conversation is None:
+                continue
+            if not is_visible_conversation(conversation):
+                continue
+            conversation.setdefault('id', doc.id)
+            conversations.append(conversation)
+    except ListReadBudgetExhausted:
+        pass
     return conversations
 
 
@@ -148,7 +157,15 @@ def get_mcp_conversation_cards_page(
         scanned += len(raw_docs)
         for doc in raw_docs:
             raw = doc.to_dict() or {}
-            last_position = (raw.get('created_at'), doc.id)
+            doc_created_at = raw.get('created_at')
+            if doc_created_at is None:
+                # A tombstoned row with no created_at can't seed a resumable
+                # keyset position (the next start_after would carry a None
+                # timestamp and raise above). Stop the scan here instead of
+                # handing back a cursor the following page would reject.
+                exhausted = True
+                break
+            last_position = (doc_created_at, doc.id)
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
@@ -157,6 +174,8 @@ def get_mcp_conversation_cards_page(
             conversation.setdefault('id', doc.id)
             visible.append(conversation)
             visible_positions.append(last_position)
+        if exhausted:
+            break
         if len(raw_docs) < limit + 1:
             exhausted = True
             break

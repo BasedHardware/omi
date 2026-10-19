@@ -8,17 +8,25 @@ the shared Gemini ladders below cannot serve company-paid generation. No I/O, no
 the proxy injects observations and owns every side effect, so every rule here
 is unit-testable without a network.
 
-Prices per 1M tokens (Vertex list, captured 2026-08-18):
+Prices per 1M tokens (Vertex global endpoint). The 2.5 Flash price is the
+Vertex AI Gemini 2.5 Standard tier verified 2026-10-18 at
+https://cloud.google.com/vertex-ai/generative-ai/pricing (the earlier figures
+were the Priority tier); the 3.1 Flash-Lite price matches the gateway card
+checked 2026-10-15. The 3.8 Flash entry is the scheduled standard rate
+effective 2027-01-01; its introductory rate through 2026-12-31 is half that
+amount. 2.5 Flash-Lite and 2.5 Pro keep the existing routing reference
+prices because the gateway table has no cards for those models.
 
     gemini-2.5-flash-lite   $0.10 in / $0.40 out
     gemini-3.1-flash-lite   $0.25 in / $1.50 out
     gemini-2.5-flash        $0.30 in / $2.50 out
     gemini-2.5-pro          $1.25 in / $10.00 out
+    gemini-3.8-flash        $1.50 in / $7.50 out (standard, from 2027-01-01)
 
 `gemini-3.1-flash-lite` is NOT the same price class as `gemini-2.5-flash-lite`
 (2.5x in / 3.75x out). It is cheaper than `gemini-2.5-flash` and far cheaper
-than `gemini-2.5-pro`. These historical prices explain the legacy shared
-ladder; they do not authorize company-paid generation on shared capacity.
+than `gemini-2.5-pro`. These prices explain the legacy shared ladder; they do
+not authorize company-paid generation on shared capacity.
 """
 
 from __future__ import annotations
@@ -49,8 +57,8 @@ PT_MODEL_CURRENT = 'gemini-2.5-flash'
 PT_MODEL_TARGET = 'gemini-3.8-flash'
 
 # Overflow ladder, most-capable first. Overflow is always on-demand, so this is
-# also a cost ladder: 3.1-flash-lite ($1.50 out) beats 2.5-flash spillover
-# ($2.50 out); 2.5-flash-lite ($0.40 out) is the floor.
+# also a cost ladder: 3.1-flash-lite ($1.50 out) is first; 2.5-flash-lite
+# ($0.40 out) is the floor. Both are below the dedicated 2.5 Flash price.
 #
 # FC-degraded-fallback-consumes-protected-budget: overflow is resolved against
 # the LIVE PT model rather than pinned, so when the reservation migrates to
@@ -59,9 +67,9 @@ PT_MODEL_TARGET = 'gemini-3.8-flash'
 OVERFLOW_PREFERENCE = ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite')
 
 # --- Fallback chains -------------------------------------------------------
-# List price per 1M tokens (Vertex list, captured 2026-08-18). Declared here
-# so the cost direction of every chain is checkable rather than asserted in
-# prose. Embedding has no text-token price and no substitute, so it is absent.
+# Standard list price per 1M tokens (Vertex). Declared here so the cost
+# direction of every chain is checkable rather than asserted in prose.
+# Embedding has no text-token price and no substitute, so it is absent.
 PRICE_PER_MTOK_IN: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.10,
     'gemini-3.1-flash-lite': 0.25,

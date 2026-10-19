@@ -2,6 +2,7 @@
 
 import copy
 import threading
+import time
 from unittest.mock import MagicMock
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -60,8 +61,10 @@ class _Query:
         assert op == '<='
         return _Query(self.client, self.path, field, maximum, self.order, self.maximum_results, self.equals)
 
-    def order_by(self, field):
-        return _Query(self.client, self.path, self.field, self.maximum, field, self.maximum_results, self.equals)
+    def order_by(self, field, direction='ASCENDING'):
+        return _Query(
+            self.client, self.path, self.field, self.maximum, (field, direction), self.maximum_results, self.equals
+        )
 
     def limit(self, count):
         return _Query(self.client, self.path, self.field, self.maximum, self.order, count, self.equals)
@@ -81,8 +84,11 @@ class _Query:
             rows = [(path, value) for path, value in rows if self.field in value and value[self.field] <= self.maximum]
         if self.equals:
             rows = [(path, value) for path, value in rows if value.get(self.equals[0]) == self.equals[1]]
-        order = self.order or self.field
-        rows.sort(key=lambda row: (row[1].get(order), row[0]) if order else row[0])
+        order = self.order[0] if self.order else self.field
+        rows.sort(
+            key=lambda row: (row[1].get(order), row[0]) if order else row[0],
+            reverse=bool(self.order and self.order[1] == 'DESCENDING'),
+        )
         if getattr(self, 'cursor_id', None):
             rows = [(path, value) for path, value in rows if path[-1] > self.cursor_id]
         if self.maximum_results is not None:
@@ -140,6 +146,9 @@ def db(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'off')
     monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER', raising=False)
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER_PERCENT', raising=False)
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', raising=False)
     monkeypatch.setattr(backfill_cutover, 'r', fakeredis.FakeRedis())
 
     def transactional(fn):
@@ -225,6 +234,35 @@ def test_waiting_jobs_run_oldest_first_and_terminal_failure_releases(db):
     assert registry.is_registered('a', 'middle', firestore_client=db)
 
 
+@pytest.mark.parametrize('sequencer', ['on', 'off'])
+def test_newest_selection_and_expected_head_fence(db, monkeypatch, sequencer):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', sequencer)
+    for job_id, stamp in [('old', 100), ('newest', 300), ('middle', 200)]:
+        _register('a', job_id, stamp, db=db)
+    assert registry.pending_head('a')['job_id'] == 'newest'
+    assert registry.claim_next('a', expected_job_id='old', now=NOW) is None
+    selected = []
+    for _ in range(3):
+        claim = registry.claim_next('a', now=NOW)
+        selected.append(claim['job_id'])
+        assert registry.finish_job('a', claim['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert selected == ['newest', 'middle', 'old']
+
+
+def test_explicit_oldest_produces_identical_claim_and_persisted_state(db, monkeypatch):
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER', raising=False)
+    _register('a', 'new', 300, db=db)
+    _register('a', 'old', 100, db=db)
+    before = copy.deepcopy(db.docs)
+    default_claim = registry.claim_next('a', now=NOW)
+    default_state = copy.deepcopy(db.docs)
+    db.docs = before
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'oldest')
+    assert registry.claim_next('a', now=NOW) == default_claim
+    assert db.docs == default_state
+
+
 def test_claim_sees_earlier_capture_admitted_before_transaction(db, monkeypatch):
     _register('a', 'newer', 300, db=db)
     original_transactional = registry.firestore.transactional
@@ -272,6 +310,53 @@ def test_contention_only_one_active_and_other_uid_can_dispatch(db):
     assert registry.claim_next('light', firestore_client=db, now=NOW)['job_id'] == 'l0'
 
 
+@pytest.mark.parametrize('order', ['oldest', 'newest'])
+def test_preparation_is_read_only_ordered_and_cannot_bypass_execution_head(db, monkeypatch, order):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', order)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    for index in range(10):
+        _register('a', f'job-{index}', index, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    assert registry.preparation_candidates('a', claim['job_id'], claim['epoch']) == []
+    assert registry.begin_job('a', claim['job_id'], claim['epoch'], now=NOW)
+    before = copy.deepcopy(db.docs)
+    candidates = registry.preparation_candidates('a', claim['job_id'], claim['epoch'])
+    expected = ['job-1', 'job-2', 'job-3'] if order == 'oldest' else ['job-8', 'job-7', 'job-6']
+    assert [job['job_id'] for job in candidates] == expected
+    assert db.docs == before
+    # Even a fully warmed future job cannot begin, finish, or steal the head.
+    assert not registry.begin_job('a', candidates[0]['job_id'], claim['epoch'], now=NOW)
+    assert not registry.finish_job('a', candidates[0]['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert registry.claim_next('a', now=NOW) is None
+    assert registry.finish_job('a', claim['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert registry.claim_next('a', now=NOW)['job_id'] == expected[0]
+
+
+def test_preparation_stale_epoch_and_small_backlog_are_inert(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    for index in range(10):
+        _register('a', f'job-{index}', index, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    assert registry.begin_job('a', claim['job_id'], claim['epoch'], now=NOW)
+    replacement = registry.redrive_job('a', claim['job_id'], claim['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.begin_job('a', replacement['job_id'], replacement['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.preparation_candidates('a', claim['job_id'], claim['epoch']) == []
+    assert len(registry.preparation_candidates('a', replacement['job_id'], replacement['epoch'])) == 3
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'off')
+    assert registry.preparation_candidates('a', replacement['job_id'], replacement['epoch']) == []
+    # Restoring serial preparation does not release/fence a running job.
+    assert registry.renew_job('a', replacement['job_id'], replacement['epoch'], now=NOW + timedelta(hours=1))
+    assert registry.claim_next('a', now=NOW) is None
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'on')
+    _register('b', 'b-head', 0, db=db)
+    _register('b', 'b-next', 1, db=db)
+    other = registry.claim_next('b', now=NOW)
+    assert registry.begin_job('b', other['job_id'], other['epoch'], now=NOW)
+    assert registry.preparation_candidates('b', other['job_id'], other['epoch']) == []
+
+
 def test_expired_lease_redrive_is_fenced_and_duplicate_delivery_is_inert(db):
     _register('a', 'job', 0, db=db)
     first = registry.claim_next('a', firestore_client=db, now=NOW)
@@ -302,10 +387,63 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     owner = registry.get_owner('a', firestore_client=db)
     assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'lease_expired'
     assert dispatched[0]['job_id'] == 'lost'
-    assert dispatched[0]['epoch'] == first['epoch'] + 1
+    assert dispatched[0]['epoch'] == first['epoch']
+    assert dispatched[0]['dispatch_attempt'] == 1
     assert registry.finish_job('a', 'lost', dispatched[0]['epoch'], 'failed', firestore_client=db, now=expired)
     assert uid_sequencer.kick('a')
     assert dispatched[-1]['job_id'] == 'next'
+
+
+@pytest.mark.parametrize('flag', ['on', 'off'])
+@pytest.mark.parametrize('delivery', ['original', 'replacement'])
+def test_delivery_after_running_lease_survives_repeated_dispatch_redrives(db, monkeypatch, flag, delivery):
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', flag)
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://sync.example.com/v2/sync-jobs/run')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+    tasks = {}
+
+    def enqueue(_queue, _url, task_id, payload, **_kwargs):
+        # Model named-task dedup, including names retained after task deletion.
+        tasks.setdefault(task_id, copy.deepcopy(payload))
+
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(uid='a', job_id='delayed', lane='backfill')
+    registry.register_job('a', 'delayed', payload, NOW.timestamp(), now=NOW)
+    _register('a', 'next', 1, db=db)
+    first = registry.claim_next('a', now=NOW)
+    uid_sequencer._dispatch(first)
+    original_name = f"delayed-s{first['epoch']}"
+    # No delivery for two hours. Each sweep previously invalidated every task
+    # already in the queue, even well before the 30-minute running lease.
+    for minute in range(6, 121, 6):
+        current = NOW + timedelta(minutes=minute)
+        assert uid_sequencer.reconcile_uid('a', registry.get_owner('a'), now=current) == 'lease_expired'
+        assert registry.get_owner('a')['active_epoch'] == first['epoch']
+        assert registry.claim_next('a', now=current) is None
+    assert len(tasks) == 21
+    replacement_name = f"{original_name}-d20"
+    assert tasks[replacement_name] == tasks[original_name]
+    # Retrying an uncertain acknowledgement is idempotent for that attempt.
+    owner = registry.get_owner('a')
+    uid_sequencer._dispatch({**first, 'dispatch_attempt': owner['dispatch_attempt']})
+    assert len(tasks) == 21
+    delivered = tasks[original_name if delivery == 'original' else replacement_name]
+    current = NOW + timedelta(seconds=registry.LEASE_SECONDS * 4 + 1)
+    assert registry.begin_job('a', 'delayed', delivered['sequencer_epoch'], now=current)
+    assert registry.get_owner('a')['lease_expires_at'] == current + timedelta(seconds=registry.LEASE_SECONDS)
+    # A stale sweeper snapshot cannot redrive a worker that just began.
+    assert registry.redrive_job('a', 'delayed', first['epoch'], now=current) is None
+    assert registry.finish_job('a', 'delayed', first['epoch'], 'completed', now=current)
+    for task in tasks.values():
+        assert not registry.begin_job('a', 'delayed', task['sequencer_epoch'], now=current)
+    assert registry.claim_next('a', now=current)['job_id'] == 'next'
 
 
 def test_flag_switch_does_not_change_persisted_owner_or_legacy_task(db, monkeypatch):
@@ -432,6 +570,55 @@ def test_expired_head_is_retired_then_live_job_claimed(retirement, monkeypatch, 
     assert 'event=sync_backfill_expired_retired' in caplog.text
     assert uid_sequencer.release_job_run_lock.call_count == 2
     uid_sequencer.release_job_run_lock.assert_any_call('expired', 'retirement-token')
+
+
+@pytest.mark.parametrize('sequencer', ['on', 'off'])
+def test_newest_sweep_retires_old_tail_without_touching_active_owner(retirement, monkeypatch, sequencer):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', sequencer)
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 100, db=retirement)
+    retirement.docs[('users', 'a', 'sync_content_ledger', 'content')] = {'job_id': 'expired', 'status': 'processing'}
+    retirement.docs[(registry.PENDING_COLLECTION, 'expired')]['payload']['content_id'] = 'content'
+    claim = registry.claim_next('a', now=NOW)
+    assert claim['job_id'] == 'live'
+    assert registry.begin_job('a', 'live', claim['epoch'], now=NOW)
+    owner = registry.get_owner('a')
+    # Keep the active owner outside this tick; the tail cleanup uses only the
+    # pending page even while the UID is busy with recent work.
+    monkeypatch.setattr(registry, 'due_owners', lambda **kwargs: [])
+    dispatch = MagicMock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    assert uid_sequencer.sweep()['expired_retired'] == 1
+    assert registry.get_owner('a') == owner
+    assert (registry.PENDING_COLLECTION, 'expired') not in retirement.docs
+    ledger = retirement.docs[('users', 'a', 'sync_content_ledger', 'content')]
+    assert ledger['status'] == 'retryable' and 'job_id' not in ledger
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('protected', ['key_present', 'run_lock', 'bound_ledger'])
+def test_newest_tail_retirement_requires_exact_absence_and_unbound_ledger(retirement, monkeypatch, protected):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 100, db=retirement)
+    registry.claim_next('a', now=NOW)
+    before_owner = registry.get_owner('a')
+    monkeypatch.setattr(registry, 'due_owners', lambda **kwargs: [])
+    if protected == 'key_present':
+        monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', lambda job_id: True)
+    elif protected == 'run_lock':
+        monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job_id: None)
+    else:
+        retirement.docs[(registry.PENDING_COLLECTION, 'expired')]['payload']['content_id'] = 'content'
+        retirement.docs[('users', 'a', 'sync_content_ledger', 'content')] = {
+            'job_id': 'expired',
+            'status': 'processing',
+            'ledger_run_epoch': 1,
+        }
+    uid_sequencer.sweep()
+    assert (registry.PENDING_COLLECTION, 'expired') in retirement.docs
+    assert registry.get_owner('a') == before_owner
 
 
 def test_redis_failure_never_retires_or_claims(retirement, monkeypatch):
@@ -927,7 +1114,7 @@ def test_301_empty_owners_cannot_crowd_out_stuck_lease_from_one_page(db, monkeyp
     outcomes = uid_sequencer.sweep(limit=100)
     assert outcomes['lease_expired'] == 1
     assert len(dispatched) == 1 and dispatched[0]['job_id'] == 'stuck-job'
-    assert dispatched[0]['epoch'] > claim['epoch']
+    assert dispatched[0]['epoch'] == claim['epoch'] + int(state == 'running')
 
 
 @pytest.mark.parametrize('release', ['finish', 'active_retire', 'pending_retire'])
@@ -1022,3 +1209,959 @@ def test_operator_window_option_reaches_shared_helper_and_rejects_zero(db, monke
     assert '"repaired_owners": 1' in capsys.readouterr().out
     with pytest.raises(ValueError, match='repair window'):
         repair_script.repair(db, repair_window=0)
+
+
+def test_sweep_defers_failing_owner_and_unblocks_healthy_owners(db, monkeypatch):
+    current = datetime.now(timezone.utc)
+    _register('failing', 'job-failing', 0, db=db)
+    registry.claim_next('failing', now=current - timedelta(hours=1))
+
+    _register('healthy', 'job-healthy', 0, db=db)
+    registry.claim_next('healthy', now=current - timedelta(hours=1))
+
+    orig_reconcile = uid_sequencer.reconcile_uid
+
+    def mock_reconcile(uid, owner, **kwargs):
+        if uid == 'failing':
+            raise RuntimeError('Firestore document missing or corrupted')
+        return orig_reconcile(uid, owner, **kwargs)
+
+    monkeypatch.setattr(uid_sequencer, 'reconcile_uid', mock_reconcile)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+
+    # Tick 1 with limit=1: 'failing' encounters an error, but must be deferred
+    outcomes1 = uid_sequencer.sweep(limit=1)
+    assert outcomes1.get('error') == 1
+    failing_owner = registry.get_owner('failing')
+    assert failing_owner['reconcile_at'] >= current + timedelta(seconds=registry.HEARTBEAT_SECONDS - 5)
+
+    # Tick 2 with limit=1: 'failing' is now deferred, so 'healthy' is reached and processed!
+    outcomes2 = uid_sequencer.sweep(limit=1)
+    assert outcomes2.get('lease_expired') == 1
+    assert len(dispatched) == 1
+    assert dispatched[0]['job_id'] == 'job-healthy'
+
+
+def test_sweep_tolerates_due_owners_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(registry, 'due_owners', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    assert uid_sequencer.sweep() == {'due_owners_error': 1, 'pending_dispatched': 1}
+    assert dispatched[0]['job_id'] == 'job'
+
+
+def test_sweep_tolerates_due_pending_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    monkeypatch.setattr(registry, 'due_pending', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    outcomes = uid_sequencer.sweep()
+    assert outcomes['due_pending_error'] == 1
+
+
+def test_defer_owner_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must not raise NotFound
+    registry.defer_owner('missing_uid', 120)
+
+
+def test_redrive_job_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must return None instead of raising NotFound
+    assert registry.redrive_job('missing_uid', 'job', 1) is None
+
+
+@pytest.mark.parametrize('active', [False, True])
+def test_dark_guard_transfers_expired_obligation_to_durable_custody(db, monkeypatch, active):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    _register('a', 'lost', 0, db=db)
+    original = db.docs[(registry.PENDING_COLLECTION, 'lost')]['payload']
+    epoch = registry.claim_next('a', now=NOW)['epoch'] if active else None
+    assert registry.retire_expired('a', 'lost', epoch=epoch, now=NOW)
+    custody = db.docs[(sync_redrive.COLLECTION, 'lost')]
+    assert custody['status'] == 'redrive_required'
+    assert custody['payload'] == original
+    assert registry.pending_head('a') is None
+    assert not registry.get_owner('a').get('active_job_id')
+    assert db.docs[(sync_redrive.STATS_COLLECTION, 'backlog')]['count'] == 1
+    sync_redrive.refresh_metrics(firestore_client=db)
+    assert sync_redrive.BACKLOG._value.get() == 1
+    assert sync_redrive.DEADLINE._value.get() > 0
+    assert sync_redrive.UNKNOWN_DEADLINE._value.get() == 1
+
+
+def test_dark_guard_keeps_partial_progress_and_counts_repeated_missing_job_once(db, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    payload = {'uid': 'a', 'job_id': 'lost', 'content_id': 'content', 'raw_blob_paths': ['syncing/a/lost/pcm16.bin']}
+    path = ('users', 'a', 'sync_content_ledger', 'content')
+    partial = {'status': 'retryable', 'processed_segment_ids': ['segment'], 'partial_result': {'total_segments': 2}}
+    db.docs[path] = copy.deepcopy(partial)
+    assert sync_redrive.preserve_missing_job('a', 'lost', payload, firestore_client=db) == 'redrive_required'
+    assert sync_redrive.preserve_missing_job('a', 'lost', payload, firestore_client=db) == 'redrive_required'
+    assert db.docs[path] == partial
+    assert db.docs[(sync_redrive.STATS_COLLECTION, 'backlog')]['count'] == 1
+
+
+def test_dark_guard_completed_content_retires_without_creating_redrive(db, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    _register('a', 'lost', 0, db=db)
+    pending = db.docs[(registry.PENDING_COLLECTION, 'lost')]
+    pending['payload']['content_id'] = 'content'
+    db.docs[('users', 'a', 'sync_content_ledger', 'content')] = {
+        'status': 'completed',
+        'result': {'total_segments': 0, 'failed_segments': 0, 'errors': [], 'outcome': 'expected_silence'},
+    }
+    assert registry.retire_expired('a', 'lost', now=NOW)
+    assert (sync_redrive.COLLECTION, 'lost') not in db.docs
+
+
+def test_dark_guard_does_not_steal_bound_run_or_another_content_owner(db, monkeypatch):
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    for claim in (
+        {'status': 'processing', 'job_id': 'other'},
+        {'status': 'processing', 'job_id': 'lost', 'ledger_run_token': 'bound'},
+    ):
+        _register('a', 'lost', 0, db=db)
+        db.docs[(registry.PENDING_COLLECTION, 'lost')]['payload']['content_id'] = 'content'
+        db.docs[('users', 'a', 'sync_content_ledger', 'content')] = claim
+        assert not registry.retire_expired('a', 'lost', now=NOW)
+        assert (registry.PENDING_COLLECTION, 'lost') in db.docs
+
+
+def test_guard_independent_of_old_retirement_switch(retirement, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 1, db=retirement)
+    assert uid_sequencer._claim_next('a')['job_id'] == 'live'
+    assert retirement.docs[(sync_redrive.COLLECTION, 'expired')]['status'] == 'redrive_required'
+
+
+def test_budget_deferral_count_survives_lease_expiry_redrive(db):
+    """A budget-deferred sequenced job redrives from the owner's original
+    ``active_payload``, which carries no chain count: without the owner-side
+    copy persisted at deferral time, every lease-expiry redrive would restart
+    ``budget_deferrals`` at zero and an over-budget job could defer forever."""
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    assert first['payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+
+    # The handler defers the attempt (e.g. second whole-budget expiry) and
+    # persists the incremented count on the running owner.
+    registry.note_budget_deferral('a', 'job', first['epoch'], 2, firestore_client=db, now=NOW)
+
+    # Lease expires before the delayed replacement begins; the sweep's redrive
+    # must re-attach the persisted count to the epoch-original payload.
+    redriven = registry.redrive_job('a', 'job', first['epoch'], firestore_client=db, now=NOW + timedelta(minutes=35))
+    assert redriven is not None
+    assert redriven['payload'][registry.BUDGET_DEFERRALS_PAYLOAD_KEY] == 2
+    # The stored owner payload itself stays untouched: the count rides the
+    # owner field, not a mutation of the durable original payload.
+    owner = registry.get_owner('a', firestore_client=db)
+    assert owner['active_payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+    assert owner['active_budget_deferrals'] == 2
+
+
+def test_note_budget_deferral_is_inert_for_released_or_mismatched_owner(db):
+    """The owner write is epoch-fenced and must not resurrect an owner a
+    completion has already released, nor pin a count to a different epoch."""
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    assert registry.finish_job('a', 'job', first['epoch'], 'completed', firestore_client=db, now=NOW)
+
+    registry.note_budget_deferral('a', 'job', first['epoch'], 3, firestore_client=db, now=NOW)
+
+    owner = registry.get_owner('a', firestore_client=db)
+    assert 'active_budget_deferrals' not in owner
+    assert 'active_job_id' not in owner
+
+    # An epoch mismatch on a live owner is equally inert.
+    second = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert second is not None
+    assert registry.begin_job('a', second['job_id'], second['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', second['job_id'], second['epoch'] + 5, 4, firestore_client=db, now=NOW)
+    assert 'active_budget_deferrals' not in registry.get_owner('a', firestore_client=db)
+
+
+def test_sweep_stops_redriving_at_the_budget_deferral_cap(db, monkeypatch):
+    """A sequenced job whose persisted budget-deferral count has reached the
+    handler's own exhaustion threshold must not be redriven again: the redrive
+    would copy the maxed count into a fresh epoch payload, run another
+    full-budget attempt, 409, and redrive forever — and backfill allows one
+    in-flight job per UID, so the loop also blocks every later capture. The
+    sweep releases the owner (deadline-fenced) and kicks the next pending
+    capture instead."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    # The handler deferred max-1 times; its next whole-budget run ends through
+    # the 409/queue with no further replacement scheduled.
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+    redrives = []
+    real_redrive = registry.redrive_job
+
+    def _counting_redrive(uid, job_id, epoch, **kwargs):
+        redrives.append((job_id, epoch))
+        return real_redrive(uid, job_id, epoch, **kwargs)
+
+    monkeypatch.setattr(registry, 'redrive_job', _counting_redrive)
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # No fresh full-budget attempt was dispatched for the exhausted job; the
+    # next waiting capture was promoted instead, unblocking the per-UID lane.
+    assert redrives == []
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    released = registry.get_owner('a', firestore_client=db)
+    # The exhausted job's owner record is gone and the next capture has
+    # already claimed the lane: the per-UID slot is no longer held hostage.
+    assert released.get('active_job_id') == 'next'
+    # The abandoned Redis job was terminalized (sequenced jobs are excluded
+    # from stale polling, so the sweep itself must hand off the terminal
+    # state) with a distinct failure reason for observability.
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+
+    # Below the cap the sweep keeps redriving with the persisted count
+    # re-attached (existing contract, thread guard).
+    assert registry.begin_job('a', 'next', dispatched[0]['epoch'], firestore_client=db, now=expired)
+    registry.note_budget_deferral('a', 'next', dispatched[0]['epoch'], 2, firestore_client=db, now=expired)
+    later = expired + timedelta(minutes=35)
+    outcome = uid_sequencer.reconcile_uid('a', registry.get_owner('a', firestore_client=db), now=later)
+    assert outcome == 'lease_expired'
+    assert redrives == [('next', dispatched[0]['epoch'])]
+    owner_after = registry.get_owner('a', firestore_client=db)
+    assert owner_after['active_payload'].get(registry.BUDGET_DEFERRALS_PAYLOAD_KEY) is None
+
+
+def test_sweep_finalizes_a_queued_budget_chain_job(db, monkeypatch):
+    """The final whole-budget attempt can expire during staged-file download
+    or another pre-pipeline step, before the attempt ever marked the job
+    processing: the capped chain's Redis job then reads ``queued``. Sequenced
+    jobs are exempt from stale polling and the owner is about to be released,
+    so the sweep's finalizer must accept the queued job exactly like the
+    processing one — otherwise it stays nonterminal (with its content claim)
+    until the 24h Redis TTL."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    # The abandoned attempt expired before the processing transition.
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # The queued abandoned job was terminalized before the owner release, and
+    # the lane advanced to the next waiting capture.
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_keeps_owner_when_budget_chain_finalize_fails_transiently(db, monkeypatch):
+    """The terminal handoff is required before the owner is released: after
+    the release no sweep retains an identity for the job and status polling
+    cannot stale-finalize sequenced dispatch, so a transient Redis failure
+    must keep the owner on the books (deferred one heartbeat) for the next
+    sweep to retry — never release the owner and advance the lane leaving the
+    accepted job nonterminal until the TTL."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+
+    def _redis_write_fails(job_id, _lock_token, error, **kwargs):
+        raise ConnectionError('redis unavailable')
+
+    finalized_chains = []
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _redis_write_fails)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # The owner is retained for the retry: the lane did not advance and no
+    # terminal write happened against the unreachable Redis job.
+    assert finalized_chains == []
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # The next sweep retries the whole sequence and completes it once Redis
+    # is reachable again.
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    monkeypatch.setattr(
+        uid_sequencer,
+        'fenced_mark_job_failed',
+        lambda job_id, _lock_token, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
+        or sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        ),
+    )
+    later = expired + timedelta(minutes=5)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_waits_for_the_final_scheduled_replacement(db, monkeypatch):
+    """The persisted count at the cap denotes a successfully enqueued final
+    replacement, not a completed attempt: that replacement is deliberately
+    delayed past the owner lease (RUN_LOCK_TTL + 60s), so the sweep normally
+    reaches the cap branch while the marker is still live. Terminalizing then
+    would make the already paid-for final delivery a stale epoch the moment
+    the lane advances — and sequenced jobs are exempt from stale polling, so
+    nothing would ever finalize the job. A live marker must keep the owner
+    until its horizon passes; only then does the handoff proceed."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    live_marker = time.time() + 1800.0
+    expired = NOW + timedelta(minutes=35)
+    monkeypatch.setattr(
+        uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing', 'deferred_until': live_marker}
+    )
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # The final replacement is still due: no terminal write, no lane advance.
+    assert finalized_chains == []
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Past the marker horizon the final delivery ran (or was lost) and the
+    # marker is gone: the handoff proceeds and the lane advances.
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    later = expired + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_retains_owner_while_a_live_writer_holds_the_run_lock(db, monkeypatch):
+    """Thread: the finalization must acquire the run lock atomically instead
+    of checking it and writing later. A final replacement (or a detached
+    executor leaf) that acquired the lock between the reconcile-level check
+    and this helper must not be treated as a successful terminal handoff:
+    releasing the owner then would advance the lane while the old attempt
+    still runs, and if that attempt times out it 409s without terminalizing
+    and no owner remains to recover the job. An unacquirable lock retains
+    the owner for the next sweep; the lock's holder keeps the right to its
+    own terminal write or deferral."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    # The final replacement acquired the lock after the reconcile-level check.
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # The owner is retained: no terminal write raced the live writer, the lane
+    # did not advance, and the next capture stays queued.
+    assert finalized_chains == []
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Once the lock is free again the next sweep completes the handoff and
+    # advances the lane.
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    later = expired + timedelta(minutes=5)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_converges_a_durably_completed_ledger_before_failing_a_capped_job(db, monkeypatch):
+    """Thread: budget cancellation can land after a detached pipeline leaf
+    durably completed the content ledger but before the matching Redis
+    terminal write. Failing such a job unconditionally would dead-letter
+    transcription whose side effects already committed. A fence job whose
+    ledger proves completion must converge that result instead of publishing
+    sync_budget_chain_exhausted."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    # A fence-mode job whose durable ledger proves a completed result.
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {'status': 'processing', 'ledger_fence_mode': sync_jobs.SyncLedgerFenceMode.ACTIVE.value},
+    )
+    monkeypatch.setattr(uid_sequencer, 'sync_job_uses_ledger_fence', lambda _job: True)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_sync_job_run_lock', lambda _job_id: '1:final-lock')
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+
+    converged_calls = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        '_converge_capped_ledger_completion',
+        lambda **kwargs: converged_calls.append(kwargs) or {'status': 'completed'},
+    )
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # The proven completion converged into the Redis result: no failure was
+    # published, the owner released, and the lane advanced to the next capture.
+    assert converged_calls and converged_calls[0]['job_id'] == 'job'
+    assert finalized_chains == []
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_retains_owner_when_terminal_cas_leaves_job_nonterminal(db, monkeypatch):
+    """A lost CAS in mark_job_failed did not apply the terminal write; the
+    finalizer must re-read and only accept a job that is now terminal or
+    absent. Accepting the loss would release the only sequencer owner with
+    the job still nonterminal — and polls never stale-finalize sequenced
+    jobs, so it would strand until the Redis TTL despite the handoff claim."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    finalized_chains = []
+
+    def _cas_lost(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(outcome=sync_jobs.FencedSyncJobMutationOutcome.CONFLICT)
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _cas_lost)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    # Re-read still shows the job nonterminal: retain the owner for retry.
+    reads = iter(
+        [
+            {'status': 'processing'},  # reconcile-level read
+            {'status': 'processing'},  # finalizer initial read
+            {'status': 'processing'},  # finalizer CAS re-read (nonterminal)
+        ]
+    )
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: next(reads))
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Next sweep: the CAS re-read now proves another writer terminalized the
+    # job, so the lost CAS is accepted — owner releases, lane advances.
+    reads = iter(
+        [
+            {'status': 'processing'},  # reconcile-level read
+            {'status': 'processing'},  # finalizer initial read
+            {'status': 'failed'},  # finalizer CAS re-read: terminality assured
+        ]
+    )
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: next(reads))
+    later = expired + timedelta(minutes=5)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_finish_expired_job_refuses_a_live_lease(db):
+    """The budget-cap release is fenced exactly like redrive_job: a delivery
+    that began and renewed between the sweeper's read and the release write
+    must never be released out from under its running worker."""
+
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+
+    # Lease still live: release refused.
+    assert (
+        registry.finish_expired_job('a', 'job', first['epoch'], 'budget_chain_exhausted', firestore_client=db, now=NOW)
+        is False
+    )
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Lease expired: release succeeds and the owner is gone.
+    assert (
+        registry.finish_expired_job(
+            'a', 'job', first['epoch'], 'budget_chain_exhausted', firestore_client=db, now=NOW + timedelta(minutes=35)
+        )
+        is True
+    )
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') is None
+
+
+def test_sweep_retains_owner_when_a_final_replacement_renewed_the_lease(db, monkeypatch):
+    """Thread: the final replacement can begin after its marker horizon while
+    still queued behind the lane's concurrency cap — it renews the Firestore
+    lease in begin_job after the sweeper's expired-owner read but before its
+    Redis run-lock acquire, so the finalizer can acquire the finalization
+    lock in that gap. Its later finish_expired_job correctly refuses to
+    release the renewed owner, but it cannot undo a failure already
+    published against the live attempt. The finalizer must re-check the
+    owner's release fence after acquiring the lock and retain the owner when
+    a renewal landed; the replacement's own terminal write decides."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+
+    # The final replacement renewed the lease after the sweeper's read: the
+    # owner names the job but its lease deadline is in the future.
+    real_release_due = registry.owner_release_due
+
+    def _renewed_owner_release_due(uid, job_id, epoch, **kwargs):
+        return real_release_due(uid, job_id, epoch, firestore_client=db, now=NOW)
+
+    monkeypatch.setattr(registry, 'owner_release_due', _renewed_owner_release_due)
+    owner = registry.get_owner('a', firestore_client=db)
+    registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=expired)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # No failure was published against the live attempt and the owner stays
+    # on the books; the lane did not advance.
+    assert finalized_chains == []
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Once the renewed lease has also expired, the fence re-check passes and
+    # the handoff proceeds.
+    later = expired + timedelta(minutes=35)
+    monkeypatch.setattr(
+        registry,
+        'owner_release_due',
+        lambda uid, job_id, epoch, **kwargs: real_release_due(uid, job_id, epoch, firestore_client=db, now=later),
+    )
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+
+
+def test_capped_chain_handoff_releases_slot_and_claim_before_owner_release(db, monkeypatch):
+    """Thread: the capped chain's terminal handoff must finish the exact-job
+    cleanup the redelivery's terminal branch would have run — the per-UID
+    backfill slot and the failed job's durable content claim — before the
+    caller releases the sequencer owner. Sequenced jobs are exempt from stale
+    polling and the task's attempt contract is spent, so nothing else runs
+    it: the slot would hold the lane for its ~2-day TTL and re-uploading the
+    same content would deflect off the claim until its 45-day TTL."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {
+            'status': 'processing',
+            'uid': 'a',
+            'job_id': 'job',
+            'lane': 'backfill',
+            'content_id': 'content-1',
+        },
+    )
+    monkeypatch.setattr(uid_sequencer, 'sync_job_uses_ledger_fence', lambda _job: False)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    released_slots = []
+    released_claims = []
+    monkeypatch.setattr(
+        uid_sequencer, 'release_backfill_slot', lambda uid, job_id: released_slots.append((uid, job_id))
+    )
+    monkeypatch.setattr(
+        uid_sequencer,
+        'release_sync_content_claim_after_job_retired',
+        lambda uid, content_id, job_id, **kwargs: released_claims.append((uid, content_id, job_id)),
+    )
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # The exact-job cleanup ran before the owner release: the lane's slot and
+    # the failed job's content claim are freed alongside the terminal write.
+    assert released_slots == [('a', 'job')]
+    assert released_claims == [('a', 'content-1', 'job')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_capped_chain_handoff_retains_owner_when_cleanup_fails(db, monkeypatch):
+    """Thread (companion): the cleanup is part of the handoff's obligation —
+    a transient failure releasing the slot/claim must retain the owner for
+    the next sweep's retry, never release the lane's identity while the
+    slot and claim stay held."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {
+            'status': 'processing',
+            'uid': 'a',
+            'job_id': 'job',
+            'lane': 'backfill',
+            'content_id': 'content-1',
+        },
+    )
+    monkeypatch.setattr(uid_sequencer, 'sync_job_uses_ledger_fence', lambda _job: False)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    cleanup_attempts = {'n': 0}
+
+    def _slot_release_fails_once(uid, job_id):
+        cleanup_attempts['n'] += 1
+        if cleanup_attempts['n'] == 1:
+            raise ConnectionError('redis unavailable')
+
+    monkeypatch.setattr(uid_sequencer, 'release_backfill_slot', _slot_release_fails_once)
+    released_claims = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        'release_sync_content_claim_after_job_retired',
+        lambda uid, content_id, job_id, **kwargs: released_claims.append((uid, content_id, job_id)),
+    )
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+
+    # First sweep: the slot release fails, so the owner is retained even
+    # though the terminal write applied.
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+    assert released_claims == []
+    assert dispatched == []
+
+    # Next sweep: the applied terminal write means the job now reads
+    # terminal, so the sweep classifies it terminal_cleanup and redrives the
+    # same epoch — the redelivery's terminal branch owns the cleanup retry
+    # (slot, claim, epoch). That redrive only exists because the failed
+    # cleanup retained the owner: a released owner would have advanced the
+    # lane with no identity left to redispatch this job.
+    later = expired + timedelta(minutes=5)
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {
+            'status': 'failed',
+            'uid': 'a',
+            'job_id': 'job',
+            'lane': 'backfill',
+            'content_id': 'content-1',
+        },
+    )
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'terminal_cleanup'
+    assert [claim['job_id'] for claim in dispatched] == ['job']
+    # The sweep itself did not re-run the slot release (the redelivery's
+    # terminal branch performs it); the claim likewise rides the redelivery.
+    assert cleanup_attempts['n'] == 1
+    assert released_claims == []
+
+
+@pytest.mark.parametrize('recheck', ['owner_renewed', 'fence_recheck_failed'])
+def test_capped_chain_handoff_drops_finalization_lock_on_recheck_exit(db, monkeypatch, recheck):
+    """Thread: both post-acquire lease-recheck early returns (the owner was
+    renewed by a final replacement that began behind the lane's concurrency
+    cap, and the recheck read itself failed) must release the finalization
+    lock they already hold. Leaking it keeps the lock for its full TTL —
+    with the queue's 5–60s backoff every remaining attempt can exhaust
+    before expiry, skipping a legitimate final attempt and blocking the
+    one-in-flight UID lane until a later sweep fails the job."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {
+            'status': 'processing',
+            'uid': 'a',
+            'job_id': 'job',
+            'lane': 'backfill',
+            'content_id': 'content-1',
+        },
+    )
+    monkeypatch.setattr(uid_sequencer, 'sync_job_uses_ledger_fence', lambda _job: False)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    released_locks = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        'release_job_run_lock',
+        lambda job_id, token: released_locks.append((job_id, token)),
+    )
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    def _recheck_raises(*_args, **_kwargs):
+        raise ConnectionError('redis unavailable')
+
+    if recheck == 'owner_renewed':
+        # A replacement renewed the Firestore lease after the sweep's
+        # expired-owner read: the recheck reads the live owner and reports
+        # the release fence no longer holds.
+        monkeypatch.setattr(registry, 'owner_release_due', lambda *_args, **_kwargs: False)
+    else:
+        monkeypatch.setattr(registry, 'owner_release_due', _recheck_raises)
+
+    terminal_writes = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        'fenced_mark_job_failed',
+        lambda job_id, *_args, **_kwargs: terminal_writes.append(job_id),
+    )
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # The owner is retained for the next sweep, no terminal write is made
+    # against the renewed (or unreadable) lease, nothing is redispatched,
+    # and the finalization lock the sweep did acquire is released instead
+    # of living out its TTL against the live replacement.
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+    assert dispatched == []
+    assert terminal_writes == []
+    assert released_locks == [('job', 'final-lock-token')]

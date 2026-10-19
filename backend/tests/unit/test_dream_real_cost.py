@@ -1,6 +1,7 @@
 """Real per-attempt prices, the 1M continuation, and allowlist-only Dream visibility."""
 
 from datetime import date, datetime, timezone
+from fractions import Fraction
 from types import SimpleNamespace
 
 import pytest
@@ -9,8 +10,15 @@ from config.dream_agent import Caps, admission_for, dream_journal_key
 from database import dream_store, review_changes, review_store
 from llm_gateway.gateway.accounting import rate_card_for
 from tests.unit.test_dream_harness_runtime import UID, runtime, store
-from utils.dream_cost import estimate_tokens, price_attempt, unpriced_card, verification_reserve_tokens
-from utils.dream_harness_transport import attempt_room
+from utils.dream_cost import (
+    cached_input_price_ratio,
+    estimate_tokens,
+    price_attempt,
+    price_weighted_tokens,
+    unpriced_card,
+    verification_reserve_tokens,
+)
+from utils.dream_harness_transport import attempt_room, turn_from_usage
 from utils.llm.shaped_agent import Budget, Mount
 
 NOW = datetime(2026, 10, 15, tzinfo=timezone.utc)
@@ -39,7 +47,7 @@ def test_byte_heuristic_rounds_up_at_three_and_a_half_bytes_per_token():
 
 
 def test_cached_input_uses_the_cached_rate_and_3_8_is_priced():
-    listed = date(2026, 10, 15)
+    listed = date(2026, 10, 18)
     full, status = price_attempt(
         'gemini', 'gemini-2.5-flash', prompt_tokens=1000, cached_tokens=0, completion_tokens=100, at=listed
     )
@@ -47,9 +55,9 @@ def test_cached_input_uses_the_cached_rate_and_3_8_is_priced():
         'gemini', 'gemini-2.5-flash', prompt_tokens=1000, cached_tokens=400, completion_tokens=100, at=listed
     )
     assert status == cached_status == 'priced'
-    # 1000 * $0.54 + 100 * $4.50, and 600 * $0.54 + 400 * $0.054 + 100 * $4.50.
-    assert full == 990
-    assert cached == 796
+    # 1000 * $0.30 + 100 * $2.50, and 600 * $0.30 + 400 * $0.03 + 100 * $2.50.
+    assert full == 550
+    assert cached == 442
     assert cached < full
     micro, flash_status = price_attempt(
         'gemini',
@@ -72,6 +80,59 @@ def test_cached_input_uses_the_cached_rate_and_3_8_is_priced():
     assert lite.input_micro_usd_per_million == 250000
     assert lite.audio_input_micro_usd_per_million == 500000
     assert lite.cache_storage_micro_usd_per_million_token_hours == 1000000
+
+
+def test_price_weighted_meter_uses_the_active_rate_card_and_unknown_cache_is_full_price():
+    ratio = cached_input_price_ratio('gemini', 'gemini-3.8-flash', 1000)
+    assert ratio == Fraction(1, 10)
+    assert (
+        price_weighted_tokens(
+            'gemini',
+            'gemini-3.8-flash',
+            prompt_tokens=1000,
+            cached_tokens=800,
+            completion_tokens=100,
+        )
+        == 380
+    )
+    assert (
+        price_weighted_tokens(
+            'gemini',
+            'gemini-3.8-flash',
+            prompt_tokens=1000,
+            cached_tokens=None,
+            completion_tokens=100,
+            cache_reported=False,
+        )
+        == 1100
+    )
+    assert (
+        price_weighted_tokens(
+            'gemini',
+            'gemini-3.8-flash',
+            prompt_tokens=1000,
+            cached_tokens=800,
+            completion_tokens=100,
+            cache_reported=False,
+        )
+        == 1100
+    )
+
+
+def test_transport_counts_unreported_cache_at_full_price():
+    turn, unknown = turn_from_usage(
+        {
+            'prompt_tokens': 1000,
+            'completion_tokens': 100,
+            'cached_tokens': 800,
+            'cache_unreported_tokens': 200,
+            'cache_usage_complete': False,
+            'unknown_attempts': 0,
+        },
+        2000,
+    )
+    assert unknown == 0
+    assert turn.tokens == turn.price_weighted_tokens == 1100
 
 
 def test_gemini_3_8_price_switches_on_2027_01_01():

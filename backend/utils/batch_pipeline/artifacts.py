@@ -18,8 +18,10 @@ from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud.storage.retry import DEFAULT_RETRY
+from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
 from utils.batch_pipeline.upload_policy import UPLOAD_CHUNK_BYTES, UPLOAD_TIMEOUT, UPLOAD_RETRY_SECONDS, UploadStream
 
 AUDIO_LIMIT = 7200 * 32000 + 4096
@@ -57,6 +59,7 @@ class ArtifactStore:
             raise ValueError('explicit staging bucket required')
         if not re.fullmatch(r'batch_pipeline_(prod|dev|test_[a-z0-9_]{1,40})', namespace):
             raise ValueError('explicit stage-qualified artifact namespace required')
+        self.client = client
         self.bucket = client.bucket(bucket)
         self.bucket_name = bucket
         self.namespace = namespace
@@ -95,13 +98,16 @@ class ArtifactStore:
             raise ValueError('batch artifacts require a 256-bit owner key')
         return MAGIC + nonce + AESGCM(key).encrypt(nonce, body, self._aad(item, kind, context))
 
-    def _write(self, item: WorkItem, kind: str, body: bytes, limit: int) -> str:
+    def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
         context = self.authorize(item)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')
-        name = f'{self.owner_prefix(item.owner_id)}{kind}/{item.segment_id}/{uuid4().hex}.enc'
+        key = result_key or uuid4().hex
+        if not re.fullmatch(r'[0-9a-f]{32}', key):
+            raise ValueError('bounded artifact identity required')
+        name = f'{self.owner_prefix(item.owner_id)}{kind}/{item.segment_id}/{key}.enc'
         # Durable deletion outbox precedes cloud IO, including uncertain uploads.
         # Reserved random names are create-only and are never reused. The outbox
         # may erase this unique name before the provider returns its generation.
@@ -169,11 +175,51 @@ class ArtifactStore:
         return self._write(item, 'audio', wav, AUDIO_LIMIT)
 
     def fetch_audio(self, item: WorkItem) -> bytes:
-        return self._read(item, item.audio_uri, 'audio', AUDIO_LIMIT)
+        body = self._read(item, item.audio_uri, 'audio', AUDIO_LIMIT)
+        if body.startswith(RECORD_MAGIC):
+            conversation_id = item.conversation_id
+            if not conversation_id:
+                raise ValueError('retained audio requires a registered conversation')
+            allowed = {
+                os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync'),
+                os.getenv('BUCKET_AUDIO_DERIVED', '').strip(),
+            }
+            wav = materialize(
+                body,
+                item,
+                lambda ref: read_reference(
+                    self.client, ref, item.owner_id, conversation_id, allowed, self.key_for_owner(item.owner_id)
+                ),
+            )
+            self.authorize(item)
+            return wav
+        return body
 
     def persist_result(self, item: WorkItem, payload: dict[str, Any]) -> str:
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
         return self._write(item, 'results', body, RESULT_LIMIT)
+
+    def persist_recovery_result(self, item: WorkItem, payload: dict[str, Any], token: str) -> str:
+        body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
+        return self._write(item, 'results', body, RESULT_LIMIT, result_key=token)
+
+    def find_recovery_result(self, item: WorkItem, token: str) -> str | None:
+        if not re.fullmatch(r'[0-9a-f]{32}', token):
+            raise ValueError('bounded recovery token required')
+        context = self.authorize(item)
+        if context.generation != item.privacy_generation:
+            raise PermissionError('recovery generation changed')
+        name = f'{self.owner_prefix(item.owner_id)}results/{item.segment_id}/{token}.enc'
+        blob = self.bucket.blob(name)
+        try:
+            blob.reload(timeout=30, retry=None)
+        except NotFound:
+            return None
+        uri = f'gs://{self.bucket_name}/{name}#{int(blob.generation)}'
+        # Authenticate the owner, admitted clocks, generation and encrypted body
+        # before acknowledging an upload whose successful reply was lost.
+        self.load_result(item, uri)
+        return uri
 
     def load_result(self, item: WorkItem, uri: str) -> dict[str, Any]:
         payload = json.loads(self._read(item, uri, 'results', RESULT_LIMIT))

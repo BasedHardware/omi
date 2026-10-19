@@ -612,6 +612,97 @@ def test_vertex_tools_and_tool_config_translate_to_gemini_native():
     assert tool_turn['parts'] == [{'functionResponse': {'name': 'take_photo', 'response': {'status': 'ok'}}}]
 
 
+def test_vertex_coalesces_tool_response_with_following_user_text():
+    notice = 'About 20% of this pass budget remains.'
+    payload = _vertex_request(
+        {
+            'messages': [
+                {'role': 'user', 'content': 'Inspect the record.'},
+                {
+                    'role': 'assistant',
+                    'content': None,
+                    'tool_calls': [
+                        {
+                            'id': 'call_read_0',
+                            'type': 'function',
+                            'function': {'name': 'read_record', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_read_0', 'content': '{"status":"ok"}'},
+                {'role': 'user', 'content': notice},
+            ]
+        }
+    )
+
+    contents = payload['contents']
+    assert [content['role'] for content in contents] == ['user', 'model', 'user']
+    assert contents[1]['parts'] == [{'functionCall': {'name': 'read_record', 'args': {}}}]
+    assert contents[2]['parts'] == [
+        {'functionResponse': {'name': 'read_record', 'response': {'status': 'ok'}}},
+        {'text': notice},
+    ]
+
+
+def test_vertex_coalesces_parallel_tool_results_in_order():
+    payload = _vertex_request(
+        {
+            'messages': [
+                {'role': 'user', 'content': 'Inspect both records.'},
+                {
+                    'role': 'assistant',
+                    'content': None,
+                    'tool_calls': [
+                        {
+                            'id': 'call_a',
+                            'type': 'function',
+                            'function': {'name': 'read_record', 'arguments': '{"ref":"a"}'},
+                        },
+                        {
+                            'id': 'call_b',
+                            'type': 'function',
+                            'function': {'name': 'read_record', 'arguments': '{"ref":"b"}'},
+                        },
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_a', 'content': '{"ref":"a"}'},
+                {'role': 'tool', 'tool_call_id': 'call_b', 'content': '{"ref":"b"}'},
+            ]
+        }
+    )
+
+    contents = payload['contents']
+    assert [content['role'] for content in contents] == ['user', 'model', 'user']
+    assert contents[1]['parts'] == [
+        {'functionCall': {'name': 'read_record', 'args': {'ref': 'a'}}},
+        {'functionCall': {'name': 'read_record', 'args': {'ref': 'b'}}},
+    ]
+    assert contents[2]['parts'] == [
+        {'functionResponse': {'name': 'read_record', 'response': {'ref': 'a'}}},
+        {'functionResponse': {'name': 'read_record', 'response': {'ref': 'b'}}},
+    ]
+
+
+def test_vertex_keeps_alternating_assistant_model_contents_unchanged():
+    payload = _vertex_request(
+        {
+            'messages': [
+                {'role': 'user', 'content': 'First question.'},
+                {'role': 'assistant', 'content': 'First answer.'},
+                {'role': 'user', 'content': 'Follow-up question.'},
+                {'role': 'assistant', 'content': 'Follow-up answer.'},
+            ]
+        }
+    )
+
+    assert payload['contents'] == [
+        {'role': 'user', 'parts': [{'text': 'First question.'}]},
+        {'role': 'model', 'parts': [{'text': 'First answer.'}]},
+        {'role': 'user', 'parts': [{'text': 'Follow-up question.'}]},
+        {'role': 'model', 'parts': [{'text': 'Follow-up answer.'}]},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_vertex_function_call_only_response_emits_openai_tool_calls(monkeypatch):
     """#13666: Insight/Task die if Vertex functionCall parts are dropped as empty text."""

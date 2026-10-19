@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from utils.byok import BYOKMiddleware
 from utils.llm.desktop_proxy_lifetime import DesktopProxyDeadlineMiddleware
 from utils.env_loader import firebase_admin_options, load_backend_env
@@ -31,18 +32,14 @@ from routers import (
     desktop_proxy,
     desktop_task_gate,
     metrics,
+    retired_app_client_contracts,
     retired_desktop_proactivity,
-    jit_ledger_snapshot,
-    jit_rollout,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
-    memory_use,
 )
 from utils.http_client import close_all_clients
 from utils.llm.vertex_reservation_state import reservation_state
-from utils.jit_rollout import close_posthog_control_plane
-from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from utils.executors import log_executor_health, start_background_task
@@ -107,8 +104,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await shutdown_managed_spend_ledger()
         await reservation_state.aclose()
         await close_all_clients()
-        close_posthog_control_plane()
-        close_free_tier_control_plane()
+
         stop_metrics_sidecar_server()
 
 
@@ -121,6 +117,7 @@ def _cors_allowed_origins_from_env() -> list[str]:
 
 def _build_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.add_middleware(FirestoreTierMiddleware)
     watchdog = DesktopLoopWatchdog(enabled=os.getenv("DESKTOP_LOOP_WATCHDOG_ENABLED", "true").lower() != "false")
     app.state.loop_watchdog = watchdog
     app.add_middleware(InFlightRequestsMiddleware, watchdog=watchdog)
@@ -141,8 +138,6 @@ def _build_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=[
-            "X-Omi-Memory-As-Of",
-            "X-Omi-Memory-Belief-Enabled",
             "X-Omi-Memory-Canonical-Lifecycle-Exposed",
             "X-Omi-Memory-Default-Delete-Supported",
             "X-Omi-Memory-Device-Scope-Supported",
@@ -163,16 +158,13 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_proxy.router)
     app.include_router(desktop_task_gate.router)
     app.include_router(retired_desktop_proactivity.router)
+    app.include_router(retired_app_client_contracts.router)
     app.include_router(desktop_experiments.router)
-    app.include_router(jit_ledger_snapshot.router)
-    app.include_router(jit_rollout.router)
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)
     app.include_router(desktop_tts_updates.router)
-    app.include_router(memory_use.router)
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
-    jit_rollout.validate_jit_rollout_contract(app)
     return app
 
 

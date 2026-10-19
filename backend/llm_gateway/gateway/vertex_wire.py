@@ -144,7 +144,19 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
                 cast(Mapping[str, Any], json_schema['schema'])
             )
 
-    payload: dict[str, Any] = {'contents': contents}
+    # Gemini requires alternating user/model turns. OpenAI tool responses each
+    # translate to a user Content, and Dream can append user text after them;
+    # those parts belong to one turn. Explicit cache splitting happens against
+    # the original messages before this builder is called for each side, so
+    # coalescing here cannot cross a cache prefix boundary.
+    coalesced_contents: list[dict[str, Any]] = []
+    for content in contents:
+        if coalesced_contents and coalesced_contents[-1]['role'] == content['role']:
+            coalesced_contents[-1]['parts'].extend(content['parts'])
+        else:
+            coalesced_contents.append(content)
+
+    payload: dict[str, Any] = {'contents': coalesced_contents}
     if system_parts:
         payload['systemInstruction'] = {'parts': system_parts}
     if generation_config:

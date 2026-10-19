@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
 import database.feedback as feedback_db
+from database.firestore_read_origin import read_origin
 from jobs.feedback_daily_report import previous_utc_day, run as run_daily_report
 from models.feedback import FeedbackContextHydrated, FeedbackReport
 from utils.feedback_context import hydrate_context
@@ -109,6 +110,7 @@ def get_feedback_report(
     tags=['admin'],
     response_model=FeedbackReportGenerateResponse,
 )
+@read_origin('job:feedback_report_generate')
 def generate_feedback_report(
     report_date: str,
     admin_id: str = Depends(_verify_admin_key),
@@ -134,6 +136,7 @@ def generate_feedback_report(
     tags=['admin'],
     response_model=FeedbackReportGenerateResponse,
 )
+@read_origin('job:feedback_report_yesterday')
 def generate_yesterdays_feedback_report(admin_id: str = Depends(_verify_admin_key)):
     """Nightly cron target — no date arithmetic in the scheduler config."""
     day = previous_utc_day()

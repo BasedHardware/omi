@@ -629,6 +629,7 @@ class GeneratedAudioFile {
   final double duration;
   final String id;
   final String provider;
+  final String? sourceFingerprint;
   final DateTime? startedAt;
   final String uid;
 
@@ -639,6 +640,7 @@ class GeneratedAudioFile {
     required this.duration,
     required this.id,
     this.provider = "gcp",
+    this.sourceFingerprint,
     this.startedAt,
     required this.uid,
   });
@@ -651,6 +653,7 @@ class GeneratedAudioFile {
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: false, defaultValue: "gcp"), "provider"),
+      sourceFingerprint: _readFieldValue<String>(_readField(json, const ["source_fingerprint"]), "source_fingerprint", _readString, requiredField: false, nullable: true),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
     );
@@ -664,6 +667,7 @@ class GeneratedAudioFile {
       'duration': duration,
       'id': id,
       'provider': provider,
+      'source_fingerprint': sourceFingerprint,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'uid': uid,
     };
@@ -975,6 +979,7 @@ class GeneratedConversation {
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
+  final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
@@ -1029,6 +1034,7 @@ class GeneratedConversation {
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
+    this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
@@ -1085,6 +1091,7 @@ class GeneratedConversation {
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
+      processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
@@ -1142,6 +1149,7 @@ class GeneratedConversation {
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
+      'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
@@ -1388,6 +1396,7 @@ class GeneratedConversationSearchItem {
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
+  final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
   final bool screenshotSharingEnabled;
@@ -1443,6 +1452,7 @@ class GeneratedConversationSearchItem {
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
+    this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
     this.screenshotSharingEnabled = true,
@@ -1500,6 +1510,7 @@ class GeneratedConversationSearchItem {
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
+      processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
@@ -1558,6 +1569,7 @@ class GeneratedConversationSearchItem {
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
+      'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
@@ -1669,6 +1681,7 @@ class GeneratedSearchConversationsResponse {
 class GeneratedSyncLocalFilesResultResponse {
   final List<String>? errors;
   final int failedSegments;
+  final bool? heldAudio;
   final List<String>? newMemories;
   final int totalSegments;
   final List<String>? updatedMemories;
@@ -1676,6 +1689,7 @@ class GeneratedSyncLocalFilesResultResponse {
   const GeneratedSyncLocalFilesResultResponse({
     this.errors,
     this.failedSegments = 0,
+    this.heldAudio,
     this.newMemories,
     this.totalSegments = 0,
     this.updatedMemories,
@@ -1685,6 +1699,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return GeneratedSyncLocalFilesResultResponse(
       errors: _readFieldValue<List<String>>(_readField(json, const ["errors"]), "errors", _readStringList, requiredField: false, nullable: true),
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      heldAudio: _readFieldValue<bool>(_readField(json, const ["held_audio"]), "held_audio", _readBool, requiredField: false, nullable: true),
       newMemories: _readFieldValue<List<String>>(_readField(json, const ["new_memories"]), "new_memories", _readStringList, requiredField: false, nullable: true),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
       updatedMemories: _readFieldValue<List<String>>(_readField(json, const ["updated_memories"]), "updated_memories", _readStringList, requiredField: false, nullable: true),
@@ -1695,6 +1710,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return {
       'errors': errors,
       'failed_segments': failedSegments,
+      'held_audio': heldAudio,
       'new_memories': newMemories,
       'total_segments': totalSegments,
       'updated_memories': updatedMemories,

@@ -19,6 +19,14 @@ Omi uses a **dual-collection architecture** for storing user data:
 
 This separation allows for efficient retrieval of both full conversation context and quick access to key facts about the user.
 
+Offline uploads can finish in a different order from their recording times.
+The sync intake transaction joins compatible adjacent intervals in either
+direction and stores transcript offsets relative to the earliest capture.
+Chunks within an upload assign chronologically; a later-arriving earlier chunk
+can still join the same conversation across uploads. Device/source boundaries,
+user-managed records, explicit live targets and conversation size limits remain
+separate constraints on automatic merging.
+
 ## On-device summaries in desktop reads
 
 The app conversation response may carry a display-only `client_processing` projection.

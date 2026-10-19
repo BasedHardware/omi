@@ -328,20 +328,18 @@ class TestDegradation:
         assert calls == []
         assert _stored_context(conversation) is None
 
-    def test_the_google_and_ocr_layers_stay_off_by_default(self):
+    def test_calendar_and_screen_context_are_read_without_rollout_flags(self):
         conversation = _desktop_conversation()
-        cleared = {'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED': '', 'CONVERSATION_OCR_CONTEXT_ENABLED': ''}
         with (
-            patch.dict(os.environ, cleared, clear=False),
             patch.object(pc.redis_db, 'get_conversation_meeting_id', return_value=None),
             patch.object(pc.calendar_db, 'get_meetings_in_time_range', return_value=[]),
             patch.object(pc, 'get_overlapping_calendar_event', MagicMock()) as calendar,
-            patch.object(pc.screen_activity_db, 'get_screen_activity', MagicMock()) as screen,
+            patch.object(pc.screen_activity_db, 'get_screen_activity', MagicMock(return_value=[])) as screen,
         ):
             pc._enrich_meeting_context('uid-meeting', conversation)
 
-        calendar.assert_not_called()
-        screen.assert_not_called()
+        calendar.assert_called_once()
+        screen.assert_called_once()
 
 
 class TestNeverMutatesTheUsersCalendar:
@@ -354,6 +352,5 @@ class TestNeverMutatesTheUsersCalendar:
             _enrich(
                 conversation,
                 meetings=[_meeting_record()],
-                env={'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED': 'true'},
             )
         write_back.assert_not_called()

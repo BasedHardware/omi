@@ -226,6 +226,16 @@ interrupted→record/deviceRecord restore and the mic restart live in
 opens a capture source; their remaining bookkeeping belongs in the
 coordinator admission fence during the next seam extraction.
 
+The uplink-policy seam also reconciles keepalive when the legacy mirror becomes
+`deviceRecord` and after coordinator commits. An admitted `pendantLive` owner
+with transcription not ready must not lose its retry merely because socket
+setup/close ran before BLE activation finished. Reconciliation preserves an
+already-active timer and marks the device reconnect notification pending. The
+keepalive codec read has a ten-second deadline using the capture scheduler;
+expiry returns without failing capture or opening a socket, releasing the
+serialized tick so the next fifteen-second retry can run. Late codec results
+cannot execute reconnect effects.
+
 ### Synchronous surfaces that remain outside the reducer
 
 | Surface | What it still does synchronously | Why it stays |

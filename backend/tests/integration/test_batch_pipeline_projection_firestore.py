@@ -31,6 +31,10 @@ def lane(monkeypatch):
     from utils.sync.capture import chunk_identity
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
@@ -80,10 +84,14 @@ def lane(monkeypatch):
     projector = Projector(store, load, publish=lambda b, r: published.append(r), clock=clock)
     queue, merge = Scheduler(store), OrderedMerge(store)
 
-    def seed(names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0):
+    def seed(
+        names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0, owner_id=None
+    ):
+        owner_id = owner_id or uid
+        client.collection('users').document(owner_id).set({'data_protection_level': 'standard'})
         ids = tuple(f'{name}-{uuid4().hex[:8]}' for name in names)
         binding = ProjectionBinding(
-            uid,
+            owner_id,
             f'job-{uuid4().hex}',
             f'content-{uuid4().hex}',
             ids,
@@ -93,21 +101,21 @@ def lane(monkeypatch):
         items = [
             WorkItem(
                 sid,
-                uid,
+                owner_id,
                 capture_at + i * 30,
                 f'gs://synthetic/{sid}#1',
                 duration_seconds,
                 Priority.DEEP,
-                conversation_id=chunk_identity(uid, 'omi', device, False, capture_at + i * 30),
+                conversation_id=chunk_identity(owner_id, 'omi', device, False, capture_at + i * 30),
                 privacy_generation=0,
             )
             for i, sid in enumerate(ids)
         ]
         assert admit(store, items, binding, 0, namespace=store.namespace)['outcome'] == 'batch'
-        ledger = sync_content_ledger_ref(client, uid, binding.content_id)
+        ledger = sync_content_ledger_ref(client, owner_id, binding.content_id)
         leases = {}
         for _ in range(240):
-            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, len(items))})
+            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, min(32, len(items)))})
             if len(leases) == len(items):
                 break
         assert len(leases) == len(items)
@@ -116,7 +124,7 @@ def lane(monkeypatch):
     def finish(batch, index=0, outcome='success'):
         sid = batch.ids[index]
         assert queue.complete(WorkResult(sid, f'gs://synthetic/results/{sid}#1', outcome), batch.leases[sid].token, 1)
-        return merge.commit_next(uid, 2)
+        return merge.commit_next(batch.binding.owner_id, 2)
 
     value = SimpleNamespace(**locals())
     yield value
@@ -458,7 +466,11 @@ def test_real_fenced_client_status_changes_only_after_durable_persist(lane, monk
     result = lane.projector.project(batch.ids[0])
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     client_job = sync_jobs.get_sync_job(batch.binding.job_id)
-    assert client_job['status'] == 'completed' and client_job['result'] == result
+    assert client_job['status'] == 'completed'
+    # Redis intentionally stores only the bounded public result fields.
+    assert client_job['result'] == {
+        key: result[key] for key in ('new_memories', 'updated_memories', 'failed_segments', 'total_segments', 'errors')
+    }
 
 
 def test_erased_gap_can_advance_cursor_without_recreating_deleted_payload(lane):
@@ -687,12 +699,12 @@ def test_backfill_enrichment_retains_configured_worker_queue_and_audience(lane, 
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'projects/demo/locations/test/queues/backfill')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_HANDLER_URL', 'https://synthetic.invalid/v2/sync-jobs/run')
-    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://synthetic.invalid')
+    monkeypatch.setenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE', 'https://synthetic.invalid/v2/sync-jobs/run')
     lane.projector.project(batch.ids[0])
     dispatch = lane.tasks[0]['dispatch']
     assert dispatch['queue'].endswith('/queues/backfill')
     assert dispatch['handler'] == 'https://synthetic.invalid/v2/sync-jobs/run'
-    assert dispatch['audience'] == 'https://synthetic.invalid'
+    assert dispatch['audience'] == 'https://synthetic.invalid/v2/sync-jobs/run'
 
 
 def multipart(lane, count):
@@ -936,3 +948,572 @@ def test_crash_after_final_part_commit_resumes_marks_without_loading_result(lane
     assert result['total_segments'] == 2 and len(lane.tasks) == 2
     assert lane.loads == [batch.ids[0]]
     assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+
+
+def test_live_wal_concurrent_missing_target_replay_has_one_canonical_row(lane, monkeypatch):
+    """WAL wins the first race; listen creates its named row during that attempt."""
+    from dataclasses import asdict
+    from datetime import datetime, timezone
+    from utils.sync import assignment
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    monkeypatch.setenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    batch = lane.seed(device='synthetic-device')
+    binding = replace(batch.binding, target_conversation_id='synthetic-live')
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(batch)
+    missing, writing = threading.Event(), threading.Event()
+    original = assignment.assign_in_transaction
+
+    def observe_missing(*args, **kwargs):
+        try:
+            return original(*args, **kwargs)
+        except SyncAssignmentConflict:
+            missing.set()
+            # Let the writer start; its commit waits for this transaction's
+            # read lock to release when the conflict aborts.
+            assert writing.wait(10)
+            raise
+
+    monkeypatch.setattr(assignment, 'assign_in_transaction', observe_missing)
+    live_ref = lane.user.collection('conversations').document('synthetic-live')
+
+    def live_create():
+        assert missing.wait(10)
+        writing.set()
+        live_ref.set(
+            {
+                'id': 'synthetic-live',
+                'source': 'omi',
+                'client_device_id': 'synthetic-device',
+                'started_at': datetime.fromtimestamp(1000, timezone.utc),
+                'finished_at': datetime.fromtimestamp(1004, timezone.utc),
+                'created_at': datetime.fromtimestamp(1000, timezone.utc),
+                'transcript_segments': [],
+                'is_locked': False,
+                'status': 'in_progress',
+                'structured': {},
+                'data_protection_level': 'standard',
+            }
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(live_create)
+        projection = pool.submit(lane.projector.project, batch.ids[0])
+        with pytest.raises(SyncAssignmentConflict, match='not persisted'):
+            projection.result(timeout=20)
+        writer.result(timeout=20)
+    assert len(active_rows(lane)) == 1 and not live_ref.get().to_dict().get('sync_content_revision')
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    result = lane.projector.project(batch.ids[0])
+    assert result['updated_memories'] == ['synthetic-live']
+    assert len(active_rows(lane)) == 1
+    row = active_rows(lane)[0]
+    assert row['sync_content_revision'] == 1
+    assert all(s['speaker_id_scope'] == f'final:batch:{batch.ids[0]}' for s in row['transcript_segments'])
+    assert lane.projector.project(batch.ids[0]) == result
+    assert active_rows(lane)[0]['sync_content_revision'] == 1
+    assert len(lane.tasks) == 1
+
+
+def test_authoritative_append_preserves_manual_text_translation_and_ids(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    first = lane.seed()
+    lane.finish(first)
+    lane.projector.project(first.ids[0])
+    row = active_rows(lane)[0]
+    original = row['transcript_segments'][0]
+    original.update(
+        text='We discussed the project.',
+        original_text='We discussed the project.',
+        person_id='synthetic-person',
+        speaker_label_source='manual',
+        translations=[{'lang': 'fr', 'text': 'Synthetic translation.'}],
+    )
+    lane.user.collection('conversations').document(row['id']).update(
+        {
+            'transcript_segments': [original],
+            'transcript_segments_compressed': False,
+            'has_transcript_corrections': True,
+            'manual_speaker_assignments': {
+                'segments': {original['id']: {'person_id': 'synthetic-person', 'is_user': False}}
+            },
+            'manual_speaker_assignments_compressed': False,
+        }
+    )
+    from database import review_store
+    from utils.agent_capabilities import transcripts
+
+    correction = {
+        'segment_id': original['id'],
+        'segment_index': 0,
+        'start': original['start'],
+        'before': 'project',
+        'after': 'plan',
+        'kind': 'word',
+        'source': 'human',
+        'change_id': 'synthetic-edit',
+        'undone': False,
+    }
+    overlay = review_store.encode_doc(lane.uid, {'source': [correction]})
+    lane.user.collection('transcript_corrections').document(row['id']).set(overlay)
+    second = lane.seed(capture_at=1060)
+    from dataclasses import asdict
+
+    binding = replace(second.binding, target_conversation_id=row['id'])
+    lane.projector.store.ref('jobs', second.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(second)
+    lane.projector.project(second.ids[0])
+    assert len(active_rows(lane)) == 1
+    stored = active_rows(lane)[0]['transcript_segments']
+    retained = next(s for s in stored if s['id'] == original['id'])
+    for field in ('text', 'translations', 'id', 'person_id', 'speaker_label_source'):
+        assert retained[field] == original[field]
+    assert all(s['speaker_id_scope'].startswith('final:batch:') for s in stored)
+    projected = transcripts.project(lane.uid, active_rows(lane)[0], firestore_client=lane.client)
+    edited = next(s for s in projected['transcript_segments'] if s['id'] == original['id'])
+    assert edited['text'] == 'We discussed the plan.'
+    assert edited['original_text'] == original['text']
+    assert lane.user.collection('transcript_corrections').document(row['id']).get().to_dict() == overlay
+
+
+def test_projection_completed_metric_is_one_per_upload_not_replay(lane, monkeypatch):
+    from unittest.mock import Mock
+    from database import batch_pipeline_projection as module
+
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    lane.projector.project(batch.ids[0])
+    metric.assert_called_once_with('projection_completed', seconds=30.0)
+
+
+def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, monkeypatch):
+    from utils.manual_speaker_assignments import apply_manual_assignments
+
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload.update(
+        words=[
+            {'word': 'First.', 'timestamp': [0, 1]},
+            {'word': 'Gap.', 'timestamp': [2, 3]},
+            {'word': 'Last.', 'timestamp': [4, 5]},
+        ],
+        diarization={
+            'turns': [{'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'}, {'start': 4, 'end': 5, 'speaker': 'SPEAKER_01'}]
+        },
+    )
+    batch = lane.seed()
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    segments = active_rows(lane)[0]['transcript_segments']
+    assert len({s['speaker_id'] for s in segments}) == 3
+    first = next(s for s in segments if s['speaker'] == 'SPEAKER_00')
+    gap = next(s for s in segments if s['speaker_match_source'] == 'batch_abstention')
+    assert gap['speaker_id'] != first['speaker_id']
+    labeled = apply_manual_assignments(
+        segments, {'speakers': {str(first['speaker_id']): {'is_user': True, 'person_id': None}}}
+    )
+    gap = next(s for s in labeled if s['id'] == gap['id'])
+    assert not gap['is_user'] and gap['person_id'] is None
+    assert gap['speaker_match_source'] == 'batch_abstention'
+
+
+def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '10')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
+    from unittest.mock import Mock
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    for index in range(12):
+        lane.projector.store.ref('jobs', f'held-{index:02d}').set(
+            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+        )
+    recovery = QuarantineRecovery(lane.store, Mock())
+    recovery.recover = Mock(return_value='held')
+    original = module.recovery_candidates
+    query = Mock(wraps=original)
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    assert recovery.sweep() == {'held': 10}
+    assert recovery.sweep() == {'held': 2}
+    assert query.call_count == 2
+    assert query.call_args.kwargs['after_id'] == 'held-09'
+    assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
+    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
+    assert query.call_count == 3
+    assert recovery.sweep() == {'held': 10}
+    assert query.call_args.kwargs['after_id'] is None
+
+
+def test_multipart_anonymous_gaps_are_distinct_while_pyannote_voice_is_shared(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    batch = lane.seed(duration_seconds=600)
+    lane.payload.update(
+        audio_seconds=600,
+        speech_seconds=600,
+        speech_spans=[{'start': 0, 'end': 600}],
+        words=[{'word': 'Synthetic.', 'timestamp': [start, start + 1]} for start in (0, 2, 299, 300, 302, 599)],
+        diarization={
+            'turns': [
+                {'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'},
+                {'start': 299, 'end': 301, 'speaker': 'SPEAKER_00'},
+                {'start': 599, 'end': 600, 'speaker': 'SPEAKER_00'},
+            ]
+        },
+    )
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    rows = active_rows(lane)
+    assert len(rows) == 1
+    segments = rows[0]['transcript_segments']
+    gaps = [s for s in segments if s['speaker_match_source'] == 'batch_abstention']
+    voices = [s for s in segments if s['speaker_match_source'] == 'batch_pyannote']
+    assert len(gaps) == 2 and len({s['speaker_id'] for s in gaps}) == 2
+    assert len({s['speaker_id'] for s in voices}) == 1
+    assert not {s['speaker_id'] for s in voices} & {s['speaker_id'] for s in gaps}
+
+
+def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatch):
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    entered, release = threading.Event(), threading.Event()
+    load = lane.projector.load_result
+
+    def paused_load(*args):
+        entered.set()
+        assert release.wait(20)
+        return load(*args)
+
+    monkeypatch.setattr(lane.projector, 'load_result', paused_load)
+    # Independent instances sharing only the real emulator and Redis boundary.
+    projectors = [
+        lane.Projector(lane.store, paused_load, publish=lane.projector.publish, clock=lane.clock) for _ in range(3)
+    ]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(projectors[0].sweep)
+        assert entered.wait(20)
+        try:
+            others = [pool.submit(projector.sweep) for projector in projectors[1:]]
+            for future in others:
+                assert future.result(timeout=20) == {'completed': 0, 'waiting': 1, 'blocked': 0, 'error': 0}
+        finally:
+            release.set()
+        assert first.result(timeout=30) == {'completed': 1, 'waiting': 0, 'blocked': 0, 'error': 0}
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert len(lane.loads) == len(lane.tasks) == len(lane.published) == 1
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+
+
+def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    # Advisory coalescing can be unavailable/expired. Durable replay must remain
+    # safe without it; all Firestore transaction races below are real.
+    redis = Mock()
+    redis.set.side_effect = ConnectionError('synthetic Redis unavailable')
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch, outcome='silence')
+    barrier = threading.Barrier(3)
+    check = lane.projector.store.check
+    seen = set()
+    lock = threading.Lock()
+
+    def synchronized_check(session):
+        check(session)
+        with lock:
+            first_check = threading.get_ident() not in seen
+            seen.add(threading.get_ident())
+        if first_check:
+            barrier.wait(timeout=20)
+
+    monkeypatch.setattr(lane.projector.store, 'check', synchronized_check)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(lane.projector.project, [batch.ids[0]] * 3))
+    assert all(result['outcome'] == 'expected_silence' for result in results)
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert not active_rows(lane) and not lane.loads and not lane.tasks
+
+
+@pytest.mark.parametrize('boundary', ['projection', 'assignment'])
+@pytest.mark.parametrize('failure', ['contention', 'expired'])
+def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, monkeypatch, boundary, failure):
+    from google.api_core.exceptions import Aborted, InvalidArgument
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    # The emulator does not deterministically emit read-time contention. Inject
+    # its explicit envelope at the real BatchGet transport boundary, as in the
+    # shared contention qualification script; begin/rollback/retry/commit and
+    # every stored receipt/index/conversation remain real emulator operations.
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed()
+    lane.finish(batch)
+    transport = lane.client._firestore_api._transport
+    original = transport._wrapped_methods[transport.batch_get_documents]
+    assign = lane.conversations.assign_sync_conversation
+    inside_assignment = False
+    injected = False
+    transactions = []
+
+    def assignment(*args, **kwargs):
+        nonlocal inside_assignment
+        inside_assignment = True
+        try:
+            return assign(*args, **kwargs)
+        finally:
+            inside_assignment = False
+
+    def read(request, **kwargs):
+        nonlocal injected
+        selected = inside_assignment if boundary == 'assignment' else not inside_assignment
+        if request.transaction and selected:
+            transactions.append(bytes(request.transaction))
+            if not injected:
+                injected = True
+                if failure == 'expired':
+                    raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+                raise Aborted('synthetic read-time contention')
+        return original(request, **kwargs)
+
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
+    monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
+    result = lane.projector.project(batch.ids[0])
+    assert result['outcome'] == 'success' and injected
+    assert transactions[0] != transactions[1]
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+    assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1
+
+
+def superseded_anchor(lane, item, *, merged=False):
+    """Metadata-only fixture: assignment must reject without decoding content."""
+    anchor = lane.user.collection('conversations').document(item.conversation_id)
+    survivor = lane.user.collection('conversations').document(f'survivor-{item.segment_id}') if merged else anchor
+    survivor.set(
+        {
+            'id': survivor.id,
+            'source': 'omi',
+            'client_device_id': None,
+            'is_locked': False,
+            'sync_content_revision': 1,
+            'sync_live_target': True,
+        }
+    )
+    if merged:
+        anchor.set({'id': anchor.id, 'deleted': True, 'sync_merged_into': survivor.id})
+    return {ref: ref.get().to_dict() for ref in {anchor, survivor}}
+
+
+@pytest.mark.parametrize('merged', [False, True])
+@pytest.mark.parametrize('all_superseded', [False, True])
+def test_superseded_assignment_settles_siblings_without_content_or_usage(lane, merged, all_superseded):
+    batch = lane.seed(('head', 'sibling'))
+    before = superseded_anchor(lane, batch.items[0], merged=merged)
+    if all_superseded:
+        before.update(superseded_anchor(lane, batch.items[1], merged=merged))
+    lane.finish(batch, 0)
+    lane.finish(batch, 1)
+    assert lane.projector.project(batch.ids[0]) is None
+    head = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert head['projection']['disposition'] == 'superseded'
+    assert head['projection']['state'] == 'ready' and head['projection']['speech_seconds'] == 0
+    result = lane.projector.project(batch.ids[1])
+    assert result['failed_segments'] == 0 and result['errors'] == [] and result['outcome'] == 'success'
+    assert result['superseded_segments'] == (2 if all_superseded else 1)
+    assert all(ref.get().to_dict() == row for ref, row in before.items())
+    assert len(lane.tasks) == (0 if all_superseded else 1)
+    ledger = batch.ledger.get().to_dict()
+    assert ledger['status'] == 'completed' and ledger['usage_committed_at']
+    assert set(ledger['processed_segment_ids']) == set(batch.ids)
+    usage = list(lane.user.collection('hourly_usage').stream())
+    assert (not usage) if all_superseded else usage[0].to_dict()['speech_seconds'] == 4
+    loads = list(lane.loads)
+    assert lane.projector.project(batch.ids[0]) == result
+    assert lane.loads == loads
+    assert batch.ledger.get().to_dict()['usage_committed_at'] == ledger['usage_committed_at']
+    assert all(
+        lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
+    )
+
+
+@pytest.mark.parametrize('superseded_index', [0, 1, 2])
+def test_multipart_supersession_excludes_only_rejected_speech_and_replays(lane, superseded_index):
+    from utils.sync.capture import chunk_identity
+
+    batch = multipart(lane, 3)
+    item = replace(
+        batch.items[0], conversation_id=chunk_identity(lane.uid, 'omi', None, False, 1000 + superseded_index * 150)
+    )
+    before = superseded_anchor(lane, item)
+    result = lane.projector.project(batch.ids[0])
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    part = receipt['projection_parts'][str(superseded_index)]
+    assert part['disposition'] == 'superseded' and part['speech_seconds'] == 0
+    assert receipt['projection']['speech_seconds'] == 2
+    assert 'disposition' not in receipt['projection']
+    assert result['superseded_segments'] == 1 and result['total_segments'] == 3
+    assert len(result['new_memories']) == 2 and len(lane.tasks) == 2
+    assert all(ref.get().to_dict() == row for ref, row in before.items())
+    assert list(lane.user.collection('hourly_usage').stream())[0].to_dict()['speech_seconds'] == 2
+    assert lane.projector.project(batch.ids[0]) == result
+    assert len(lane.tasks) == 2
+
+
+@pytest.mark.parametrize('kind', ['account', 'conversation', 'generation', 'ledger'])
+def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, monkeypatch, kind):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
+    from database.batch_pipeline_projection import ProjectionBlocked
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    batch = lane.seed()
+    lane.finish(batch)
+    assign = lane.conversations.assign_sync_conversation
+
+    def fail(*args, **kwargs):
+        try:
+            return assign(*args, **kwargs)
+        except SyncAssignmentSuperseded:
+            if kind == 'account':
+                lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+            elif kind == 'conversation':
+                lane.user.collection('deleted_conversations').document(batch.items[0].conversation_id).set(
+                    {'deleted': True}
+                )
+            elif kind == 'generation':
+                lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set(
+                    {'generation': 1}
+                )
+            else:
+                batch.ledger.update({'job_id': 'other-job'})
+            raise
+
+    superseded_anchor(lane, batch.items[0])
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', fail)
+    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+        lane.projector.project(batch.ids[0])
+    assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert not lane.tasks and not lane.published
+
+
+def test_all_multipart_superseded_lost_settlement_reply_recovers_without_usage(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.sync.capture import chunk_identity
+
+    batch = multipart(lane, 3)
+    for index in range(3):
+        superseded_anchor(
+            lane,
+            replace(batch.items[0], conversation_id=chunk_identity(lane.uid, 'omi', None, False, 1000 + index * 150)),
+        )
+    persist = ProjectionSession.persist_empty
+    lost = []
+
+    def crash(session, **kwargs):
+        result = persist(session, **kwargs)
+        if session.part_index == 1 and not lost:
+            lost.append(True)
+            raise RuntimeError('synthetic lost superseded receipt reply')
+        return result
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', crash)
+    with pytest.raises(RuntimeError, match='lost superseded'):
+        lane.projector.project(batch.ids[0])
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    result = lane.projector.project(batch.ids[0])
+    receipt = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert receipt['projection']['disposition'] == 'superseded' and receipt['projection']['speech_seconds'] == 0
+    assert result['superseded_segments'] == result['total_segments'] == 3
+    assert result['outcome'] == 'success' and not result['new_memories'] and not result['updated_memories']
+    assert not list(lane.user.collection('hourly_usage').stream())
+    assert not lane.tasks
+    assert lane.projector.project(batch.ids[0]) == result
+
+
+def test_recovery_batch_dispatch_duplicate_start_and_ordered_merge(lane, monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import intake, quarantine_recovery as module
+    from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.invalid')
+    batch = lane.seed(names=tuple(f'unit-{i:02}' for i in range(17)))
+    for sid in batch.ids:
+        assert lane.queue.fail(sid, batch.leases[sid].token, 1, quarantine=True)
+    lane.projector.store.ref('intakes', batch.binding.job_id).set(
+        {
+            'owner_id': lane.uid,
+            'content_id': batch.binding.content_id,
+            'segment_ids': list(batch.ids),
+            'total_files': 1,
+            'lane': 'backfill',
+        }
+    )
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['status'] == 'processing'
+    recovery = QuarantineRecovery(lane.store, Mock(), clock=lambda: 100)
+    enqueued = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueued)
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 1}
+    assert enqueued.call_count == 17
+    # Settle in reverse capture order, with racing duplicate deliveries for
+    # each token: only one provider-start winner, then capture-ordered merge.
+    for sid in reversed(batch.ids):
+        job = recovery.protocol.prepare(sid, lane.uid, 100)
+        token = job['recovery']['token']
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            starts = list(pool.map(lambda _: recovery.protocol.start(sid, token, 100), range(2)))
+        assert sorted(starts) == [False, True]
+        assert recovery.protocol.settle(sid, token, 101, f'gs://synthetic/{sid}')
+        assert not recovery.protocol.start(sid, token, 102)
+    entries = [lane.merge.commit_next(lane.uid, 103) for _ in batch.ids]
+    assert [entry['segment_id'] for entry in entries] == list(batch.ids)
+    assert [entry['previous_segment_id'] for entry in entries] == [None, *batch.ids[:-1]]
+    assert intake.durable_status(lane.store, lane.uid, batch.binding.job_id)['poll_after_ms'] == 3000
+    # Exercise the real HTTP boundary with the emulator's real privacy fence.
+    from database.batch_pipeline_privacy import advance_privacy_generation
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import routers.sync as route
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *args, **kwargs: lane.store)
+    monkeypatch.setattr(route, 'admit_sync_job_poll', lambda uid: True)
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid] = lambda: lane.uid
+    # Public IDs are bp_ prefixed; alias the same durable receipt for the route.
+    public_id = 'bp_recovery_test'
+    lane.projector.store.ref('intakes', public_id).set(
+        lane.projector.store.ref('intakes', batch.binding.job_id).get().to_dict()
+    )
+    with TestClient(app) as client:
+        active = client.get(f'/v2/sync-local-files/{public_id}')
+        assert active.status_code == 200
+        assert active.json()['status'] == 'processing' and active.json()['poll_after_ms'] > 0
+        advance_privacy_generation(lane.client, lane.uid, blocked=True)
+        response = client.get(f'/v2/sync-local-files/{public_id}')
+    assert response.status_code == 409
+    assert response.json()['code'] == 'sync_batch_privacy_blocked'

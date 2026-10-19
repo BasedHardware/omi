@@ -29,6 +29,7 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
+from config.firestore_read_levers import lever_enabled
 from utils.action_items_list_guard import enforce_hot_client_list_ceiling, enforce_stale_client_list_refusal
 from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name
@@ -39,6 +40,7 @@ from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     list_read_budget_for_request,
+    finish_list_budget,
 )
 from utils.notifications import (
     send_notification,
@@ -415,6 +417,7 @@ def _ensure_aware(value: datetime) -> datetime:
 
 def _action_items_list_cache_params(
     *,
+    uid: str = '',
     limit: int,
     offset: int,
     completed: Optional[bool],
@@ -426,11 +429,22 @@ def _action_items_list_cache_params(
 ) -> Optional[dict]:
     """Cacheable request shape, or None when this request must not be cached.
 
-    Only the unfiltered listing is cached. That is the whole hot path (98.6% of
-    the measured traffic is ``limit=500&offset=0&completed=true|false``) and it
-    keeps the key space per user to a handful of entries; date- and
-    conversation-scoped reads are rare, high-cardinality, and stay uncached.
+    The default path caches only the unfiltered listing (98.6% of the older
+    measured traffic was ``limit=500&offset=0&completed=true|false``). The
+    action_items_page cohort also caches exact date/conversation predicates;
+    every page shares the existing write-bumped invalidation version.
     """
+    if uid and lever_enabled('action_items_page', uid):
+        return {
+            'limit': limit,
+            'offset': offset,
+            'completed': completed,
+            'conversation_id': conversation_id,
+            'start_date': start_date.isoformat() if start_date is not None else None,
+            'end_date': end_date.isoformat() if end_date is not None else None,
+            'due_start_date': due_start_date.isoformat() if due_start_date is not None else None,
+            'due_end_date': due_end_date.isoformat() if due_end_date is not None else None,
+        }
     if (
         conversation_id is not None
         or start_date is not None
@@ -461,10 +475,11 @@ def _serve_action_items_list_from_cache(
     point of this function and what the ``omi_action_items_list_cache_total``
     counter proves after a deploy.
     """
-    ttl = list_cache_ttl_seconds()
+    ttl = list_cache_ttl_seconds(uid) if lever_enabled('action_items_page', uid) else list_cache_ttl_seconds()
     if ttl <= 0:
         return None
     params = _action_items_list_cache_params(
+        uid=uid,
         limit=limit,
         offset=offset,
         completed=completed,
@@ -488,6 +503,9 @@ def _serve_action_items_list_from_cache(
         record_action_items_list_cache('miss')
         return None
 
+    if lever_enabled('action_items_page', uid) and get_action_items_list_version(uid) != version:
+        record_action_items_list_cache('miss')
+        return None
     etag = entry['etag']
     inm = request.headers.get('if-none-match') if request is not None else None
     if if_none_match_matches(inm, etag):
@@ -505,6 +523,7 @@ def _store_action_items_list_in_cache(
     body: dict,
     *,
     etag: str,
+    expected_version: Optional[int] = None,
     limit: int,
     offset: int,
     completed: Optional[bool],
@@ -514,10 +533,11 @@ def _store_action_items_list_in_cache(
     due_start_date: Optional[datetime],
     due_end_date: Optional[datetime],
 ) -> None:
-    ttl = list_cache_ttl_seconds()
+    ttl = list_cache_ttl_seconds(uid) if lever_enabled('action_items_page', uid) else list_cache_ttl_seconds()
     if ttl <= 0:
         return
     params = _action_items_list_cache_params(
+        uid=uid,
         limit=limit,
         offset=offset,
         completed=completed,
@@ -531,6 +551,8 @@ def _store_action_items_list_in_cache(
         return
     version = get_action_items_list_version(uid)
     if version is None:
+        return
+    if lever_enabled('action_items_page', uid) and (expected_version is None or version != expected_version):
         return
     write_cached_list(list_cache_key(uid, version, params), body=body, etag=etag, ttl=ttl)
 
@@ -586,6 +608,9 @@ def get_action_items(
     if cached_response is not None:
         return cached_response
 
+    # Pin fills before the Firestore read so an intervening write cannot
+    # address an old result with the newer version it just created.
+    cache_version = get_action_items_list_version(uid) if lever_enabled('action_items_page', uid) else None
     budget = list_read_budget_for_request(request, route='action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
@@ -635,6 +660,7 @@ def get_action_items(
             uid,
             body,
             etag=etag,
+            expected_version=cache_version,
             limit=limit,
             offset=offset,
             completed=completed,
@@ -671,6 +697,8 @@ def list_action_item_ids(
         description="When present, return only non-deleted IDs in this completion bucket",
     ),
     uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """Return the user's action-item IDs (lightweight reconciliation).
 
@@ -686,12 +714,16 @@ def list_action_item_ids(
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
     """
+    budget = list_read_budget_for_request(request, route='action-item-ids')
     if completed is None:
-        return {"ids": action_items_db.get_action_item_ids(uid)}
-    return {
-        "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed),
-        "completed_scope": completed,
-    }
+        result = {"ids": action_items_db.get_action_item_ids(uid, budget=budget)}
+    else:
+        result = {
+            "ids": action_items_db.get_visible_action_item_ids(uid, completed=completed, budget=budget),
+            "completed_scope": completed,
+        }
+    finish_list_budget(response, budget)
+    return result
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])

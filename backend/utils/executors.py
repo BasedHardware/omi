@@ -4,12 +4,14 @@ Provides shared executors with strict separation (bulkhead pattern):
 - critical_executor: auth verification, rate limiting, hard restriction checks,
   small session/code cache reads. Must never starve — gates every request.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- context_executor: optional context reads and fresh mount fences, four workers,
+  zero queue, isolated from setup's Firestore work even after caller cancellation.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
   to prevent slow LLM retries from blocking DB or auth operations.
-- jev_shadow_executor: lazy ten-worker pool for best-effort EXP-004 measurements,
-  isolated from foreground LLM work even during dependency outages.
 - stripe_executor: Stripe API calls (Subscription.retrieve, etc.). External network I/O
   with unpredictable latency, isolated from everything else.
+- posthog_flag_executor: bounded PostHog feature-flag lookups used to gate desktop
+  experiment enrollment, isolated from request-critical and post-processing work.
 - sync_executor: sync pipeline VAD/STT/segment processing.
 - postprocess_executor: best-effort post-processing (memories, trends, vectors,
   action items, goals, conversation processing, webhook delivery).
@@ -107,6 +109,9 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
+posthog_flag_executor = MonitoredThreadPoolExecutor(
+    name="posthog_flags", max_workers=4, max_queue_size=16, thread_name_prefix="posthog-flag"
+)
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
@@ -128,6 +133,7 @@ _ALL_EXECUTORS = [
     db_executor,
     llm_executor,
     stripe_executor,
+    posthog_flag_executor,
     sync_executor,
     postprocess_executor,
     cleanup_executor,
@@ -136,20 +142,36 @@ _ALL_EXECUTORS = [
     cimd_executor,
 ]
 
-_jev_shadow_executor: MonitoredThreadPoolExecutor | None = None
-_jev_shadow_executor_lock = threading.Lock()
+_context_executor: MonitoredThreadPoolExecutor | None = None
+_context_executor_lock = threading.Lock()
 
 
-def get_jev_shadow_executor() -> ThreadPoolExecutor:
-    """Create the shadow bulkhead only when eligible work is first submitted."""
-    global _jev_shadow_executor
-    with _jev_shadow_executor_lock:
-        if _jev_shadow_executor is None:
-            _jev_shadow_executor = MonitoredThreadPoolExecutor(
-                name='jev_shadow', max_workers=10, thread_name_prefix='jev-shadow'
+def get_context_executor() -> MonitoredThreadPoolExecutor:
+    """Lazy optional-read pool: four workers, no queue, true worker-lifetime slots."""
+    global _context_executor
+    with _context_executor_lock:
+        if _context_executor is None:
+            _context_executor = MonitoredThreadPoolExecutor(
+                name='context', max_workers=4, max_queue_size=0, thread_name_prefix='context'
             )
-            _ALL_EXECUTORS.append(_jev_shadow_executor)
-        return _jev_shadow_executor
+            _ALL_EXECUTORS.append(_context_executor)
+        return _context_executor
+
+
+_rollout_executor: MonitoredThreadPoolExecutor | None = None
+_rollout_executor_lock = threading.Lock()
+
+
+def get_rollout_executor() -> MonitoredThreadPoolExecutor:
+    """Small isolated pool for optional cohort reads; bounded during Firestore outages."""
+    global _rollout_executor
+    with _rollout_executor_lock:
+        if _rollout_executor is None:
+            _rollout_executor = MonitoredThreadPoolExecutor(
+                name='rollout', max_workers=4, max_queue_size=64, thread_name_prefix='rollout'
+            )
+            _ALL_EXECUTORS.append(_rollout_executor)
+        return _rollout_executor
 
 
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
@@ -242,7 +264,11 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
     """
-    task = asyncio.create_task(coro, name=name)
+    from database.firestore_read_origin import background_task_read_origin
+
+    # Task creation copies context; keep the original coroutine/task semantics.
+    with background_task_read_origin(name):
+        task = asyncio.create_task(coro, name=name)
     _background_tasks.add(task)
 
     def _done(t: asyncio.Task[Any]) -> None:

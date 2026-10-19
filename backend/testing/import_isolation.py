@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import sys
 from contextlib import contextmanager
+from importlib.machinery import ExtensionFileLoader
 from pathlib import Path
 from types import ModuleType
 from typing import Iterable, Iterator
@@ -54,6 +55,18 @@ class AutoMockModule(ModuleType):
         mock = MagicMock()
         setattr(self, name, mock)
         return mock
+
+
+def _has_existing_file_origin(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None) if spec else None
+    return isinstance(origin, str) and Path(origin).is_file()
+
+
+def _is_existing_extension_module(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    loader = getattr(spec, "loader", None) if spec else None
+    return isinstance(loader, ExtensionFileLoader) and _has_existing_file_origin(module)
 
 
 def _set_parent_attr(name: str, module: ModuleType | None) -> None:
@@ -78,11 +91,12 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     including deleting entries that were absent before and repairing parent attrs.
 
     It ALSO snapshots the FULL ``sys.modules`` mapping (key -> object) at entry and
-    restores it on teardown: newly-added keys are evicted AND existing keys whose
-    object was swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against
-    the fakes) are restored to the original object. This is what makes a fixture
-    hermetic: subsequent test files always see the *real* module, never a stub-fed
-    fresh copy left behind.
+    restores it on teardown: newly-added keys are evicted except for exact names in
+    the explicit import-safety allowlist, and existing keys whose object was swapped
+    (e.g. by ``load_module_fresh`` re-exec'ing a module against the fakes) are
+    restored to the original object. Explicit fakes are restored and backend-owned
+    modules are always evicted, so a stub-fed backend copy never leaks to later
+    test files.
 
     Use ONLY inside a function/fixture scope (never at module scope in a test file —
     the static checker bans that). For most test seams prefer ``monkeypatch.setattr``
@@ -132,20 +146,57 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # 2. Evict any module keys that appeared during the block (e.g. a module
         #    exec'd via load_module_fresh against the fakes) and clear the parent
         #    attribute each one set, so a stub-fed version never leaks to later files.
-        #    Skip C extension / spec-less modules outside the backend namespace
-        #    (e.g. ``_openssl``) that cannot be safely re-imported once evicted —
-        #    evicting them corrupts the crypto stack for all subsequent test files.
-        #    Backend-owned modules (database.*, utils.*, etc.) are always evicted
-        #    because they may be stubs that must not leak.
-        _backend_prefixes = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
-        for extra in list(sys.modules.keys() - saved_keys):
-            extra_mod = sys.modules.get(extra)
-            if extra_mod is not None:
-                spec = getattr(extra_mod, "__spec__", None)
-                origin = getattr(spec, "origin", None) if spec else None
-                is_backend = any(extra == p.rstrip(".") or extra.startswith(p) for p in _backend_prefixes)
-                if not is_backend and (spec is None or (origin and origin.endswith((".so", ".pyd")))):
+        # Preserve only these exact families. Jiter's source package must remain
+        # paired with its extension because its initializer binds the child module;
+        # the listed Google modules register descriptors in protobuf's global pool.
+        # Add future native families explicitly rather than discovering .so files.
+        _extension_family_companions = {
+            "google": (
+                "google._upb._message",
+                "proto",
+                "google.ai.generativelanguage_v1beta.types.cache_service",
+                "google.ai.generativelanguage_v1beta.types.cached_content",
+                "google.ai.generativelanguage_v1beta.types.citation",
+                "google.ai.generativelanguage_v1beta.types.content",
+                "google.ai.generativelanguage_v1beta.types.discuss_service",
+                "google.ai.generativelanguage_v1beta.types.file",
+                "google.ai.generativelanguage_v1beta.types.file_service",
+                "google.ai.generativelanguage_v1beta.types.generative_service",
+                "google.ai.generativelanguage_v1beta.types.model",
+                "google.ai.generativelanguage_v1beta.types.model_service",
+                "google.ai.generativelanguage_v1beta.types.permission",
+                "google.ai.generativelanguage_v1beta.types.permission_service",
+                "google.ai.generativelanguage_v1beta.types.prediction_service",
+                "google.ai.generativelanguage_v1beta.types.retriever",
+                "google.ai.generativelanguage_v1beta.types.retriever_service",
+                "google.ai.generativelanguage_v1beta.types.safety",
+                "google.ai.generativelanguage_v1beta.types.text_service",
+                "google.ai.generativelanguage_v1beta.types.tuned_model",
+            ),
+            "jiter": ("jiter", "jiter.jiter"),
+        }
+        extra_names = list(sys.modules.keys() - saved_keys)
+        preserve_for_import_safety: set[str] = set()
+        extra_name_set = set(extra_names)
+        google_extension_loaded = _is_existing_extension_module(sys.modules.get("google._upb._message"))
+        jiter_extension_loaded = _is_existing_extension_module(sys.modules.get("jiter.jiter"))
+        if google_extension_loaded:
+            for companion_name in _extension_family_companions["google"]:
+                if companion_name in extra_name_set and _has_existing_file_origin(sys.modules.get(companion_name)):
+                    preserve_for_import_safety.add(companion_name)
+        if jiter_extension_loaded:
+            for companion_name in _extension_family_companions["jiter"]:
+                if companion_name not in extra_name_set:
                     continue
+                companion = sys.modules.get(companion_name)
+                if companion_name == "jiter.jiter":
+                    if _is_existing_extension_module(companion):
+                        preserve_for_import_safety.add(companion_name)
+                elif _has_existing_file_origin(companion):
+                    preserve_for_import_safety.add(companion_name)
+        for extra in extra_names:
+            if extra in preserve_for_import_safety:
+                continue
             _clear_parent_attr_if_added(extra, saved_submodule_attrs)
             sys.modules.pop(extra, None)
         # 3. Restore existing keys whose object was swapped in place (load_module_fresh

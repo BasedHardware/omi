@@ -4,7 +4,10 @@ from enum import IntEnum
 import hashlib
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
 from typing import Callable, TypeVar
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
 class Priority(IntEnum):
@@ -16,6 +19,10 @@ class Priority(IntEnum):
 T = TypeVar('T')
 
 
+class RecordOwnerContention(RuntimeError):
+    """A loaded conversation revision lost a route-only compare-and-set."""
+
+
 def enabled_for(owner_id: str) -> bool:
     if os.getenv('BATCH_PIPELINE_ENABLED', 'false').lower() != 'true':
         return False
@@ -25,9 +32,15 @@ def enabled_for(owner_id: str) -> bool:
         return False
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
-    owners = {value.strip() for value in os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', '').split(',') if value.strip()}
+    return in_rollout_cohort(owner_id, 'batch-pipeline') or in_percent_cohort(owner_id, percent)
+
+
+def in_percent_cohort(owner_id: str, percent: float) -> bool:
+    """Shared unsalted admission bucket; invalid percentages never admit."""
+    if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
+        return False
     bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
-    return owner_id in owners or bucket < percent
+    return bucket < percent
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -49,6 +62,27 @@ def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[...
     return (admit if enabled_for(owner_id) else legacy)(*args, **kwargs)
 
 
+def live_record_admission_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false').lower() == 'true'
+
+
+def live_record_enabled_for(owner_id: str) -> bool:
+    return live_record_admission_enabled() and enabled_for(owner_id)
+
+
+def record_capture_eligible(owner_id: str, capture: dict) -> bool:
+    return bool(
+        live_record_enabled_for(owner_id)
+        and capture.get('private_cloud_sync_enabled')
+        and not capture.get('uses_custom_stt')
+        and not capture.get('deleted')
+        and not capture.get('discarded')
+        and capture.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
+        and normalized_stt_language(capture.get('language'))
+        in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+    )
+
+
 def shared_live_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'false').lower() == 'true'
 
@@ -59,3 +93,173 @@ SCHEDULER_SHARDS = 64
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'
+
+
+def max_worker_attempts() -> int:
+    """Bound charged worker failures; malformed configuration keeps the safe default."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5'))
+    except ValueError:
+        return 5
+    return value if 1 <= value <= 20 else 5
+
+
+def recovery_owners() -> tuple[str, ...]:
+    """Recovery is independent of admission; empty allowlist always denies."""
+    if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+        return ()
+    return rollout_cohort_members('batch-pipeline-recovery')
+
+
+def authoritative_labels_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false').lower() == 'true'
+
+
+def empty_asr_recovery_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true'
+
+
+def require_live_target_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'false').lower() == 'true'
+
+
+def recover_all_admitted() -> bool:
+    # These are already batch-owned obligations; rollback must still drain them.
+    return (
+        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').lower() == 'on'
+        and os.getenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'false').lower() == 'true'
+    )
+
+
+def recovery_enabled_for(owner_id: str) -> bool:
+    return recover_all_admitted() or (
+        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() == 'on'
+        and in_rollout_cohort(owner_id, 'batch-pipeline-recovery')
+    )
+
+
+def empty_asr_disposition_enabled() -> bool:
+    """Dark strict-VAD disposition; accepted paid intents are never reset."""
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def projection_contention_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def speech_empty_multilingual_enabled() -> bool:
+    """Dark alternate-provider recovery; one call per durable paid intent."""
+    return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
+
+
+def terminal_empty_disposition_enabled() -> bool:
+    """Dark, evidenced terminal empty result; never grants another paid intent."""
+    return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_silence_disposition_enabled() -> bool:
+    """Dark worker-side use of integration's strict local silence evidence."""
+    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_validation_disposition_enabled() -> bool:
+    """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
+    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+
+
+def head_priority_enabled() -> bool:
+    """Prefer a queued capture-order head without changing lease/merge authority."""
+    return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
+
+
+def async_projection_enabled() -> bool:
+    """Persist in order, then drain durable follow-ups outside the owner claim."""
+    return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def recovery_tasks_enabled() -> bool:
+    """Ship-on request-backed paid recovery; false restores inline sweeping."""
+    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'
+
+
+def recovery_dispatch_batch_size() -> int:
+    """Bound each serving pass; 1 restores the former all-admitted dispatch rate."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '16'))
+    except ValueError:
+        return 16
+    return value if 1 <= value <= 64 else 16
+
+
+def projection_pagination_enabled() -> bool:
+    """Ship-on fair discovery; false restores the legacy oldest-page scan."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'
+
+
+WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_MAX = 8
+
+
+def worker_io_concurrency() -> int:
+    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+
+    1 restores the fully serial chain. Malformed or out-of-range values keep the
+    conservative default; GPU work and the chain lock are unaffected either way.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))
+    except ValueError:
+        return WORKER_IO_CONCURRENCY_DEFAULT
+    return value if 1 <= value <= WORKER_IO_CONCURRENCY_MAX else WORKER_IO_CONCURRENCY_DEFAULT
+
+
+DEFAULT_PUBLISH_CONCURRENCY = 4
+MAX_PUBLISH_CONCURRENCY = 16
+
+
+def publish_concurrency() -> int:
+    """Ship-on bounded post-flight publication; 1 is the kill switch.
+
+    Bounds concurrent fenced transitions and cross-owner ordered drains after
+    one GPU flight. ``1`` restores serial transitions with one drain after each
+    accepted transition. Malformed values fall back to that serial path.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PUBLISH_CONCURRENCY', str(DEFAULT_PUBLISH_CONCURRENCY)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 1
+    return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+RECOVERY_WAKE_LEASE_DEFAULT = 600
+RECOVERY_WAKE_LEASE_MAX = 3600
+
+
+def recovery_wake_lease_seconds() -> int:
+    """Ship-on: one outstanding recovery delivery task per prepared intent.
+
+    The lease bounds how long an undelivered wake is trusted before the sweep
+    repairs it with a new one. ``0`` is the kill switch: the legacy 120s
+    time-bucketed wake on every sweep. Malformed or out-of-range values keep the
+    default.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', str(RECOVERY_WAKE_LEASE_DEFAULT)))
+    except ValueError:
+        return RECOVERY_WAKE_LEASE_DEFAULT
+    if value == 0:
+        return 0
+    return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT

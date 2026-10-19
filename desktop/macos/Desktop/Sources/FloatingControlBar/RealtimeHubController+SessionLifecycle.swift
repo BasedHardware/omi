@@ -15,10 +15,6 @@ extension RealtimeHubController {
   /// Automatic keep-warm (idle remint, reconnect, presence return, launch) must
   /// not mint a managed session when the entitlement decision is `.planGated`.
   func ensureWarm(userInitiated: Bool = false) {
-    guard !AppBuild.shouldDisableJITQARealtime else {
-      log("RealtimeHub: JIT QA realtime disabled by OMI_JIT_QA_DISABLE_REALTIME")
-      return
-    }
     guard admitWarmRequest(userInitiated: userInitiated) else { return }
     let skipAutomatic = shouldSkipAutomaticManagedWarm()
     if !userInitiated, skipAutomatic {

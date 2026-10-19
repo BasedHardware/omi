@@ -4,6 +4,15 @@ icon: "wrench"
 description: "Complete reference for all Omi MCP tools"
 ---
 
+## REST memory lists
+
+For integrations using `GET /v1/mcp/memories`, response bodies remain arrays and continuation is carried in
+`X-Next-Cursor`. Identical requests from the same credential may return a cached page for up to 10 seconds
+after any write. `X-Scan-Truncated: true` or `X-Omi-List-Truncated: true` means the scan was incomplete;
+an empty or short page does not establish that no more memories exist. The default `created_desc` sort
+includes legacy memories but may reach this bound on large accounts. `scoring_desc` and `updated_desc`
+support keyset continuation through `X-Next-Cursor`; retain the same filters and use `offset=0`.
+
 ## Memory Tools
 
 The hosted server returns only the tools allowed by the OAuth grant or MCP key. A local

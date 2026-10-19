@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_enabled
 import json
 import logging
 import os
@@ -925,6 +926,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
@@ -978,6 +981,13 @@ async def update_persona(
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    needs_generation = (
+        'name' in data and data['name'] and data['name'] != persona.get('name') and 'description' not in data
+    ) or ('omi' in data.get('connected_accounts', []) and 'omi' not in persona.get('connected_accounts', []))
+    if needs_generation:
+        if generated_compute_enabled():
+            await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
 
     # Image
     if file:
@@ -1060,6 +1070,8 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
             return safe_persona
         logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     # Create a new persona for the user
     user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
@@ -1535,6 +1547,7 @@ def generate_description_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    require_generated_compute(uid, 'app_integration')
     enforce_chat_quota(uid, platform=x_app_platform)
     if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -1557,6 +1570,7 @@ def generate_description_and_emoji_endpoint(
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
+    require_generated_compute(uid, 'app_integration')
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     if not data.name:
@@ -1583,6 +1597,8 @@ async def generate_sample_prompts_endpoint(
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_integration')
     from utils.llm.clients import get_llm
     import json
 
@@ -1639,6 +1655,8 @@ async def generate_app_endpoint(
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator')
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
@@ -1687,6 +1705,8 @@ async def generate_app_icon_endpoint(
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
     from utils.llm.app_generator import generate_app_icon
     import base64
 
@@ -1795,6 +1815,7 @@ def get_twitter_initial_message(
     username: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:twitter_initial_message")),
 ):
+    require_generated_compute(uid, 'persona_clone')
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1852,6 +1873,10 @@ async def migrate_app_owner(
 
 
 async def update_omi_persona_connected_accounts(uid: str):
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'persona_clone'
+    ):
+        return
     try:
         personas = await run_blocking(db_executor, get_omi_persona_apps_by_uid_db, uid)
 
@@ -2393,7 +2418,7 @@ def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2407,7 +2432,7 @@ def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2419,7 +2444,7 @@ def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(..
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2438,7 +2463,7 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
@@ -2446,7 +2471,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
@@ -2456,7 +2481,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
@@ -2472,7 +2497,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
@@ -2522,7 +2547,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     personas = get_persona_by_id_db(persona_id)
     if not personas:
@@ -2533,7 +2558,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     persona = get_personas_by_username_db(persona_id)
     if not persona:
@@ -2598,7 +2623,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 @router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
@@ -2609,7 +2634,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
 @router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = add_conversation_summary_app_id(app_id)
@@ -2622,7 +2647,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
 @router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = remove_conversation_summary_app_id(app_id)

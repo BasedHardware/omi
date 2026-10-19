@@ -142,13 +142,16 @@ grafana:
   # starved: /api/health returned 502 externally and alert provisioning timed
   # out. Requests give the alerting UI a guaranteed CPU share; sized from
   # measured peaks (214m CPU, 241Mi during the 2026-10-14 evaluation storm).
+  # Grafana 13 was OOMKilled at 1Gi three times on 2026-10-16 (15:18, 15:19,
+  # 15:51Z), each at the end of an internet scanner burst (~300 unauthenticated
+  # .env/secrets probes in ~70s) while steady-state working set stays ~260-510Mi.
   resources:
     requests:
       cpu: 250m
       memory: 384Mi
     limits:
       cpu: "1"
-      memory: 1Gi
+      memory: 2Gi
   serviceAccount:
     create: true
     annotations:
@@ -478,13 +481,24 @@ prometheus:
           - source_labels: [__meta_kubernetes_service_name]
             regex: "(.*)-prometheus-stackdriver-exporter"
             action: keep
-      # Exporter namespace allowlist includes notifications-job (GMP cluster=__run__).
+      # Two exporter releases feed this one job (GMP cluster=__run__):
+      # prod-omi-cloud-run-metrics-exporter imports every omi_* family from the
+      # non-sync Cloud Run services; prod-omi-cloud-run-sync-metrics-exporter
+      # imports only the consumed families from the sync services. Keeping one job
+      # name keeps every job="cloud-run-application-metrics" query, min(up) and
+      # max(stackdriver_monitoring_last_scrape_error) covering both.
       - job_name: cloud-run-application-metrics
         # A prod scrape is ~28MB and takes 6-10s because the exporter queries
         # Cloud Monitoring inline. The default 10s scrape_timeout cut every
         # collection off mid-flight and recorded 0 samples, so the budget has to
         # exceed a slow scrape, and the interval has to exceed the budget.
-        scrape_interval: 60s
+        # Every scrape is a full timeSeries.list of each imported family, billed per
+        # time series returned (SKU 6E35-67F5-C3C6, "Time series billed count"), and
+        # both Prometheus replicas scrape independently. At 60s this cost ~$50/day on
+        # 2026-10-16 for data Cloud Run only writes every 60s anyway. 120s halves the
+        # bill; no rule reads these families over a window shorter than 5m, which
+        # still holds 2-3 samples. Do not drop below 120s without re-pricing.
+        scrape_interval: 120s
         scrape_timeout: 45s
         metrics_path: /metrics
         scheme: http
@@ -495,7 +509,7 @@ prometheus:
               - "prod-omi-monitoring"
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_name]
-            regex: "prod-omi-cloud-run-metrics-exporter"
+            regex: "prod-omi-cloud-run-(sync-)?metrics-exporter"
             action: keep
         metric_relabel_configs:
           # The Stackdriver exporter mangles every imported name into

@@ -1,13 +1,23 @@
 """One gateway tool/verifier turn; reserved policy and configured fallback stay gateway-owned."""
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+
 import json
 from typing import Any
 
 import httpx
 
 from config.dream_agent import admission_for
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils import dream_capacity
-from utils.dream_cost import charge_attempts, conservative_attempt_micro, estimate_tokens, price_attempt
+from utils.dream_cost import (
+    charge_attempts,
+    conservative_attempt_micro,
+    estimate_tokens,
+    price_attempt,
+    price_weighted_tokens,
+)
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.shaped_agent import Turn
@@ -67,13 +77,36 @@ def input_token_estimate(messages, mount, *, prior_prompt_tokens=None, prior_mes
     return prior_prompt_tokens + estimate_tokens(message_bytes(new_messages))
 
 
-def attempt_room(messages, mount, *, prior_prompt_tokens=None, prior_message_count=0, completion_limit=4096):
+def attempt_room(
+    messages,
+    mount,
+    *,
+    prior_prompt_tokens=None,
+    prior_message_count=0,
+    cached_tokens_estimate=None,
+    completion_limit=4096,
+):
     """One attempt: estimated input plus bounded completion. No second-attempt halving."""
     estimate = input_token_estimate(
         messages, mount, prior_prompt_tokens=prior_prompt_tokens, prior_message_count=prior_message_count
     )
     budget = mount.budget.tokens or 0
-    room = min(CONTEXT_TOKENS, budget) - estimate
+    context_room = CONTEXT_TOKENS - estimate
+    known_cached = (
+        min(cached_tokens_estimate, estimate)
+        if type(cached_tokens_estimate) is int and cached_tokens_estimate >= 0
+        else None
+    )
+    budget_input = price_weighted_tokens(
+        DREAM_PROVIDER,
+        DREAM_MODEL,
+        prompt_tokens=estimate,
+        cached_tokens=known_cached,
+        completion_tokens=0,
+        cache_reported=known_cached is not None,
+    )
+    budget_room = budget - budget_input
+    room = min(context_room, budget_room)
     if room < 128:
         raise ValueError('dream_input_token_budget')
     completion = min(completion_limit, room)
@@ -115,6 +148,7 @@ def _price_aggregate(turn, aggregate, ceiling):
         turn.cached_tokens = _required_int(priced.get('cached_tokens'))
         turn.cache_unreported_tokens = _required_int(priced.get('cache_unreported_tokens'))
         turn.accounted_tokens = _required_int(priced.get('tokens'))
+        turn.price_weighted_tokens = _required_int(priced.get('price_weighted_tokens'))
         status = priced.get('cost_status')
         if status not in {'priced', 'unpriced'}:
             raise ValueError('dream_invalid_usage')
@@ -134,8 +168,24 @@ def _price_aggregate(turn, aggregate, ceiling):
             _apply_cost(turn, None, 'unpriced')
         else:
             _apply_cost(turn, micro + extra * unknown, 'priced')
-        return
-    _apply_cost(turn, micro, status)
+    else:
+        _apply_cost(turn, micro, status)
+    cache_reported = (
+        aggregate.get('cache_usage_complete') is True
+        if 'cache_usage_complete' in aggregate
+        else turn.cached_tokens is not None
+    )
+    weighted = price_weighted_tokens(
+        DREAM_PROVIDER,
+        DREAM_MODEL,
+        prompt_tokens=turn.prompt_tokens,
+        cached_tokens=turn.cached_tokens,
+        completion_tokens=turn.completion_tokens,
+        cache_reported=cache_reported,
+    )
+    if turn.accounted_tokens is not None:
+        weighted += max(0, turn.accounted_tokens - turn.tokens)
+    turn.price_weighted_tokens = weighted
 
 
 def turn_from_usage(aggregate, ceiling):
@@ -165,7 +215,12 @@ async def model_turn(
     usage_sink=None,
     prior_prompt_tokens=None,
     prior_message_count=0,
+    cached_tokens_estimate=None,
 ):
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
+    ):
+        raise CapacityWait('usage_budget_exhausted')
     if lane not in {MAIN_LANE, VERIFY_LANE}:
         raise ValueError('dream_invalid_lane')
     _estimate, completion = attempt_room(
@@ -173,9 +228,11 @@ async def model_turn(
         mount,
         prior_prompt_tokens=prior_prompt_tokens,
         prior_message_count=prior_message_count,
+        cached_tokens_estimate=cached_tokens_estimate,
         completion_limit=completion_limit,
     )
     ceiling = _estimate + completion
+    await warm_rollout_cohorts(uid)
     mode, allowlisted = admission_for(uid)
     model = await dream_capacity.available_model(mode=mode, owner_allowlisted=allowlisted)
     if model is None:

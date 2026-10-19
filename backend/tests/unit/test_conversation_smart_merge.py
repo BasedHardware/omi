@@ -14,6 +14,7 @@ import pytest
 
 from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges, action_item_refresh as refresh_db
@@ -196,7 +197,6 @@ class World:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     return World(monkeypatch)
 
 
@@ -229,13 +229,6 @@ def test_unset_mode_is_merge_by_default(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
     assert config.smart_merge_mode() is config.SmartMergeMode.MERGE
     assert config.DEFAULT_SMART_MERGE_MODE is config.SmartMergeMode.MERGE
-
-
-def test_uid_allowlist(monkeypatch):
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, 'a, b')
-    assert config.smart_merge_uid_allowed('a') and not config.smart_merge_uid_allowed('c')
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, '')
-    assert config.smart_merge_uid_allowed('c')
 
 
 def test_metric_reason_is_bounded_to_known_values(monkeypatch):

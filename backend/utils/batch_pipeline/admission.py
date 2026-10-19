@@ -3,6 +3,8 @@
 import math
 import time
 
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
+from utils.stt_cap_dispatch import sync_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -34,7 +36,17 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
+            if cap_dispatch_enabled() and not sync_allowed(
+                job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet'
+            ):
+                retries[segment] = 60
+                continue
             if int(job['priority']) == 0:
+                # Known overshoot, intentionally unchanged: these fair-use reads
+                # are check-then-act with no reservation, and the meter advances
+                # only at projection, so in-flight audio is invisible. Each
+                # worker replica can admit one batch past an exhausted ceiling;
+                # the bound scales with replicas x batch size x unit length.
                 restricted, retry_after = get_hard_restriction_status(job['owner_id'])
                 if restricted:
                     retries[segment] = max(1, min(86400, retry_after or 3600))

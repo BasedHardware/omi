@@ -14,7 +14,9 @@ sum(increase(omi_stt_replay_queue_high_water_count{job="backend-listen-metrics",
 sum by (from_mode,to_mode,reason,outcome) (increase(omi_fallback_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}",component="stt_live_session"}[15m]))
 sum by (provider,phase) (increase(omi_live_stt_terminal_failures_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}",phase=~"connection|send"}[15m]))
 sum by (provider) (increase(omi_live_session_terminal_after_text_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
-min_over_time((abs(sum by (instance,target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (instance,target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (instance,target) (omi_stt_managed_legs_open{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"})))[2m:15s])
+# Accounting diagnostic only: HOLD for investigation, never an automatic serving abort.
+# Transport release and settlement are independent. Baseline both arms; see live-stt-routing.md.
+sum by (pod,target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (pod,target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}) - sum by (pod,target) (omi_stt_managed_legs_open{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"})
 
 # Proposed fleet watches, with manual for: 1m semantics (no alert rules installed).
 # Evaluate each comparison every 15s. Fire only after five consecutive TRUE
@@ -49,3 +51,7 @@ up{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track="canar
 backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary",pod=~"${canary_pods:regex}"}
 # Adapter query: compare against external.metrics API value (API uses milli-units).
 avg(backend_listen_active_ws_connections{job="backend-listen-metrics",listen_track!="canary"})
+
+# Exhausted-chain events / accepts: aggregate both sides before division because
+# their labels differ. Repeat with [30m] and exact control pods; missing = HOLD.
+sum(increase(omi_stt_chain_exhausted_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m])) / sum(increase(omi_listen_accepted_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))

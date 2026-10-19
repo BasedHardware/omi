@@ -167,7 +167,12 @@ Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildW
 }
 
 Future<void> _pumpPage(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(_app(sync, const OnTheWayPage(multiFileSync: true), extras: extras));
+  // The fixtures start a few minutes into 1970: pin Today there so their day opens by default.
+  OnTheWayPage.resetFolds();
+  await tester.pumpWidget(
+    _app(sync, OnTheWayPage(multiFileSync: true, clock: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000)),
+        extras: extras),
+  );
   await tester.pump();
 }
 
@@ -288,7 +293,7 @@ void main() {
       await tester.tap(find.byKey(_row));
       await tester.pumpAndSettle();
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsOneWidget);
+      expect(find.text('1 recording · 4m on the way'), findsOneWidget);
     });
 
     // Home mounts the row inside a CustomScrollView's slivers, where a plain
@@ -321,13 +326,11 @@ void main() {
   });
 
   group('OnTheWayPage', () {
-    testWidgets('groups recordings by how close they are to done', (tester) async {
+    testWidgets('shows how close each recording is to done', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));
 
-      expect(find.text('ALMOST READY'), findsOneWidget);
       expect(find.text('Transcribing…'), findsOneWidget);
-      expect(find.text('SYNCING'), findsOneWidget);
       expect(find.text('On your device'), findsOneWidget);
     });
 
@@ -337,7 +340,7 @@ void main() {
       await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
 
       expect(find.text('On your device'), findsNothing);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Transcribing…'), findsOneWidget);
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
@@ -412,8 +415,7 @@ void main() {
             device: 'pendant',
           );
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
-      expect(find.textContaining('· 10m'), findsOneWidget);
-      expect(find.textContaining('·'), findsOneWidget);
+      expect(find.text('1 recording · 10m on the way'), findsOneWidget);
     });
 
     test('the catching-up check is answered once per WAL list, not per progress tick', () {
@@ -500,7 +502,7 @@ void main() {
     });
 
     testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
-      final now = DateTime.now();
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
       final conversations = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
         isSignedIn: () => true,
@@ -524,7 +526,7 @@ void main() {
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
-      final now = DateTime.now();
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
       final conversations = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
         isSignedIn: () => true,
@@ -544,7 +546,7 @@ void main() {
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
       expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Waiting to sync'), findsNothing);
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
@@ -563,14 +565,12 @@ void main() {
         device: 'pendant',
       );
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
-      expect(find.text('ALMOST READY'), findsNothing);
+      expect(find.text('Transcribing…'), findsNothing);
       expect(find.text('Waiting to sync'), findsOneWidget);
     });
 
-    testWidgets('a transfer with no recording listed yet sits under Syncing', (tester) async {
+    testWidgets('a transfer with no recording listed yet still reads as in progress', (tester) async {
       await _pumpPage(tester, _FakeSync(syncing: true));
-      expect(find.text('SYNCING'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsNothing);
       expect(find.text('Downloading from your device'), findsOneWidget);
     });
 

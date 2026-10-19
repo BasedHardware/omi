@@ -53,6 +53,84 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     ]
 
 
+def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm not installed')
+    command = [
+        helm,
+        'template',
+        'prod-omi-parakeet',
+        str(CHART),
+        '-f',
+        str(CHART / 'prod_omi_parakeet_values.yaml'),
+        '--set',
+        'autoscaling.demand.enabled=true',
+        '--set-string',
+        'image.tag=packing-contract-test',
+        '--show-only',
+        'templates/hpa.yaml',
+    ]
+    hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
+    assert hpa['spec']['minReplicas'] == 3 and hpa['spec']['maxReplicas'] == 12
+    metrics = hpa['spec']['metrics']
+    assert all(metric['type'] == 'Pods' for metric in metrics)
+    targets = {metric['pods']['metric']['name']: str(metric['pods']['target']['averageValue']) for metric in metrics}
+    assert targets == {
+        'parakeet_active_requests_total': '2',
+        'parakeet_live_queue_age_seconds': '0.75',
+        'parakeet_backfill_queue_age_seconds': '30',
+    }
+
+
+def test_packing_is_dark_and_admission_remains_two_thirty_five():
+    values = _values('prod')
+    assert _literal_env(values)['PARAKEET_PACKING_ENABLED'] == 'false'
+    assert _literal_env(values)['PARAKEET_EXPLICIT_CUDA_GRAPHS'] == 'false'
+    assert values['autoscaling']['requestsPerPod'] == 2
+    assert values['autoscaling']['targetGPUUtilization'] == 35
+
+
+@pytest.mark.parametrize('demand_enabled', [False, True])
+def test_workload_only_hpa_omits_mixed_latency_and_preserves_capacity_controls(demand_enabled):
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm not installed')
+    assert _values('prod')['autoscaling']['workloadOnly'] is False
+    command = [
+        helm,
+        'template',
+        'prod-omi-parakeet',
+        str(CHART),
+        '-f',
+        str(CHART / 'prod_omi_parakeet_values.yaml'),
+        '--set',
+        'autoscaling.workloadOnly=true',
+        '--set',
+        f'autoscaling.demand.enabled={str(demand_enabled).lower()}',
+        '--set-string',
+        'image.tag=workload-hpa-contract-test',
+        '--show-only',
+        'templates/hpa.yaml',
+    ]
+    hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
+    spec = hpa['spec']
+    assert (spec['minReplicas'], spec['maxReplicas']) == (3, 12)
+    assert spec['behavior'] == _values('prod')['autoscaling']['behavior']
+    metrics = {m[m['type'].lower()]['metric']['name']: m[m['type'].lower()]['target'] for m in spec['metrics']}
+    expected = {'parakeet_active_requests_total': {'type': 'AverageValue', 'averageValue': '2'}}
+    if demand_enabled:
+        expected.update(
+            {
+                'parakeet_live_queue_age_seconds': {'type': 'AverageValue', 'averageValue': '0.75'},
+                'parakeet_backfill_queue_age_seconds': {'type': 'AverageValue', 'averageValue': '30'},
+            }
+        )
+    else:
+        expected['parakeet_gpu_utilization'] = {'type': 'Value', 'value': '35'}
+    assert metrics == expected
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_parakeet_probes_remove_and_recycle_fatal_gpu_workers(environment):
     values = _values(environment)

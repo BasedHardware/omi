@@ -31,6 +31,8 @@ class _Ref:
         self.id = doc_id
         self.data = data
         self.has_legacy_photo = has_legacy_photo
+        self.attention_refs = {}
+        self.parent = SimpleNamespace(parent=SimpleNamespace(collection=lambda name: _Collection(self.attention_refs)))
 
     def get(self, transaction=None):
         del transaction
@@ -517,6 +519,27 @@ def test_retryable_processing_failure_increments_the_attempt_budget():
     assert jobs._mark_finalization_retryable_txn(transaction, ref, 2, 4, 'processing_failed', now) is True
     assert transaction.updates[0][1]['attempt_count'] == 1
     assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
+
+
+def test_repeated_record_owner_contention_does_not_consume_processing_budget():
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {'status': 'queued', 'dispatch_generation': 2, 'lease_epoch': 4, 'attempt_count': 4, 'worker_claim_count': 4},
+    )
+    for _ in range(7):
+        claim_tx = _Transaction()
+        claim = jobs._claim_finalization_job_txn(claim_tx, ref, 2, False, 60, now, count_worker_claim=True)
+        assert claim['attempt_count'] == 4
+        ref.data.update(claim_tx.updates[0][1])
+        transaction = _Transaction()
+        assert jobs._mark_finalization_retryable_txn(
+            transaction, ref, 2, claim['lease_epoch'], 'record_owner_contention', now, count_attempt=False
+        )
+        update = transaction.updates[0][1]
+        assert update['status'] == 'queued' and update['attempt_count'] == 4
+        assert update['worker_claim_count'] == 4
+        ref.data.update(update)
 
 
 def test_finalization_completion_requires_durable_fanout_completion():
