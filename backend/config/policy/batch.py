@@ -88,13 +88,9 @@ def resolve_batch_policy(
         valid_percent = math.isfinite(float(percent_raw)) and 0 <= float(percent_raw) <= 100
     except ValueError:
         valid_percent = False
-    allowlisted = cohort('batch-pipeline', 'BATCH_PIPELINE_UID_ALLOWLIST')
-    batch = (
-        enabled('BATCH_PIPELINE_ENABLED', strip=False)
-        and valid_percent
-        and bool(uid)
-        and (allowlisted or cohort_bucket(uid, COHORT_SALTS['batch-pipeline']) < percent)
-    )
+    eligible = enabled('BATCH_PIPELINE_ENABLED', strip=False) and valid_percent and bool(uid)
+    allowlisted = eligible and cohort('batch-pipeline', 'BATCH_PIPELINE_UID_ALLOWLIST')
+    batch = eligible and (allowlisted or cohort_bucket(uid, COHORT_SALTS['batch-pipeline']) < percent)
     live_admission = enabled('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', strip=False)
     retire = min(parse_percent(env.get('BATCH_LIVE_STT_RETIRE_PERCENT', '0')), percent)
     final_pass = False

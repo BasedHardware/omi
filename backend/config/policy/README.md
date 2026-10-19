@@ -25,7 +25,9 @@ other parts. First-summary coalescing retains the original obligation's stamp;
 a new obligation gets a new stamp at creation.
 
 Pre-E1 admission rows acquire a durable fallback and `policy_source=fallback`,
-with bounded telemetry. Redis repair preserves TTL and concurrent progress. Old
+with bounded telemetry. Redis repair preserves TTL and concurrent progress;
+status reads remain pure. Batch publication pins the existing admission part
+after acquiring its publication lease, through `load_sync_job_policy`. Old
 Firestore bindings adopt the recorded admission policy during comparison while
 retaining all other identity checks. Missing stage parts are resolved by their
 owner on first use; a partial recorded dict is already a stamp and uses defaults.

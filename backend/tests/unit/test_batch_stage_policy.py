@@ -208,3 +208,13 @@ def test_first_scheduler_failure_stamps_legacy_lease_and_emits_committed_fallbac
     row = store.get('jobs', 'old')
     assert row['policy_parts']['scheduler']['max_attempts'] == 2
     assert row['policy_source'] == 'fallback' and events == ['fallback', 'stage']
+
+
+def test_disabled_recovery_does_not_read_the_cohort(monkeypatch):
+    import config.policy.stages as stages
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError('disabled recovery must not load membership')
+
+    monkeypatch.setattr(stages, 'member', unexpected)
+    assert not stages.resolve_stage_policy('owner', 'recovery', flags={}).recovery_enabled

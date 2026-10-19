@@ -268,19 +268,35 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
         # fenced mutation paths below already guard the identical json.loads; an unparseable job
         # is treated as an unknown job.
         return None
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
+
+
+def load_sync_job_policy(job_id: str, *, policy=None) -> Optional[Dict[str, Any]]:
+    """Mutating policy read for a unit owner; status/lease probes stay pure.
+
+    Batch publication supplies the admission policy already pinned on its
+    binding. Legacy standalone callers may resolve once here instead.
+    """
+    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
+    if not data:
+        return None
+    try:
+        raw = json.loads(_as_redis_text(data))
+    except (TypeError, ValueError):
+        return None
     if not isinstance(raw, dict):
         return None
     if isinstance(raw.get('policy'), dict) or not isinstance(raw.get('uid'), str):
-        return cast(Dict[str, Any], raw)
-    return _pin_legacy_job_policy(job_id, raw, _as_redis_text(data))
+        return raw
+    return _pin_legacy_job_policy(job_id, raw, _as_redis_text(data), policy=policy)
 
 
-def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str) -> Optional[Dict[str, Any]]:
+def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str, *, policy=None) -> Optional[Dict[str, Any]]:
     """CAS an old job's first policy without losing progress or resetting TTL."""
     from config.policy import resolve_batch_policy
     from config.policy.telemetry import record_policy_source
 
-    policy = resolve_batch_policy(job['uid'], source='fallback')
+    policy = policy or resolve_batch_policy(job['uid'], source='fallback')
     original_uid = job['uid']
     script = (
         "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end "
@@ -291,9 +307,6 @@ def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str) -> Option
         updated = {**job, 'policy': policy.to_dict(), 'policy_source': 'fallback'}
         if r.eval(script, 1, key, raw, json.dumps(updated, default=str)) == 1:
             record_policy_source('fallback', policy.policy_id)
-            record_fallback(
-                component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='recovered'
-            )
             return updated
         current = r.get(key)
         if not current:

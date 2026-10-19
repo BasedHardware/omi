@@ -112,7 +112,7 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
     if stage == 'recovery':
         mode = env.get('BATCH_PIPELINE_RECOVERY_MODE', 'off')
         all_admitted = mode.lower() == 'on' and boolean(env, 'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', strip=False)
-        allowlisted = member(
+        allowlisted = mode.strip().lower() == 'on' and member(
             uid, env, 'batch-pipeline-recovery', 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', explicit=flags is not None
         )
         return RecoveryPolicy(

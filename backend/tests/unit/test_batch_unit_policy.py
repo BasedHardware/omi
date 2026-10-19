@@ -267,13 +267,27 @@ def test_redis_legacy_policy_is_persisted_once_without_resetting_ttl(sync_jobs_w
     key = jobs._key(jobs.JOB_KEY_PREFIX + 'legacy')
     redis.set(key, json.dumps({'uid': 'owner', 'job_id': 'legacy', 'processed_segments': 3}), ex=100)
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '2')
-    first = jobs.get_sync_job('legacy')
+    first = jobs.load_sync_job_policy('legacy')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '19')
-    second = jobs.get_sync_job('legacy')
+    second = jobs.load_sync_job_policy('legacy')
     assert first['policy'] == second['policy']
     assert second['policy']['batch_percent'] == 2
     assert second['processed_segments'] == 3 and second['policy_source'] == 'fallback'
     assert 95 <= redis.ttl(key) <= 100
+
+
+def test_redis_owner_pins_the_existing_admission_policy(sync_jobs_with_redis, monkeypatch):
+    jobs, redis = sync_jobs_with_redis
+    key = jobs._key(jobs.JOB_KEY_PREFIX + 'legacy')
+    original = json.dumps({'uid': 'owner', 'job_id': 'legacy', 'processed_segments': 3})
+    redis.set(key, original, ex=100)
+    admitted = BatchUnitPolicy(batch_enabled=True, batch_percent=3)
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '99')
+    assert jobs.get_sync_job('legacy') == json.loads(original)
+    assert redis.get(key) == original.encode()
+    pinned = jobs.load_sync_job_policy('legacy', policy=admitted)
+    assert pinned['policy'] == admitted.to_dict()
+    assert jobs.get_sync_job('legacy') == pinned
 
 
 def test_redis_policy_cas_preserves_concurrent_progress(sync_jobs_with_redis, monkeypatch):
@@ -293,7 +307,7 @@ def test_redis_policy_cas_preserves_concurrent_progress(sync_jobs_with_redis, mo
         return original_eval(script, *args)
 
     monkeypatch.setattr(redis, 'eval', race)
-    assert jobs.get_sync_job('legacy')['processed_segments'] == 4
+    assert jobs.load_sync_job_policy('legacy')['processed_segments'] == 4
     assert json.loads(redis.get(key))['policy_source'] == 'fallback'
 
 
@@ -311,7 +325,7 @@ def test_redis_policy_cas_adopts_an_existing_winner(sync_jobs_with_redis, monkey
         return original_eval(script, *args)
 
     monkeypatch.setattr(redis, 'eval', race)
-    assert jobs.get_sync_job('legacy')['policy'] == winner
+    assert jobs.load_sync_job_policy('legacy')['policy'] == winner
 
 
 def test_guard_rejects_a_stage_reresolving_through_a_legacy_getter():
