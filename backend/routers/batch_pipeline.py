@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response, JSONResponse
 
-from config.batch_pipeline import read_only_metrics_enabled, async_projection_enabled
+from config.batch_pipeline import read_only_metrics_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
@@ -165,7 +165,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     authorizes a second provider invocation. The payload carries no owner ID.
     """
     service = body.service()
-    if not service.recovery or os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+    if not service.recovery:
         # Contract (d): a switched-off target answers 409, never 503 (fast 5xx throttles the queue).
         return retry_response(RetryReason.KILL_SWITCH_OFF)
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
@@ -207,10 +207,7 @@ async def gpu_idle(body: IdleRequest):
 
 @router.post('/reconcile', include_in_schema=False)
 async def reconcile(body: WorkerRequest):
-    if async_projection_enabled():
-        await body.service().reconcile_async(recover_quarantine=True)
-    else:
-        await run_blocking(sync_executor, body.service().reconcile, recover_quarantine=True)
+    await body.service().reconcile_async(recover_quarantine=True)
     return {'status': 'reconciled'}
 
 
@@ -219,11 +216,9 @@ async def metrics():
     service = serving_for_stage(current_stage())
     if read_only_metrics_enabled() and service.metrics is not None:
         await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
-    elif async_projection_enabled():
-        # A scrape is a periodic tick: maintenance runs on the lease holder only.
-        await service.reconcile_async(periodic=True)
     else:
-        await run_blocking(sync_executor, service.reconcile, periodic=True)
+        # Periodic maintenance uses the leader lease; per-unit policy decides follow-ups.
+        await service.reconcile_async(periodic=True)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 

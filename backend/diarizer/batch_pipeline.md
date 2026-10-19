@@ -33,6 +33,24 @@ speaker labels never pool across owners. Payloads retain words and turns as
 separate evidence for the downstream projection/assignment layer; this worker
 does not name speakers or write user conversation records.
 
+Capture units are cut at upload boundaries, so a unit whose VAD speech starts at
+sample 0 usually starts mid-utterance, and Parakeet TDT v3 then decodes nothing
+(decoder start-state blank; KB `projects/parakeet-primary/evidence/2026-09-21-tdt-empty-output-root-cause.md`).
+With `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` set (default 0, off until an L4
+community-1 replay qualifies it; 8 is the evaluated value), such a unit's first
+ASR window is prefixed with the contiguous predecessor of the same capture
+stream (same owner, privacy generation and conversation; gap within 1s; an
+overlap is trimmed so audio is never replayed), starting 0.5s before the onset
+of the speech run that crosses the seam. Predecessors come from the same flight
+or a bounded process-local tail cache (`BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS`,
+default 64, 10-minute TTL; other-generation tails of the owner are dropped on
+sight). Window core ownership still starts at the unit's first sample, so
+prefix words are never emitted, double-counted, or counted as the unit's ASR
+output (an empty unit stays `empty_asr`); a seam-straddling word is clipped to
+the capture. The padded empty-ASR retry keeps its synthetic silence. Ordering,
+owner, merge and paid-recovery semantics are unchanged; only the ASR input of
+the first window changes.
+
 Flight packing (`BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED`, **default off**; only
 the exact value `true` enables it; `BATCH_PIPELINE_FLIGHT_BATCH_SECONDS`, default
 1800) removes duplicated pyannote work inside one locked flight. Community-1
