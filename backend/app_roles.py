@@ -106,6 +106,8 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount('updates'),
     Mount('sync', roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
     Mount('batch_pipeline', roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
+    Mount('enrichment', roles=frozenset({AppRole.WORKERS})),  # Cloud Tasks: /v2/enrichment/run (lane 9)
+    Mount('batch_provider_stt', roles=frozenset({AppRole.WORKERS})),  # Cloud Tasks: provider-STT run (lane 8)
     Mount('apps'),
     Mount('calendar_meetings'),
     Mount('google_calendar'),

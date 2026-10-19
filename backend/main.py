@@ -35,6 +35,8 @@ from utils.observability.external_lists import ExternalListMetricsMiddleware
 from routers import messaging
 from routers import (
     fleet_telemetry,
+    enrichment,
+    batch_provider_stt,
     budget_choice,
     candidate_integration_sweep,
     chat_receipts,
@@ -290,6 +292,9 @@ app.include_router(firmware.router)
 app.include_router(updates.router)
 app.include_router(sync.router)
 app.include_router(batch_pipeline.router)
+# Legacy-sync retirement consumers (contracts (a)/(d)); lane 7's B8 role map owns where they serve.
+app.include_router(enrichment.router)
+app.include_router(batch_provider_stt.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
