@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from config.policy.listen import service_models, listen_value
+
 import asyncio
 import os
 import time
@@ -101,7 +103,7 @@ class LiveChainSession:
         constructed: list[LiveLegSocket] = []
         language = host.stt_language
         uid = host.request.uid
-        models = [m.strip() for m in st.stt_service_models]
+        models = [m.strip() for m in service_models(st.stt_service_models)]
         keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
         demand = getattr(self.receiver, 'live_demand', None)
@@ -723,7 +725,9 @@ class LiveLegSocket(STTSocket):
         self._target_death_recorded = True
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
-            circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+            circuit.record_account_failure(
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+            )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
@@ -783,7 +787,7 @@ class LiveLegSocket(STTSocket):
             elif self._pending_capture_sample is not None:
                 self._pending_capture_sample = max(self._pending_capture_sample, self._emitted_capture_sample)
         if any(str(segment.get('text') or '').strip() for segment in segments) and self._transcript_outcome is None:
-            deadline = max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30')))
+            deadline = max(1.0, float(listen_value('no_text_seconds', 'STT_NO_TEXT_SECONDS', '30')))
             if self._first_speech_at is not None and time.monotonic() - self._first_speech_at <= deadline:
                 self._record_transcript_outcome('text')
             elif self._first_speech_at is not None:
@@ -810,7 +814,9 @@ class LiveLegSocket(STTSocket):
     def _check_no_text_deadline(self) -> None:
         if self._first_speech_at is None or self._transcript_outcome is not None:
             return
-        if time.monotonic() - self._first_speech_at >= max(1.0, float(os.getenv('STT_NO_TEXT_SECONDS', '30'))):
+        if time.monotonic() - self._first_speech_at >= max(
+            1.0, float(listen_value('no_text_seconds', 'STT_NO_TEXT_SECONDS', '30'))
+        ):
             self._record_transcript_outcome('no_text')
 
     @property

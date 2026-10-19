@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from config.policy import kill_switch
+from config.policy.listen import current_listen_policy
+
 import asyncio
 import logging
 import math
@@ -110,11 +113,10 @@ MAX_EMPTY_STREAK = 4
 
 def stranded_drift_settle_enabled() -> bool:
     """Kill switch, default on: settle stranded answers whose text was unplaceable."""
-    return os.getenv('PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', 'true').strip().lower() not in {
-        'false',
-        '0',
-        'off',
-    }
+    policy = current_listen_policy.get()
+    return kill_switch(
+        'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', policy_id=policy.policy_id if policy is not None else 'control'
+    )
 
 
 def _positive_float_env(name: str, default: float) -> float:

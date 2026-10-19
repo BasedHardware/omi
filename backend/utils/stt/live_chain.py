@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from config.policy.listen import listen_value
+
 import asyncio
 import logging
-import os
 import threading
 import time
 from collections import deque
@@ -70,7 +71,7 @@ _recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
 
 def _connect_failures_before_shed() -> int:
     try:
-        return min(1000, max(1, int(os.getenv('STT_SHED_CONNECT_FAILURES', '3'))))
+        return min(1000, max(1, int(listen_value('shed_connect_failures', 'STT_SHED_CONNECT_FAILURES', '3'))))
     except ValueError:
         return 3
 
@@ -388,7 +389,7 @@ async def connect_configured_chain(
     prior_outcome: LiveLegOutcome | None = None
     attempted = False
     primary_open = False
-    probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
+    probes = max(1, int(listen_value('circuit_half_open_probes', 'STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
     capacity_resorts = []
     backoff_skipped = []
@@ -631,7 +632,11 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    )
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
@@ -871,7 +876,11 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    )
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
