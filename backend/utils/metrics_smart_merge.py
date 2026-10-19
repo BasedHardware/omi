@@ -35,7 +35,6 @@ CONVERSATION_SMART_MERGE_LABELS = {
 }
 CONVERSATION_SMART_MERGE_REASONS = frozenset(
     {
-        'uid_not_allowed',
         'not_eligible_source',
         'not_capture_end',
         'conversation_not_eligible',
@@ -191,27 +190,6 @@ def record_smart_merge_flatten(outcome: str, reason: str) -> None:
         OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL.labels(
             outcome=outcome if outcome in SMART_MERGE_FLATTEN_OUTCOMES else 'other',
             reason=reason if reason in SMART_MERGE_FLATTEN_REASONS else 'other',
-        ).inc()
-    except Exception:
-        pass
-
-
-CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS = frozenset({'merge', 'kept', 'skip'})
-CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL = _reuse_or_create(
-    Counter,
-    'omi_conversation_smart_merge_wallclock_shadow_total',
-    'Smart-merge wall-clock shadow verdicts for proven same-recording pairs the legacy gate skipped. '
-    'Never labeled by uid. Per-pod; sum() across jobs.',
-    ['would', 'reason'],
-)
-
-
-def record_conversation_smart_merge_wallclock_shadow(would: str, reason: str) -> None:
-    """Never raises: observability must not change a finalization outcome."""
-    try:
-        CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_TOTAL.labels(
-            would=would if would in CONVERSATION_SMART_MERGE_WALLCLOCK_SHADOW_WOULDS else 'other',
-            reason=reason if reason in CONVERSATION_SMART_MERGE_REASONS else 'other',
         ).inc()
     except Exception:
         pass

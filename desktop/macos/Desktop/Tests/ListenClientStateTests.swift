@@ -64,4 +64,103 @@ final class ListenClientStateTests: XCTestCase {
         .init(foreground: false, transcriptVisible: false),
       ])
   }
+
+  func testSurfaceReportingURLAcceptsBothBackendBaseShapes() {
+    for base in ["https://backend.example.invalid", "https://backend.example.invalid/"] {
+      XCTAssertEqual(
+        ListenClientState.surfaceReportURL(baseURL: base)?.absoluteString,
+        "https://backend.example.invalid/v1/users/client-state")
+    }
+  }
+
+  func testOcclusionDuringHeaderPreparationReadsLatestStateAndDrainsClose() async {
+    var open = true
+    var release: CheckedContinuation<Void, Never>?
+    let preparing = expectation(description: "Preparing headers")
+    var sent: [Bool] = []
+    let state = ListenClientState(
+      foreground: true, observeApplication: false, surfaceReportingEnabled: true,
+      surfaceOpen: { open },
+      surfaceTransport: { latest in
+        if sent.isEmpty {
+          await withCheckedContinuation { continuation in
+            release = continuation
+            preparing.fulfill()
+          }
+        }
+        sent.append(try XCTUnwrap(latest()["surface_open"] as? Bool))
+        return true
+      })
+    state.reportSurface()
+    await fulfillment(of: [preparing])
+    open = false
+    state.reportSurface()
+    release?.resume()
+    await state.waitForSurfaceReportsForTest()
+    XCTAssertEqual(sent, [false, false])
+  }
+
+  func testCloseWhileOpenIsOnTheWireIsSentImmediatelyAfterIt() async {
+    await assertCloseDrains(openDelivered: true)
+  }
+
+  func testQueuedCloseIsSentEvenWhenTheOpenFails() async {
+    await assertCloseDrains(openDelivered: false)
+  }
+
+  private func assertCloseDrains(openDelivered: Bool) async {
+    var open = true
+    var release: CheckedContinuation<Void, Never>?
+    let transmitting = expectation(description: "Open on wire")
+    var sent: [Bool] = []
+    let state = ListenClientState(
+      foreground: true, observeApplication: false, surfaceReportingEnabled: true,
+      surfaceOpen: { open },
+      surfaceTransport: { latest in
+        sent.append(try XCTUnwrap(latest()["surface_open"] as? Bool))
+        if sent.count == 1 {
+          await withCheckedContinuation { continuation in
+            release = continuation
+            transmitting.fulfill()
+          }
+        }
+        return sent.count == 1 ? openDelivered : true
+      })
+    state.reportSurface(heartbeat: true)
+    await fulfillment(of: [transmitting])
+    open = false
+    state.reportSurface()
+    release?.resume()
+    await state.waitForSurfaceReportsForTest()
+    XCTAssertEqual(sent, [true, false])
+  }
+
+  func testFailedCloseIsRetriedByClosedHeartbeatWithoutSpinning() async {
+    var open = true
+    var failClose = true
+    var sent: [Bool] = []
+    let state = ListenClientState(
+      foreground: true, observeApplication: false, surfaceReportingEnabled: true,
+      surfaceOpen: { open },
+      surfaceTransport: { latest in
+        let value = try XCTUnwrap(latest()["surface_open"] as? Bool)
+        sent.append(value)
+        if !value && failClose { throw URLError(.timedOut) }
+        return true
+      })
+    state.reportSurface()
+    await state.waitForSurfaceReportsForTest()
+    open = false
+    state.reportSurface()
+    await state.waitForSurfaceReportsForTest()
+    XCTAssertEqual(sent, [true, false])
+    failClose = false
+    state.reportSurface(heartbeat: true)
+    await state.waitForSurfaceReportsForTest()
+    XCTAssertEqual(sent, [true, false, false])
+    state.reportSurface(heartbeat: true)
+    await state.waitForSurfaceReportsForTest()
+    XCTAssertEqual(sent.count, 3)
+  }
+
 }

@@ -84,6 +84,8 @@ class ProviderRejection(str, Enum):
     INVALID_TOOLS = 'invalid_tools'
     INVALID_STREAM = 'invalid_stream'
     INVALID_OTHER = 'invalid_other'
+    INVALID_ATTACHMENT = 'invalid_attachment'
+    UNSUPPORTED_ATTACHMENT = 'unsupported_attachment'
     UNSUPPORTED_MODEL = 'unsupported_model'
     UNSUPPORTED_MESSAGES = 'unsupported_messages'
     UNSUPPORTED_RESPONSE_FORMAT = 'unsupported_response_format'

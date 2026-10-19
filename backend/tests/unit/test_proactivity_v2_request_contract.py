@@ -21,6 +21,7 @@ from llm_gateway.routers import dependencies
 from tests.unit.test_proactivity_v2_budget import NOW, Redis, store
 from tests.unit.test_proactivity_v2_producers import lane, mentor
 from utils.llm import gateway_client
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
 from utils import proactivity
 from utils import proactivity_producers as producers
 from utils.proactivity import claim_item, ensure_admitted, publish_item, run_proactivity_model
@@ -121,6 +122,8 @@ async def test_mentor_requests_reserve_and_settle(wire):
         receipt = wire.store.rows[(ATTEMPTS_COLLECTION, attempt_id)]
         assert receipt['request_id'] == ctx.call_id and receipt['feature'] == ctx.accounting.feature
         if 'messages' in payload:
+            assert payload['model'] == 'gpt-6-luna'
+            assert payload['prompt_cache_options'] == EXPLICIT_CACHE_OPTIONS
             assert payload['stream'] is False
             assert payload['max_completion_tokens'] == 2048
             assert payload['response_format']['type'] == 'json_schema'

@@ -409,6 +409,7 @@ def _host(websocket, channels=1):
     return SimpleNamespace(
         request=SimpleNamespace(websocket=websocket, uid='uid-1', codec='aac', sample_rate=16000, channels=channels),
         state=SimpleNamespace(
+            current_conversation_id=None,
             active=True,
             close_code=1001,
             last_audio_received_time=None,

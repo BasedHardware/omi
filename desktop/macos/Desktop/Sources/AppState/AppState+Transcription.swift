@@ -47,6 +47,7 @@ extension AppState {
     }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
+    isMicrophoneSignalMissing = false
     currentConversationRole = conversationRole
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
@@ -132,6 +133,7 @@ extension AppState {
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
         debugForceCloud: debugForceCloud,
+        wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName,
         preferLocalOnBasic: preferLocalOnBasic
       )
       let clientConversationId = UUID().uuidString.lowercased()
@@ -537,6 +539,7 @@ extension AppState {
                 self.recordSilentMicDiagnostic(
                   detection: nil, phase: "rebuild", result: "live_signal")
               }
+              self.handleSharedMicrophoneSignalRecovered(from: current)
               self.armedMicrophoneRecovery.recovered()
             }
           }
@@ -775,9 +778,9 @@ extension AppState {
     }
 
     captureGateInFlight = false
-    if let recoveryReason = pendingCoreAudioCaptureRecoveryReason {
-      pendingCoreAudioCaptureRecoveryReason = nil
-      await rebuildCoreAudioCaptureStack(reason: recoveryReason)
+    if let recovery = pendingCoreAudioCaptureRecovery {
+      pendingCoreAudioCaptureRecovery = nil
+      await rebuildCoreAudioCaptureStack(reason: recovery.reason, scope: recovery.scope)
       return
     }
     if let pendingDeviceID = pendingPreferredMicReapplyDeviceID {
@@ -1404,10 +1407,11 @@ extension AppState {
     stopDictationMicSuppressionMonitor()
     captureGateInFlight = false
     captureReconcilePending = false
-    pendingCoreAudioCaptureRecoveryReason = nil
+    pendingCoreAudioCaptureRecovery = nil
     pendingPreferredMicReapplyDeviceID = nil
     pendingPreferredMicReapplyDeviceName = nil
     silentMicRecoveryAttempts = 0
+    isMicrophoneSignalMissing = false
     silentMicHealedDeviceID = nil
     isAwaitingMeeting = false
     meetingBoundaryInProgress = false

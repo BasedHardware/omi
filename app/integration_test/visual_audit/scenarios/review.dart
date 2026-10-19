@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -24,6 +25,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 
@@ -121,6 +123,39 @@ const _spellingItem = ReviewItem(
   spelling: SpellingItem(termId: 'term-1', options: ['Paraform', 'Pairform']),
 );
 
+const _closeTaskSuggestion = ReviewItem(
+  itemId: 'agent_proposal:close',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'close_task',
+    targetLabel: 'Send Béla the signed SOW',
+    reason: 'In Thursday’s Paraform check-in you said the signed SOW went out that morning.',
+  ),
+);
+
+const _mergeSuggestion = ReviewItem(
+  itemId: 'agent_proposal:merge',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'merge_people',
+    targetLabel: 'Bela K',
+    otherLabel: 'Béla',
+    reason: 'Same company and phone number, and both appear in the Paraform pilot conversations.',
+  ),
+);
+
+const _memorySuggestion = ReviewItem(
+  itemId: 'agent_proposal:memory',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'memory',
+    targetLabel: 'Runs the Paraform pilot',
+    before: 'Runs the Paraform pilot for six weeks',
+    after: 'Runs the Paraform pilot, extended to eight weeks',
+    reason: 'In Monday’s sync Béla agreed to extend the pilot by two weeks.',
+  ),
+);
+
 /// A short silent WAV; the scenarios never play audio.
 Uint8List _clip() => Uint8List.fromList(List<int>.filled(44 + 3200, 0));
 
@@ -151,6 +186,13 @@ Future<void> _openSheet(AuditRun a, ReviewItem item) async {
     providers: [ChangeNotifierProvider<ReviewProvider>.value(value: review)],
   );
 }
+
+Person _auditPerson(String id, String name) => Person(
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+    );
 
 final _personPage = EntityPageData(
   entityId: 'person:p-bela',
@@ -541,8 +583,24 @@ final reviewScenarios = <AuditScenario>[
     page: _sheet,
     state: 'The speaker question; Béla preselected as the closest voice',
     run: (a) async {
-      await _openSheet(a, _speakerItem);
+      final people = PeopleProvider(
+        loadPeople: () async => PeopleListResponse(people: [
+          _auditPerson('p-priya', 'Priya Natarajan'),
+          _auditPerson('p-alex', 'Alex Rivera'),
+        ]),
+      );
+      await people.setPeople();
+      final review = await _loadedReview(a);
+      await a.pumpHost(
+        (context) => showReviewItemSheet(context, _speakerItem),
+        providers: [
+          ChangeNotifierProvider<ReviewProvider>.value(value: review),
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       await a.shot('Tap the speaker card');
+      await a.tap(find.byKey(const Key('review_speaker_someone_else')));
+      await a.shot('Tap Someone Else…: search every existing person', step: 'picker');
     },
   ),
   AuditScenario(
@@ -576,6 +634,29 @@ final reviewScenarios = <AuditScenario>[
       await _openSheet(a, _spellingItem);
       await a.tap(find.text('Paraform'));
       await a.shot('Choose a spelling');
+    },
+  ),
+  AuditScenario(
+    id: 'review-suggestions',
+    title: 'Review: Dream suggestions next to questions',
+    page: _reviewPage,
+    state: 'Dream suggests closing a task and merging two people; one regular question',
+    run: (a) async {
+      final review = await _loadedReview(a, items: const [_closeTaskSuggestion, _mergeSuggestion, _spellingItem]);
+      await a.pump(const ReviewPage(), scaffold: false, providers: [
+        ChangeNotifierProvider<ReviewProvider>.value(value: review),
+      ]);
+      await a.shot('Open Review after Dream ran');
+    },
+  ),
+  AuditScenario(
+    id: 'review-sheet-suggestion',
+    title: 'Detail sheet: a Dream suggestion',
+    page: _sheet,
+    state: 'Dream suggests rewriting a memory; current and suggested text with the reason',
+    run: (a) async {
+      await _openSheet(a, _memorySuggestion);
+      await a.shot('Tap the suggestion card');
     },
   ),
   AuditScenario(

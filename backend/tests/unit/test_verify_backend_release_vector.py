@@ -306,9 +306,13 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
     ]
 
 
-def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls() -> None:
+def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls(tmp_path: Path) -> None:
     preflight = _load_preflight()
     calls: list[list[str]] = []
+    # Project admission needs only this scope; unrelated service bindings make
+    # parsing the full production manifest dominate this fast boundary test.
+    manifest = tmp_path / 'runtime-env.yaml'
+    manifest.write_text('environments:\n  prod:\n    compute_project: based-hardware\n')
 
     with pytest.raises(ValueError, match="prod expects project 'based-hardware'"):
         preflight.migrate_legacy_public_bindings(
@@ -316,6 +320,7 @@ def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_cal
             env='prod',
             project='based-hardware-dev',
             region='us-central1',
+            manifest_path=manifest,
             runner=lambda command, **_kwargs: calls.append(command),
         )
 

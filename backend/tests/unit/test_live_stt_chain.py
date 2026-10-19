@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
+from utils.observability import demand_cohort as telemetry, fallback
 from utils.stt import (
     connect_backoff as connect_backoff_module,
     live_failure,
@@ -689,6 +690,49 @@ def _soniox_then_modulate(**overrides):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+@pytest.mark.parametrize('exhausted', [False, True])
+async def test_metric_failure_cannot_abort_selection_or_replace_typed_exhaustion(monkeypatch, failure, exhausted):
+    class RaisingMetric:
+        attempts = 0
+
+        def labels(self, **_labels):
+            if failure == 'labels':
+                self.attempts += 1
+                raise ValueError('synthetic label failure')
+            return self
+
+        def inc(self, *_args):
+            self.attempts += 1
+            raise ValueError('synthetic counter failure')
+
+    broken = RaisingMetric()
+    monkeypatch.setattr(fallback, 'FAILURE_DETAIL', broken)
+    monkeypatch.setattr(live_chain, 'CHAIN_EXHAUSTED', broken)
+    cohort = telemetry.DemandTelemetry('admitted')
+    token = telemetry.current_demand.set(cohort)
+    st._soniox_circuit.record_account_failure(600)
+    primary = AsyncMock(return_value=socket())
+    tail = AsyncMock(return_value=socket())
+    if exhausted:
+        tail.side_effect = RuntimeError('synthetic vendor dial failure')
+    try:
+        kwargs = _soniox_then_modulate(soniox=primary, modulate=tail)
+        if exhausted:
+            with pytest.raises(live_chain.LiveChainExhausted):
+                await live_chain.connect_configured_chain(**kwargs)
+        else:
+            _, selected = await live_chain.connect_configured_chain(**kwargs)
+            assert selected == st.STTService.modulate
+        primary.assert_not_awaited()
+        tail.assert_awaited_once()
+        assert broken.attempts > 0
+        assert cohort.exhausted == exhausted
+    finally:
+        telemetry.current_demand.reset(token)
+
+
+@pytest.mark.asyncio
 async def test_isolated_429_leaves_fresh_sessions_dialing_soniox(connect_backoff):
     soniox = AsyncMock(side_effect=SonioxRateLimitError('transient'))
     _, service = await live_chain.connect_configured_chain(**_soniox_then_modulate(soniox=soniox))
@@ -980,3 +1024,39 @@ async def test_rescue_probe_auth_records_on_the_probed_circuit(connect_backoff, 
     assert st._modulate_circuit._account_cooldown == 1800
     assert st._soniox_circuit._account_cooldown == soniox_bench
     assert st._soniox_circuit._opened_at == soniox_opened
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cheap_fails', [False, True])
+async def test_batch_preview_preference_keeps_managed_vendor_failover(monkeypatch, cheap_fails):
+    """The retirement preference still dials through policy and the ordinary chain."""
+    monkeypatch.setenv('STT_ROUTING_MODE', 'off')
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet-window'])
+    monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
+    primary, language, model = st.get_stt_service_for_language(
+        'en', multi_lang_enabled=False, prefer_window=True, window_uid='synthetic-batch-preview'
+    )
+    assert primary == st.STTService.parakeet and model == 'parakeet-window'
+    calls = []
+
+    async def cheap():
+        calls.append('parakeet')
+        if cheap_fails:
+            raise st.ParakeetConnectionError('capacity_full')
+        return socket()
+
+    async def vendor():
+        calls.append('soniox')
+        return socket()
+
+    _, actual = await st.connect_stt_socket_with_fallback(
+        primary_service=primary,
+        connect_primary=cheap,
+        connect_parakeet=cheap,
+        connect_soniox=vendor,
+        routing_uid='synthetic-batch-preview',
+        routing_language=language,
+        routing_models={'parakeet': model, 'soniox': 'soniox'},
+    )
+    assert actual.value == ('soniox' if cheap_fails else 'parakeet')
+    assert calls == (['parakeet', 'soniox'] if cheap_fails else ['parakeet'])

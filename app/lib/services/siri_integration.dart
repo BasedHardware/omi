@@ -881,8 +881,6 @@ class SiriIntegration extends SiriEventsApi {
                       limit: limit,
                       offset: cursor == null ? offset : 0,
                       cursor: cursor,
-                      view: MemoryReadView.all,
-                      forceView: true,
                     ))
                 .timeout(const Duration(seconds: 10));
         if (_uid != uid || _accountGeneration != generation) return;

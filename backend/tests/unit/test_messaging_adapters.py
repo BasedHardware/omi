@@ -9,8 +9,8 @@ import time
 from datetime import datetime, timezone
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
-import httpx
 import pytest
 from testing.messaging.adapter_contract import AdapterContract
 from testing.messaging.adapter_fakes import FixtureTransport, FixtureLedger, no_sleep
@@ -46,7 +46,7 @@ def signed(adapter, body, *, timestamp=None):
 def adapter(request, monkeypatch):
     transport, ledger = FixtureTransport(), FixtureLedger()
     if request.param == 'telegram':
-        result = TelegramAdapter(
+        result: Any = TelegramAdapter(
             '000:fixture-token', 'fixture_secret', transport=transport, ledger=ledger, sleep=no_sleep
         )
     else:
@@ -61,9 +61,9 @@ def adapter(request, monkeypatch):
     result.sent = []
     send = result.send
 
-    async def record(message, *, text=None, artifact=None, draft=False):
+    async def record(message, *, text=None, artifact=None, draft=False, link=None):
         result.sent.append(dict(message=message, text=text, artifact=artifact, draft=draft))
-        await send(message, text=text, artifact=artifact, draft=draft)
+        await send(message, text=text, artifact=artifact, draft=draft, **({'link': link} if link else {}))
 
     async def owned_bytes(artifact):
         return b'abc'
@@ -91,6 +91,290 @@ def signed_message(adapter):
 
 class TestProviderContracts(AdapterContract):
     pass
+
+
+@pytest.mark.parametrize(
+    'failure',
+    [
+        None,
+        'rejected',
+        'failure_rejected',
+        'error_frame',
+        'error_fallback',
+        'empty',
+        'cancelled',
+        'tool',
+        'timeout',
+        'unavailable',
+        'completion',
+        'history',
+    ],
+)
+def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, failure, caplog):
+    if adapter.channel != 'imessage':
+        return
+    from contextvars import ContextVar
+    from utils.messaging import history
+    from utils.observability.journeys import ClientJourneyAttempt
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    fallback_outcomes = []
+    from utils.messaging import gateway as gateway_module
+
+    monkeypatch.setattr(gateway_module, 'record_fallback', lambda **values: fallback_outcomes.append(values['outcome']))
+    complete = store.complete
+
+    def complete_job(path):
+        if failure == 'completion' and store.jobs[path].get('payload', {}).get('provider_message_id') == 'first':
+            raise RuntimeError('Synthetic completion failure')
+        complete(path)
+
+    monkeypatch.setattr(store, 'complete', complete_job)
+    code = '0123456789ABCDEF0123456789ABCDEF'
+    proof = store.mint('user', 'imessage', 'linq', 'code')['proof']
+    store.proofs[code] = store.proofs.pop(proof)
+    append_event = store.append_event
+    history_failed = False
+
+    def append_history(uid, session_id, event):
+        nonlocal history_failed
+        if failure == 'history' and event['role'] == 'assistant' and not history_failed:
+            history_failed = True
+            raise RuntimeError('Synthetic history persistence failure')
+        append_event(uid, session_id, event)
+
+    monkeypatch.setattr(store, 'append_event', append_history)
+    cleaned = []
+    usage: ContextVar[str | None] = ContextVar('fixture_usage', default=None)
+    turns = []
+
+    def turn(*args, **kwargs):
+        turns.append(args)
+
+        async def source():
+            token = usage.set('user')
+            try:
+                if failure == 'cancelled' and len(turns) == 1:
+                    raise asyncio.CancelledError
+                if failure == 'tool' and len(turns) == 1:
+                    raise RuntimeError('Synthetic tool failure')
+                if failure == 'empty' and len(turns) == 1:
+                    return
+                if failure in ('error_frame', 'error_fallback') and len(turns) == 1:
+                    yield 'error: {}\n\n'
+                    if failure == 'error_frame':
+                        return
+                yield 'done: ' + base64.b64encode(json.dumps({'text': 'Synthetic answer'}).encode()).decode() + '\n\n'
+            finally:
+                usage.reset(token)
+                cleaned.append(True)
+
+        return ClientJourneyAttempt('mobile_chat', 'unknown').observe_stream(
+            source(),
+            success_when=lambda frame: frame.startswith('done: '),
+            failure_when=lambda frame: frame.startswith('error: '),
+        )
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
+
+    async def deliver(kind, message_id, text=None):
+        value = json.loads(fixture('linq', kind))
+        value['data']['id'] = message_id
+        if text:
+            value['data']['parts'][0]['value'] = text
+        jobs = (await gateway.webhook(*signed(adapter, json.dumps(value).encode())))['jobs']
+        return jobs[0]
+
+    async def run():
+        link_job = await deliver('start', 'link', f'Hi Omi, link code {code}')
+        assert await gateway.process(link_job)
+        assert store.jobs[link_job]['status'] == 'done'
+        assert next(iter(store.identities.values()))['active']
+        first = await deliver('text', 'first')
+        if failure in ('rejected', 'failure_rejected'):
+            # Typing succeeds, final text is rejected, typing stops, failure reply succeeds.
+            adapter.transport.responses = [(200, {}, {}), (400, {'error': 'synthetic'}, {}), (200, {}, {})]
+            if failure == 'failure_rejected':
+                adapter.transport.responses.append((400, {'error': 'synthetic'}, {}))
+        elif failure == 'timeout':
+            adapter.transport.responses = (
+                [(200, {}, {})] + [DeliveryUncertain('Provider transport outcome unknown')] * 4 + [(200, {}, {})]
+            )
+        elif failure == 'unavailable':
+            adapter.transport.responses = [(200, {}, {})] + [(503, {'error': 'synthetic'}, {})] * 4 + [(200, {}, {})]
+        if failure not in (None, 'error_fallback'):
+            assert not await gateway.process(first)
+            assert store.jobs[first]['status'] == 'running'  # no replay of ambiguous effects
+            if failure in ('completion', 'history'):
+                assert adapter.sent[-1]['text'] == 'Synthetic answer'
+                assert fallback_outcomes == []
+            else:
+                assert 'could not finish' in adapter.sent[-1]['text']
+                assert fallback_outcomes == ['exhausted' if failure == 'failure_rejected' else 'degraded']
+                session = next(iter(store.sessions.values()))
+                assert not any(e['role'] == 'assistant' for e in store.events('user', session['id']))
+            assert not store.leases
+            assert not await gateway.process(first)
+        else:
+            assert await gateway.process(first)
+        assert cleaned == [True]
+        assert usage.get() is None
+        second = await deliver('text', 'second')
+        assert await gateway.process(second)
+        assert store.jobs[second]['status'] == 'done'
+        assert not store.leases
+        assert adapter.sent[-1]['text'] == 'Synthetic answer'
+
+    asyncio.run(run())
+    sends = [call[2]['json'] for call in adapter.transport.calls if call[1].endswith('/messages')]
+    assert sends[0]['message']['parts'][0]['value'].startswith('Account linked.')
+    assert all('parts' not in body and body['message']['idempotency_key'] for body in sends)
+    keys = [body['message']['idempotency_key'] for body in sends]
+    assert all(isinstance(item, str) and 1 <= len(item) <= 255 for item in keys)
+    if failure in ('timeout', 'unavailable'):
+        assert keys[1] == keys[2] == keys[3] == keys[4]
+        assert len({keys[0], keys[1], keys[5], keys[6]}) == 4
+    else:
+        assert len(keys) == len(set(keys))
+    assert 'Synthetic answer' not in caplog.text
+    assert 'Synthetic tool failure' not in caplog.text
+    assert code not in caplog.text
+    typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
+    assert typing == ['POST', 'DELETE', 'POST', 'DELETE']
+    if failure not in (None, 'error_fallback'):
+        reason = {
+            'rejected': 'worker_error',
+            'failure_rejected': 'worker_error',
+            'completion': 'worker_error',
+            'history': 'worker_error',
+            'error_frame': 'turn_error_frame',
+            'empty': 'missing_terminal_reply',
+            'tool': 'worker_error',
+            'timeout': 'delivery_uncertain',
+            'unavailable': 'worker_error',
+            'cancelled': 'turn_cancelled',
+        }[failure]
+        assert 'reason=' + reason in caplog.text
+    if failure == 'rejected':
+        assert 'status_code=400' in caplog.text
+    if failure == 'unavailable':
+        assert 'status_code=503' in caplog.text
+
+
+def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
+    if adapter.channel != 'imessage':
+        return
+    from datetime import timedelta
+    from utils.messaging import history
+    from utils.messaging.contracts import ReentryEvent
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    message = adapter.parse(fixture('linq'))[0]
+    store.consume(store.mint('user', 'imessage', 'linq', 'code')['proof'], message)
+
+    def turn(*args, **kwargs):
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'Deferred answer'}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
+    principal = Principal('user', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
+    event = ReentryEvent('event', 'Synthetic result', 'task')
+
+    async def run():
+        await adapter.admitted(message)
+        adapter.transport.responses = [(200, {}, {}), (400, {}, {}), (200, {}, {})]
+        with pytest.raises(ProviderError):
+            await gateway.reenter(message, event, principal=principal)
+        assert not store.leases
+        session = next(iter(store.sessions.values()))
+        events = store.events('user', session['id'])
+        assert not any(e['id'] == 'reply:event' for e in events)
+        assert any(e['id'] == 'failed:event' for e in events)
+        assert 'could not finish' in adapter.sent[-1]['text']
+        sent = len(adapter.sent)
+        await gateway.reenter(message, event, principal=principal)
+        assert len(adapter.sent) == sent
+        assert not store.leases
+
+    asyncio.run(run())
+
+
+def test_task_cancellation_retains_lease_until_worker_stops(adapter, monkeypatch, caplog):
+    if adapter.channel != 'imessage':
+        return
+    import threading
+    from utils.messaging import history
+
+    monkeypatch.setattr(history, 'recent_activity', lambda *a: [])
+    store = MemoryStore()
+    code = '0123456789ABCDEF0123456789ABCDEF'
+    proof = store.mint('user', 'imessage', 'linq', 'code')['proof']
+    store.proofs[code] = store.proofs.pop(proof)
+    release_thread = threading.Event()
+    started = threading.Event()
+
+    def turn(*args, **kwargs):
+        started.set()
+        release_thread.wait(5)
+
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'Synthetic answer'}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
+
+    async def deliver(kind, message_id, text=None):
+        value = json.loads(fixture('linq', kind))
+        value['data']['id'] = message_id
+        if text:
+            value['data']['parts'][0]['value'] = text
+        return (await gateway.webhook(*signed(adapter, json.dumps(value).encode())))['jobs'][0]
+
+    async def run():
+        link_job = await deliver('start', 'link', f'Hi Omi, link code {code}')
+        assert await gateway.process(link_job)
+        first = await deliver('text', 'first')
+        task = asyncio.create_task(gateway.process(first))
+        assert await asyncio.to_thread(started.wait, 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert store.leases
+        assert store.jobs[first]['status'] == 'running'
+        assert 'reason=worker_cancelled' in caplog.text
+        assert all('could not finish' not in (item.get('text') or '') for item in adapter.sent)
+        typing = [call[0] for call in adapter.transport.calls if call[1].endswith('/typing')]
+        assert typing and typing[0] == 'POST' and 'DELETE' in typing
+        second = await deliver('text', 'second')
+        assert not await gateway.process(second)
+        assert store.jobs[second]['status'] == 'pending'
+        assert store.leases
+        assert code not in caplog.text
+
+    try:
+        asyncio.run(run())
+    finally:
+        release_thread.set()
+
+
+@pytest.mark.parametrize('status,body', [(429, {}), (200, {'error_code': 429})])
+def test_terminal_rate_limit_preserves_status(status, body):
+    from utils.messaging.adapters.transport import request_json
+
+    async def run():
+        transport = FixtureTransport([(status, body, {'Retry-After': '61'})])
+        with pytest.raises(ProviderError) as error:
+            await request_json(transport, 'POST', 'https://api.linqapp.com/synthetic', sleep=no_sleep)
+        assert error.value.status_code == 429
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
@@ -205,7 +489,7 @@ def test_voice_notes_off_does_not_run_a_turn(adapter):
     async def turn(*args, **kwargs):
         turns.append(args)
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     asyncio.run(gateway.process(path))
     assert turns == []
     assert 'Voice notes are turned off' in adapter.sent[-1]['text']
@@ -233,7 +517,7 @@ def test_renderers_escape_split_and_citations(adapter):
     assert all(len(p.encode('utf-16-le')) // 2 <= adapter.capabilities.max_text_len for p in parts)
     assert '[1]' not in ''.join(parts)
     assert not any(p.endswith('\\') for p in parts)
-    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See (from Weekly review)'
+    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See'
     assert ''.join(split_text('a b\n😀' * 10, 8)) == 'a b\n😀' * 10
 
 
@@ -297,8 +581,8 @@ def test_ambiguous_5xx_fail_closed_or_idempotent(adapter):
             await adapter.send(message, text='safe')
             assert len(adapter.transport.calls) == 2
             assert (
-                adapter.transport.calls[0][2]['json']['idempotency_key']
-                == adapter.transport.calls[1][2]['json']['idempotency_key']
+                adapter.transport.calls[0][2]['json']['message']['idempotency_key']
+                == adapter.transport.calls[1][2]['json']['message']['idempotency_key']
             )
 
     asyncio.run(run())
@@ -355,8 +639,8 @@ def test_followups_buttons_and_citation_source_prose(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'Found [1].',
-                'conversations': [{'title': 'Daily standup'}],
+                'text': 'Found Daily standup [1].',
+                'conversations': [{'id': 'conv-1', 'title': 'Daily standup'}],
                 'follow_up_suggestions': ['Explain more', 'x' * 80],
             }
         )
@@ -364,11 +648,41 @@ def test_followups_buttons_and_citation_source_prose(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:Explain more'
-        assert 'Daily standup' in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0] == {
+            'text': 'Daily standup',
+            'url': 'https://h.omi.me/conversation/conv-1',
+        }
+        assert '[1]' not in payload['text']
     else:
-        assert 'Daily standup' in payload['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
         assert 'Explain more' not in str(payload)
+
+
+def test_many_items_are_one_imessage_link_or_bounded_telegram_buttons(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+    conversations = [{'id': f'id {index}', 'kind': 'task', 'title': f'Task {index}'} for index in range(6)]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {'text': ', '.join(item['title'] for item in conversations) + ' [#1][#2].', 'conversations': conversations}
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    if adapter.channel == 'telegram':
+        rows = payload['reply_markup']['inline_keyboard']
+        assert len(rows) == 5
+        assert all(row[0]['url'] != 'https://h.omi.me' for row in rows)
+        assert all(row[0]['url'].startswith('https://h.omi.me/task/id%20') for row in rows)
+        assert '[#1]' not in payload['text']
+        assert payload['text'].count('https://') == 0
+    else:
+        body = payload['message']['parts'][0]['value']
+        assert 'h.omi.me' not in body
+        assert body.count('https://') == 0
+        assert 'Open in Omi' not in body
+        assert '[#1]' not in body
 
 
 def test_media_fetch_bounds_and_ssrf(monkeypatch):
@@ -391,8 +705,8 @@ def test_real_followup_wire_block_and_source_title(adapter):
         await adapter.admitted(message)
         await ChannelReplySink(adapter, message).finish_payload(
             {
-                'text': 'See [1].',
-                'memories': [{'structured': {'title': 'Team meeting'}}],
+                'text': 'See Team meeting [1].',
+                'memories': [{'id': 'conv-1', 'structured': {'title': 'Team meeting'}}],
                 'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
             }
         )
@@ -400,11 +714,12 @@ def test_real_followup_wire_block_and_source_title(adapter):
     asyncio.run(run())
     payload = adapter.transport.calls[-1][2]['json']
     if adapter.channel == 'telegram':
-        assert payload['reply_markup']['inline_keyboard'][0][0]['callback_data'] == 'ask:What changed?'
-        assert 'Team meeting' in payload['text']
+        assert '[1]' not in payload['text']
+        assert payload['reply_markup']['inline_keyboard'][0][0]['text'] == 'Team meeting'
+        assert payload['reply_markup']['inline_keyboard'][0][0]['url'] == 'https://h.omi.me/conversation/conv-1'
     else:
         assert 'What changed?' not in str(payload)
-        assert 'Team meeting' in payload['parts'][0]['value']
+        assert 'https://h.omi.me' not in payload['message']['parts'][0]['value']
 
 
 def test_revocation_during_429_backoff_blocks_retry(adapter):
@@ -436,14 +751,16 @@ def test_revocation_during_429_backoff_blocks_retry(adapter):
 def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     from database import chat
     from utils.messaging.adapters.media import ChatMediaStore
-    from utils.stt import pre_recorded
+    from utils import chat as voice_chat
 
+    monkeypatch.setattr(voice_chat, 'linear16_pcm_is_silent', lambda *a, **k: False)
+    monkeypatch.setattr(voice_chat, 'resolve_voice_message_language', lambda *a: 'en')
     calls = []
     media = ChatMediaStore()
     monkeypatch.setattr(
-        pre_recorded,
+        voice_chat,
         'prerecorded_from_bytes',
-        lambda data, **kwargs: [{'word': 'voice'}, {'punctuated_word': 'transcribed.'}],
+        lambda data, **kwargs: [{'text': 'voice transcribed.', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}],
     )
 
     def ingest(uid, attachment, data):
@@ -455,6 +772,14 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
         chat, 'add_files_to_chat_session', lambda uid, session, ids: calls.append(('session', uid, session, ids))
     )
     adapter.media = media
+
+    async def download(attachment):
+        if attachment.voice:
+            filename = 'voice.m4a' if adapter.provider == 'linq' else 'voice.ogg'
+            return (FIXTURES / 'audio' / filename).read_bytes()
+        return b'fixture file'
+
+    monkeypatch.setattr(adapter, 'download', download)
     checks = []
 
     async def guard():
@@ -463,7 +788,7 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     async def run():
         voice = adapter.parse(fixture(adapter.provider, 'voice'))[0]
         result = await adapter.prepare(voice, 'test', {'id': 'surface-session'}, guard)
-        assert 'voice transcribed.' in result.text and not result.attachments
+        assert 'Voice transcribed.' in result.text and not result.attachments
         document = adapter.parse(fixture(adapter.provider, 'document'))[0]
         result = await adapter.prepare(document, 'test', {'id': 'surface-session'}, guard)
         assert result.media[0].file_store_ref == 'owned-file-id'
@@ -552,12 +877,12 @@ def test_app_writes_do_not_create_undo_or_channel_capture(monkeypatch):
     monkeypatch.setattr(preference_tools, 'capture_memory_write', lambda **kwargs: called.append(kwargs))
     token = surface_runtime.set(SurfaceRuntime('channel:test', '', Principal('test')))
     try:
-        preference_tools._capture_app_memory_write(content='synthetic')
+        getattr(preference_tools, '_capture_app_memory_write')(content='synthetic')
         assert not called
     finally:
         surface_runtime.reset(token)
     assert undo.record_write('test', 'task', 'id', None, {}) == ''
-    preference_tools._capture_app_memory_write(content='synthetic')
+    getattr(preference_tools, '_capture_app_memory_write')(content='synthetic')
     assert len(called) == 1
 
 
@@ -566,7 +891,8 @@ def test_adapter_http_routes_authenticate_before_admission(adapter, monkeypatch)
     from fastapi.testclient import TestClient
     from routers import messaging
 
-    gateway = Gateway(adapter, store=MemoryStore(), turn=lambda *a, **k: pytest.fail('Turn before HTTP ACK'))
+    store = MemoryStore()
+    gateway = Gateway(adapter, store=store, turn=lambda *a, **k: pytest.fail('Turn before HTTP ACK'))
     monkeypatch.setattr(messaging, '_gateways', {'provider-test': gateway})
     app = FastAPI()
     app.include_router(messaging.router)
@@ -574,7 +900,7 @@ def test_adapter_http_routes_authenticate_before_admission(adapter, monkeypatch)
     with TestClient(app) as client:
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers=headers).status_code == 202
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers=headers).status_code == 202
-        assert len(gateway.store.jobs) == 1
+        assert len(store.jobs) == 1
         assert not adapter.transport.calls
         assert client.post('/v1/messaging/webhooks/provider-test', content=body, headers={}).status_code == 401
         assert client.post('/v1/messaging/webhooks/missing', content=body, headers=headers).status_code == 404
@@ -619,3 +945,68 @@ def test_provider_http_logs_filter_credential_urls():
     )
     assert not filter_.filter(record)
     assert filter_.filter(logging.LogRecord('httpx', logging.INFO, '', 0, 'unrelated request', (), None))
+
+
+def test_telegram_definite_html_rejection_falls_back_once():
+    transport = FixtureTransport([(400, {'ok': False, 'description': "Bad Request: can't parse entities"}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A &amp; B</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 2
+    first, second = [call[2]['json'] for call in transport.calls]
+    assert first['parse_mode'] == 'HTML'
+    assert second == {'chat_id': 'fixture', 'text': 'A & B'}
+
+
+@pytest.mark.parametrize('status', [400, 500])
+def test_telegram_other_failure_never_replays_send_as_plain(status):
+    transport = FixtureTransport([(status, {'ok': False, 'description': 'unrelated rejection'}, {})])
+    adapter = TelegramAdapter('000:fixture-token', 'fixture_secret', transport=transport, sleep=no_sleep)
+    with pytest.raises(ProviderError):
+        asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A</b>', 'parse_mode': 'HTML'}))
+    assert len(transport.calls) == 1
+
+
+def test_follow_up_suggestions_are_not_rendered_on_channels(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {
+                'text': 'Nothing linked here.',
+                'follow_up_suggestions': ['What was the next step for the share-buyback review?'],
+                'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
+            }
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    assert 'reply_markup' not in payload
+    assert 'share-buyback' not in str(payload)
+    assert 'What changed?' not in str(payload)
+
+
+def test_legacy_follow_up_button_tap_still_asks():
+    adapter = TelegramAdapter(
+        '000:fixture-token', 'fixture_secret', transport=FixtureTransport(), ledger=FixtureLedger(), sleep=no_sleep
+    )
+    item = json.loads(fixture('telegram'))['message']
+    body = json.dumps(
+        {
+            'update_id': 9,
+            'callback_query': {'id': 'cb', 'from': item['from'], 'message': item, 'data': 'ask:What changed?'},
+        }
+    )
+    assert adapter.parse(body.encode())[0].text == 'What changed?'
+
+
+@pytest.mark.parametrize(
+    'channel, words', [('telegram', ('/new', '/unlink', 'Undo button')), ('imessage', ('new chat', 'unlink', 'undo'))]
+)
+def test_help_uses_channel_command_words(channel, words):
+    from utils.messaging.gateway import help_text
+
+    text = help_text(channel)
+    assert all(word in text for word in words)
+    if channel == 'imessage':
+        assert '/' not in text

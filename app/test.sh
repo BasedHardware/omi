@@ -64,6 +64,9 @@ fi
 
 bash "$ROOT_DIR/scripts/check_hermetic_test_env.sh" --app-dir "$ROOT_DIR"
 
+# Exercise the pinned native resource-error paths before Dart mocks.
+python3 scripts/test_whisper_cleanup.py
+
 # Execute registration with the real compile-time opt-in in a separate isolate.
 # Keep the ordinary suite (including the pinned fail-closed guard) unopted-in.
 flutter test --dart-define=OMI_DEV_CONTROLS=1 test/spine

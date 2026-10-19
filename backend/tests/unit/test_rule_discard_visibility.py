@@ -355,7 +355,9 @@ def test_completed_live_shared_rule_discard_stays_hidden_on_append(text, reason)
     assert result['sync_live_target'] is True
 
 
-def test_empty_segment_append_is_a_dedupe_noop_and_leaves_stored_state():
+def test_empty_segment_append_is_a_dedupe_noop_and_leaves_stored_state(monkeypatch):
+    # Exercise lineage dedupe for the fixture owner; absent keys now deny membership.
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
     store = StrictFirestore()
     incident = chunk('incident', 1000, 'I think it is.')
     incident['structured'] = {'title': '', 'overview': ''}

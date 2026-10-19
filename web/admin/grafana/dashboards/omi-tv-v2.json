@@ -1,0 +1,6198 @@
+{
+  "uid": "omi-tv-v2",
+  "title": "Omi TV \u00b7 v3",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "refresh": "1m",
+  "editable": true,
+  "graphTooltip": 1,
+  "tags": [
+    "omi-tv",
+    "v3"
+  ],
+  "time": {
+    "from": "now-182d",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Growth \u00b7 active users",
+      "description": "Users are deduplicated persons with qualified use (v2 definitions): a capture, conversation, chat or \u22652 successful MCP calls on a UTC day, not just an app open. Weekly, daily and monthly users over the trailing 7 / 1 / 30 complete UTC days (MCP-only included). Change below: relative % vs the prior 7 / 1 / 30 days.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.wau",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Weekly",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.dau",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Daily",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.mau",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Monthly",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Weekly"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Weekly"
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Daily"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Daily"
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Monthly"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Monthly"
+              },
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 26
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 5,
+        "h": 3
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "description": "Growth: change vs the prior period, from the series API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip_growth",
+          "columns": [
+            {
+              "selector": "wau",
+              "text": "wau",
+              "type": "string"
+            },
+            {
+              "selector": "dau",
+              "text": "dau",
+              "type": "string"
+            },
+            {
+              "selector": "mau",
+              "text": "mau",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "wau": 0,
+              "dau": 1,
+              "mau": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u200b.*",
+                "result": {
+                  "color": "#0ca30c"
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u2060.*",
+                "result": {
+                  "color": "#d03b3b"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 14
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 5,
+        "h": 1
+      },
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "Weekly users by platform",
+      "description": "Users are deduplicated persons with qualified use (v2 definitions): a capture, conversation, chat or \u22652 successful MCP calls on a UTC day, not just an app open. Trailing 7-day periods ending each date (UTC), stacked by each user's primary platform. Starts at the first period after mobile telemetry began (week of 2026-05-04); earlier periods undercount mobile and are not drawn. MCP-only = users whose only qualified use was \u22652 successful MCP calls on a day (blank before that marker existed). The latest bar is the weekly-users stat.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/growth",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.weekly",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "mobile",
+              "text": "Mobile",
+              "type": "number"
+            },
+            {
+              "selector": "macos",
+              "text": "macOS",
+              "type": "number"
+            },
+            {
+              "selector": "other",
+              "text": "Other",
+              "type": "number"
+            },
+            {
+              "selector": "mcp",
+              "text": "MCP-only",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineInterpolation": "linear",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mobile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mobile"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "macOS"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "macOS"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MCP-only"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MCP-only"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Mobile": 1,
+              "macOS": 2,
+              "Other": 3,
+              "MCP-only": 4
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "182d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 5,
+        "h": 7
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "New, returning & lost users",
+      "description": "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/growth",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.weekly",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "retained",
+              "text": "Returning",
+              "type": "number"
+            },
+            {
+              "selector": "resurrected",
+              "text": "Back after a break",
+              "type": "number"
+            },
+            {
+              "selector": "new",
+              "text": "New",
+              "type": "number"
+            },
+            {
+              "selector": "churned",
+              "text": "Lost",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": null,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineInterpolation": "linear",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Returning"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Returning"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Back after a break"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Back after a break"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c4bdf4"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "New"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "New"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Lost"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lost"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e66767"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Returning": 1,
+              "Back after a break": 2,
+              "New": 3,
+              "Lost": 4
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "182d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 5,
+        "h": 6
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "Quick ratio",
+      "description": "Users gained \u00f7 users lost each week: (new + back after a break) \u00f7 lost. Above the dashed 1.0 line the active base is growing.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/growth",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.weekly",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "quickRatio",
+              "text": "Quick ratio",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#6b6a63",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "timeFrom": "182d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 5,
+        "h": 5
+      },
+      "id": 5
+    },
+    {
+      "type": "timeseries",
+      "title": "Stickiness (DAU/WAU)",
+      "description": "Average daily users \u00f7 weekly users: qualified user-days in the 7-day period \u00f7 (7 \u00d7 weekly users). 100% = every weekly user is active every day.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/growth",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.weekly",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "stickiness",
+              "text": "Stickiness",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "timeFrom": "182d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 5,
+        "h": 5
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Activation \u00b7 week one",
+      "description": "Activated: new users (first seen in the weekly cohort, 180-day lookback so returning users are not counted as new) with \u22652 qualified days in days 1\u20137. Saved capture: share of the same cohort with a saved own-device or mic capture in week one, the main activation driver. Change below in percentage points vs the prior weekly cohort.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.activation",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Activated",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.capture",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Saved capture",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Activated"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Activated"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Saved capture"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Saved capture"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 26
+        }
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 0,
+        "w": 5,
+        "h": 3
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "description": "Activation: change vs the prior period, from the series API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip_activation",
+          "columns": [
+            {
+              "selector": "activation",
+              "text": "activation",
+              "type": "string"
+            },
+            {
+              "selector": "capture",
+              "text": "capture",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "activation": 0,
+              "capture": 1
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u200b.*",
+                "result": {
+                  "color": "#0ca30c"
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u2060.*",
+                "result": {
+                  "color": "#d03b3b"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 14
+        }
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 3,
+        "w": 5,
+        "h": 1
+      },
+      "id": 8
+    },
+    {
+      "type": "timeseries",
+      "title": "Activation by platform",
+      "description": "Week-one activation for weekly new-user cohorts, dated by the cohort's last day, split by the platform users first arrived on. Rates use the full cohort, including users who never qualified. The latest All point is the Activated stat. \"Other\" platform cohorts are a handful of users, so their rate is in the tooltip only. The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days after its last first-seen day, and a new one is added every day, so the line always ends 8 days back. ",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.activation",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "total",
+              "text": "All",
+              "type": "number"
+            },
+            {
+              "selector": "mobile",
+              "text": "Mobile",
+              "type": "number"
+            },
+            {
+              "selector": "macos",
+              "text": "macOS",
+              "type": "number"
+            },
+            {
+              "selector": "other",
+              "text": "Other",
+              "type": "number"
+            },
+            {
+              "selector": "n",
+              "text": "Cohort users",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.maturing",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "maturing",
+              "text": "Maturing",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mobile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mobile"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "macOS"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "macOS"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MCP-only"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MCP-only"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "All"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "All": 1,
+              "Mobile": 2,
+              "macOS": 3,
+              "Other": 4,
+              "Cohort users": 5,
+              "Maturing": 6
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "95d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 5,
+        "y": 4,
+        "w": 5,
+        "h": 8
+      },
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "Week-one capture",
+      "description": "Share of each new-user cohort with a saved, non-discarded own-device or mic conversation in days 1\u20137, by first platform. The latest All point is the Saved capture stat. The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days after its last first-seen day, and a new one is added every day, so the line always ends 8 days back. ",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.capture",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "total",
+              "text": "All",
+              "type": "number"
+            },
+            {
+              "selector": "mobile",
+              "text": "Mobile",
+              "type": "number"
+            },
+            {
+              "selector": "macos",
+              "text": "macOS",
+              "type": "number"
+            },
+            {
+              "selector": "other",
+              "text": "Other",
+              "type": "number"
+            },
+            {
+              "selector": "n",
+              "text": "Cohort users",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.maturing",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "maturing",
+              "text": "Maturing",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mobile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mobile"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "macOS"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "macOS"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MCP-only"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MCP-only"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "All"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "All": 1,
+              "Mobile": 2,
+              "macOS": 3,
+              "Other": 4,
+              "Cohort users": 5,
+              "Maturing": 6
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "95d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 5,
+        "y": 12,
+        "w": 5,
+        "h": 7
+      },
+      "id": 10
+    },
+    {
+      "type": "barchart",
+      "title": "Activation by capture",
+      "description": "Latest matured new-user cohort (the Activated stat's cohort), split by what users captured with in week one, largest group first: phone mic, an Omi pendant, \"Other Omi\" (another or unknown Omi model), \"2+ devices\", Limitless, Apple Watch, another device, Mac only, phone + Mac, or nothing saved. Bars are each group's week-one activation; the group's user count is in the label. Groups sum to the cohort.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.sources",
+          "columns": [
+            {
+              "selector": "source",
+              "text": "Capture source",
+              "type": "string"
+            },
+            {
+              "selector": "activation",
+              "text": "Activated",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#a8a69e"
+          },
+          "custom": {
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0,
+          "min": 0,
+          "max": 115
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Activated"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "orientation": "horizontal",
+        "barWidth": 0.8,
+        "groupWidth": 0.75,
+        "text": {
+          "valueSize": 16
+        },
+        "showValue": "always",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "fullHighlight": false,
+        "barRadius": 0.08
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 19,
+        "w": 5,
+        "h": 8
+      },
+      "id": 11
+    },
+    {
+      "type": "stat",
+      "title": "Retention",
+      "description": "If activated: activated new users who qualify again in days 8\u201337 (the cohort needs 37 days to mature, so this is the cohort that started ~5 weeks ago). Established: users active in both of the prior two weeks who are active this week. Change below in percentage points vs the prior cohort / week.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.retained",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "If activated",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.established",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Established",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "If activated"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "If activated"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Established"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Established"
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 26
+        }
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 0,
+        "w": 5,
+        "h": 3
+      },
+      "id": 12
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "description": "Retention: change vs the prior period, from the series API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip_retention",
+          "columns": [
+            {
+              "selector": "retained",
+              "text": "retained",
+              "type": "string"
+            },
+            {
+              "selector": "established",
+              "text": "established",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "retained": 0,
+              "established": 1
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u200b.*",
+                "result": {
+                  "color": "#0ca30c"
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u2060.*",
+                "result": {
+                  "color": "#d03b3b"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 14
+        }
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 3,
+        "w": 5,
+        "h": 1
+      },
+      "id": 13
+    },
+    {
+      "type": "trend",
+      "title": "Weekly cohort retention",
+      "description": "W0\u2013W8: share of each weekly new-user cohort (180-day history check, as the activation stat) with a qualified day in week k after first seen. Only fully observed weeks are drawn, so the newest cohort is a single W0 point. Older cohorts are dimmer; the newest is brightest and thickest. Legend oldest \u2192 newest.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_8",
+          "columns": []
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_7",
+          "columns": []
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_6",
+          "columns": []
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_5",
+          "columns": []
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_4",
+          "columns": []
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_3",
+          "columns": []
+        },
+        {
+          "refId": "G",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_2",
+          "columns": []
+        },
+        {
+          "refId": "H",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_1",
+          "columns": []
+        },
+        {
+          "refId": "I",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cohort_0",
+          "columns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "always",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "linear",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Cohorts still filling",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "week"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "weeks since first seen"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e8e6df"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d4d2cc"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c0bfb8"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#adaba5"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#999892"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#85847f"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#72706c"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b\u200b\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5e5d58"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^[A-Z][a-z]{2} \\d+\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b[^\u200b]*$"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.name}"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4a4945"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "xField": "week"
+      },
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "week",
+            "mode": "outer"
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 10,
+        "y": 4,
+        "w": 5,
+        "h": 8
+      },
+      "id": 14
+    },
+    {
+      "type": "timeseries",
+      "title": "Retention by week",
+      "description": "Established retention by week (solid) and retained-if-activated (dashed) by the cohort's last first-seen day. Retained-if-activated needs 37 days to mature, so its line always ends 38 days back; the violet band is the cohorts still maturing (a new one closes every day). Established ends at the last complete Mon\u2013Sun week. Latest points are the stats.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.established",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "total",
+              "text": "Established",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.retained",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "total",
+              "text": "If activated",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.retainedMaturing",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "maturing",
+              "text": "If activated: maturing",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Established"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Established"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e8e6df"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "If activated"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "If activated"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "If activated: maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "If activated: maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Established": 1,
+              "If activated": 2,
+              "If activated: maturing": 3
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "125d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 10,
+        "y": 12,
+        "w": 5,
+        "h": 7
+      },
+      "id": 15
+    },
+    {
+      "type": "barchart",
+      "title": "Power users \u00b7 days active",
+      "description": "Share of weekly users by number of active days in the latest 7 days (white), against the same period 4 weeks earlier (grey). A rise on the right means habitual use.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.power",
+          "columns": [
+            {
+              "selector": "days",
+              "text": "Days active",
+              "type": "string"
+            },
+            {
+              "selector": "4 weeks earlier",
+              "text": "4 weeks earlier",
+              "type": "number"
+            },
+            {
+              "selector": "This week",
+              "text": "This week",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "This week"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "This week"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e8e6df"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "4 weeks earlier"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "4 weeks earlier"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "orientation": "vertical",
+        "barWidth": 0.8,
+        "groupWidth": 0.75,
+        "text": {
+          "valueSize": 14
+        },
+        "showValue": "never",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "fullHighlight": false,
+        "barRadius": 0.08
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Days active": 0,
+              "4 weeks earlier": 1,
+              "This week": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 10,
+        "y": 19,
+        "w": 5,
+        "h": 8
+      },
+      "id": 16
+    },
+    {
+      "type": "stat",
+      "title": "Revenue",
+      "description": "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR \u00f7 monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon\u2013Sun week vs the prior week. Relative % change.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.mrr",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "MRR",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.arpmau",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Per user",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.hardware",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Hardware",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MRR"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MRR"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Per user"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Per user"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hardware"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Hardware"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 26
+        }
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 0,
+        "w": 5,
+        "h": 3
+      },
+      "id": 17
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "description": "Revenue: change vs the prior period, from the series API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip_revenue",
+          "columns": [
+            {
+              "selector": "mrr",
+              "text": "mrr",
+              "type": "string"
+            },
+            {
+              "selector": "arpmau",
+              "text": "arpmau",
+              "type": "string"
+            },
+            {
+              "selector": "hardware",
+              "text": "hardware",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "mrr": 0,
+              "arpmau": 1,
+              "hardware": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u200b.*",
+                "result": {
+                  "color": "#0ca30c"
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u2060.*",
+                "result": {
+                  "color": "#d03b3b"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 14
+        }
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 3,
+        "w": 5,
+        "h": 1
+      },
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "MRR by plan",
+      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/revenue",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.mrr",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "unlimited",
+              "text": "Neo",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2",
+              "text": "Unlimited",
+              "type": "number"
+            },
+            {
+              "selector": "operator",
+              "text": "Pro",
+              "type": "number"
+            },
+            {
+              "selector": "plus",
+              "text": "Plus",
+              "type": "number"
+            },
+            {
+              "selector": "architect",
+              "text": "Architect",
+              "type": "number"
+            },
+            {
+              "selector": "other",
+              "text": "Other",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#008300"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e66767"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Neo": 1,
+              "Unlimited": 2,
+              "Pro": 3,
+              "Plus": 4,
+              "Architect": 5,
+              "Other": 6
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "40d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 15,
+        "y": 4,
+        "w": 5,
+        "h": 7
+      },
+      "id": 19
+    },
+    {
+      "type": "barchart",
+      "title": "Shopify sales per week",
+      "description": "Mon\u2013Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/revenue",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.hardware",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "Week ending",
+              "type": "timestamp"
+            },
+            {
+              "selector": "hardwareUsd",
+              "text": "Hardware",
+              "type": "number"
+            },
+            {
+              "selector": "prepayUsd",
+              "text": "Plan prepay (cash)",
+              "type": "number"
+            },
+            {
+              "selector": "units",
+              "text": "Devices",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "lineWidth": 0,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false
+          },
+          "noValue": "Loading\u2026"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hardware"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Hardware"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plan prepay (cash)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plan prepay (cash)"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Devices"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Devices"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "orientation": "vertical",
+        "barWidth": 0.8,
+        "groupWidth": 0.75,
+        "text": {
+          "valueSize": 14
+        },
+        "showValue": "never",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 60,
+        "fullHighlight": false,
+        "barRadius": 0.08
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Week ending": 0,
+              "Hardware": 1,
+              "Plan prepay (cash)": 2,
+              "Devices": 3
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 15,
+        "y": 11,
+        "w": 5,
+        "h": 5
+      },
+      "id": 20
+    },
+    {
+      "type": "timeseries",
+      "title": "Margin by plan",
+      "description": "Allocated estimate, not gross margin. Revenue = that day's FinOps MRR \u00f7 30.4. Cost = FinOps fully-loaded plan cost + the shared pool (TV all-in \u2212 FinOps: BigQuery, STT, SaaS) split by each plan's cost-active user-days. Lines: margin % (left); Free: \u2212$/day bars (right); $/day and the unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan membership comes from a point-in-time snapshot.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.marginByPlan",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "unlimitedPct",
+              "text": "Neo",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Pct",
+              "text": "Unlimited",
+              "type": "number"
+            },
+            {
+              "selector": "operatorPct",
+              "text": "Pro",
+              "type": "number"
+            },
+            {
+              "selector": "plusPct",
+              "text": "Plus",
+              "type": "number"
+            },
+            {
+              "selector": "architectPct",
+              "text": "Architect",
+              "type": "number"
+            },
+            {
+              "selector": "basicMargin",
+              "text": "Free $/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedRevenue",
+              "text": "Neo revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedCost",
+              "text": "Neo cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedMargin",
+              "text": "Neo margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Revenue",
+              "text": "Unlimited revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Cost",
+              "text": "Unlimited cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Margin",
+              "text": "Unlimited margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorRevenue",
+              "text": "Pro revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorCost",
+              "text": "Pro cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorMargin",
+              "text": "Pro margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusRevenue",
+              "text": "Plus revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusCost",
+              "text": "Plus cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusMargin",
+              "text": "Plus margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectRevenue",
+              "text": "Architect revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectCost",
+              "text": "Architect cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectMargin",
+              "text": "Architect margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "basicCost",
+              "text": "Free cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unattributedCost",
+              "text": "Unattributed cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "shared",
+              "text": "Shared pool/day",
+              "type": "number"
+            },
+            {
+              "selector": "allInTotal",
+              "text": "All-in total/day",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": null,
+            "axisBorderShow": false,
+            "axisCenteredZero": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "insertNulls": 129600000
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#008300"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e66767"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free $/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Free $/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 70
+              },
+              {
+                "id": "custom.barWidthFactor",
+                "value": 0.7
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisCenteredZero",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Free cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unattributed cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unattributed cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Shared pool/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shared pool/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All-in total/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "All-in total/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Neo": 1,
+              "Unlimited": 2,
+              "Pro": 3,
+              "Plus": 4,
+              "Architect": 5,
+              "Free $/day": 6,
+              "Neo revenue/day": 7,
+              "Neo cost/day": 8,
+              "Neo margin/day": 9,
+              "Unlimited revenue/day": 10,
+              "Unlimited cost/day": 11,
+              "Unlimited margin/day": 12,
+              "Pro revenue/day": 13,
+              "Pro cost/day": 14,
+              "Pro margin/day": 15,
+              "Plus revenue/day": 16,
+              "Plus cost/day": 17,
+              "Plus margin/day": 18,
+              "Architect revenue/day": 19,
+              "Architect cost/day": 20,
+              "Architect margin/day": 21,
+              "Free cost/day": 22,
+              "Unattributed cost/day": 23,
+              "Shared pool/day": 24,
+              "All-in total/day": 25
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "35d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 15,
+        "y": 16,
+        "w": 5,
+        "h": 10
+      },
+      "id": 21
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, and the source used for each all-in line. Estimates are dated and marked stale after 35 days; measured SaaS is labeled from Mercury.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.marginStatus",
+          "columns": [
+            {
+              "selector": "text",
+              "text": "Margin status",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "Margin through \u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 12
+        }
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 26,
+        "w": 5,
+        "h": 1
+      },
+      "id": 22
+    },
+    {
+      "type": "stat",
+      "title": "Health",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Cost / day is the settled day D\u22122; cost / user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.netCost",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Cost / day",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.costPerMau",
+          "columns": [
+            {
+              "selector": "value",
+              "text": "Cost / user",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "noValue": "\u2014"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost / day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost / day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost / user"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost / user"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": false,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 26
+        }
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 3
+      },
+      "id": 23
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "description": "Health: change vs the prior period, from the series API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "transparent": true,
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip_health",
+          "columns": [
+            {
+              "selector": "netCost",
+              "text": "netCost",
+              "type": "string"
+            },
+            {
+              "selector": "costPerMau",
+              "text": "costPerMau",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "netCost": 0,
+              "costPerMau": 1
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "\u2014",
+          "mappings": [
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u200b.*",
+                "result": {
+                  "color": "#0ca30c"
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": ".*\u2060.*",
+                "result": {
+                  "color": "#d03b3b"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 14
+        }
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 3,
+        "w": 4,
+        "h": 1
+      },
+      "id": 24
+    },
+    {
+      "type": "timeseries",
+      "title": "Cost vs revenue",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Measured/invoiced lines are solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are sand-colored. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.cost",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "gcp",
+              "text": "GCP",
+              "type": "number"
+            },
+            {
+              "selector": "vertexLlm",
+              "text": "Vertex LLM",
+              "type": "number"
+            },
+            {
+              "selector": "openai",
+              "text": "OpenAI",
+              "type": "number"
+            },
+            {
+              "selector": "anthropic",
+              "text": "Anthropic",
+              "type": "number"
+            },
+            {
+              "selector": "sttMeasuredUsd",
+              "text": "STT measured",
+              "type": "number"
+            },
+            {
+              "selector": "sttEstimateUsd",
+              "text": "STT est.",
+              "type": "number"
+            },
+            {
+              "selector": "saasMeasuredUsd",
+              "text": "SaaS measured (Mercury)",
+              "type": "number"
+            },
+            {
+              "selector": "saasEstimateUsd",
+              "text": "SaaS est.",
+              "type": "number"
+            },
+            {
+              "selector": "revenuePerDay",
+              "text": "Revenue",
+              "type": "number"
+            },
+            {
+              "selector": "oneTimeExcluded",
+              "text": "One-time excluded",
+              "type": "number"
+            },
+            {
+              "selector": "total",
+              "text": "All-in total",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 88,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineInterpolation": "linear",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "GCP"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "GCP"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#5c6b80"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Vertex LLM"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Vertex LLM"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8494ab"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OpenAI"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OpenAI"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#aab6c6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Anthropic"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Anthropic"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#cdd5df"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "STT measured"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STT measured"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#aab6c6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SaaS measured (Mercury)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SaaS measured (Mercury)"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8494ab"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "STT est."
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STT est."
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d8b46a"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SaaS est."
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SaaS est."
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eedcb3"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Revenue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Revenue"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "One-time excluded"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All-in total"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "GCP": 1,
+              "Vertex LLM": 2,
+              "OpenAI": 3,
+              "Anthropic": 4,
+              "STT measured": 5,
+              "STT est.": 6,
+              "SaaS measured (Mercury)": 7,
+              "SaaS est.": 8,
+              "Revenue": 9,
+              "One-time excluded": 10,
+              "All-in total": 11
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "35d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 20,
+        "y": 4,
+        "w": 4,
+        "h": 12
+      },
+      "id": 25
+    },
+    {
+      "type": "timeseries",
+      "title": "Unit economics",
+      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR \u00f7 that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D\u22122 \u00f7 the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/revenue",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.arpmau",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "arpmau",
+              "text": "Revenue / user",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.costPerMau",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "costPerMau",
+              "text": "Cost / user",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": null,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "insertNulls": 172800000
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Revenue / user"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Revenue / user"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost / user"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cost / user"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#aab6c6"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Revenue / user": 1,
+              "Cost / user": 2
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "35d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 20,
+        "y": 16,
+        "w": 4,
+        "h": 10
+      },
+      "id": 26
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Oldest data-through day (UTC) across every chart on the wall, and how many series are still filling; the wall shows stale-but-real data rather than waiting. Sources without a defensible read path (crash-free, answer ratings, payer churn, activated \u2192 paid, gross margin) stay off the wall; the full classified reasons are in /api/omi/stats/wall/series/headline.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.through",
+          "columns": [
+            {
+              "selector": "text",
+              "text": "Data through",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "Data through \u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 12
+        }
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 26,
+        "w": 4,
+        "h": 1
+      },
+      "id": 27
+    }
+  ],
+  "links": [],
+  "description": "Growth \u2192 Activation \u2192 Retention \u2192 Revenue \u2192 Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health."
+}

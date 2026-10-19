@@ -32,10 +32,16 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
 
 <Steps>
   <Step title="Get Your API Key" icon="key">
-    While signed in, open the Omi web app and navigate to **Developer → API Keys**. Create a key and choose
-    only the scopes your integration needs.
+    While signed in, open the **Developers** page in the Omi web app
+    ([app.omi.me/developers](https://app.omi.me/developers)). Create a key and choose only the scopes
+    your integration needs.
 
-    <Tip>Copy the key immediately - you won't be able to see it again!</Tip>
+    <Tip>
+    Connecting an agent rather than writing code yourself? Choose **Create API Key & Prompt**, then
+    **Send to My Agent Securely**: the agent receives a one-time encrypted link instead of the key. See
+    [Hand a key to an agent](/doc/developer/api/keys#hand-a-key-to-an-agent-without-pasting-it).
+    Otherwise copy the key immediately — you won't be able to see it again.
+    </Tip>
   </Step>
   <Step title="Make Your First Request" icon="terminal">
     <Tabs>
@@ -152,6 +158,15 @@ Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` su
 </Warning>
 
 ---
+
+## List freshness
+
+Conversation, memory, and action-item list responses may be reused for up to **10 seconds** for the same
+credential and query. After any write (including edits or deletion in another app), a list may reflect the
+previous state for up to 10 seconds. Authentication, permission checks, and rate limits apply to every poll.
+
+A `200` response with `X-Omi-List-Truncated: true` contains incomplete results. Do not interpret an empty
+or short truncated page as the end of your data. See the conversation pagination guidance below.
 
 ## Rate Limits
 
@@ -303,3 +318,21 @@ Looking for different API capabilities? Omi offers several APIs for different us
 <Info>
 The **Developer API** (this section) is for accessing your own personal data. The APIs above are for building apps that interact with other users' data (with their permission).
 </Info>
+
+## Additional read surfaces
+
+The Developer API shares these reads with hosted MCP:
+
+| Endpoint | Required explicit scope | Response |
+| --- | --- | --- |
+| `GET /v1/dev/user/people` | `people:read` | `{people: [...]}` |
+| `GET /v1/dev/user/profile` | `profile:read` | Stored AI profile, or `profile: null` with a message |
+| `GET /v1/dev/user/screen-activity` | `screen_activity:read` | `{screen_activity: [...], next_cursor?}` |
+
+These scopes must be selected when creating a key; existing read-only keys do
+not acquire them automatically. Screen activity accepts UTC dates (`start_date`,
+`end_date`, YYYY-MM-DD, both inclusive with the entire end day), `app`, `limit`
+(1–1000), and `cursor`. Repeat identical filters with `next_cursor` to continue.
+People and profile accept no query parameters. Unknown parameters return 400.
+Daily summaries are available at `/v1/dev/user/daily-summaries` with
+`conversations:read`. Audio download is not exposed by either surface.

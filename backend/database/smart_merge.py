@@ -292,6 +292,10 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        # Corrections own captured segment anchors. Intake must not absorb or
+        # re-key either side underneath an encrypted correction receipt.
+        if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()
@@ -340,7 +344,7 @@ def absorb_conversation(
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
-        conversations_db._guard_match_score_size(payload, survivor_raw)  # pyright: ignore[reportPrivateUsage]
+        conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw
             and 'speaker_match_scores' not in payload

@@ -144,7 +144,6 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/app_integrations.py',
     'utils/webhooks.py',
     'utils/llm/external_integrations.py',
-    'utils/memory/daily_memory_sweep.py',
     'utils/other/notifications.py',
     # Goals.
     'utils/llm/goals.py',
@@ -177,8 +176,6 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/retrieval/tool_services/action_items.py',
     'utils/retrieval/tools/__init__.py',
     'utils/retrieval/tools/conversation_tools.py',
-    'utils/retrieval/tools/conversation_jit.py',
-    'utils/retrieval/tools/conversation_jit_gate.py',
     'utils/retrieval/tools/memory_tools.py',
     'utils/retrieval/tools/action_item_tools.py',
     'utils/retrieval/tools/app_tools.py',
@@ -192,12 +189,8 @@ _SCAN_FILES: tuple[str, ...] = (
     'utils/retrieval/tools/notification_settings_tools.py',
     'utils/retrieval/tools/screen_activity_tools.py',
     'utils/retrieval/tools/graph_tools.py',
-    'utils/retrieval/tools/knowledge_ledger_tools.py',
-    'utils/retrieval/tools/knowledge_ledger_write_tools.py',
-    'utils/retrieval/tools/entity_timeline_tools.py',
     'utils/retrieval/tools/chart_tools.py',
     'utils/retrieval/tools/apple_health_tools.py',
-    'utils/retrieval/tools/frame_request_tools.py',
     'utils/retrieval/tools/integration_base.py',
     'utils/retrieval/tools/google_utils.py',
     'utils/retrieval/tools/result_bounds.py',
@@ -218,13 +211,15 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('utils/conversations/process_conversation.py', '<module>'),
         ('utils/conversations/process_conversation.py', 'process_conversation'),
         ('utils/conversations/process_conversation.py', '_attach_client_projection'),
-        ('utils/conversations/process_conversation.py', '_store_projected_conversation'),
-        ('utils/conversations/process_conversation.py', '_store_deterministic_minimum'),
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
+        # Model-free backlog persistence: display projection never enters canonical structure.
+        ('utils/conversations/process_conversation.py', '_store_budget_waiting'),
+        # Storage-only budget-denial wrapper forwards validated display projection
+        # to _store_budget_waiting; no model or intelligence reads it.
+        ('utils/conversations/process_conversation.py', 'preserve_capture'),
         # Flag-off eager deny: threads the display projection into the same
         # persist helpers; has_projection is the existing S6 plan input, not
         # an intelligence read of projection contents.
-        ('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny'),
         ('utils/conversations/projection_payload.py', 'strip_client_processing'),
         ('utils/conversations/projection_payload.py', 'client_processing_mutation'),
         # Serialization sink: family-set definition + integration redaction.
@@ -294,23 +289,14 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('utils/conversations/process_conversation.py', '<module>', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', 'process_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_processing'),
+        Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_store_projected_conversation', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', '_store_projected_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_store_deterministic_minimum', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', '_store_deterministic_minimum', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'client_projection'),
-        Reference('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'ClientProcessing'),
-        Reference(
-            'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_processing'
-        ),
-        Reference(
-            'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_projection'
-        ),
+        Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', 'preserve_capture', 'client_projection'),
         Reference(
             'utils/conversations/projection_payload.py',
             'client_processing_mutation',
@@ -522,7 +508,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
+        # Storage payload strips the projection before the initial-create-only mutation.
+        DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
@@ -541,6 +528,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/conversations.py', 'update_action_item_description', 'model_dump'),
         DumpSite('routers/conversations.py', 'delete_action_item', 'model_dump'),
         DumpSite('routers/conversations.py', 'get_conversation_suggested_apps', 'model_dump'),
+        # Final-pass commit serializes only TranscriptSegment candidates for
+        # protected persistence/remapping, never a Conversation or LLM payload.
+        # TranscriptSegment cannot carry the client_processing projection.
+        DumpSite('database/conversations.py', 'commit', 'model_dump'),
         DumpSite('database/conversations.py', 'store_model_segments_result', 'model_dump'),
         DumpSite('database/conversations.py', '_store', 'model_dump'),
         # _get_goal_context / suggest_goal dump MemoryDB records (not
@@ -567,20 +558,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # MemoryDB has no client_processing field.
         DumpSite('utils/apps.py', 'generate_persona_prompt', 'dict'),
         DumpSite('utils/apps.py', 'generate_persona_desc', 'dict'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'digest', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'reconcile', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', '_bounded_candidate_channel', 'model_dump'),
-        DumpSite('utils/memory/daily_memory_sweep.py', 'build_candidate_page', 'model_dump'),
-        DumpSite(
-            'utils/memory/daily_memory_sweep.py',
-            '_load_or_stage_onboarding_candidates',
-            'model_dump',
-        ),
-        DumpSite(
-            'utils/memory/daily_memory_sweep.py',
-            '_load_or_stage_daily_summary_candidates',
-            'model_dump',
-        ),
         DumpSite('utils/task_intelligence/backend_capture.py', 'policy_signals', 'model_dump'),
         DumpSite('utils/task_intelligence/conversation_capture.py', 'canonical_fields', 'model_dump'),
         # Daily-summary stats payload (not Conversation); scanner matches any model_dump.
@@ -608,12 +585,20 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'source',
         'language',
         'uses_custom_stt',
+        # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
+        'record_lane_owner',
         'structured',
         'client_processing',
+        # Authenticated owner-confirmed edits, not device-authored display projections.
+        # Corrections deliberately enter summarization; overview is the owned override.
+        'user_corrections',
+        'user_overview',
         # S3 (§1.7): server-authored, NOT projection-family. It says why
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # Server-authored funding/queue state, not client display text or projection-family.
+        'processing_deferred',
         # Server-authored dead-letter retry marker, written only by the
         # finalization dead-letter transaction and cleared by processing
         # persists. A bool, no client text: NOT projection-family.
@@ -669,6 +654,14 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # processing_state) — they are pinned here as non-projection-family.
         'sync_relevance',
         'sync_content_revision',
+        # Server-only successful-output checkpoints, NOT client-authored
+        # display projections. Loaded from the durable server snapshot for
+        # exact-input reuse; Field(exclude=True) keeps them out of client and
+        # integration dumps. Projection invalidation must retain them: only
+        # the successful-output persistence seams own these stamps.
+        'notes_llm_input_hash',
+        'notes_llm_output_hash',
+        'l1_llm_input_hash',
         # Server-authored cross-surface event membership (#3244): member ids,
         # sources, and windows only, written solely by database.capture_groups.
         # No client-authored text, so not projection-family.
@@ -684,6 +677,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'speaker_resolution',
         # Server-derived numeric voice evidence; not client-authored display projection.
         'speaker_match_scores',
+        # Server-authored counts/enums/durations/ids only; no client display
+        # projection. Internal metadata, excluded from API and integrations.
+        'owner_recognition_diagnostics',
     }
 )
 
@@ -892,7 +888,6 @@ def test_scan_covers_required_plumbing() -> None:
         'utils/apps.py',
         'utils/app_integrations.py',
         'utils/llm/external_integrations.py',
-        'utils/memory/daily_memory_sweep.py',
         'utils/retrieval/rag.py',
         'utils/llm/goals.py',
         'database/goals.py',
@@ -983,11 +978,11 @@ def test_red_proof_render_client_processing_read_fails_static_scan() -> None:
     """
     render_path = _BACKEND / 'utils' / 'conversations' / 'render.py'
     source = render_path.read_text(encoding='utf-8')
-    needle = 'conversation_str += f"{str(conversation.structured.title).capitalize()}\\n"'
+    needle = "title = title[:1].upper() + title[1:] if title else ''"
     assert needle in source, 'render.py title-format site moved; update this red-proof needle'
     poisoned = source.replace(
         needle,
-        'conversation_str += f"{str(conversation.client_processing.structure.title)}\\n"',
+        "title = str(conversation.client_processing.structure.title) if title else ''",
         1,
     )
     assert 'client_processing' in poisoned
@@ -1005,11 +1000,14 @@ def test_red_proof_full_conversation_dump_fails_dump_scan() -> None:
     """
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump())', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump())', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     assert all(site.relpath != 'utils/retrieval/tools/conversation_tools.py' for site in _PRODUCTION_DUMPS)
 
 
@@ -1021,15 +1019,18 @@ def test_red_proof_aliased_receiver_dump_fails_dump_scan() -> None:
     """
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
     poisoned = source.replace(
         needle,
-        'payload = conv; conversations_collected.append(payload.model_dump())',
+        'payload = conversation; collected.append(payload.model_dump())',
         1,
     )
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     assert all(site.relpath != 'utils/retrieval/tools/conversation_tools.py' for site in _PRODUCTION_DUMPS)
 
 
@@ -1037,11 +1038,14 @@ def test_red_proof_include_none_dump_fails_dump_scan() -> None:
     """Mutation: ``conv.model_dump(include=None)`` is a full dump, not an allowlist."""
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump(include=None))', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump(include=None))', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     scratch = 'def f(conv):\n    return conv.model_dump(include=None)\n'
     assert collect_conversation_dumps('scratch.py', scratch) == frozenset({DumpSite('scratch.py', 'f', 'model_dump')})
 
@@ -1050,11 +1054,14 @@ def test_red_proof_dynamic_include_dump_fails_dump_scan() -> None:
     """Mutation: ``conv.model_dump(include=fields)`` cannot be verified statically."""
     tools_path = _BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'
     source = tools_path.read_text(encoding='utf-8')
-    needle = 'conversations_collected.append(conversation_to_citation_card(conv))'
+    needle = 'collected.append(conversation_to_citation_card(conversation))'
     assert needle in source, 'citation collector site moved; update this red-proof needle'
-    poisoned = source.replace(needle, 'conversations_collected.append(conv.model_dump(include=fields))', 1)
+    poisoned = source.replace(needle, 'collected.append(conversation.model_dump(include=fields))', 1)
     dumps = collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', poisoned)
-    assert DumpSite('utils/retrieval/tools/conversation_tools.py', 'get_conversations_tool', 'model_dump') in dumps
+    assert (
+        DumpSite('utils/retrieval/tools/conversation_tools.py', '_render_addressable_conversations', 'model_dump')
+        in dumps
+    )
     scratch = 'def f(conv, fields):\n    return conv.model_dump(include=fields)\n'
     assert collect_conversation_dumps('scratch.py', scratch) == frozenset({DumpSite('scratch.py', 'f', 'model_dump')})
 
@@ -1278,25 +1285,37 @@ def _assert_cards_and_message_are_projection_free(cards: list[dict[str, Any]]) -
 
 
 def test_citation_collector_and_message_serializer_exclude_projection(render_mod: ModuleType) -> None:
-    """Drive the collector body and the Message serializer: projection text cannot appear.
-
-    Both tool sites append ``conversation_to_citation_card(conv)``. This test
-    runs that loop on a deserialized Conversation (the same conversion the
-    tools perform) and then the voice/text ``Message.memories`` serializer.
-    """
+    """Drive the shared production collector and Message serializer with a projection sentinel."""
     tools_source = (_BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py').read_text(encoding='utf-8')
-    helper_call = 'conversations_collected.append(conversation_to_citation_card(conv))'
-    assert tools_source.count(helper_call) == 2
-    assert 'conv.model_dump()' not in tools_source
+    tree = ast.parse(tools_source)
+    for tool_name in ('get_conversations_tool', 'search_conversations_tool'):
+        tool_body = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == tool_name)
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == '_render_addressable_conversations'
+            for node in ast.walk(tool_body)
+        ), f'{tool_name} must use the projection-free citation collector'
+    assert collect_conversation_dumps('utils/retrieval/tools/conversation_tools.py', tools_source) == frozenset()
 
     conv = _make_conversation(projection=True)
     conv_data = conv.model_dump()
     assert SENTINEL in str(conv_data.get('client_processing'))
     conversations = [deserialize_conversation(conv_data)]
-    conversations_collected: list[dict[str, Any]] = []
-    for item in conversations:
-        conversations_collected.append(render_mod.conversation_to_citation_card(item))
-    _assert_cards_and_message_are_projection_free(conversations_collected)
+    configurable: dict[str, Any] = {'conversations_collected': []}
+    with stub_modules({}):
+        tools_mod = load_module_fresh(
+            'utils.retrieval.tools.conversation_tools',
+            str(_BACKEND / 'utils' / 'retrieval' / 'tools' / 'conversation_tools.py'),
+        )
+        rendered = tools_mod._render_addressable_conversations(
+            conversations, configurable=configurable, use_transcript=True
+        )
+    assert SENTINEL not in rendered
+    assert 'client_processing' not in rendered
+    assert f'ref: conversations/{conv.id}' in rendered
+    assert len(configurable['conversations_collected']) == 1
+    _assert_cards_and_message_are_projection_free(configurable['conversations_collected'])
 
 
 def _divergent_output_spec() -> dict[str, Any]:
@@ -2214,3 +2233,41 @@ def test_internal_voice_match_scores_are_absent_from_client_and_integration_view
         public = redact(conv.model_dump())
         assert 'speaker_match_scores' not in public
         assert all('speaker_match_scores' not in s for s in public.get('transcript_segments', []))
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_internal_owner_diagnostics_are_absent_from_client_and_integration_views(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.owner_recognition_diagnostics = {'first_resolver': {'reason': 'private_cloud_disabled', 'uid': 'owner'}}
+    assert conv.model_dump()['owner_recognition_diagnostics']['first_resolver']['uid'] == 'owner'
+    assert 'owner_recognition_diagnostics' not in conv.model_dump(mode='json')
+    assert 'owner_recognition_diagnostics' not in render_mod.PROJECTION_FAMILY_FIELDS
+    assert 'owner_recognition_diagnostics' not in render_mod.conversation_to_dict(conv)
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        assert 'owner_recognition_diagnostics' not in redact(conv.model_dump())
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(render_mod, projection_sink_fns, locked):
+    checkpoints = {
+        'notes_llm_input_hash': 'ab' * 32,
+        'notes_llm_output_hash': 'cd' * 32,
+        'l1_llm_input_hash': 'ef' * 32,
+    }
+    # These values come from a server snapshot, not a client display projection.
+    conv = Conversation.model_validate({**_make_conversation(is_locked=locked).model_dump(), **checkpoints})
+    for field, value in checkpoints.items():
+        assert field not in render_mod.PROJECTION_FAMILY_FIELDS
+        assert Conversation.model_fields[field].exclude is True
+        assert getattr(conv, field) == value
+    for payload in (conv.model_dump(), conv.model_dump(mode='json'), render_mod.conversation_to_dict(conv)):
+        assert checkpoints.keys().isdisjoint(payload)
+        for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+            assert checkpoints.keys().isdisjoint(redact(dict(payload)))
+    # Clearing untrusted projections must not destroy durable reuse checkpoints.
+    for sink in ('strip', 'invalidate'):
+        snapshot = {**conv.model_dump(), **checkpoints}
+        projection_sink_fns[sink](snapshot)
+        assert {field: snapshot[field] for field in checkpoints} == checkpoints
+    projection_sink_fns['drop'](conv)
+    assert {field: getattr(conv, field) for field in checkpoints} == checkpoints

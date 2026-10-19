@@ -93,28 +93,74 @@ def observed_state(model: str, evidence: Mapping[str, Evidence], *, now: float) 
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # dedicated, shared, remap, refuse
+    kind: str  # dedicated, shared (non-managed compatibility), remap, refuse, luna
     model: str = ''
 
 
-# Lane refinements precede the requested-model default. No platform is cut off
-# merely because it sends Flash, a screenshot, or the broad extraction tag.
+# INACTIVE destinations are reviewed product policy, not an overflow ladder.
+# After the exclusive-order move, only Dream may consume Gemini capacity.
+# Legacy tool loops retain their explicit terminal-refusal contract.
 D = Action('dedicated')
 S = Action('shared')
 R = Action('refuse')
+REMAP = Action('remap', 'gemini-3.8-flash')
+LUNA = Action('luna', 'gpt-6-luna')
 MODEL_REMAPS = {'gemini-2.5-pro': 'gemini-3.1-flash-lite'}
 
-POLICIES = {
-    'macos_legacy_tasks': {State.ACTIVE: D, State.INACTIVE: R, State.UNKNOWN: D},
-    'windows_tasks': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
-    'windows_focus': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
-    'macos_dictation': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
-    'macos_suggestions': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
-    'desktop_other': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
-    'backend_other': {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: D},
+INACTIVE_DESTINATIONS = {
+    'macos_legacy_tasks': R,
+    'macos_tasks': LUNA,
+    'windows_tasks': LUNA,
+    'windows_focus': LUNA,
+    'windows_dictation': LUNA,
+    'windows_suggestions': LUNA,
+    'windows_live_notes': LUNA,
+    'windows_screen_synthesis': LUNA,
+    'windows_memory': LUNA,
+    'windows_insight': LUNA,
+    'windows_goals': LUNA,
+    'windows_task_dedup': LUNA,
+    'windows_task_prioritization': LUNA,
+    'windows_home_suggestions': LUNA,
+    'macos_focus': LUNA,
+    'macos_dictation': LUNA,
+    'macos_suggestions': LUNA,
+    'macos_live_notes': LUNA,
+    'macos_screen_synthesis': LUNA,
+    'macos_memory': LUNA,
+    'macos_insight': LUNA,
+    'macos_goals': LUNA,
+    'macos_task_dedup': LUNA,
+    'macos_task_prioritization': LUNA,
+    'macos_home_suggestions': LUNA,
+    'proactive_nudges': LUNA,
+    'desktop_other': LUNA,
+    'backend_other': LUNA,
 }
 
-LANE_POLICIES = {'gemini-2.5-flash': POLICIES}
+# These are the bounded product tags in desktop_gemini_attribution.json.
+PRODUCT_POLICY_TAGS = {
+    'task_extraction': 'tasks',
+    'focus': 'focus',
+    'dictation': 'dictation',
+    'suggestions': 'suggestions',
+    'live_notes': 'live_notes',
+    'screen_synthesis': 'screen_synthesis',
+    'memory': 'memory',
+    'insight': 'insight',
+    'goals': 'goals',
+    'task_dedup': 'task_dedup',
+    'task_prioritization': 'task_prioritization',
+    'home_suggestions': 'home_suggestions',
+}
+
+
+def product_policy_lane(platform: str, tag: str, *, default: str = 'desktop_other') -> str:
+    platform, tag = platform.strip().lower(), tag.strip().lower()
+    if tag in {'proactive_notification', 'proactive-notification', 'proactive_nudges', 'notifications'}:
+        return 'proactive_nudges'
+    row = f'{platform}_{PRODUCT_POLICY_TAGS.get(tag, "other")}'
+    return row if row in INACTIVE_DESTINATIONS else default
 
 
 def policy(model: str, state: State, *, lane: str = '') -> Action:
@@ -123,7 +169,6 @@ def policy(model: str, state: State, *, lane: str = '') -> Action:
     spec = RESERVATIONS.get(model)
     if spec is None:
         return S
-    lanes = LANE_POLICIES.get(model, {})
-    if lane in lanes:
-        return lanes[lane][state]
+    if model == 'gemini-2.5-flash':
+        return INACTIVE_DESTINATIONS.get(lane, INACTIVE_DESTINATIONS['desktop_other']) if state == State.INACTIVE else D
     return {State.ACTIVE: D, State.INACTIVE: S, State.UNKNOWN: Action(spec.unknown_capacity)}[state]

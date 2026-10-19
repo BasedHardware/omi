@@ -2955,7 +2955,7 @@ workflows:
             --android-build "${PROMOTE_ANDROID_BUILD:-}"
 
   mobile-daily-train:
-    name: Daily Mobile Store Train (queue for human release)
+    name: Daily Mobile Store Train (self-driving store release)
     instance_type: mac_mini_m2
     max_build_duration: 30
     integrations:
@@ -2968,13 +2968,60 @@ workflows:
         TRAIN_DRY_RUN: "false"
     working_directory: app
     scripts:
-      - name: Queue the newest internal builds for a human release
+      - name: Release the newest internal builds through the stores
         script: |
           set -euo pipefail
-          # Dispatched daily by .github/workflows/mobile_daily_train.yml. iOS: submit the newest
-          # processed TestFlight build for review with release type MANUAL, one submission in flight
-          # at a time; an approved-but-unreleased version is replaced by a newer build. Android: write
-          # the newest internal/alpha build to production as a draft release. Nothing here releases.
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
+          # no-candidate; optional): the gate's audited verdicts; when set, the
+          # train fails closed if the store moved on after the audit.
+          DRY_RUN_FLAG=""
+          if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG
+
+  mobile-rollout-advance:
+    name: Mobile Rollout Advance (intraday exposure ladder)
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        # Never submits or stages a candidate: advances only already-released
+        # rollouts (iOS phased jump at 12h, Android ladder hop at 4h).
+        TRAIN_ADVANCE_ROLLOUTS: "true"
+        TRAIN_DRY_RUN: "false"
+    working_directory: app
+    scripts:
+      - name: Advance the live rollouts along the exposure ladder
+        script: |
+          set -euo pipefail
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
+          # no-candidate; optional): the gate's audited verdicts; when set, the
+          # train fails closed if the store moved on after the audit.
           DRY_RUN_FLAG=""
           if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"

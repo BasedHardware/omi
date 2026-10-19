@@ -9,6 +9,7 @@ This package records bounded operational signals and owns their presentation/exp
 | `sync_phases.py` | Context-scoped sync phase latency/calls and request-bound aggregate export |
 | `finalization.py` | Finalization outcomes |
 | `fallback.py` | Shared fallback telemetry |
+| `listen_loop.py` | Listen event-loop lag probe, per-frame processing time and VAD window rate (`LISTEN_LOOP_METRICS_ENABLED`) |
 | `speaker_identification.py` | Speaker decision/review metrics |
 | `speaker_learning_jobs.py` | Voice-learning job event metrics |
 | `speaker_tag_prompts.py` | Speaker prompt telemetry |

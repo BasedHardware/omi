@@ -7,12 +7,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from config.batch_live_preview import capture_snapshot
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
@@ -55,7 +57,7 @@ RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
     """The onboarding-provenance marker consumed by the daily memory sweep
-    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    (the conversation processor) must reflect the runtime's own
     onboarding-admission decision (``host.onboarding_session_id``), not
     ``OnboardingHandler.session_id``: the handler mints its own fallback id
     whenever none is supplied (utils/onboarding.py), so a Settings speech-
@@ -143,7 +145,9 @@ class LiveConversationController:
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
+        self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = binding['conversation_id']
+        await persist_conversation_policy(self.host, binding['conversation_id'])
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
@@ -156,7 +160,7 @@ class LiveConversationController:
         await self.host.persistence.call(
             redis_db.set_in_progress_conversation_id, self.host.request.uid, binding['conversation_id']
         )
-        await self.host.speakers.refresh_for_conversation(binding['conversation_id'])
+        await self._refresh_speakers(binding['conversation_id'])
         self.send_conversation_session(binding, self.host.recording_session_id)
         return True
 
@@ -257,7 +261,38 @@ class LiveConversationController:
             self.emit_recording_lifecycle_event(conversation_id, 'processing'), name='recording_session_processing'
         )
 
+    async def _refresh_speakers(self, conversation_id: str, **kwargs: Any) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        previous = observation.current if observation else None
+        try:
+            await self.host.speakers.refresh_for_conversation(conversation_id, **kwargs)
+        finally:
+            # refresh closes the old generation before loading the successor.
+            # Persist its frozen counts, including work after the early checkpoint.
+            if previous is not None and previous.closed:
+                await self._persist_speaker_diagnostics(previous.data['conversation'])
+
+    async def _persist_speaker_diagnostics(self, conversation_id: str) -> None:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation is None:
+            return
+        snapshot = observation.boundary_snapshot(conversation_id)
+        if snapshot:
+            try:
+                await self.host.persistence.call(
+                    conversations_db.update_owner_recognition_diagnostics,
+                    self.host.request.uid,
+                    conversation_id,
+                    snapshot,
+                )
+            except Exception:
+                observation.flush_failed(snapshot)
+
     async def schedule_finalization(self, conversation_id: str) -> bool:
+        observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
+        if observation:
+            observation.checkpoint(conversation_id, self.host.speakers.queue, self.host.speakers.tasks)
+            await self._persist_speaker_diagnostics(conversation_id)
         if not self.host.request_conversation_processing and not is_listen_finalization_dispatch_enabled():
             logger.warning('Pusher unavailable; finalization remains queued conversation=%s', conversation_id)
             return False
@@ -457,10 +492,14 @@ class LiveConversationController:
                             existing.get(key) for key in ('transcript_segments', 'photos', 'has_content', 'is_locked')
                         )
                     ):
-                        await self.process_conversation(conversation_id)
+                        await self._finalize_isolated(
+                            self.process_conversation, conversation_id, stage='reconnect_rollover'
+                        )
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
+                self.host.batch_record_capture = capture_snapshot(existing)
                 self.host.state.current_conversation_id = conversation_id
+                await persist_conversation_policy(self.host, conversation_id)
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
@@ -474,7 +513,7 @@ class LiveConversationController:
                         {'uses_custom_stt': True},
                     )
                 await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
-                await self.host.speakers.refresh_for_conversation(conversation_id)
+                await self._refresh_speakers(conversation_id)
                 self.send_conversation_session(binding, self.host.recording_session_id)
                 return
             if existing.get('deleted') or action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
@@ -560,12 +599,13 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
-        await self.host.persistence.call(
+        created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
+        self.host.batch_record_capture = capture_snapshot(payload) if created else None
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
@@ -583,6 +623,7 @@ class LiveConversationController:
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         self.host.state.current_conversation_id = conversation_id
+        await persist_conversation_policy(self.host, conversation_id)
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
@@ -596,7 +637,7 @@ class LiveConversationController:
             note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
             if note_carry is not None:
                 note_carry(carried_ids)
-        await self.host.speakers.refresh_for_conversation(
+        await self._refresh_speakers(
             conversation_id,
             owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
             owner_carry_donor=automatic_donor,
@@ -622,7 +663,11 @@ class LiveConversationController:
             # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
-        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if hasattr(self.host, '_policy_resume_candidate'):
+            existing = self.host._policy_resume_candidate
+            del self.host._policy_resume_candidate
+        else:
+            existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
             await self.create_new_in_progress_conversation()
             return None
@@ -655,7 +700,7 @@ class LiveConversationController:
             # This runs before STT initialization: an outage cannot indefinitely
             # defer empty-generation cleanup. The transaction still lets content win.
             if not (existing.get('transcript_segments') or existing.get('photos') or existing.get('has_content')):
-                await self.process_conversation(existing['id'])
+                await self._finalize_isolated(self.process_conversation, existing['id'], stage='prepare_rollover')
             await self.create_new_in_progress_conversation()
             return existing['id']
         binding = await self.host.persistence.call(
@@ -677,7 +722,9 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 return None
             existing = current
+        self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = existing['id']
+        await persist_conversation_policy(self.host, existing['id'])
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)

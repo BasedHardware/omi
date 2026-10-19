@@ -6,6 +6,8 @@ Messages are persistence-only writes (no LLM streaming) — they use
 streams AI responses.
 """
 
+from utils.generated_compute import require_generated_compute
+
 import logging
 from typing import Any, Callable, List, cast
 
@@ -264,8 +266,19 @@ def reconcile_messages(
         )
     except chat_db.MessageReconcileCursorError as exc:
         raise HTTPException(status_code=400, detail='invalid message reconciliation cursor') from exc
+    # One malformed/legacy stored row must not 500 the reconcile page — guard it
+    # the same way the sibling /v2/desktop/messages list does, so the desktop can
+    # resume syncing past a poisoned row on the next page.
     return {
-        'messages': messages,
+        'messages': Message.deserialize_many_safe(
+            messages,
+            on_error=lambda record, exc: logger.warning(
+                'Skipping malformed desktop reconcile message %s for uid=%s: %s',
+                record.get('id') if isinstance(record, dict) else None,
+                uid,
+                type(exc).__name__,
+            ),
+        ),
         'next_cursor': next_cursor,
         'has_more': has_more,
     }
@@ -349,6 +362,7 @@ def generate_session_title(
     ),
 ):
     """Generate a title for a chat session based on its messages."""
+    require_generated_compute(uid, 'session_titles')
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
         "Generate a short, descriptive title (max 6 words) for this chat conversation. "

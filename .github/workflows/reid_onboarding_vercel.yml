@@ -1,0 +1,72 @@
+name: Deploy Reid onboarding prototype to Vercel
+
+# Builds prototypes/device_first_onboarding for web and publishes it to the
+# Vercel project behind https://omi-reid-onboarding.vercel.app, which the mobile
+# app loads through the `onboarding-variant` PostHog flag (reid arm). Vercel has
+# no Flutter builder, so the build happens here and the CLI uploads the output.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "prototypes/device_first_onboarding/**"
+      - ".github/workflows/reid_onboarding_vercel.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-reid-onboarding-vercel-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build web and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: prototypes/device_first_onboarding
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Run prototype tests
+        run: flutter test test/flow_test.dart
+
+      - name: Build web
+        run: flutter build web --release
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Deploy to Vercel production
+        # Explicit bash enables pipefail, so a failed upload fails the step
+        # instead of being masked by tee.
+        shell: bash
+        working-directory: prototypes/device_first_onboarding/build/web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID_REID_ONBOARDING }}
+        run: |
+          npx --yes vercel@64 deploy --prod --yes --token "$VERCEL_TOKEN" \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --meta githubCommitRef="$GITHUB_REF_NAME" | tee deploy-url.txt
+          echo "Deployed $(tail -n 1 deploy-url.txt) for $GITHUB_SHA"

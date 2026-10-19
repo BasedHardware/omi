@@ -1,10 +1,14 @@
+from omi_logging import configure_logging, TraceContextMiddleware
+
+configure_logging('nllb', access_policy='keep')
+
 import asyncio
 import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from contextlib import asynccontextmanager
-from functools import partial
 from typing import Dict, List, Optional
 
 import ctranslate2
@@ -14,6 +18,7 @@ from pydantic import BaseModel, Field
 from prometheus_client import Counter as PromCounter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, REGISTRY
 from starlette.responses import Response
 
+configure_logging('nllb', access_policy='keep')
 logger = logging.getLogger("nllb_translation")
 
 
@@ -167,6 +172,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="NLLB Translation Service", lifespan=lifespan)
+app.add_middleware(TraceContextMiddleware)
 
 
 class TranslateRequest(BaseModel):
@@ -298,9 +304,10 @@ async def translate(req: TranslateRequest):
         total_chars = sum(len(c) for c in req.contents)
         t0 = time.monotonic()
         loop = asyncio.get_running_loop()
+        context = copy_context()
         translations = await loop.run_in_executor(
             _inference_pool,
-            partial(_translate_batch, req.contents, source_nllb or "", target_nllb, t_queued),
+            lambda: context.run(_translate_batch, req.contents, source_nllb or "", target_nllb, t_queued),
         )
         latency = time.monotonic() - t0
 
@@ -316,9 +323,9 @@ async def translate(req: TranslateRequest):
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         REQUESTS_TOTAL.labels(target_lang=req.target_language_code, status="error").inc()
-        logger.error("Translation error: %s", e)
+        logger.exception("Translation error")
         raise HTTPException(status_code=500, detail="Internal translation error")
     finally:
         ACTIVE_REQUESTS.dec()
@@ -369,4 +376,4 @@ async def metrics():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_config=None)

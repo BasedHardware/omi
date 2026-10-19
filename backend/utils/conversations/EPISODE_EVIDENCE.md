@@ -123,22 +123,10 @@ in that one block. Later stages add evidence-sufficiency retrieval across
 windows/sources, commitment tracking, and episode/thread linking. None of
 those is implemented here.
 
-Round-9 DEV experiments preregister deterministic independent links versus a Luna
-low-effort selection pass, optional claim generation, and default/high/xhigh writer
-effort. `MEETING_NOTES_EPISODE_SELECTION` and `MEETING_NOTES_EPISODE_EFFORT`
-are read at the call boundary; only admitted episode writers use them. Selection
-passes return exact original IDs plus short connection reasons; the writer receives
-only original speech and selected original evidence, never generated reasons.
-Unknown IDs/invalid selection fall back to conservative independent links, and
-large inputs skip the selection model. No retrieval window is widened. The actual
-capture end is separate from processing time; later observations cannot establish
-activity during the window. Claim-disabled notes skip claim-coverage validation,
-retaining prose/presentation/vacuity checks and one bounded optional repair.
-References and judges stay fixed across comparisons. Cache keys include candidate
-effort/selection/claim mode. Two independently cached judgments of fixed candidates
-measure judge variance; selection costs join writer tokens/latency/provider dollars.
-No held-out input may guide these choices. Defaults remain subject to measured DEV
-gates and external held-out acceptance; sticky rollout remains zero here.
+Serving now applies deterministic evidence selection unconditionally before note
+writing. The Jev/Luna selector and its runtime controls were retired on
+2026-10-18. The `MEETING_NOTES_EPISODE_EVIDENCE_*` admission controls above are
+unchanged. Offline evaluation uses the same deterministic evidence filter.
 
 Capture/device constraints are always retained by deterministic selection, even
 without topical word overlap. The capture adapter records desktop remote-channel
@@ -146,28 +134,20 @@ mixing capability and roster-entry count (not observed speaker count); neither
 establishes attendance or identity. Writer instructions require every field to
 respect those constraints and keep unclear referents/intent/outcomes unresolved.
 A connected evidence item can still contain unrelated clauses, which stay out.
-Selector controls: `MEETING_NOTES_EPISODE_SELECTION_EFFORT` defaults low and
-`MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS` defaults 30 (bounded 1–30).
-Recoverable selector/repair model errors are separate from processing errors in
-receipts. Source selection failure keeps the conservative evidence and continues.
+Evidence selection does not call a model. Writer and repair errors retain their
+existing receipt and processing behavior.
 
 Round 10 supersedes guarded C8. Base settings are C7: deterministic selection,
 claims off, no effort override, optional thinking byte guard disabled (0).
 The locked 2026-10-06 processing-time cost route admits C6/xhigh for at least 1500 speech
 words and two admitted source kinds; thresholds are configurable. No taxonomy or
 user allowlist participates. Long transcript prefixes (>240k bytes) still use rich
-baseline. The same downstream contract applies to every selector/tier.
+baseline. The same downstream contract applies to every tier.
 
-Jev uses the existing pinned SystemOne gateway/client with the `episode_evidence`
-metric lane. One shared bounded state describes speech, capture times, roster and
-call/device metadata. Each grouped app/window screen segment or prior/person/
-memory/goal/task item gets one connection question. Oversize batches split before
-transport truncation; an individually oversize item, invalid answer or timeout
-fails open to deterministic selection. Speech and trusted device constraints stay.
-No retrieval is added: missing catalog sources remain absent. The offline adapter
-uses the identical typed request/validated answers on OpenRouter's `/systemone`,
-substituting the pinned model for the gateway lane ID. DEV threshold calibration
-must precede enablement; the default selector remains deterministic.
+No model chooses episode evidence. The deterministic filter retains speech and
+trusted capture constraints, drops post-capture observations, and admits other
+context only when it has an evidenced connection to speech or the capture state.
+No retrieval is added: missing catalog sources remain absent.
 
 See [deadline audit](EPISODE_DEADLINES.md). Requested episode deadlines are 120s
 (C7) and 180s (C6); the existing gateway's 120s ceiling clamps C6 to 115s. Only
@@ -175,7 +155,7 @@ already leased durable finalizers receive extended budgets. Synchronous request
 paths retain 60s and route to C7. Baseline/legacy deadlines are unchanged. One C6
 timeout/context-limit failure buys one C7 rewrite and disables further model
 repair. Repairs still require 15s remaining headroom. Telemetry records requested/
-effective deadline, tier, route reason, selector actually used and tier fallback.
+effective deadline, tier, route reason and tier fallback.
 No request effort override on C7 inherits the configured gateway effort (currently
 low); explicit C6 xhigh overrides it. Offline candidate calls read that route
 policy by default, with `--provider-default-effort` only for non-parity experiments.

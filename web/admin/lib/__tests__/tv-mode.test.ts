@@ -1,7 +1,6 @@
 import { createHash } from "crypto";
 import { describe, expect, it } from "vitest";
 
-import { grafanaBoardPath, grafanaBoardSrc } from "../grafana-board";
 import {
   generateTvToken,
   hashTvToken,
@@ -57,33 +56,6 @@ describe("tv link status", () => {
     );
     expect(isTvLinkActive({ revokedAt: now, expiresAt: null }, now)).toBe(
       false
-    );
-  });
-});
-
-describe("grafana board src", () => {
-  it("uses omi-tv by default and kiosk query when asked", () => {
-    expect(grafanaBoardPath(null, false)).toBe("/grafana/d/omi-tv/?refresh=5m");
-    expect(grafanaBoardPath(null, true)).toBe(
-      "/grafana/d/omi-tv/?refresh=5m&kiosk"
-    );
-    expect(grafanaBoardPath("macos", true)).toBe(
-      "/grafana/d/omi-tv-macos/?refresh=5m&kiosk"
-    );
-    expect(grafanaBoardPath("mobile", false)).toBe(
-      "/grafana/d/omi-tv-mobile/?refresh=5m"
-    );
-    expect(grafanaBoardPath("constructor", true)).toBe(
-      "/grafana/d/omi-tv/?refresh=5m&kiosk"
-    );
-    expect(grafanaBoardPath("__proto__", false)).toBe(
-      "/grafana/d/omi-tv/?refresh=5m"
-    );
-  });
-
-  it("falls back to path when NEXT_PUBLIC_GRAFANA_URL is unset", () => {
-    expect(grafanaBoardSrc(null, true)).toBe(
-      "/grafana/d/omi-tv/?refresh=5m&kiosk"
     );
   });
 });

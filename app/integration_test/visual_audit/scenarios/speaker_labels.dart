@@ -24,6 +24,7 @@ import 'package:omi/widgets/transcript.dart';
 import '../fakes.dart';
 import '../harness.dart';
 import 'capture.dart';
+import '../../../test/helpers/reprocess_fakes.dart';
 
 const _transcript = 'lib/pages/conversation_detail/widgets/transcript_tab.dart (TranscriptWidgets)';
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
@@ -77,7 +78,7 @@ Future<void> _pumpTranscript(
         create: (_) => ConversationDetailProvider(
           assignSpeaker: (_, __, {isUser, personId, speakerId}) async => true,
           rejectSpeaker: (_, __, ___, {personId, segmentIds}) async => ApiSuccess(conversation),
-          reprocess: (_, {appId, requireSpeakerReceipt = false}) async => conversation,
+          reprocess: conversationReprocess((_, {appId, requireSpeakerReceipt = false}) async => conversation),
           fetchConversation: (_) async => conversation,
         )..selectedDate = conversationLocalDayKey(conversation.createdAt),
       ),
@@ -239,8 +240,10 @@ final speakerLabelScenarios = <AuditScenario>[
         ChangeNotifierProvider<DeviceProvider>.value(
             value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
       ]);
-      expect(find.byKey(const Key('carried_speaker_banner')), findsOneWidget);
-      await a.shot('A new conversation starts on the same recording: Maya is still Maya, with Change');
+      expect(find.byKey(const ValueKey('edit_speaker_label_s1')), findsOneWidget);
+      expect(find.byKey(const Key('speaker_label_confirmed')), findsWidgets);
+      await a
+          .shot('A new conversation starts on the same recording: Maya has a confirmed label with inline correction');
     },
   ),
 ];

@@ -7,11 +7,9 @@ provider payloads, headers, and credentials never enter the accounting path.
 
 from __future__ import annotations
 
-import base64
-import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime, timezone
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -63,6 +61,8 @@ class ProviderUsage:
     tool_use_prompt_tokens: int = 0
     cache_write_tokens: int = 0
     cache_write_ttl: str | None = None
+    cache_storage_token_seconds: int = 0
+    cache_operation_usage_complete: bool = True
     total_tokens: int = 0
     cache_status: CacheStatus = CacheStatus.NOT_REPORTED
     unit_type: str = 'tokens'
@@ -87,6 +87,14 @@ class ProviderResponseMetadata:
     traffic_type: str | None = None
     # Raw receipt validity is consumed only by v2; legacy normalization is unchanged.
     billable_usage_complete: bool = False
+    token_usage_complete: bool | None = None
+    lane_id: str = 'unknown'
+    resolved_model: str | None = None
+    cache_mode: str = 'none'
+    cacheable_prefix_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_storage_token_seconds: int = 0
+    cache_operation_usage_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -104,6 +112,14 @@ class ProviderAttempt:
     provider_response_id: str | None = None
     actual_model_version: str | None = None
     traffic_type: str | None = None
+    billable_usage_complete: bool = False
+    lane_id: str = 'unknown'
+    resolved_model: str | None = None
+    cache_mode: str = 'none'
+    cacheable_prefix_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_storage_token_seconds: int = 0
+    cache_operation_usage_complete: bool = True
 
 
 @dataclass
@@ -124,6 +140,8 @@ class AttemptTrace:
         error_class: str,
         metadata: ProviderResponseMetadata | None = None,
         usage_status: UsageStatus | None = None,
+        lane_id: str = 'unknown',
+        cache_policy: Mapping[str, Any] | None = None,
     ) -> ProviderAttempt:
         response_metadata = metadata or ProviderResponseMetadata()
         status = usage_status or (
@@ -138,13 +156,29 @@ class AttemptTrace:
             retry_ordinal=retry_ordinal,
             outcome=outcome,
             error_class=error_class,
+            resolved_model=response_metadata.resolved_model,
+            lane_id=response_metadata.lane_id if response_metadata.lane_id != 'unknown' else lane_id,
+            cache_mode=response_metadata.cache_mode if metadata else (cache_policy or {}).get('mode', 'none'),
+            cacheable_prefix_tokens=response_metadata.cacheable_prefix_tokens
+            or (cache_policy or {}).get('prefix_tokens', 0),
+            cache_write_tokens=response_metadata.cache_write_tokens,
+            cache_storage_token_seconds=response_metadata.cache_storage_token_seconds,
+            cache_operation_usage_complete=response_metadata.cache_operation_usage_complete,
             usage=response_metadata.usage,
             usage_status=status,
             provider_response_id=response_metadata.provider_response_id,
             actual_model_version=response_metadata.actual_model_version,
             traffic_type=response_metadata.traffic_type,
+            billable_usage_complete=(
+                response_metadata.token_usage_complete
+                if response_metadata.token_usage_complete is not None
+                else response_metadata.billable_usage_complete
+            ),
         )
         self.attempts.append(attempt)
+        from llm_gateway.gateway.cache_metrics import observe_cache_attempt
+
+        observe_cache_attempt(attempt)
         return attempt
 
 
@@ -160,9 +194,6 @@ class AccountingContext:
     app_platform: str | None = None
     product_lane: str | None = None
     client_platform: str | None = None
-    # Opaque qualification-run correlation. Normal chat leaves this absent.
-    jit_run_id: str | None = None
-    jit_contract_version: str | None = None
 
     @classmethod
     def create(
@@ -177,8 +208,6 @@ class AccountingContext:
         app_platform: str | None = None,
         product_lane: str | None = None,
         client_platform: str | None = None,
-        jit_run_id: str | None = None,
-        jit_contract_version: str | None = None,
     ) -> 'AccountingContext':
         return cls(
             invocation_id=str(uuid4()),
@@ -191,8 +220,6 @@ class AccountingContext:
             app_platform=app_platform,
             product_lane=product_lane,
             client_platform=client_platform,
-            jit_run_id=jit_run_id,
-            jit_contract_version=jit_contract_version,
         )
 
 
@@ -217,6 +244,12 @@ class RateCard:
     output_micro_usd_per_million: int
     cache_write_micro_usd_per_million: int | None = None
     cache_write_1h_micro_usd_per_million: int | None = None
+    cache_storage_micro_usd_per_million_token_hours: int | None = None
+    # Text-token accounting does not apply this. It records the published
+    # audio input rate until a modality split exists.
+    audio_input_micro_usd_per_million: int | None = None
+    # None means the card applies until a later dated card for the same model.
+    effective_from: date | None = None
     # Some providers publish a second, more expensive price band once a
     # request's total context crosses a token threshold (e.g. OpenAI's
     # >272K-input-token band for the GPT-5.6 family). A card with no
@@ -328,8 +361,12 @@ class AccountingEvent:
     app_platform: str | None = None
     product_lane: str | None = None
     client_platform: str | None = None
-    jit_run_id: str | None = None
-    jit_contract_version: str | None = None
+    lane_id: str = 'unknown'
+    resolved_model: str | None = None
+    cache_mode: str = 'none'
+    cacheable_prefix_tokens: int = 0
+    cache_field_reported: bool = False
+    cache_storage_token_seconds: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -346,8 +383,6 @@ class AccountingEvent:
             'app_platform': self.app_platform,
             'product_lane': self.product_lane,
             'client_platform': self.client_platform,
-            'jit_run_id': self.jit_run_id,
-            'jit_contract_version': self.jit_contract_version,
             'provider': self.provider,
             'configured_model': self.configured_model,
             'actual_model_version': self.actual_model_version,
@@ -369,6 +404,12 @@ class AccountingEvent:
             'cache_write_ttl': self.cache_write_ttl,
             'total_tokens': self.total_tokens,
             'cache_status': self.cache_status.value,
+            'lane_id': self.lane_id,
+            'resolved_model': self.resolved_model,
+            'cache_mode': self.cache_mode,
+            'cacheable_prefix_tokens': self.cacheable_prefix_tokens,
+            'cache_field_reported': self.cache_field_reported,
+            'cache_storage_token_seconds': self.cache_storage_token_seconds,
             'unit_type': self.unit_type,
             'image_count': self.image_count,
             'image_size': self.image_size,
@@ -426,9 +467,23 @@ def openai_usage_from_sse_payload(
     *,
     cache_requested: bool = False,
 ) -> ProviderResponseMetadata | None:
-    if not isinstance(payload.get('usage'), Mapping):
+    if not isinstance(payload.get('usage'), Mapping) and not isinstance(payload.get('_gateway_cache_receipt'), Mapping):
         return None
-    return openai_usage_from_response(payload, cache_requested=cache_requested)
+    metadata = openai_usage_from_response(payload, cache_requested=cache_requested)
+    receipt = payload.get('_gateway_cache_receipt')
+    if isinstance(receipt, Mapping):
+        metadata = replace(
+            metadata,
+            lane_id=str(receipt.get('lane', 'unknown')),
+            resolved_model=receipt.get('resolved_model'),
+            traffic_type=metadata.traffic_type or receipt.get('traffic_type'),
+            cache_mode=str(receipt.get('mode', 'none')),
+            cacheable_prefix_tokens=_nonnegative_int(receipt.get('prefix_tokens')),
+            cache_write_tokens=_nonnegative_int(receipt.get('write_tokens')),
+            cache_storage_token_seconds=_nonnegative_int(receipt.get('storage_token_seconds')),
+            cache_operation_usage_complete=receipt.get('operation_usage_complete') is not False,
+        )
+    return metadata
 
 
 def vertex_usage_from_response(response: Mapping[str, Any]) -> ProviderResponseMetadata:
@@ -478,6 +533,20 @@ def vertex_usage_from_response(response: Mapping[str, Any]) -> ProviderResponseM
             tool_use_prompt_tokens=tool_use,
             total_tokens=total,
             cache_status=cache_status,
+        ),
+        token_usage_complete=(
+            type(raw.get('promptTokenCount')) is int
+            and raw['promptTokenCount'] >= 0
+            and type(raw.get('candidatesTokenCount')) is int
+            and raw['candidatesTokenCount'] >= 0
+            and (
+                'thoughtsTokenCount' not in raw
+                or (type(raw['thoughtsTokenCount']) is int and raw['thoughtsTokenCount'] >= 0)
+            )
+            and (
+                'toolUsePromptTokenCount' not in raw
+                or (type(raw['toolUsePromptTokenCount']) is int and raw['toolUsePromptTokenCount'] >= 0)
+            )
         ),
         provider_response_id=_string_or_none(response.get('responseId')),
         actual_model_version=_string_or_none(response.get('modelVersion')),
@@ -585,15 +654,28 @@ def build_accounting_event(
 ) -> AccountingEvent:
     now = datetime.now(timezone.utc)
     usage = attempt.usage or ProviderUsage()
+    if attempt.cache_write_tokens or attempt.cache_storage_token_seconds or not attempt.cache_operation_usage_complete:
+        usage = replace(
+            usage,
+            cache_write_tokens=usage.cache_write_tokens + attempt.cache_write_tokens,
+            cache_storage_token_seconds=attempt.cache_storage_token_seconds,
+            cache_operation_usage_complete=attempt.cache_operation_usage_complete,
+        )
     cost_status, estimated_cost, cache_savings, rate_card_id, cost_basis = _estimate_cost(
         payer=context.payer,
         provider=attempt.provider,
-        model=attempt.configured_model,
-        usage=attempt.usage,
+        model=attempt.resolved_model or attempt.configured_model,
+        usage=usage if attempt.usage is not None else None,
         usage_status=attempt.usage_status,
         traffic_type=attempt.traffic_type,
     )
-    if priced is not None and cost_status in {CostStatus.UNPRICED, CostStatus.ESTIMATED}:
+    if (
+        priced is not None
+        and cost_status in {CostStatus.UNPRICED, CostStatus.ESTIMATED}
+        and not (
+            usage.cache_write_tokens or usage.cache_storage_token_seconds or not usage.cache_operation_usage_complete
+        )
+    ):
         # A caller-priced attempt is still an Omi cost, so BYOK (not_omi_cost)
         # and indeterminate usage keep the estimator's verdict; only the
         # rate-card estimate is replaced, and the basis says by what.
@@ -637,6 +719,12 @@ def build_accounting_event(
         cache_write_ttl=usage.cache_write_ttl,
         total_tokens=usage.total_tokens,
         cache_status=usage.cache_status,
+        lane_id=attempt.lane_id,
+        resolved_model=attempt.resolved_model,
+        cache_mode=attempt.cache_mode,
+        cacheable_prefix_tokens=attempt.cacheable_prefix_tokens,
+        cache_field_reported=usage.cache_status not in {CacheStatus.NOT_REPORTED, CacheStatus.NOT_APPLICABLE},
+        cache_storage_token_seconds=usage.cache_storage_token_seconds,
         unit_type=usage.unit_type,
         image_count=usage.image_count,
         image_size=usage.image_size,
@@ -647,8 +735,6 @@ def build_accounting_event(
         rate_card_id=rate_card_id,
         cost_basis=cost_basis,
         provider_response_id=attempt.provider_response_id,
-        jit_run_id=context.jit_run_id,
-        jit_contract_version=context.jit_contract_version,
     )
 
 
@@ -659,13 +745,7 @@ def estimated_provider_cost_micro_usd(
     model: str,
     metadata: ProviderResponseMetadata,
 ) -> tuple[CostStatus, int | None]:
-    """Return the same rate-card estimate used by the persisted ledger event.
-
-    JIT reservations must settle before a retry or fallback can spend again.
-    Keep that decision on the gateway's existing accounting estimator so the
-    reservation authority and the durable AccountingEvent cannot drift into
-    separate pricing rules.
-    """
+    """Return the rate-card estimate used by gateway and verifier accounting."""
     cost_status, estimated_cost, _cache_savings, _rate_card_id, _cost_basis = _estimate_cost(
         payer=payer,
         provider=provider,
@@ -675,140 +755,6 @@ def estimated_provider_cost_micro_usd(
         traffic_type=metadata.traffic_type,
     )
     return cost_status, estimated_cost
-
-
-@dataclass(frozen=True)
-class AccountingAggregate:
-    """Run-level view over every provider attempt, including failures/retries."""
-
-    jit_run_id: str
-    attempt_count: int
-    normalized_uncached_input_tokens: int
-    cached_input_tokens: int
-    cache_write_tokens: int
-    output_tokens: int
-    reasoning_tokens: int
-    estimated_cost_micro_usd: int | None
-    cost_status: CostStatus
-
-    @property
-    def cost_is_known(self) -> bool:
-        return self.estimated_cost_micro_usd is not None and self.cost_status == CostStatus.ESTIMATED
-
-
-def aggregate_accounting_events(events: list[AccountingEvent]) -> AccountingAggregate | None:
-    """Aggregate a JIT run without treating missing cost as zero.
-
-    The gateway persists one immutable event per provider attempt.  A full
-    agent turn can contain retries, fallbacks, and read-only tool rounds, so a
-    final-message usage value is insufficient.  Any unpriced/indeterminate
-    attempt makes the aggregate cost unknown and therefore ineligible for a
-    subsequent paid attempt.
-    """
-    jit_events = [event for event in events if event.jit_run_id]
-    if not jit_events:
-        return None
-    run_ids = {event.jit_run_id for event in jit_events if event.jit_run_id is not None}
-    if len(run_ids) != 1:
-        raise ValueError('cannot aggregate multiple JIT run IDs')
-    cost_known = all(
-        event.cost_status == CostStatus.ESTIMATED and event.estimated_cost_micro_usd is not None for event in jit_events
-    )
-    return AccountingAggregate(
-        jit_run_id=next(iter(run_ids)),
-        attempt_count=len(jit_events),
-        normalized_uncached_input_tokens=sum(event.uncached_input_tokens for event in jit_events),
-        cached_input_tokens=sum(event.cached_input_tokens for event in jit_events),
-        cache_write_tokens=sum(event.cache_write_tokens for event in jit_events),
-        output_tokens=sum(event.output_tokens for event in jit_events),
-        reasoning_tokens=sum(event.reasoning_tokens for event in jit_events),
-        estimated_cost_micro_usd=(
-            sum(event.estimated_cost_micro_usd or 0 for event in jit_events) if cost_known else None
-        ),
-        cost_status=CostStatus.ESTIMATED if cost_known else CostStatus.INDETERMINATE,
-    )
-
-
-JIT_GATEWAY_RECEIPT_SCHEMA = 'jit-gateway-receipt-v1'
-
-
-@dataclass(frozen=True)
-class JITGatewayReceipt:
-    """Small, prompt-free billing receipt returned to a qualified JIT caller."""
-
-    run_id: str
-    contract_version: str
-    attempts: tuple[dict[str, Any], ...]
-    aggregate: AccountingAggregate
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            'schema_version': JIT_GATEWAY_RECEIPT_SCHEMA,
-            'run_id': self.run_id,
-            'contract_version': self.contract_version,
-            'attempts': list(self.attempts),
-            'aggregate': {
-                'attempt_count': self.aggregate.attempt_count,
-                'normalized_uncached_input_tokens': self.aggregate.normalized_uncached_input_tokens,
-                'cached_input_tokens': self.aggregate.cached_input_tokens,
-                'cache_write_tokens': self.aggregate.cache_write_tokens,
-                'output_tokens': self.aggregate.output_tokens,
-                'reasoning_tokens': self.aggregate.reasoning_tokens,
-                'estimated_cost_micro_usd': self.aggregate.estimated_cost_micro_usd,
-                'cost_status': self.aggregate.cost_status.value,
-            },
-        }
-
-
-def jit_gateway_receipt_for_trace(
-    context: AccountingContext,
-    trace: AttemptTrace,
-) -> JITGatewayReceipt | None:
-    """Build the trusted wire receipt after all attempts in one request settle."""
-    if not context.jit_run_id or not context.jit_contract_version or not trace.attempts:
-        return None
-    events = [build_accounting_event(context, attempt) for attempt in trace.attempts]
-    aggregate = aggregate_accounting_events(events)
-    if aggregate is None:
-        return None
-    attempts = tuple(
-        {
-            'attempt_id': event.attempt_id,
-            'provider': event.provider,
-            'configured_model': event.configured_model,
-            'actual_model_version': event.actual_model_version,
-            'provider_response_id': event.provider_response_id,
-            'rate_card_id': event.rate_card_id,
-            'cost_basis': event.cost_basis,
-            'usage_status': event.usage_status.value,
-            'cost_status': event.cost_status.value,
-            'normalized_uncached_input_tokens': event.uncached_input_tokens,
-            'cached_input_tokens': event.cached_input_tokens,
-            'cache_write_tokens': event.cache_write_tokens,
-            'output_tokens': event.output_tokens,
-            'reasoning_tokens': event.reasoning_tokens,
-            'estimated_cost_micro_usd': event.estimated_cost_micro_usd,
-        }
-        for event in events
-    )
-    return JITGatewayReceipt(
-        run_id=context.jit_run_id,
-        contract_version=context.jit_contract_version,
-        attempts=attempts,
-        aggregate=aggregate,
-    )
-
-
-def encode_jit_gateway_receipt(receipt: JITGatewayReceipt) -> str:
-    """Encode a compact, header-safe copy for non-streaming callers."""
-    payload = json.dumps(receipt.as_dict(), separators=(',', ':'), sort_keys=True).encode('utf-8')
-    return base64.urlsafe_b64encode(payload).decode('ascii').rstrip('=')
-
-
-def jit_gateway_receipt_sse_frame(receipt: JITGatewayReceipt) -> bytes:
-    """Frame the same receipt as a terminal SSE event before ``[DONE]``."""
-    payload = json.dumps({'omi_jit_receipt': receipt.as_dict()}, separators=(',', ':'), sort_keys=True)
-    return f'event: omi_jit_receipt\ndata: {payload}\n\n'.encode('utf-8')
 
 
 def complete_openai_billable_usage(raw: Mapping[str, Any]) -> bool:
@@ -884,6 +830,8 @@ def _cache_status(
 ) -> CacheStatus:
     if cached_tokens > 0:
         return CacheStatus.HIT if prompt_tokens > 0 and cached_tokens >= prompt_tokens else CacheStatus.PARTIAL_HIT
+    if not cache_field_reported:
+        return CacheStatus.NOT_REPORTED
     if cache_requested:
         return CacheStatus.MISS
     if cache_field_reported:
@@ -955,6 +903,10 @@ def _estimate_cost(
     rate_card = rate_card_for(provider, model)
     if rate_card is None:
         return CostStatus.UNPRICED, None, None, None, 'rate_card_missing'
+    if not usage.cache_operation_usage_complete:
+        return CostStatus.UNPRICED, None, None, rate_card.rate_card_id, 'cache_operation_usage_missing'
+    if usage.cache_storage_token_seconds and rate_card.cache_storage_micro_usd_per_million_token_hours is None:
+        return CostStatus.UNPRICED, None, None, rate_card.rate_card_id, 'cache_storage_rate_missing'
     # The tier that applies is decided by total request context — cached,
     # uncached, and cache-write input tokens together — never by output
     # tokens, which some providers price at a different multiplier entirely.
@@ -1006,6 +958,11 @@ def _estimate_cost(
         cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
     else:
         cost_basis = 'marginal_token_rates_excludes_cache_storage'
+    if usage.cache_storage_token_seconds:
+        storage_rate = rate_card.cache_storage_micro_usd_per_million_token_hours
+        assert storage_rate is not None
+        numerator += (usage.cache_storage_token_seconds * storage_rate + 3599) // 3600
+        cost_basis = 'token_and_committed_cache_storage_rates'
     cost = rounded_micro_usd(numerator)
     savings = rounded_micro_usd(cache_savings_numerator)
     return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, cost_basis
@@ -1023,13 +980,13 @@ def _half_toward_zero(value: int) -> int:
 
 
 @lru_cache(maxsize=1)
-def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
+def _load_rate_cards() -> dict[tuple[str, str], list[RateCard]]:
     with RATE_CARD_FILE.open('r', encoding='utf-8') as handle:
         raw = cast(object, yaml.safe_load(handle))
     if not isinstance(raw, Mapping) or not isinstance(raw.get('rate_cards'), list):
         raise ValueError(f'{RATE_CARD_FILE} must contain a rate_cards list')
 
-    cards: dict[tuple[str, str], RateCard] = {}
+    cards: dict[tuple[str, str], list[RateCard]] = {}
     for item in cast(list[object], raw['rate_cards']):
         if not isinstance(item, Mapping):
             raise ValueError(f'{RATE_CARD_FILE} rate card entries must be mappings')
@@ -1041,6 +998,11 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
             cached_input_micro_usd_per_million=_nonnegative_int(item.get('cached_input_micro_usd_per_million')),
             output_micro_usd_per_million=_nonnegative_int(item.get('output_micro_usd_per_million')),
             cache_write_micro_usd_per_million=_optional_nonnegative_int(item, 'cache_write_micro_usd_per_million'),
+            cache_storage_micro_usd_per_million_token_hours=_optional_nonnegative_int(
+                item, 'cache_storage_micro_usd_per_million_token_hours'
+            ),
+            audio_input_micro_usd_per_million=_optional_nonnegative_int(item, 'audio_input_micro_usd_per_million'),
+            effective_from=_effective_from(item),
             cache_write_1h_micro_usd_per_million=_optional_nonnegative_int(
                 item, 'cache_write_1h_micro_usd_per_million'
             ),
@@ -1062,14 +1024,30 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
             ),
         )
         key = (card.provider, card.model)
-        if key in cards:
+        if any(existing.effective_from == card.effective_from for existing in cards.get(key, [])):
             raise ValueError(f'duplicate gateway rate card: {card.provider}/{card.model}')
-        cards[key] = card
+        cards.setdefault(key, []).append(card)
     return cards
 
 
-def rate_card_for(provider: str, model: str) -> RateCard | None:
-    return _load_rate_cards().get((provider.strip().lower(), model.strip()))
+def rate_card_for(
+    provider: str, model: str, *, at: date | None = None, rate_card_id: str | None = None
+) -> RateCard | None:
+    """The card in effect on ``at``. The default is today's UTC date.
+
+    An explicit ``rate_card_id`` takes precedence over the date: it resolves a
+    card recorded on a persisted ledger event for historical metadata. An
+    unknown ID, or an ID belonging to a different model, returns None rather
+    than falling through to the current price.
+    """
+    choices = _load_rate_cards().get((provider.strip().lower(), model.strip()), [])
+    if rate_card_id is not None:
+        return next((card for card in choices if card.rate_card_id == rate_card_id), None)
+    as_of = at or datetime.now(timezone.utc).date()
+    eligible = [card for card in choices if card.effective_from is None or card.effective_from <= as_of]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda card: card.effective_from or date.min)
 
 
 @lru_cache(maxsize=1)
@@ -1132,6 +1110,19 @@ def _nonnegative_int(value: object) -> int:
 
 def _optional_nonnegative_int(item: Mapping[str, Any], key: str) -> int | None:
     return _nonnegative_int(item[key]) if item.get(key) is not None else None
+
+
+def _effective_from(item: Mapping[str, Any]) -> date | None:
+    value = item.get('effective_from')
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value.strip():
+        return date.fromisoformat(value.strip())
+    raise ValueError('rate card effective_from must be a date')
 
 
 def _string_or_none(value: object) -> str | None:

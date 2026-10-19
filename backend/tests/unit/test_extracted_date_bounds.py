@@ -1,8 +1,7 @@
 """Contract tests for utils.llm.temporal.normalize_extracted_dates.
 
 The conversation metadata-extraction paths in utils/llm/chat.py turn model-extracted dates into
-the ``dates`` search filters (``add_filter_category_item(uid, 'dates', ...)`` plus the conversation
-vector metadata). They used to bound those dates with a hardcoded ``if date.year > 2025: continue``
+conversation vector metadata. They used to bound those dates with a hardcoded ``if date.year > 2025: continue``
 and a prompt line saying "Do not include dates greater than 2025". Once 2025 passed, that stopped
 rejecting implausible dates and started discarding every real one: external-integration
 conversations (message/text sources) recorded no dates at all, and the prompt actively steered the

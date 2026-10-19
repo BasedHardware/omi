@@ -64,6 +64,26 @@ _CONVERSATION_TIMESTAMPS: Dict[str, Any] = {
     "finished_at": _DATETIME_OR_NULL,
 }
 
+_CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
+    **_CONVERSATION_TIMESTAMPS,
+    "participants_included": {
+        "type": "boolean",
+        "description": "Whether stored transcript speaker mappings were loaded; false also for locked content",
+    },
+    "participants": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "speaker_id": {"type": ["integer", "string", "null"]},
+                "person_id": {"type": ["string", "null"]},
+                "is_user": {"type": "boolean"},
+            },
+        },
+    },
+    "person_ids": {"type": "array", "items": {"type": "string"}},
+}
+
 _ACTION_ITEM_TIMESTAMPS: Dict[str, Any] = {
     "created_at": _DATETIME_OR_NULL,
     "due_at": _DATETIME_OR_NULL,
@@ -312,6 +332,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             _object_schema(
                 ["memories"],
                 memories=_ARRAY_OF_OBJECTS,
+                effective_limit={"type": "integer"},
                 filters={"type": "object"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,
                 has_more={"type": "boolean"},
@@ -461,8 +482,14 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
-                "start_date": {"type": "string", "description": "Filter after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter before this date (yyyy-mm-dd)"},
+                "start_date": {
+                    "type": "string",
+                    "description": "created_at on/after UTC midnight (YYYY-MM-DD), inclusive",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "created_at through the entire UTC day (YYYY-MM-DD), inclusive",
+                },
                 "categories": {
                     "type": "array",
                     "items": {"type": "string", "enum": _CONVERSATION_CATEGORY_ENUM},
@@ -489,7 +516,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversations"],
-                conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS),
+                conversations=_object_array_with(**_CONVERSATION_CARD_FIELDS),
+                has_more={"type": "boolean"},
+                effective_limit={"type": "integer"},
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),
@@ -531,7 +560,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversation"],
-                conversation={"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
+                conversation={"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                 truncated={"type": "boolean"},
             )
         ),
@@ -587,7 +616,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "items": {
                         "type": "object",
                         "properties": {
-                            "conversation": {"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
+                            "conversation": {"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                         },
                     },
                 },
@@ -623,7 +652,15 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
             "required": ["query"],
         },
-        output_schema=_output_schema(_object_schema(["memories"], memories=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["memories"],
+                memories=_ARRAY_OF_OBJECTS,
+                search_coverage={"type": "string"},
+                message={"type": "string"},
+                effective_limit={"type": "integer"},
+            )
+        ),
         scope="memories.read",
         operation="memory_search",
         write_operation=_READ,
@@ -636,15 +673,21 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         description=(
             "Search for a topic inside the user's conversations, preferably with start_date and end_date. "
             "Returns small cards plus short match snippets; deep-read only a few relevant ids with "
-            "get_conversation_by_id."
+            "get_conversation_by_id. Empty results do not establish absence: use date-window listing for unindexed content."
         ),
         annotations=_read_annotations("Search conversations"),
         input_schema={
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Natural language search query"},
-                "start_date": {"type": "string", "description": "Filter after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter before this date (yyyy-mm-dd)"},
+                "start_date": {
+                    "type": "string",
+                    "description": "created_at on/after UTC midnight (YYYY-MM-DD), inclusive",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "created_at through the entire UTC day (YYYY-MM-DD), inclusive",
+                },
                 "limit": {
                     "type": "integer",
                     "description": "Maximum number of results to return",
@@ -656,7 +699,29 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "required": ["query"],
         },
         output_schema=_output_schema(
-            _object_schema(["conversations"], conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS))
+            _object_schema(
+                ["conversations"],
+                conversations=_object_array_with(
+                    **_CONVERSATION_CARD_FIELDS,
+                    match_snippets={
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "segment_id": {"type": ["string", "null"]},
+                                "start": {"type": ["number", "null"]},
+                                "end": {"type": ["number", "null"]},
+                                "start_ms": {"type": ["integer", "null"]},
+                                "end_ms": {"type": ["integer", "null"]},
+                                "speaker_id": {"type": ["integer", "string", "null"]},
+                            },
+                        },
+                    },
+                ),
+                search_coverage={"type": "string"},
+                message={"type": "string"},
+            )
         ),
         scope="conversations.read",
         operation="conversation_search",
@@ -1179,6 +1244,38 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=other.get_daily_summaries,
+    ),
+    ToolSpec(
+        name="process_recent_conversations",
+        title="Process recent conversations",
+        description="Process your own pending conversations from the last six hours. Returns progress; ready=false is not completion.",
+        annotations=_create_annotations("Process recent conversations", idempotent=True),
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "hours": {"type": "integer", "minimum": 1, "maximum": 6, "default": 6},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20},
+            },
+        },
+        output_schema=_output_schema(
+            {
+                "type": "object",
+                "required": ["status", "ready"],
+                "properties": {
+                    "status": {"type": "string"},
+                    "ready": {"type": "boolean"},
+                    "promoted": {"type": "integer"},
+                    "has_more": {"type": "boolean"},
+                    "retry_after_seconds": {"type": "integer"},
+                },
+            }
+        ),
+        scope="conversations.read",
+        operation="conversation_process_recent",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=other.process_recent_conversations,
     ),
 )
 

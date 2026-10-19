@@ -7,7 +7,7 @@
 This is deliberately a source/resource inventory, not a runtime probe.  It
 reads only checked-in files, emits paths/lines/classifications (never source
 text), and has no database, network, model, or user-data dependency.  The
-baseline records the current debt while the JIT-processing migration is in
+baseline records the current debt while the legacy memory-surface retirement is in
 flight: a class may shrink, but a new reference in a tracked class fails the
 ratchet.
 """
@@ -194,6 +194,11 @@ def _is_canonical_promotion_metadata(line: str, match: re.Match[str]) -> bool:
     if match.group(0) != "promotion":
         return False
     start, end = match.span()
+    # A literal canonical-apply payload key is metadata, not a lifecycle
+    # implementation. Identifiers/imports/calls with this prefix stay inventoried.
+    for field in re.finditer(r"[\"']promotion_audit[\"']\s*:", line):
+        if start == field.start() + 1:
+            return True
 
     def is_identifier(character: str) -> bool:
         return character.isalnum() or character == "_"

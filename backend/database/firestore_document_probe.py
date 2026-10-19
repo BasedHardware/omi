@@ -71,12 +71,15 @@ from typing import Any, Callable
 from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
+from database.firestore_read_origin import current_read_origin
+from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     'FIRESTORE_BILLED_READS',
     'FIRESTORE_BILLED_READS_BY_CALLER',
+    'FIRESTORE_BILLED_READS_BY_ORIGIN',
     'FIRESTORE_CALLER_LABEL_OVERFLOW',
     'FIRESTORE_DOCUMENT_READS',
     'FIRESTORE_QUERY_OPERATIONS',
@@ -127,6 +130,13 @@ FIRESTORE_BILLED_READS_BY_CALLER = Counter(
     'caller is module:function or other. Distinct caller values are capped; '
     'overflow increments omi_firestore_caller_label_overflow_total.',
     ['collection', 'kind', 'caller'],
+)
+
+
+FIRESTORE_BILLED_READS_BY_ORIGIN = Counter(
+    'omi_firestore_billed_reads_by_origin_total',
+    'Billed-equivalent Firestore reads by bounded route template or job/task name, collection, and kind.',
+    ['origin', 'collection', 'kind'],
 )
 
 
@@ -200,6 +210,7 @@ _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
 # observation; the value set is bounded by TIER_VALUES, so cardinality is
 # the plan catalog, not the user base. Keys absent until first seen.
 _ledger_tier_counts: dict[str, int] = {}
+_ledger_origin_counts: dict[str, int] = {}
 _ledger_unscoped = 0
 _ledger_seq = 0
 _ledger_last_emit = 0.0
@@ -219,6 +230,7 @@ def _ledger_emit_locked(day: str) -> None:
         'not_found': _ledger_counts['not_found'],
         'query': _ledger_counts['query'],
         'tier_counts': dict(sorted(_ledger_tier_counts.items())),
+        'reads_by_origin': dict(_ledger_origin_counts),
         'unscoped': _ledger_unscoped,
     }
     try:
@@ -228,8 +240,10 @@ def _ledger_emit_locked(day: str) -> None:
     _ledger_last_emit = time.monotonic()
 
 
-def _ledger_record(amount: float, kind: str, project: str | None, tier: str = 'unattributed') -> None:
-    global _ledger_day, _ledger_counts, _ledger_tier_counts, _ledger_unscoped
+def _ledger_record(
+    amount: float, kind: str, project: str | None, tier: str = 'unattributed', origin: str = 'unset'
+) -> None:
+    global _ledger_day, _ledger_counts, _ledger_tier_counts, _ledger_origin_counts, _ledger_unscoped
     if not _LEDGER_ENABLED:
         return
     try:
@@ -243,12 +257,14 @@ def _ledger_record(amount: float, kind: str, project: str | None, tier: str = 'u
                 _ledger_day = today
                 _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
                 _ledger_tier_counts = {}
+                _ledger_origin_counts = {}
             if project is not None and project != 'based-hardware':
                 return
             if project is None:
                 _ledger_unscoped = 1
             _ledger_counts[kind if kind in _ledger_counts else 'query'] += int(amount)
             _ledger_tier_counts[tier] = _ledger_tier_counts.get(tier, 0) + int(amount)
+            _ledger_origin_counts[origin] = _ledger_origin_counts.get(origin, 0) + int(amount)
             if now - _ledger_last_emit >= 60:
                 _ledger_emit_locked(_ledger_day)
     except Exception:
@@ -371,8 +387,88 @@ _KNOWN_PATTERNS = frozenset(
         'apps',
         'plugins',
         'migration_requests',
+        'batch_pipeline_prod_gpus',
+        'batch_pipeline_prod_intakes',
+        'batch_pipeline_prod_owners',
+        'batch_pipeline_dev_gpus',
+        'batch_pipeline_dev_intakes',
+        'batch_pipeline_dev_owners',
+        'sync_dead_letters_local',
+        'users/sync_content_ledger_local',
+        'sync_dead_letters_offline',
+        'users/sync_content_ledger_offline',
+        'users/client_devices',
+        'users/account_cutover',
+        'desktop_prompts',
+        'users/fair_use_state',
+        'users/fair_use_events',
+        'users/llm_usage',
+        'users/candidate_integration_outbox',
+        'users/task_recurrence_inbox',
+        'users/frame_deletion_outbox',
+        'users/memory_review_queue',
+        'users/daily_summaries',
+        'users/desktop_daily_usage',
+        'users/chat_first_proactive_intents',
+        'users/chat_first_delivery_attempts',
+        'users/chat_first_dead_letters',
+        'conversation_finalization_jobs',
+        'conversation_finalization_projection_shards',
+        'conversation_recovery_state',
+        'dream_scheduler',
+        'dream_users',
+        'dream_users/spend',
+        'dream_users/dirty',
+        'dream_users/reviews',
+        'dream_global_spend',
+        'dream_spend',
+        'dream_due',
+        'dream_feedback',
+        'dream_canary_health',
+        'users/dream_runs',
+        'users/dream_vocabulary',
+        'users/review_changes',
+        'users/review_attention',
+        'sync_backfill_sequencer',
+        'sync_backfill_pending',
+        'sync_dead_letters',
+        'offline_sync_jobs',
+        'import_jobs',
+        'users/sync_content_ledger',
+        'users/sync_content_ledger_dev',
+        'sync_dead_letters_dev',
+        'users/frame_requests',
+        'users/frame_upload_orphans',
+        'users/frame_vision_receipts',
+        'users/screen_frames',
+        'screen_frame_cleanup',
+        'channel_identities',
+        'channel_identities/inbox',
+        'channel_identities/inbound_chat_heads',
+        'channel_link_proofs',
+        'channel_capacity',
+        'channel_capacity/members',
+        'users/channel_turn_leases',
+        'users/chat_sessions',
+        'users/chat_sessions/channel_events',
+        'users/chat_sessions/channel_event_fences',
+        'users/speaker_learning_jobs',
+        'batch_pipeline_prod_jobs',
+        'batch_pipeline_prod_queues',
+        'batch_pipeline_prod_results',
+        'batch_pipeline_prod_control',
+        'batch_pipeline_dev_jobs',
+        'batch_pipeline_dev_queues',
+        'batch_pipeline_dev_results',
+        'batch_pipeline_dev_control',
     }
 )
+
+# Precompute group aliases once; recording never scans the allowlist.
+_group_candidates: dict[str, list[str]] = {}
+for _pattern in _KNOWN_PATTERNS:
+    _group_candidates.setdefault(_pattern.rsplit('/', 1)[-1], []).append(_pattern)
+_COLLECTION_GROUP_PATTERNS = {key: values[0] for key, values in _group_candidates.items() if len(values) == 1}
 
 _OTHER = 'other'
 _UNKNOWN = 'unknown'
@@ -398,10 +494,7 @@ def collection_pattern(path_parts: Any) -> str:
     if pattern in _KNOWN_PATTERNS:
         return pattern
     if len(parts) == 1:
-        token = str(parts[0])
-        matches = [known for known in _KNOWN_PATTERNS if known == token or known.endswith('/' + token)]
-        if len(matches) == 1:
-            return matches[0]
+        return _COLLECTION_GROUP_PATTERNS.get(str(parts[0]), _OTHER)
     return _OTHER
 
 
@@ -473,9 +566,11 @@ def _record(
         kind = 'not_found' if outcome == 'miss' else 'lookup'
     if caller is None:
         caller = 'unattributed'
+    trace_request_reads(amount)
     tier = current_tier()
+    origin = current_read_origin()
     if _LEDGER_ENABLED:
-        _ledger_record(amount, kind, _sdk_project(sdk_object), tier)
+        _ledger_record(amount, kind, _sdk_project(sdk_object), tier, origin)
     pattern = collection_pattern(path_parts)
     try:
         FIRESTORE_DOCUMENT_READS.labels(collection=pattern, outcome=outcome, tier=tier).inc(amount)
@@ -485,6 +580,10 @@ def _record(
         FIRESTORE_BILLED_READS.labels(collection=pattern, kind=kind, tier=tier).inc(amount)
     except Exception:
         logger.warning('firestore document read probe failed to record', exc_info=True)
+    try:
+        FIRESTORE_BILLED_READS_BY_ORIGIN.labels(origin=origin, collection=pattern, kind=kind).inc(amount)
+    except Exception:
+        pass  # Attribution must never affect a read or the existing counters.
     try:
         FIRESTORE_BILLED_READS_BY_CALLER.labels(collection=pattern, kind=kind, caller=caller).inc(amount)
     except Exception:

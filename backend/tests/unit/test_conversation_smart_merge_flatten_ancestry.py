@@ -21,7 +21,6 @@ from utils.sync.assignment_errors import SyncAssignmentConflict
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_AUDIT_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_FLATTEN_ENV, raising=False)
     return World(monkeypatch)

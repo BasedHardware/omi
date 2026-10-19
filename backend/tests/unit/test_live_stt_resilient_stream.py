@@ -230,10 +230,10 @@ async def test_window_ring_limit_with_pending_speech_replays_before_current_chun
     await listener._flush_stt_buffer(bytearray(b'B\x00' * 2), force=True)
     if listener._replay_recovery_task is not None:
         await listener._replay_recovery_task
-    assert raw.failure == 'capacity_full'
+    assert raw.failure == 'replay_ring_overflow'
     assert old.finished
-    assert live_stt_terminal_reason(old, 'connection_lost') == 'capacity_full'
-    assert listener._pending_live_failover.reason == 'capacity_full'
+    assert live_stt_terminal_reason(old, 'connection_lost') == 'replay_ring_overflow'
+    assert listener._pending_live_failover.reason == 'replay_ring_overflow'
     assert replayed == [(0, b'A\x00' * 6 + b'B\x00' * 2)]
     assert new.sent == replayed
     assert ring.snapshot() == ((0, b'A\x00' * 6), (6, b'B\x00' * 2))

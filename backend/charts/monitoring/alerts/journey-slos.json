@@ -1,0 +1,847 @@
+[
+  {
+    "uid": "omi-slo-live-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Live transcription - SLO budget burn (critical)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[1h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h]))) > bool 0.5) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[5m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))) > bool 0.5) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.474) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[30m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m]))) > bool 0.474) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live transcription - SLO budget burn (critical)",
+      "user_impact": "Live unsuccessful eligible work is consuming the 92.1% success budget faster than allowed.",
+      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances. Arms: 1h and 5m bad share >50% (14.4x burn exceeds 100% at this target, so it is capped) with >=20 events in 1h and >=5 in 5m; 6h and 30m burn >6x with >=20 events in 6h and >=5 in 30m.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.921",
+      "threshold": "(1h AND 5m bad share > 50%, the 14.4x burn capped) OR (6h AND 30m burn > 6x)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-slo-live-critical",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-live-warning",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Live transcription - SLO budget burn (warning)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 259200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[24h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h]))) > bool 0.237) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[2h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h]))) > bool 0.237) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[3d])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d]))) > bool 0.079) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.079) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live transcription - SLO budget burn (warning)",
+      "user_impact": "Live unsuccessful eligible work is consuming the 92.1% success budget faster than allowed.",
+      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 events in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 events in 3d and >=5 in 6h.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.921",
+      "threshold": "(24h AND 2h burn > 3x) OR (3d AND 6h burn > 1x)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-slo-live-warning",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-chat-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Mobile chat - SLO budget burn (critical)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1)) > bool 0.0864) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) >= bool 4) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.036) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) >= bool 7) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 40)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Mobile chat - SLO budget burn (critical)",
+      "user_impact": "Chat failure and stale terminals are consuming the 99.4% success budget faster than allowed.",
+      "scope": "Bad events are explicit chat_response terminals with outcome failure or stale. Cancelled client disconnects are excluded. Denominator is accepted work clamped to at least 1. Aggregate across instances. Burn arms: 1h failure share >8.64% with >=4 bad events and >=20 accepts; 6h failure share >3.6% with >=7 bad events and >=40 accepts. Pending period is five minutes. A total chat outage is already paged by omi-journey-chat-success-critical and omi-journey-chat-fail in alerts/resilience.json.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.994",
+      "threshold": "(1h burn > 14.4x AND bad >= 4 AND accepted >= 20) OR (6h burn > 6x AND bad >= 7 AND accepted >= 40)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-slo-chat-critical",
+      "component": "ai-chat",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-chat-warning",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Mobile chat - SLO budget burn (warning)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 259200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[24h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1)) > bool 0.018) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[2h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1)) > bool 0.018) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[3d])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1)) > bool 0.006) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.006) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) * 0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Mobile chat - SLO budget burn (warning)",
+      "user_impact": "Chat failure and stale terminals are consuming the 99.4% success budget faster than allowed.",
+      "scope": "Bad events are explicit chat_response terminals with outcome failure or stale. Cancelled client disconnects are excluded. Denominator is accepted work clamped to at least 1. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 accepts in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 accepts in 3d and >=5 in 6h.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.994",
+      "threshold": "(24h AND 2h burn > 3x) OR (3d AND 6h burn > 1x)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-slo-chat-warning",
+      "component": "ai-chat",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-pusher-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Pusher session - SLO budget burn (critical)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[1h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h]))) > bool 0.1584) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[5m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]))) > bool 0.1584) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) >= bool 7)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.066) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[30m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m]))) > bool 0.066) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) >= bool 16)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Pusher session - SLO budget burn (critical)",
+      "user_impact": "Pusher failure and cancelled terminals are consuming the 98.9% success budget faster than allowed.",
+      "scope": "Bad events are pusher_session terminals with outcome failure or cancelled. pusher_session_outcome maps application_failed and close 1011 to failure, close 1000 and 1001 to success, and every other close to cancelled. Normal success closes stay out of the bad count. The denominator is every terminal outcome for the journey, so an in-flight session cannot count. Aggregate across instances. Arms: 1h and 5m burn >14.4x with >=20 terminals in 1h and >=7 in 5m; 6h and 30m burn >6x with >=20 terminals in 6h and >=16 in 30m. Hangs and total outages stay covered by omi-journey-pusher-success-critical and omi-journey-pusher-fail.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.989",
+      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-slo-pusher-critical",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-pusher-warning",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Pusher session - SLO budget burn (warning)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 259200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[24h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h]))) > bool 0.033) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[2h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h]))) > bool 0.033) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[3d])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d]))) > bool 0.011) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.011) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Pusher session - SLO budget burn (warning)",
+      "user_impact": "Pusher failure and cancelled terminals are consuming the 98.9% success budget faster than allowed.",
+      "scope": "Bad events are pusher_session terminals with outcome failure or cancelled. pusher_session_outcome maps application_failed and close 1011 to failure, close 1000 and 1001 to success, and every other close to cancelled. Normal success closes stay out of the bad count. The denominator is every terminal outcome for the journey, so an in-flight session cannot count. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 terminals in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 terminals in 3d and >=5 in 6h. Hangs and total outages stay covered by omi-journey-pusher-success-critical and omi-journey-pusher-fail.",
+      "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
+      "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "slo_target": "0.989",
+      "threshold": "(24h AND 2h burn > 3x) OR (3d AND 6h burn > 1x)",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-slo-pusher-warning",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-slo-live-signal-dead",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Journey SLOs",
+    "title": "Live transcription - delivery counter silent",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live transcription - delivery counter silent",
+      "user_impact": "Live outcome or accepted-audio telemetry disappeared, or accepted audio is not producing session outcomes; journey health is unknown.",
+      "scope": "Eligible-session family (initialized at startup) absent OR fewer than one session outcome with more than 20 audio accepts in one hour. Quiet/too_short outcomes prove emission.",
+      "verification": "Read-only production counters are ingested; the exact query is included in the 10-day backtest. No notification delivery verified.",
+      "safe_next_action": "Check metric-family presence and exporter ingestion even if up is healthy; then compare accepted audio with all session outcomes. Do not scale from this alert alone.",
+      "runbook": "backend/charts/monitoring/SLOS.md",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-slo-live-signal-dead",
+      "component": "live-transcription",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  }
+]

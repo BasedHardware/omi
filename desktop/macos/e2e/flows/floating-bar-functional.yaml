@@ -39,6 +39,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/HandsFreeRequestScope.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift

@@ -87,7 +87,12 @@ class ReservationState:
             for m, s in sorted(RESERVATIONS.items())
         ]
         revision = hashlib.sha256(json.dumps(addresses).encode()).hexdigest()[:16]
-        return 'vertex-reservations:v1:' + os.getenv('GOOGLE_CLOUD_PROJECT', '') + ':' + revision
+        return (
+            'vertex-reservations:v1:'
+            + os.getenv('OMI_VERTEX_RESERVATION_PROJECT', os.getenv('GOOGLE_CLOUD_PROJECT', ''))
+            + ':'
+            + revision
+        )
 
     def _check_scope(self) -> None:
         key = self.key()
@@ -149,7 +154,7 @@ class ReservationState:
             own = evidence[m]
             if 0 <= now - at <= ACTIVE_FRESH_SECONDS and at > max(own.success_at, own.failure_start):
                 evidence[m] = observe(own, now=at, outcome='dedicated_success')
-        if model in RESERVATIONS and outcome:
+        if model in RESERVATIONS and outcome in {'dedicated_success', 'capacity_error'}:
             evidence[model] = observe(evidence[model], now=now, outcome=outcome)
         states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
         leases = {m: at for m, at in doc.get('leases', {}).items() if m in RESERVATIONS}
@@ -321,6 +326,47 @@ class ReservationState:
             raw[m] = local.get(m, state) if state == State.UNKNOWN else state
         return effective_states(raw, os.environ) if apply_overrides else raw
 
+    async def dream_headroom(self, model: str, *, fresh_seconds: float, utilization_limit: float) -> str | None:
+        """Strict shared evidence for background admission, without operator/local overrides.
+
+        A utilization producer may SET EX `<key>:dedicated-utilization:<model>` to
+        {"utilization": fraction, "observed_at": Redis epoch seconds}. Absence
+        selects the saturation-only policy; malformed/stale samples always wait.
+        Existing reservation observations do not measure utilization.
+        """
+        client = self.client()
+        if client is None:
+            return 'no_client'
+        async with asyncio.timeout(0.5):
+            raw = await client.get(self.key())
+            seconds, micros = await client.time()
+            now = seconds + micros / 1_000_000
+            doc = json.loads(raw) if raw else {}
+            evidence = {m: Evidence(**doc.get('evidence', {}).get(m, {})) for m in RESERVATIONS}
+            fresh = [
+                m for m, value in evidence.items() if value.success_at and 0 <= now - value.success_at <= fresh_seconds
+            ]
+            if fresh != [model]:
+                return 'no_active_model' if fresh else 'no_states'
+            if await client.get(self.key() + ':saturated:' + model):
+                return 'saturated'
+            if await client.get(self.key() + ':dream-probe-failed:' + model):
+                return 'probe_failed'
+            sample = await client.get(self.key() + ':dedicated-utilization:' + model)
+            if sample is not None:
+                value = json.loads(sample)
+                utilization, observed_at = value['utilization'], value['observed_at']
+                if (
+                    type(utilization) not in (int, float)
+                    or not 0 <= utilization <= 1
+                    or type(observed_at) not in (int, float)
+                    or not 0 <= now - observed_at <= fresh_seconds
+                ):
+                    return 'utilization_unavailable'
+                if utilization >= utilization_limit:
+                    return 'interactive_headroom'
+        return None
+
     async def _run_probe(self, model: str, probe: Probe, key: str) -> None:
         if model not in discovery_models(os.environ) or key != self.key():
             return
@@ -331,9 +377,15 @@ class ReservationState:
                 outcome = await probe(model, location)
         except Exception:
             outcome = 'inconclusive'
-        if model in discovery_models(os.environ) and key == self.key():
+        if (
+            outcome in {'dedicated_success', 'capacity_error'}
+            and model in discovery_models(os.environ)
+            and key == self.key()
+        ):
             await self.transact(model, outcome)
-            self._snapshot = {}
+        # A completed probe releases the local snapshot so the next refresh can
+        # discover another model. Non-teaching outcomes still publish no evidence.
+        self._snapshot = {}
 
     async def aclose(self) -> None:
         for task in self._probe_tasks:
@@ -354,6 +406,14 @@ class ReservationState:
         self, model: str, capacity: str, status: int, traffic_type: str | None, *, timeout_seconds: float = 0.3
     ) -> None:
         self._check_scope()
+        if model in RESERVATIONS and capacity == 'dedicated' and status == 429:
+            try:
+                client = self.client()
+                if client is not None:
+                    async with asyncio.timeout(0.3):
+                        await client.set(self.key() + ':saturated:' + model, '1', ex=120)
+            except Exception:
+                logger.warning('vertex_reservation_saturation_publish_failed model=%s', model)
         if (
             model in RESERVATIONS
             and capacity == 'dedicated'

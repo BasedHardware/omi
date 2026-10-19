@@ -48,6 +48,12 @@ void main() {
     await PlatformManager.initializeServices();
   });
 
+  test('announces lossless plan decoding without requiring an auth token', () async {
+    final headers = await buildHeaders(requireAuthCheck: false);
+    expect(headers['X-Omi-Plan-Identity'], '1');
+    expect(headers['X-App-Version'], '1.0.0+1');
+  });
+
   group('auth header guards', () {
     test('throws AuthTokenUnavailableException when signed in and token missing', () async {
       expect(() => simulateGetAuthHeader(isSignedIn: true, token: ''), throwsA(isA<AuthTokenUnavailableException>()));

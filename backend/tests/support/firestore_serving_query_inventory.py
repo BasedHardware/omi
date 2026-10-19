@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -112,6 +113,12 @@ def discover_serving_query_functions(backend_root: str | Path) -> list[dict[str,
     return sorted(rows, key=lambda row: row['key'])
 
 
+@lru_cache(maxsize=16)
+def _parsed_serving_source(source: str) -> ast.Module:
+    """Reuse repeated parses by exact content; source edits always get a fresh AST."""
+    return ast.parse(source)
+
+
 def serving_function_body_digest(key: str, backend_root: str | Path | None = None) -> str:
     root = Path(backend_root) if backend_root is not None else Path(__file__).resolve().parents[2]
     parts = key.split('.')
@@ -119,7 +126,7 @@ def serving_function_body_digest(key: str, backend_root: str | Path | None = Non
         path = root.joinpath(*parts[:split]).with_suffix('.py')
         if path.is_file():
             names = parts[split:]
-            nodes = ast.parse(path.read_text()).body
+            nodes = _parsed_serving_source(path.read_text()).body
             target = None
             for name in names:
                 target = next(

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "FC-saved-device-launch-failure-revokes-reconnect",
+  "violated_contract": "A saved BLE pairing retains reconnect intent across a cold-start adapter or transport failure until the user disconnects, forgets, or a pairing-loss block requires recovery. Error cleanup must not masquerade as a manual disconnect and leave the process with no owner or retry path.",
+  "canonical_prevention": "Retain one service/transport owner for pre-readiness failures; authorize native retry only from the saved pairing, ensure it on resume and adapter-on, and keep one capped backoff timer. Persist explicit user suppression before teardown, fence queued retries, and prove recovery and suppression through the real provider/service/native bridge path.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/device_provider_late_ready_test.dart",
+    "app/test/services/devices/saved_pendant_reconnect_test.dart",
+    "app/ios/test/omi_ble_connection_policy_test.rb",
+    "app/android/app/src/test/kotlin/com/friend/ios/ble/BleSavedReconnectTest.kt",
+    "app/test/services/devices/saved_pendant_launch_timeout_reconnect_test.dart",
+    "app/test/services/devices/saved_reconnect_review_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/devices.dart",
+    "app/lib/services/devices/saved_pendant_reconnect.dart",
+    "app/ios/Runner/Ble/OmiBleManager.swift",
+    "app/android/app/src/main/kotlin/com/friend/ios/ble/OmiBleForegroundService.kt"
+  ],
+  "status": "open"
+}

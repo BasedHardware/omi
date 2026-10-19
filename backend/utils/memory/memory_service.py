@@ -1,5 +1,7 @@
 """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
+from contextvars import ContextVar
+
 import hashlib
 import json
 import logging
@@ -30,11 +32,18 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import (
+    DestructiveGateTakeover,
+    assert_destructive_gate_still_ours,
+    DestructiveOperationInProgress,
+    LegalHoldAuthorityUnavailable,
+    destructive_operation_gate,
+)
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
@@ -43,7 +52,6 @@ from models.knowledge_ledger_search import (
     is_ledger_row_admissible as is_ledger_row_admissible,
     ledger_row_is_rejected,
 )
-from models.memory_apply import WriterMode
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
@@ -58,7 +66,13 @@ from models.product_memory import (
     SourceState,
 )
 from utils.log_sanitizer import sanitize, sanitize_validation_error
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
+from utils.other.account_gate_http import account_gate_busy_http_exception
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_get_all,
+    indexed_list_reads_enabled,
+)
 from utils.other.portability_read import check_portability_read
 from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
 from utils.memory.canonical_memory_adapter import (
@@ -72,19 +86,20 @@ from utils.memory.canonical_memory_adapter import (
     delete_canonical_memories_batch,
     memory_item_to_memorydb,
     purge_canonical_memory_projections,
+    defer_conversation_privacy_finalization,
     read_canonical_memory_item,
     read_canonical_memories,
     read_canonical_scan_page,
     refine_canonical_memory,
     replace_conversation_sourced_memories,
     retract_conversation_sourced_memories,
+    apply_canonical_user_mutation,
     search_canonical_memories,
     search_result_to_memorydb,
     update_canonical_memory_content,
     update_canonical_memory_visibility,
     update_canonical_memory_product_fields,
     update_canonical_memory_review,
-    is_direct_user_write_authority,
     write_canonical_external_memory,
 )
 from utils.memory.product_memory_read_service import (
@@ -94,29 +109,26 @@ from utils.memory.product_memory_read_service import (
 from utils.memory.knowledge_ledger import (
     LEDGER_SCHEMA_VERSION,
     LedgerProvenance,
-    LedgerWrite,
     amend_user_fact as amend_fact,
     evidence_id_for_ledger_provenance,
     reopen_standalone_fact,
-    save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
+from utils.memory.category_reads import read_category_window
+from utils.memory.compatibility_reads import CompatibilityReadState, memory_sort_key, next_historical_scan_limit
+from utils.memory.read_resilience import (
+    MemoryBackingStoreStream,
+    MemoryBackingStoreUnavailable,
+    memory_store_read,
+    resilient_memory_read,
+)
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system import ensure_canonical_apply_control_state
-from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
-from utils.memory.belief_model import (
-    belief_model_enabled,
-    memory_use_suppressed,
-    normalize_temporal_read_view,
-    public_belief_overlay_json,
-    temporal_view_allows_record,
-)
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -133,22 +145,6 @@ from utils.metrics import (
 
 logger = logging.getLogger(__name__)
 
-MemoryBackingStoreStream = Literal['canonical', 'historical', 'cursor']
-
-
-class MemoryBackingStoreUnavailable(HTTPException):
-    """Recoverable backing-store failure for mixed-list reads.
-
-    Subclasses ``HTTPException`` so existing callers keep the same 503 body.
-    ``GET /v3/memories`` first-page fallback catches this type instead of
-    matching ``detail`` strings — a renamed or newly added unavailable
-    message must not escape to clients as a hard 503.
-    """
-
-    def __init__(self, detail: str, *, stream: MemoryBackingStoreStream) -> None:
-        super().__init__(status_code=503, detail=detail)
-        self.stream = stream
-
 
 MemoryPayload = Dict[str, Any]
 McpSearchPayload = Dict[str, Any]
@@ -156,6 +152,14 @@ McpSearchPayload = Dict[str, Any]
 MAX_LEDGER_HISTORY_PROVIDER_WINDOW = 500
 MAX_LEDGER_REVERT_CHAIN_LENGTH = 64
 _LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
+
+
+_EXPLICIT_DELETION_ACTIVE: ContextVar[bool] = ContextVar("memory_service_explicit_deletion", default=False)
+
+
+def _revalidate_explicit_deletion(uid: str, *, db_client: Any) -> None:
+    if _EXPLICIT_DELETION_ACTIVE.get():
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
 
 
 def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]:
@@ -167,14 +171,21 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
         # derived data for a row the assignment transaction already tombstoned.
         # It must not take the exclusive account gate reserved for genuinely
         # destructive work; callers pass claim_destructive_gate=False.
-        if not kwargs.get("claim_destructive_gate", True):
-            return method(self, uid, *args, **kwargs)
-        with destructive_operation_gate(
-            uid,
-            kind="explicit_memory_deletion",
-            firestore_client=self.db_client,
-        ):
-            return method(self, uid, *args, **kwargs)
+        try:
+            if not kwargs.get("claim_destructive_gate", True):
+                return method(self, uid, *args, **kwargs)
+            with destructive_operation_gate(
+                uid,
+                kind="explicit_memory_deletion",
+                firestore_client=self.db_client,
+            ):
+                reset = _EXPLICIT_DELETION_ACTIVE.set(True)
+                try:
+                    return method(self, uid, *args, **kwargs)
+                finally:
+                    _EXPLICIT_DELETION_ACTIVE.reset(reset)
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
 
     return wrapped
 
@@ -206,8 +217,13 @@ def _purge_required_canonical_projections(
             db_client=db_client,
             reason=reason,
             include_review_queue=False,
+            revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -221,6 +237,7 @@ def _delete_historical_privacy_overrides(uid: str, memory_ids: List[str], *, db_
     client = db_client if db_client is not None else default_db_client
     collections = MemoryCollections(uid=uid)
     for memory_id in dict.fromkeys(memory_id for memory_id in memory_ids if memory_id):
+        _revalidate_explicit_deletion(uid, db_client=client)
         client.document(f"{collections.memory_historical_overrides}/{memory_id}").delete()
 
 
@@ -319,9 +336,11 @@ class LedgerHistoryPage:
     memories: Tuple[MemoryDB, ...]
     truncated: bool
     scanned_count: int
-    # Raw provider keyset after the bounded window.  The router signs this
-    # value into its continuation token; it is deliberately separate from the
-    # filtered row offset so rejected/non-history rows cannot stall paging.
+    # Raw provider keyset to resume after: the last row before the sentinel,
+    # or the last returned row when ``limit`` stopped the page inside the
+    # window.  The router signs this value into its continuation token; it is
+    # deliberately separate from the filtered row offset so rejected/non-history
+    # rows cannot stall paging.
     next_start_after: Optional[Tuple[datetime, str]] = None
 
 
@@ -396,7 +415,7 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
     if not memory_ids:
         return []
 
-    memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
+    memories_data = memory_store_read(memories_db.get_memories_by_ids, uid, memory_ids)
     memories_data = [
         memory_api_payload(memory, MemoryApiExposure.LEGACY)
         for memory in memories_data
@@ -520,7 +539,6 @@ class CanonicalMemoryBackend:
             include_archive=include_archive,
             now=now,
             budget=budget,
-            view=view,
             as_of=as_of,
         )
 
@@ -553,8 +571,6 @@ class CanonicalMemoryBackend:
             "now": now,
             "budget": budget,
         }
-        if view != 'released':
-            read_kwargs["view"] = view
         if as_of is not None:
             read_kwargs["as_of"] = as_of
         return [truncate_locked_memory_preview(memory) for memory in read_canonical_memories(uid, **read_kwargs)]
@@ -570,7 +586,6 @@ class CanonicalMemoryBackend:
         include_archive: bool,
         now: Optional[datetime],
         budget: Optional[ListReadBudget],
-        view: str,
         as_of: Optional[datetime],
     ) -> List[MemoryDB]:
         """Fill one offset window from bounded canonical keyset pages.
@@ -592,7 +607,11 @@ class CanonicalMemoryBackend:
         with batch_canonical_expiry_observations():
             while len(collected) < needed and scanned < raw_cap:
                 scan_kwargs: Dict[str, Any] = {
-                    "limit": MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    "limit": (
+                        min(500, needed - len(collected), raw_cap - scanned)
+                        if indexed_list_reads_enabled()
+                        else MEMORY_LIST_SCAN_CHUNK_SIZE
+                    ),
                     "start_after": start_after,
                     "db_client": self._db_client,
                     "device_scope_request": device_scope_request,
@@ -601,14 +620,10 @@ class CanonicalMemoryBackend:
                     "now": now,
                     "budget": budget,
                 }
-                # Released callers and test fakes keep the historical kwarg set.
-                # Temporal arguments are added only when this read opted in.
-                if view != "released":
-                    scan_kwargs["view"] = view
                 if as_of is not None:
                     scan_kwargs["as_of"] = as_of
                 try:
-                    slots, exhausted = read_canonical_scan_page(uid, **scan_kwargs)
+                    slots, exhausted = memory_store_read(read_canonical_scan_page, uid, **scan_kwargs)
                 except ListReadBudgetExhausted:
                     stopped_early = True
                     break
@@ -666,11 +681,13 @@ class CanonicalMemoryBackend:
         }
         if ledger_kinds is not None:
             search_kwargs["ledger_kinds"] = ledger_kinds
-        if view != 'released':
-            search_kwargs["view"] = view
         if as_of is not None:
             search_kwargs["as_of"] = as_of
-        items = search_canonical_memories(
+        # Empty ledger queries return without provider IO and are not probe
+        # evidence. All other canonical searches perform a backing read.
+        search = memory_store_read if (query or '').strip() or ledger_kinds is None else lambda fn, *a, **k: fn(*a, **k)
+        items = search(
+            search_canonical_memories,
             uid,
             query,
             **search_kwargs,
@@ -943,7 +960,9 @@ class HistoricalMemoryAdapter:
         if not memory_ids:
             return records
         try:
-            raw_rows = memories_db.get_memories_by_ids(uid, memory_ids, budget=budget, **self._firestore_kwargs())
+            raw_rows = memory_store_read(
+                memories_db.get_memories_by_ids, uid, memory_ids, budget=budget, **self._firestore_kwargs()
+            )
         except ListReadBudgetExhausted as exc:
             # A charge that dies after the documents were fetched still carries
             # those rows. Ship them; the budget is already truncated.
@@ -977,6 +996,7 @@ class HistoricalMemoryAdapter:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         hydrate: bool = True,
         budget: Optional[ListReadBudget] = None,
+        index_state: Optional[memories_db.MemoryListIndexState] = None,
     ) -> List[HistoricalMemoryRecord]:
         bounded_limit = max(1, min(int(limit or 100), self.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -998,11 +1018,13 @@ class HistoricalMemoryAdapter:
         records: List[HistoricalMemoryRecord] = []
         try:
             while True:
-                index_rows = memories_db.list_memory_updated_or_created_index(
+                index_rows = memory_store_read(
+                    memories_db.list_memory_updated_or_created_index,
                     uid,
                     index_limit,
                     0,
                     budget=budget,
+                    **({"index_state": index_state} if index_state is not None else {}),
                     **self._firestore_kwargs(),
                 )
                 records = []
@@ -1104,7 +1126,8 @@ class HistoricalMemoryAdapter:
         """Bounded updated_at-present historical keyset page."""
         bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
         try:
-            payloads, cursors, exhausted = memories_db.scan_memories_updated_at_page(
+            payloads, cursors, exhausted = memory_store_read(
+                memories_db.scan_memories_updated_at_page,
                 uid,
                 limit=bounded_limit,
                 start_after=start_after,
@@ -1138,7 +1161,8 @@ class HistoricalMemoryAdapter:
         """Bounded created_at historical keyset page with updated_at-present filtered out."""
         bounded_limit = max(1, min(int(limit or 100), self.MAX_PAGE_SIZE))
         try:
-            payloads, cursors, exhausted = memories_db.scan_memories_created_at_page(
+            payloads, cursors, exhausted = memory_store_read(
+                memories_db.scan_memories_created_at_page,
                 uid,
                 limit=bounded_limit,
                 start_after=start_after,
@@ -1185,7 +1209,7 @@ class HistoricalMemoryAdapter:
         if not ids:
             return []
         try:
-            rows = memories_db.get_memories_by_ids(uid, ids, **self._firestore_kwargs())
+            rows = memory_store_read(memories_db.get_memories_by_ids, uid, ids, **self._firestore_kwargs())
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         by_id: Dict[str, HistoricalMemoryRecord] = {}
@@ -1218,6 +1242,7 @@ class HistoricalMemoryAdapter:
         therefore its retry identity) intact. Suppression/tombstones prevent
         resurrection while the caller retries the failed request.
         """
+        _revalidate_explicit_deletion(uid, db_client=db_client)
         failures: List[str] = []
         if delete_vector:
             # The legacy vector helper no-ops when no vector store is
@@ -1239,7 +1264,10 @@ class HistoricalMemoryAdapter:
             raise HTTPException(status_code=503, detail="Historical memory privacy cleanup incomplete")
         try:
             kwargs = {"firestore_client": db_client} if db_client is not None else {}
+            _revalidate_explicit_deletion(uid, db_client=db_client)
             memories_db.delete_memory(uid, memory_id, **kwargs)
+        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+            raise
         except Exception:
             failures.append("content")
             logger.exception("historical memory cleanup failed uid=%s memory_id=%s", uid, memory_id)
@@ -1698,6 +1726,7 @@ class _CanonicalCursorStream:
         self._view = view
         self._as_of = as_of
         self._page_limit = max(1, int(page_limit or 100))
+        self._consumed_count = 0
         self._peek: Optional[MemoryDB] = None
         self._peek_keyset: Optional[StreamKeyset] = None
         self._peek_scan: Optional[StreamKeyset] = None
@@ -1714,7 +1743,11 @@ class _CanonicalCursorStream:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
         try:
             scan_kwargs: dict[str, Any] = {
-                "limit": MEMORY_LIST_SCAN_CHUNK_SIZE,
+                "limit": (
+                    min(500, max(1, self._page_limit + 1 - self._consumed_count))
+                    if indexed_list_reads_enabled()
+                    else MEMORY_LIST_SCAN_CHUNK_SIZE
+                ),
                 "start_after": start_after,
                 "db_client": self._service.db_client,
                 "device_scope_request": self._device_scope_request,
@@ -1730,7 +1763,7 @@ class _CanonicalCursorStream:
                 scan_kwargs["view"] = self._view
             if self._as_of is not None:
                 scan_kwargs["as_of"] = self._as_of
-            raw_slots, stream_exhausted = read_canonical_scan_page(self._uid, **scan_kwargs)
+            raw_slots, stream_exhausted = memory_store_read(read_canonical_scan_page, self._uid, **scan_kwargs)
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
@@ -1792,6 +1825,7 @@ class _CanonicalCursorStream:
     def consume(self) -> None:
         if self._peek is None or self._peek_keyset is None or self._peek_scan is None:
             raise RuntimeError("canonical cursor stream consume without peek")
+        self._consumed_count += 1
         self.emitted_keyset = self._peek_keyset
         self.scan_keyset = self._peek_scan
         self._peek = None
@@ -2458,9 +2492,12 @@ class MemoryService:
         try:
             ref = client.document(path)
             try:
+                _revalidate_explicit_deletion(uid, db_client=client)
                 ref.set(payload, merge=True)
             except TypeError:
                 ref.set(payload)
+        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+            raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
@@ -2500,7 +2537,10 @@ class MemoryService:
                         batch.set(ref, payload, merge=True)
                     except TypeError:
                         batch.set(ref, payload)
+                _revalidate_explicit_deletion(uid, db_client=client)
                 batch.commit()
+            except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+                raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
@@ -2532,8 +2572,6 @@ class MemoryService:
                 "now": now,
                 "budget": budget,
             }
-            if view != 'released':
-                read_kwargs["view"] = view
             if as_of is not None:
                 read_kwargs["as_of"] = as_of
             reader = self._canonical.read_authoritative if authoritative else self._canonical.read
@@ -2543,16 +2581,7 @@ class MemoryService:
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
-    @staticmethod
-    def _memory_sort_key(memory: MemoryDB) -> tuple[float, str]:
-        value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
-        if value is None:
-            timestamp = float("-inf")
-        else:
-            if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
-            timestamp = value.timestamp()
-        return (-timestamp, memory.id)
+    _memory_sort_key = staticmethod(memory_sort_key)
 
     @classmethod
     def _sort_memories(cls, memories: List[MemoryDB]) -> None:
@@ -2560,18 +2589,13 @@ class MemoryService:
 
     @staticmethod
     def _next_historical_scan_limit(current: int, *, step: int) -> int:
-        """Grow the adaptive historical scan at least geometrically.
+        return next_historical_scan_limit(
+            current,
+            step=step,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+        )
 
-        Every expansion round re-reads the whole newest-first prefix from the
-        start, so a linear step makes one page cost O(rounds x prefix): a fully
-        suppressed account at window=500 stepped 500, 1000, ... 5000 and read
-        27,500 documents over 55 queries for a single page. Doubling keeps the
-        light case identical (the first expansion is still ``current + step``)
-        and bounds the heavy case to a logarithmic number of rescans.
-        """
-        grown = max(current + max(1, int(step)), current * 2)
-        return min(HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW, grown)
-
+    @resilient_memory_read
     def read(
         self,
         uid: str,
@@ -2586,6 +2610,51 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
+        category_filter: Optional[Set[str]] = None,
+        reuse_compatibility_reads: bool = False,
+    ) -> List[MemoryDB]:
+        kwargs: Dict[str, Any] = dict(
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
+            now=now,
+            budget=budget,
+            view=view,
+            as_of=as_of,
+            authoritative=authoritative,
+        )
+        if reuse_compatibility_reads:
+            # Allocated inside the resilience attempt: a whole-operation retry
+            # gets fresh evidence and every call drops it on return.
+            kwargs["read_state"] = CompatibilityReadState(uid)
+        if category_filter is None:
+            return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
+        # One admission owns all internal windows and their shared budget.
+        return read_category_window(
+            self._read_compatibility_window,
+            uid,
+            limit=limit,
+            offset=offset,
+            category_filter=category_filter,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+            **kwargs,
+        )
+
+    def _read_compatibility_window(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        include_archive: bool = False,
+        now: Optional[datetime] = None,
+        budget: Optional[ListReadBudget] = None,
+        view: str = 'released',
+        as_of: Optional[datetime] = None,
+        authoritative: bool = False,
+        read_state: Optional[CompatibilityReadState] = None,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -2607,8 +2676,6 @@ class MemoryService:
                 "now": now,
                 "budget": budget,
             }
-            if view != 'released':
-                canonical_kwargs["view"] = view
             if as_of is not None:
                 canonical_kwargs["as_of"] = as_of
             canonical = self._canonical_read(uid, authoritative=authoritative, **canonical_kwargs)
@@ -2653,8 +2720,8 @@ class MemoryService:
         # batch gets over 55,000 documents for one page and took the request
         # past the 30s edge timeout. Canonical status is a stable read within
         # one request, so ask for each memory id exactly once.
-        statuses: Dict[str, MemoryItemStatus] = {}
-        status_ids_read: Set[str] = set()
+        statuses: Dict[str, MemoryItemStatus] = read_state.statuses if read_state is not None else {}
+        status_ids_read: Set[str] = read_state.status_ids_read if read_state is not None else set()
         kept_stub_ids: Set[str] = set()
         try:
             while True:
@@ -2665,6 +2732,7 @@ class MemoryService:
                     device_scope_request=device_scope_request,
                     hydrate=False,
                     budget=budget,
+                    **({"index_state": read_state.index} if read_state is not None else {}),
                 )
                 merged = list(canonical)
                 identity_suppressed = 0
@@ -2876,6 +2944,7 @@ class MemoryService:
             return "canonical_state"
         return None
 
+    @resilient_memory_read
     def read_page(
         self,
         uid: str,
@@ -2899,8 +2968,7 @@ class MemoryService:
         bounded Firestore keyset scan — never a full-set reload.
         """
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
+        temporal_view = 'released'
         # ``as_of`` is an explicit traversal anchor.  ``now`` remains the
         # evaluation clock for callers that do not opt into a stable snapshot;
         # it is intentionally not smuggled into a cursor clients cannot echo.
@@ -3048,12 +3116,7 @@ class MemoryService:
                     )
                     if take_canonical:
                         assert canonical_memory is not None
-                        accepted = temporal_view == 'released' or temporal_view_allows_record(
-                            canonical_memory,
-                            view=temporal_view,
-                            now=temporal_clock,
-                            include_archive=include_archive,
-                        )
+                        accepted = True
                         if accepted:
                             page.append(canonical_memory)
                         canonical.consume()
@@ -3061,12 +3124,7 @@ class MemoryService:
                             canonical_kept += 1
                         continue
                     assert historical_memory is not None
-                    accepted = temporal_view == 'released' or temporal_view_allows_record(
-                        historical_memory,
-                        view=temporal_view,
-                        now=temporal_clock,
-                        include_archive=include_archive,
-                    )
+                    accepted = True
                     if accepted:
                         page.append(historical_memory)
                     historical.consume()
@@ -3186,6 +3244,7 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found")
         return record.memory
 
+    @resilient_memory_read
     def search(
         self,
         uid: str,
@@ -3200,9 +3259,6 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
     ) -> List[MemorySearchMatch]:
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
-        temporal_clock = as_of or datetime.now(timezone.utc)
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
         # Callers that already over-fetch (e.g. timeframe-scoped chat) pass candidate_limit.
@@ -3216,11 +3272,6 @@ class MemoryService:
                 "device_scope_request": device_scope_request,
                 "item_filter": canonical_item_filter,
             }
-            if temporal_view != 'released':
-                # The canonical adapter owns candidate retrieval.  Passing the
-                # same bounded view/anchor through lets it retain stale rows
-                # for history instead of losing them to released filtering.
-                canonical_kwargs.update(view=temporal_view, as_of=as_of)
             if ledger_kinds is not None:
                 canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
@@ -3262,15 +3313,6 @@ class MemoryService:
                 return False
             # Search is an automated evidence consumer, including explicit
             # dated recall. Owner history inspection uses list/history routes.
-            if belief_model_enabled() and memory_use_suppressed(memory):
-                return False
-            if temporal_view != 'released' and not temporal_view_allows_record(
-                memory,
-                view=temporal_view,
-                now=temporal_clock,
-                include_archive=False,
-            ):
-                return False
             return True
 
         results = [match for match in by_id.values() if _result_allowed(match.memory)]
@@ -3352,11 +3394,20 @@ class MemoryService:
         # partial even when it happens to contain exactly 501 rows.
         truncated = truncated or scanned_count >= scan_limit
         projected_items.sort(key=lambda pair: (-pair[0].updated_at.timestamp(), pair[0].memory_id))
+        page_items = projected_items[bounded_offset:window]
+        next_start_after = last_scanned if truncated else None
+        if len(projected_items) > window:
+            # ``limit`` stopped this page inside the provider window, so more
+            # history follows it. Resume after the last returned row; resuming
+            # after the window would skip the window's remaining history rows.
+            last_item = page_items[-1][0]
+            next_start_after = (last_item.updated_at, last_item.memory_id)
+            truncated = True
         return LedgerHistoryPage(
-            memories=tuple(row for _, row in projected_items[bounded_offset : bounded_offset + bounded_limit]),
+            memories=tuple(row for _, row in page_items),
             truncated=truncated,
             scanned_count=scanned_count,
-            next_start_after=last_scanned if truncated else None,
+            next_start_after=next_start_after,
         )
 
     def read_ledger_history(
@@ -3477,10 +3528,6 @@ class MemoryService:
         """
         bounded_limit = max(1, min(int(limit or 100), 500))
         bounded_offset = max(0, int(offset or 0))
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
-        assessment_now = now or datetime.now(timezone.utc)
-        temporal_clock = as_of or assessment_now
         if (
             policy.consumer
             in {
@@ -3492,106 +3539,6 @@ class MemoryService:
         ):
             return self._default_product_search_response(uid, query, [], limit=bounded_limit, offset=bounded_offset)
 
-        # Temporal product reads use the bounded cursor stream.  The released
-        # compatibility path below intentionally keeps its legacy ``read``
-        # call shape, but a beta history/useful-now query must never materialize
-        # an entire account just to answer a text search.  Continue through a
-        # finite number of existing mixed-list pages and disclose an incomplete
-        # candidate window to callers.
-        if temporal_view != 'released':
-            query_tokens = {
-                token.lower() for token in (query or '').replace('.', ' ').replace(',', ' ').split() if len(token) > 2
-            }
-            page_size = 500
-            max_pages = 10
-            target_end = bounded_offset + bounded_limit
-            temporal_rows: List[MemoryDB] = []
-            cursor: Optional[str] = None
-            pages_scanned = 0
-            scan_truncated = False
-            while len(temporal_rows) < target_end and pages_scanned < max_pages:
-                pages_scanned += 1
-                page = self.read_page(
-                    uid,
-                    limit=page_size,
-                    cursor=cursor,
-                    include_pending_processing=False,
-                    include_archive=False,
-                    now=assessment_now,
-                    view=temporal_view,
-                    as_of=as_of,
-                )
-                for memory in page.memories:
-                    # ``read_page`` owns identity/source/privacy fences.  The
-                    # model-facing product seam also vetoes explicit use
-                    # suppression and owner rejection before text matching.
-                    if memory.is_locked or memory.user_review is False:
-                        continue
-                    if belief_model_enabled() and memory_use_suppressed(memory):
-                        continue
-                    if memory.memory_tier == MemoryTier.archive:
-                        continue
-                    if not temporal_view_allows_record(
-                        memory,
-                        view=temporal_view,
-                        now=temporal_clock,
-                        include_archive=False,
-                    ):
-                        continue
-                    content = memory.content or ''
-                    if query_tokens and not any(token in content.lower() for token in query_tokens):
-                        continue
-                    temporal_rows.append(memory)
-                    if len(temporal_rows) >= target_end:
-                        break
-                if page.truncated:
-                    scan_truncated = True
-                    cursor = None
-                    break
-                cursor = page.next_cursor
-                if not cursor:
-                    break
-            if cursor and pages_scanned >= max_pages and len(temporal_rows) < target_end:
-                scan_truncated = True
-
-            items: List[Dict[str, Any]] = []
-            for memory in temporal_rows:
-                tier = memory.memory_tier or MemoryTier.long_term
-                ledger_status = getattr(memory, 'ledger_status', None)
-                lifecycle_status = getattr(ledger_status, 'value', None) or 'active'
-                items.append(
-                    {
-                        'memory_id': memory.id,
-                        'memory_layer': 'product_memory',
-                        'tier': tier.value,
-                        'content': memory.content or '',
-                        'lifecycle_status': lifecycle_status,
-                        'processing_state': 'processed',
-                        'confidence': None,
-                        'visibility': memory.visibility,
-                        'visibility_source': 'universal_memory_service',
-                        'source': memory.evidence[0].source_id if memory.evidence else None,
-                        'date': (memory.updated_at or memory.created_at).isoformat(),
-                        'evidence': [evidence.model_dump(mode='json') for evidence in memory.evidence],
-                        'agent_use': 'default_access_memory',
-                        'access_reason': 'default_memory_allowed',
-                        'superseded_by': memory.superseded_by,
-                        **public_belief_overlay_json(memory, now=temporal_clock),
-                    }
-                )
-            selected = items[bounded_offset : bounded_offset + bounded_limit]
-            result = self._default_product_search_response(
-                uid,
-                query,
-                selected,
-                limit=bounded_limit,
-                offset=bounded_offset,
-                total_count=len(items),
-            )
-            result['truncated'] = scan_truncated
-            result['has_more'] = bool(scan_truncated or cursor or len(items) > target_end)
-            return result
-
         # Read one bounded merged window. Calling ``read`` once avoids the
         # previous page-by-page prefix reread, which grew to O(N²) Firestore
         # reads as the compatibility offset advanced.
@@ -3600,33 +3547,23 @@ class MemoryService:
             "offset": 0,
             "include_pending_processing": False,
             # Preserve the released adapter's historical ``now=None`` call
-            # shape. Temporal views need an assessment clock before filtering;
-            # released reads retain the caller's original clock semantics.
-            "now": assessment_now if temporal_view != 'released' or now is not None else now,
+            # shape; current reads retain the caller's original clock semantics.
+            "now": now,
         }
-        if temporal_view != 'released':
-            read_kwargs["view"] = temporal_view
         if as_of is not None:
             read_kwargs["as_of"] = as_of
         # Search keeps the authoritative collection read. List reads are the
         # path that must not stream ``memory_items``.
         rows = self.read(uid, authoritative=True, **read_kwargs)
 
-        query_tokens = {
-            token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2
-        }
+        query_words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+        # Words of two characters or fewer drop only beside a longer word; a non-blank query always filters.
+        query_tokens = {token for token in query_words if len(token) > 2} or query_words
         items: List[Dict[str, Any]] = []
         for memory in rows:
             # archive_requires_explicit_query: this default product search never
             # admits Archive, regardless of physical origin.
             if memory.is_locked:
-                continue
-            if temporal_view != 'released' and not temporal_view_allows_record(
-                memory,
-                view=temporal_view,
-                now=temporal_clock,
-                include_archive=policy.archive_capability,
-            ):
                 continue
             if memory.memory_tier == MemoryTier.archive:
                 continue
@@ -3634,7 +3571,7 @@ class MemoryService:
                 continue
             content = memory.content or ""
             content_lower = content.lower()
-            if query_tokens and not any(token in content_lower for token in query_tokens):
+            if (query or "").strip() and not any(token in content_lower for token in query_tokens):
                 continue
             tier = memory.memory_tier or MemoryTier.long_term
             source = memory.evidence[0].source_id if memory.evidence else None
@@ -3655,7 +3592,6 @@ class MemoryService:
                     "agent_use": "default_access_memory",
                     "access_reason": "default_memory_allowed",
                     "superseded_by": None,
-                    **public_belief_overlay_json(memory, now=assessment_now),
                 }
             )
 
@@ -3858,74 +3794,6 @@ class MemoryService:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
         return memory_item_to_memorydb(item)
 
-    def _direct_user_ledger_admitted(self, uid: str, authority: object | None) -> bool:
-        """Require route authority, fresh JIT ingress, and stable ledger mode."""
-        if not is_direct_user_write_authority(authority):
-            return False
-        decision = resolve_jit_rollout_sync(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-            force_refresh=True,
-        )
-        if not decision.permits_work:
-            return False
-        control = ensure_canonical_apply_control_state(uid, db_client=self.db_client)
-        return control.writer_mode == WriterMode.ledger
-
-    def _write_direct_user_fact(
-        self,
-        uid: str,
-        memory_db: MemoryDB,
-        *,
-        consumer: str,
-        authority: object,
-    ) -> MemoryDB:
-        """Persist one explicitly typed memory through the ledger fact seam."""
-        provenance = self._direct_user_fact_provenance(memory_db, consumer=consumer)
-        memory_id = save_fact(
-            uid,
-            memory_db.content,
-            provenance=provenance,
-            write_reason=LedgerWriteReason.direct_user_statement,
-            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
-            subject_entity_id=memory_db.subject_entity_id,
-            predicate=memory_db.predicate,
-            arguments=memory_db.arguments,
-            valid_from=memory_db.valid_at,
-            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
-            db_client=self.db_client,
-            _direct_user_authority=authority,
-        )
-        item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
-        if item is None:
-            raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
-        return memory_item_to_memorydb(item)
-
-    @staticmethod
-    def _direct_user_fact_provenance(memory_db: MemoryDB, *, consumer: str) -> LedgerProvenance:
-        return LedgerProvenance(
-            source_id=f"{consumer}:{memory_db.id}",
-            source_type="explicit_user_statement",
-            source_version="v3_memory_create.v1",
-            action_id=f"{consumer}:memory:{memory_db.id}",
-            artifact_ref={"memory_id": memory_db.id},
-        )
-
-    def _validate_direct_user_fact(self, memory_db: MemoryDB, *, consumer: str) -> None:
-        """Run the same semantic model validation as save_fact without I/O."""
-        LedgerWrite(
-            kind=MemoryKind.fact,
-            content=memory_db.content,
-            provenance=self._direct_user_fact_provenance(memory_db, consumer=consumer),
-            write_reason=LedgerWriteReason.direct_user_statement,
-            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
-            subject_entity_id=memory_db.subject_entity_id,
-            predicate=memory_db.predicate,
-            arguments=memory_db.arguments,
-            valid_from=memory_db.valid_at,
-            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
-        )
-
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
         result = self._canonical.write(uid, data)
@@ -4125,10 +3993,13 @@ class MemoryService:
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         lineage_ids,
+                        revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                         reason="canonical_memory_delete_retry",
                         db_client=self.db_client,
                         include_legacy_commits=True,
                     )
+                except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                    raise account_gate_busy_http_exception() from exc
                 except Exception as exc:
                     raise HTTPException(
                         status_code=503,
@@ -4179,10 +4050,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 lineage_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="explicit_memory_delete",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4224,6 +4098,12 @@ class MemoryService:
                 if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
                     try:
                         historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
+                    except (
+                        DestructiveGateTakeover,
+                        DestructiveOperationInProgress,
+                        LegalHoldAuthorityUnavailable,
+                    ) as exc:
+                        raise account_gate_busy_http_exception() from exc
                     except Exception as exc:
                         raise HTTPException(
                             status_code=503,
@@ -4298,10 +4178,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 cleanup_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_batch_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4332,10 +4215,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_all_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4368,10 +4254,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_default_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4394,12 +4283,25 @@ class MemoryService:
         on_authoritative_commit: Optional[Callable[[], None]] = None,
         claim_destructive_gate: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        result = retract_conversation_sourced_memories(
-            uid,
-            conversation_id,
-            db_client=self.db_client,
-            claim_destructive_gate=claim_destructive_gate,
-        )
+        coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
+        deferred_ids: List[str] = []
+        if coalesce:
+            # Retain the canonical tombstones and source receipt until the
+            # outer, complete canonical + historical ID set is ready to purge.
+            with defer_conversation_privacy_finalization(uid, db_client=self.db_client) as deferred_ids:
+                result = retract_conversation_sourced_memories(
+                    uid,
+                    conversation_id,
+                    db_client=self.db_client,
+                    claim_destructive_gate=claim_destructive_gate,
+                )
+        else:
+            result = retract_conversation_sourced_memories(
+                uid,
+                conversation_id,
+                db_client=self.db_client,
+                claim_destructive_gate=claim_destructive_gate,
+            )
         # Canonical retraction is irreversible even if the historical scan or
         # suppression write below fails. Advance the merge compensation fence
         # immediately so failure handling preserves the already-built merged
@@ -4417,32 +4319,49 @@ class MemoryService:
         ]
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
+        if coalesce:
+            all_ids = list(dict.fromkeys(all_ids + deferred_ids))
         if all_ids:
             # Historical suppression must commit before the authoritative fence
             # advances. A suppression failure leaves the callback unfired so
             # merge source-deletion does not proceed on a partial retract.
             self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned)
-            _purge_required_canonical_projections(
-                uid,
-                all_ids,
-                db_client=self.db_client,
-                reason="conversation_memory_retraction",
-                preserve_source_replacement_receipts=True,
-            )
+            if not coalesce:
+                _purge_required_canonical_projections(
+                    uid,
+                    all_ids,
+                    db_client=self.db_client,
+                    reason="conversation_memory_retraction",
+                    preserve_source_replacement_receipts=True,
+                )
             try:
                 purge_stale_review_conflicts_for_memories(
                     uid,
                     all_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     reason="conversation_memory_retraction",
                     db_client=self.db_client,
-                    include_legacy_commits=True,
+                    include_legacy_commits=not coalesce,
                     preserve_source_replacement_receipts=True,
                 )
+            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,
                     detail="Conversation memory review privacy cleanup unavailable",
                 ) from exc
+            if coalesce:
+                # All review cleanup precedes the one fresh task-wide history
+                # purge. Provider absence and gate ownership are re-proven by
+                # this call before tombstones can be physically finalized.
+                _purge_required_canonical_projections(
+                    uid,
+                    all_ids,
+                    db_client=self.db_client,
+                    reason="conversation_memory_retraction",
+                    preserve_source_replacement_receipts=True,
+                )
         for memory_id in historical_ids:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client, required=True)
         _delete_historical_privacy_overrides(uid, all_ids, db_client=self.db_client)
@@ -4451,8 +4370,11 @@ class MemoryService:
                 purge_source_replacement_receipts_for_memories(
                     uid,
                     retracted_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     firestore_client=self.db_client,
                 )
+            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,
@@ -4493,20 +4415,10 @@ class MemoryService:
         operation: str,
         upsert_vector: bool = True,
         require_canonical_promotion: bool = True,
-        direct_user_authority: object | None = None,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
         try:
-            if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
-                assert direct_user_authority is not None
-                result = self._write_direct_user_fact(
-                    uid,
-                    memory_db,
-                    consumer=consumer,
-                    authority=direct_user_authority,
-                )
-            else:
-                result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+            result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
         except EvidenceIdentityConflict as exc:
             raise _evidence_identity_conflict_http() from exc
         self._invalidate_prompt_cache(uid)
@@ -4522,34 +4434,9 @@ class MemoryService:
         operation: str,
         upsert_vectors: bool = True,
         require_canonical_promotion: bool = True,
-        direct_user_authority: object | None = None,
     ) -> List[MemoryDB]:
         del memory_system, operation, upsert_vectors, require_canonical_promotion
         self.ensure_canonical_mutation_ready(uid)
-        if direct_user_authority is not None and any(memory.manually_added for memory in memory_dbs):
-            if self._direct_user_ledger_admitted(uid, direct_user_authority):
-                assert direct_user_authority is not None
-                if not all(memory.manually_added for memory in memory_dbs):
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Mixed explicit-user and external memory batch is not admitted in ledger mode",
-                    )
-                for memory in memory_dbs:
-                    self._validate_direct_user_fact(memory, consumer=consumer)
-                try:
-                    results = [
-                        self._write_direct_user_fact(
-                            uid,
-                            memory,
-                            consumer=consumer,
-                            authority=direct_user_authority,
-                        )
-                        for memory in memory_dbs
-                    ]
-                except EvidenceIdentityConflict as exc:
-                    raise _evidence_identity_conflict_http() from exc
-                self._invalidate_prompt_cache(uid)
-                return results
         payloads = [
             required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
             for memory in memory_dbs
@@ -4570,6 +4457,47 @@ class MemoryService:
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         self._invalidate_prompt_cache(uid)
         return results
+
+    def remove_chat_memory(self, uid: str, memory_id: str) -> MemoryItem:
+        """Reversible owner-requested removal, distinct from privacy erasure.
+
+        Retains canonical history for undo and hides the item through the common
+        access policy. Existing privacy-purge deletion APIs remain destructive.
+        """
+        self.ensure_canonical_mutation_ready(uid)
+        self._ensure_canonical_target(uid, memory_id)
+
+        def build_patch(item, now):
+            if item.uid != uid or item.status != MemoryItemStatus.active:
+                raise HTTPException(status_code=404, detail='Memory not found')
+            metadata = dict(item.promotion or {})
+            if memory_item_to_memorydb(item).is_locked:
+                raise HTTPException(status_code=402, detail='A paid plan is required to access this memory')
+            metadata['chat_deleted'] = True
+            return {}, {'promotion_audit': metadata}
+
+        _, updated = apply_canonical_user_mutation(
+            uid, memory_id, mutation_kind='chat_remove', build_patch=build_patch, db_client=self.db_client
+        )
+        self._invalidate_prompt_cache(uid)
+        return updated
+
+    def restore_chat_memory_removal(
+        self, uid: str, memory_id: str, before: Dict[str, Any], expected: Dict[str, Any]
+    ) -> MemoryItem:
+        """Restore exact product metadata through a new canonical audit revision."""
+        self.ensure_canonical_mutation_ready(uid)
+
+        def build_patch(item, now):
+            if item.model_dump(mode='json') != expected or item.uid != uid:
+                raise HTTPException(status_code=409, detail='Memory changed after removal')
+            return {}, {'promotion_audit': before.get('promotion')}
+
+        _, updated = apply_canonical_user_mutation(
+            uid, memory_id, mutation_kind='chat_remove_undo', build_patch=build_patch, db_client=self.db_client
+        )
+        self._invalidate_prompt_cache(uid)
+        return updated
 
     @_legal_hold_gated_deletion
     def delete_external_memory(

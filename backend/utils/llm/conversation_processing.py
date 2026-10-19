@@ -7,6 +7,12 @@ from importlib import import_module
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
 
+try:
+    from langchain_core.exceptions import OutputParserException
+except ModuleNotFoundError:
+    # Import isolation replaces langchain_core with a non-package stub, so
+    # langchain_core.exceptions cannot be imported. Notes repair is unused there.
+    OutputParserException = None
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -31,6 +37,7 @@ if TYPE_CHECKING:
     from utils.conversations.episode_evidence import EvidenceItem
 
 from utils.llm.conversation_notes_prompts import (
+    ACTION_ITEM_EXTRACTION_RULES,
     conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
     conversation_note_density,
@@ -307,6 +314,67 @@ def _record_shaped_notes_tier(escalated: bool, reason: str, words: int, screen_c
         run.effort = 'xhigh'
 
 
+# A quote ends a JSON string only when the next non-space character closes a
+# value or starts the next key. Anything else is prose the model left unescaped.
+_JSON_STRING_CLOSER_FOLLOWERS = ',}]:"'
+
+
+def _escape_interior_json_quotes(text: str) -> str:
+    """Escape double quotes that sit inside JSON strings.
+
+    Notes completions quote a phrase without backslashes (`asked "what fish?"`).
+    JsonOutputParser raises OutputParserException from langchain json.py, and the
+    conversation never gets a summary. Valid JSON is returned unchanged.
+    """
+    out: List[str] = []
+    in_string = False
+    escaped = False
+    length = len(text)
+    index = 0
+    while index < length:
+        char = text[index]
+        if in_string:
+            if escaped:
+                out.append(char)
+                escaped = False
+            elif char == '\\':
+                out.append(char)
+                escaped = True
+            elif char == '"':
+                follower = index + 1
+                while follower < length and text[follower] in ' \t\r\n':
+                    follower += 1
+                if follower >= length or text[follower] in _JSON_STRING_CLOSER_FOLLOWERS:
+                    out.append(char)
+                    in_string = False
+                else:
+                    out.append('\\"')
+            else:
+                out.append(char)
+        else:
+            if char == '"':
+                in_string = True
+            out.append(char)
+        index += 1
+    return ''.join(out)
+
+
+_NOTES_OUTPUT_PARSE_ERRORS: Tuple[type[BaseException], ...] = (
+    (OutputParserException,) if OutputParserException is not None else (ValueError, json.JSONDecodeError)
+)
+
+
+def _parse_notes_model_output(parser: PydanticOutputParser, content: str) -> Any:
+    text = str(content)
+    try:
+        return parser.parse(text)
+    except _NOTES_OUTPUT_PARSE_ERRORS:
+        repaired = _escape_interior_json_quotes(text)
+        if repaired == text:
+            raise
+        return parser.parse(repaired)
+
+
 def notes_mount() -> Mount:
     return Mount(
         instructions=_conversation_notes_static_instructions('') + """
@@ -314,7 +382,7 @@ Calendar invitees are expected participants only. Screen-shown names are observe
 listing data only. Neither establishes attendance or binds an audio cluster to a
 person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
-""",
+""" + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
         budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
     )
@@ -353,8 +421,10 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                     'timezone': kwargs['tz'],
                     'started_at': kwargs['started_at'].isoformat(),
                     'task_intelligence_capture': kwargs['task_intelligence_capture'],
+                    'account_owner_name': prefix.account_owner_name or next(iter(prefix.owner_names), None),
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
                 ensure_ascii=False,
@@ -397,7 +467,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
-                return Turn(value=extraction_parser.parse(str(content)))
+                return Turn(value=_parse_notes_model_output(extraction_parser, str(content)))
 
             return await run_loop(mount, evidence, model_turn)
 

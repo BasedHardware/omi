@@ -12,6 +12,7 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -242,6 +243,25 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.uploadRejected,
       );
 
+  /// The part of [needsAttentionWalsCount] a retry can still upload: the
+  /// automatic budget ([walMaxAutoRetries]) is spent, the recording is still
+  /// pending. The rest are terminal and no sync can move them.
+  List<Wal> get retryableAttentionWals =>
+      _allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+
+  /// Retry every recording in [retryableAttentionWals]. The automatic drain
+  /// skips a recording once its budget is spent, so a plain [syncWals] from
+  /// the Needs Attention card left every one of them where it was; grant the
+  /// fresh budget a per-recording Retry gives ([syncWal]) before draining.
+  Future<void> retryNeedsAttentionWals() async {
+    for (final wal in retryableAttentionWals) {
+      wal
+        ..retryCount = 0
+        ..lastRetryAt = 0;
+    }
+    await syncWals();
+  }
+
   /// Durable HTTP refusals that automatic connectivity wakes must never retry.
   /// The Auto Sync Needs Attention chip renders this count through
   /// [needsAttentionWalsCount]; this narrower accessor keeps the terminal-HTTP
@@ -423,6 +443,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _sessionGeneration++;
     _admittedWorkGeneration = -1;
     _walService.getSyncs().clearUserData();
+    // The capture monitor singleton outlives the provider: without this, the
+    // previous account's unseen flag and storage/upload counts light the bell
+    // for the next login.
+    _captureWedgeMonitor.reset();
     _allWals = [];
     _isLoadingWals = false;
     _syncState = const SyncState();
@@ -590,6 +614,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> refreshWals() => _refreshWals(_sessionGeneration);
 
+  /// Upload-stall attention's slice of the inventory: a phone-local, cloud-
+  /// draining WAL that is still moving toward an upload. Mirrors
+  /// [SyncPendingWork.isPendingWal] (which lives behind a page import and
+  /// cannot be imported here without a cycle): local-only on-device-STT WALs
+  /// never join a drain, and a WAL that already exhausted its retries is
+  /// Offline Sync's terminal attention, not an upload stall — unless it is
+  /// mid-sync right now, which is forward movement by definition.
+  static bool _isUploadStallCandidate(Wal wal) =>
+      wal.storage == WalStorage.disk &&
+      !wal.onDeviceOnly &&
+      wal.status == WalStatus.miss &&
+      (wal.isSyncing || wal.retryCount < walMaxAutoRetries);
+
   Future<void> _refreshWals(int generation) async {
     if (!_isCurrent(generation)) return;
     _isLoadingWals = true;
@@ -599,14 +636,32 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation)) return;
     _allWals = wals;
     Logger.debug('SyncProvider: Loaded ${_allWals.length} WALs (${missingWals.length} missing)');
-    final pendingLocal =
-        _allWals.where((wal) => wal.storage == WalStorage.disk && wal.status == WalStatus.miss).toList();
+    // Upload-stall attention counts recordings, not WAL fragments: capture
+    // writes ~1-minute fragments and other UI paths collapse them with
+    // [groupRecordingBlocks]. Local-only WALs (on-device STT) never join a
+    // cloud drain — counting them would light a stall that no upload can
+    // clear — and only forward-moving (upload-eligible) work proves a stall.
+    // Ordered by [displaySortedWals] — the memoized newest-first inventory —
+    // so a refresh shares one sort with every other consumer instead of
+    // re-sorting the index on the UI isolate (the same keyed order the
+    // pending-work row reads).
+    final uploadEligible = displaySortedWals.where(_isUploadStallCandidate).toList(growable: false);
     DateTime? oldestPendingAt;
-    if (pendingLocal.isNotEmpty) {
-      final oldestSeconds = pendingLocal.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);
+    if (uploadEligible.isNotEmpty) {
+      final oldestSeconds = uploadEligible.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);
       oldestPendingAt = DateTime.fromMillisecondsSinceEpoch(oldestSeconds * 1000);
     }
-    _captureWedgeMonitor.observeWalBacklog(pendingCount: pendingLocal.length, oldestPendingAt: oldestPendingAt);
+    // Fragment durations still sum across the same upload-eligible set: the
+    // row reports the kept audio this stall holds, and a fragment that
+    // already uploaded contributes none of its length to what waits.
+    // Retry-exhausted WALs are Offline Sync's terminal attention — hours of
+    // them must not read as audio waiting on this upload.
+    final pendingSeconds = uploadEligible.fold<int>(0, (sum, wal) => sum + (wal.seconds > 0 ? wal.seconds : 0));
+    _captureWedgeMonitor.observeWalBacklog(
+      pendingCount: groupRecordingBlocks(uploadEligible).length,
+      oldestPendingAt: oldestPendingAt,
+      pendingSeconds: pendingSeconds,
+    );
     try {
       final risk = _walService.getSyncs().phone.retentionRisk as WalRetentionRisk?;
       if (risk != null) {
@@ -616,6 +671,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           retainedCount: risk.retainedCount,
           reason: risk.reason,
         );
+      } else {
+        // No retention risk reading: the disk admitted a write (or the older
+        // alternate implementations expose no diagnostic), so the storage row
+        // ends with its own condition instead of lingering forever.
+        _captureWedgeMonitor.clearStorageAtRisk();
       }
     } catch (_) {
       // Test doubles and older alternate WAL implementations need not expose
@@ -1008,6 +1068,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.shareAsAudio(wal);
   }
 
+  Future<void> shareRecordingAsWav(List<Wal> wals) => _audioPlayerUtils.shareRecordingAsAudio(wals);
+
   Future<void> seekToPosition(Duration position) async {
     await _audioPlayerUtils.seekToPosition(position);
   }
@@ -1051,8 +1113,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _refreshWals(generation);
     if (!_isCurrent(generation)) return;
 
-    if (wal.status == WalStatus.synced) {
-      _trackedServerJobWalIds.remove(wal.id);
+    // Keep finished recordings in the batch until all of it is done. Removing
+    // each one as it finished shrank the total while "processed" stayed at
+    // zero, so the card read "Processing 0/5914 · 0%" for the whole drain.
+    if (_trackedServerJobWalIds.isNotEmpty &&
+        !_allWals.any((w) => w.status == WalStatus.uploaded && _trackedServerJobWalIds.contains(w.id))) {
+      _trackedServerJobWalIds.clear();
     }
     if (wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) {
       _captureWedgeMonitor.onUploadCompleted();
@@ -1192,6 +1258,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// still reconciling). Completed = recordings no longer waiting on a job.
   ({int processed, int total}) get offlineServerProcessingCounts {
     return OfflineProcessingDisplay.serverJobCounts(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
+  }
+
+  /// [offlineServerProcessingCounts] in seconds of audio, for the status card.
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds {
+    return OfflineProcessingDisplay.serverJobSeconds(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
   }
 
   @override

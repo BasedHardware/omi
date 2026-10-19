@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -77,6 +78,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         deviceConnected: context.read<DeviceProvider>().isConnected,
         supportLinks: PlatformService.isIntercomSupported,
         android: PlatformService.isAndroid,
+        rememberedDevice: context.read<DeviceProvider>().hasRememberedDevice,
       );
 
   // ---------------------------------------------------------------------------------------------
@@ -105,11 +107,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
-  /// "Pro" on the Plan & Usage row for a paid plan.
+  /// Show the subscriber's actual tier on the Plan & Usage row.
   String? _planValue(UsageProvider usage) {
     final plan = usage.subscription?.subscription.plan;
     if (plan == null || !plan.isPaid) return null;
-    return context.l10n.pro;
+    return currentPlanDisplayName(context, usage.subscription);
   }
 
   Widget _buildSettings(BuildContext context) {
@@ -185,6 +187,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               icon: FontAwesomeIcons.networkWired,
               title: l10n.integrations,
               tag: SettingsTag(l10n.beta, OmiColors.warning),
+            ),
+            _row(
+              SettingsDestination.connectAgent,
+              key: 'settings_row_connect_agent',
+              icon: FontAwesomeIcons.terminal,
+              title: l10n.connectAnAgent,
             ),
             _row(
               SettingsDestination.privacyGroup,
@@ -269,39 +277,47 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   Widget _buildHeader(BuildContext context) {
     final l10n = context.l10n;
     if (_isSearching) {
-      return Padding(
+      // One header height (48 pt) and 20 pt left padding (OmiSpacing.lg) so opening search
+      // never shifts the settings rows below it and the field aligns with the cards (#19241).
+      return SizedBox(
         key: const ValueKey('search-header'),
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.xs, OmiSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: OmiSearchField(
-                placeholder: l10n.searchSettings,
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                autofocus: true,
-                onChanged: (value) => setState(() => _searchQuery = value),
+        height: 48,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xs, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: OmiSearchField(
+                  placeholder: l10n.searchSettings,
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  autofocus: true,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
               ),
-            ),
-            OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
-          ],
+              OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
+            ],
+          ),
         ),
       );
     }
-    return Padding(
+    return SizedBox(
       key: const ValueKey('normal-header'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-      child: Row(
-        children: [
-          OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+      height: 48,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+        child: Row(
+          children: [
+            OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+              ),
             ),
-          ),
-          const OmiCloseButton(),
-        ],
+            const OmiCloseButton(),
+          ],
+        ),
       ),
     );
   }

@@ -17,11 +17,12 @@ import zlib
 from typing import Any, Dict, List
 
 import pytest
-from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import Aborted, InvalidArgument
 
 from database import conversations as conversations_db
 
 EXPIRED_MESSAGE = '400 The referenced transaction has expired or is no longer valid.'
+ABORTED_EXPIRED_MESSAGE = '409 The referenced transaction has expired or is no longer valid.'
 
 
 class _FakeSnapshot:
@@ -39,6 +40,8 @@ class _FakeDocumentReference:
 
     def get(self, transaction=None) -> _FakeSnapshot:
         self._client.reads += 1
+        if self._client.read_errors:
+            raise self._client.read_errors.pop(0)
         return _FakeSnapshot(self._client.document)
 
     def collection(self, _collection_id: str) -> "_FakeCollectionReference":
@@ -87,9 +90,15 @@ class _FakeTransaction:
 
 
 class _FakeFirestoreClient:
-    def __init__(self, document: Dict[str, Any] | None, commit_errors: List[BaseException] | None = None):
+    def __init__(
+        self,
+        document: Dict[str, Any] | None,
+        commit_errors: List[BaseException] | None = None,
+        read_errors: List[BaseException] | None = None,
+    ):
         self.document = document
         self.commit_errors = list(commit_errors or [])
+        self.read_errors = list(read_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
         self.transactions: List[_FakeTransaction] = []
         self.reads = 0
@@ -141,6 +150,30 @@ def test_expired_transaction_gives_up_after_the_attempt_budget():
         _write(client)
 
     assert len(client.transactions) == 3
+    assert client.commits == []
+
+
+def test_aborted_409_on_the_streaming_read_is_restarted():
+    # grpc_helpers.py:174 raises this when BatchGetDocuments references a retired id.
+    # The SDK does not retry Aborted raised by the read, only by commit.
+    client = _FakeFirestoreClient({'has_content': False}, read_errors=[Aborted(ABORTED_EXPIRED_MESSAGE)])
+
+    assert _write(client) is True
+
+    assert len(client.transactions) == 2, 'the retry must use a fresh transaction, not the retired id'
+    assert client.transactions[0].rolled_back is True
+    assert len(client.commits) == 1
+    assert _stored_segments(client.commits[0]) == SEGMENTS
+
+
+def test_aborted_contention_on_the_read_is_not_restarted():
+    contention = Aborted('409 Too much contention on these documents. Please try again.')
+    client = _FakeFirestoreClient({'has_content': False}, read_errors=[contention])
+
+    with pytest.raises(Aborted):
+        _write(client)
+
+    assert len(client.transactions) == 1, 'contention is not an expired id'
     assert client.commits == []
 
 

@@ -27,6 +27,7 @@ def test_build_chat_scope_conversation_and_dates():
     )
     assert build_chat_scope(ctx) == {
         "conversation_id": "conv-1",
+        "title": "Standup",
         "start_date": "2026-08-01T00:00:00-07:00",
         "end_date": "2026-08-01T23:59:59-07:00",
     }
@@ -73,6 +74,7 @@ def test_get_conversations_tool_honors_conversation_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {"conversation_id": "only-me"},
         }
@@ -100,9 +102,8 @@ def test_get_conversations_tool_honors_conversation_scope():
             ),
         ),
         patch.object(tools, "conversations_to_string", return_value="SCOPED_ONLY"),
-        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
-        out = tools.get_conversations_tool.invoke({}, config=cfg)
+        out = tools.get_conversations_tool.invoke({"include_transcript": False}, config=cfg)
     assert "SCOPED_ONLY" in out
     get_one.assert_called_once_with("u1", ["only-me"], include_discarded=True)
     get_many.assert_not_called()
@@ -112,6 +113,7 @@ def test_get_conversations_tool_hides_discarded_under_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {"conversation_id": "gone"},
         }
@@ -127,7 +129,8 @@ def test_get_conversations_tool_hides_discarded_under_scope():
         patch.object(tools.conversations_db, "get_conversations") as get_many,
     ):
         out = tools.get_conversations_tool.invoke({}, config=cfg)
-    assert "no accessible conversation" in out.lower()
+    assert "were not read: discarded" in out.lower()
+    assert "no conversations found" in out.lower()
     get_many.assert_not_called()
 
 
@@ -135,6 +138,7 @@ def test_get_conversations_tool_fail_closed_on_timeframe_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {
                 "conversation_id": "only-me",
@@ -158,7 +162,6 @@ def test_get_conversations_tool_fail_closed_on_timeframe_scope():
         patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
         patch.object(tools, "conversation_matches_date_range", return_value=False),
         patch.object(tools.conversations_db, "get_conversations") as get_many,
-        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
         out = tools.get_conversations_tool.invoke({}, config=cfg)
     assert "outside the active chat timeframe" in out.lower()
@@ -169,6 +172,7 @@ def test_search_conversations_tool_rejects_other_exact_reference_under_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {"conversation_id": "only-me"},
         }
@@ -207,7 +211,6 @@ def test_search_conversations_tool_refilters_hydrated_hits_to_timeframe():
         patch.object(tools.vector_db, "query_vectors", return_value=[]),
         patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[stale]),
         patch.object(tools, "conversations_to_string") as render,
-        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
         out = tools.search_conversations_tool.invoke({"query": "standup"}, config=cfg)
     assert "no conversations found" in out.lower()
@@ -216,7 +219,7 @@ def test_search_conversations_tool_refilters_hydrated_hits_to_timeframe():
 
 def test_search_conversations_tool_finds_transcript_only_fact_with_verbatim_evidence():
     """A summary-only miss must not become an unsupported answer after user pushback (#20629)."""
-    cfg = {"configurable": {"user_id": "u1", "conversations_collected": []}}
+    cfg = {"configurable": {"user_id": "u1", "user_timezone": "UTC", "conversations_collected": []}}
     conv = {
         'id': 'spoken-only',
         'started_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
@@ -243,20 +246,20 @@ def test_search_conversations_tool_finds_transcript_only_fact_with_verbatim_evid
         patch.object(tools, 'deserialize_conversation', return_value=parsed),
         patch.object(tools, 'conversation_to_citation_card', return_value={'id': 'spoken-only'}),
         patch.object(tools, 'conversations_to_string', return_value='Summary: Billing discussion'),
-        patch.object(tools.notification_db, 'get_user_time_zone', return_value='UTC'),
+        patch.object(tools, 'get_user_name', return_value='Test User'),
     ):
         out = tools.search_conversations_tool.invoke({'query': 'invoice amount'}, config=cfg)
     assert embeddings.embed_query.call_count == 1
     assert summaries.call_args.kwargs['query_vector'] == [0.5]
     assert chunks.call_args.kwargs['query_vector'] == [0.5]
-    fetch.assert_called_once_with('u1', ['spoken-only'])
+    fetch.assert_called_once_with('u1', ['spoken-only'], include_discarded=True)
     assert '47 dollars' in out
     assert 'spoken-only' in out
     assert cfg['configurable']['conversations_collected'] == [{'id': 'spoken-only'}]
 
 
 def test_search_conversations_tool_does_not_claim_no_transcript_match_when_index_unavailable():
-    cfg = {"configurable": {"user_id": "u1", "conversations_collected": []}}
+    cfg = {"configurable": {"user_id": "u1", "user_timezone": "UTC", "conversations_collected": []}}
     with (
         patch.object(tools, 'parse_exact_conversation_reference', return_value=None),
         patch.object(tools, 'keyword_search_conversation_ids', return_value=[]),
@@ -276,6 +279,7 @@ def test_get_action_items_tool_forces_conversation_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "chat_scope": {"conversation_id": "only-me"},
         }
     }
@@ -291,6 +295,7 @@ def test_get_action_items_tool_rejects_foreign_conversation_under_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "chat_scope": {"conversation_id": "only-me"},
         }
     }
@@ -307,6 +312,7 @@ def test_search_memories_tool_filters_matches_to_timeframe_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "chat_scope": {
                 "start_date": "2026-08-09T00:00:00+00:00",
                 "end_date": "2026-08-09T23:59:59+00:00",
@@ -330,10 +336,7 @@ def test_search_memories_tool_filters_matches_to_timeframe_scope():
 
     service = MagicMock()
     service.search.return_value = [leaked, in_scope]
-    with (
-        patch.object(memory_tools, "MemoryService", return_value=service),
-        patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"),
-    ):
+    with patch.object(memory_tools, "MemoryService", return_value=service):
         out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
     assert "IN_SCOPE_FACT" in out
     assert "LEAKED" not in out
@@ -346,6 +349,7 @@ def test_search_memories_tool_excludes_untimed_matches_under_timeframe_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "chat_scope": {
                 "start_date": "2026-08-09T00:00:00+00:00",
                 "end_date": "2026-08-09T23:59:59+00:00",
@@ -362,10 +366,7 @@ def test_search_memories_tool_excludes_untimed_matches_under_timeframe_scope():
 
     service = MagicMock()
     service.search.return_value = [untimed]
-    with (
-        patch.object(memory_tools, "MemoryService", return_value=service),
-        patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"),
-    ):
+    with patch.object(memory_tools, "MemoryService", return_value=service):
         out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
     assert "UNTIMED" not in out
     assert "no memories found" in out.lower()
@@ -375,6 +376,7 @@ def test_get_conversations_tool_rejects_missing_status_under_scope():
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {"conversation_id": "only-me"},
         }
@@ -398,6 +400,7 @@ def test_get_conversations_tool_scoped_offset_does_not_repeat_the_conversation()
     cfg = {
         "configurable": {
             "user_id": "u1",
+            "user_timezone": "UTC",
             "conversations_collected": [],
             "chat_scope": {"conversation_id": "only-me"},
         }
@@ -416,8 +419,7 @@ def test_get_conversations_tool_scoped_offset_does_not_repeat_the_conversation()
     with (
         patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
         patch.object(tools.conversations_db, "get_conversations") as get_many,
-        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
     ):
-        out = tools.get_conversations_tool.invoke({"offset": 1}, config=cfg)
+        out = tools.get_conversations_tool.invoke({"offset": 1, "include_transcript": False}, config=cfg)
     assert out.startswith("No conversations found")
     get_many.assert_not_called()

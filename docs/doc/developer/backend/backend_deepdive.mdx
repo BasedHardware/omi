@@ -33,6 +33,11 @@ This deep dive will walk you through the **core elements** of Omi's backend, pro
 
 ## System Architecture
 
+The backend reaches model services over internal HTTP. Their Helm charts can
+optionally share a Gateway that routes by path prefix and rewrites requests to
+native HTTP and WebSocket endpoints. App clients continue to use the authenticated
+backend API rather than reaching model services directly.
+
 ```mermaid
 flowchart TD
     subgraph Client

@@ -29,14 +29,12 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
-# The chart must serve exactly the policy-owned default routes; deriving the
-# expected literals from the policy keeps this guard from drifting when the
-# serving order changes there.
-SAFE_STREAMING_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.STREAMING])
-DEV_CANARY_STREAMING_ROUTE = 'parakeet-window,' + SAFE_STREAMING_ROUTE.removesuffix(',parakeet')
+# Keep these deployed routes as ordered subsets of the broader policy; the
+# unused Deepgram provider stays available in code but is absent from runtime lists.
+DEV_CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox'
 # Soniox-first was rolled back on 2026-10-02: a Parakeet failover replays its
 # ring into Soniox's bounded send queue, which overflowed and ended the session.
-CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
+CANARY_STREAMING_ROUTE = 'parakeet-window,modulate-velma-2,soniox'
 SAFE_PRERECORDED_ROUTE = ','.join(DEFAULT_MODELS_BY_SURFACE[STTServingSurface.PRERECORDED])
 
 
@@ -89,7 +87,14 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert f'name: GOOGLE_CLOUD_PROJECT\n              value: "{expected["runtime_gcp_project_id"]}"' in rendered
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
+    if env_name == 'prod':
+        token = _env_value(_load_values(expected['values_file']), 'POSTHOG_PRODUCT_CAPTURE_TOKEN')
+        assert token and f'name: POSTHOG_PRODUCT_CAPTURE_TOKEN\n              value: "{token}"' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_CACHE_TTL") == "86400"
+    assert _env_value(_load_values(expected["values_file"]), "TRANSLATION_NEGATIVE_CACHE_TTL") == "21600"
+    assert 'name: TRANSLATION_CACHE_TTL\n              value: "86400"' in rendered
+    assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
 def test_backend_listen_helm_template_requires_image_tag():
