@@ -426,6 +426,23 @@ class TestReminderSync:
 
     @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
     @patch('utils.mcp_action_items.action_items_db')
+    def test_description_change_rearms_reminder_with_new_title(self, mock_db, mock_sync):
+        # The phone reminder carries the title it was armed with, so a rename must re-arm it.
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', desc='Email Bob the deck')]
+        mock_db.update_action_item.return_value = True
+        actions.update_action_item(UID, 'a1', description='Email Bob the deck')
+        mock_sync.assert_called_once_with(
+            user_id=UID,
+            action_item_id='a1',
+            description='Email Bob the deck',
+            completed=False,
+            due_at=NOW,
+            status=None,
+            deleted=False,
+        )
+
+    @patch('utils.mcp_action_items.sync_action_item_reminder', create=True)
+    @patch('utils.mcp_action_items.action_items_db')
     def test_delete_cancels_reminder(self, mock_db, mock_sync):
         mock_db.get_action_item.return_value = _action_item('a1')
         mock_db.delete_action_item.return_value = True
