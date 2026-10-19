@@ -297,6 +297,10 @@ struct SettingsContentView: View {
   @State var singleLanguageMode: Bool = false
   @State var newVocabularyWord: String = ""
   @State var vocabularyList: [String] = []
+  /// Whether `vocabularyList` was read from the account rather than shown from the local copy.
+  /// A save replaces the account's whole list; see `TranscriptionVocabularyWriter`.
+  @State var vocabularyLoadedFromAccount: Bool = false
+  @State var isReadingVocabulary: Bool = false
 
   // Language setting
   @State var userLanguage: String = "en"

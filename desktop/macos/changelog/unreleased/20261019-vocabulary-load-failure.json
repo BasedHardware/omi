@@ -1,0 +1,3 @@
+{
+  "change": "Fixed adding or removing a custom vocabulary word erasing your other saved words when Settings had not loaded them yet"
+}
