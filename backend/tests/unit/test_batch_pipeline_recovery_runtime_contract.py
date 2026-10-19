@@ -65,7 +65,7 @@ def test_recovery_targets_integration_with_declared_platform_timeout(environment
     assert targets['services']['backend-integration']['flags']['--timeout'] == timeout
 
 
-@pytest.mark.parametrize('inventory', ['present', 'absent', 'denied', 'unexpected'])
+@pytest.mark.parametrize('inventory', ['present', 'present_short', 'absent', 'denied', 'unexpected'])
 def test_recovery_queue_provisioning_is_bounded_and_inventory_errors_fail_closed(tmp_path, inventory):
     action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
     steps = action['runs']['steps']
@@ -87,6 +87,7 @@ printf '%s\\n' "$*" >> "$TRACE"
 if [[ "$3" == list ]]; then
   case "$INVENTORY" in
     present) echo projects/synthetic-project/locations/synthetic-region/queues/batch-quarantine-recovery ;;
+    present_short) echo batch-quarantine-recovery ;;
     absent) ;;
     denied) exit 1 ;;
     unexpected) echo unexpected ;;
@@ -101,10 +102,10 @@ fi
         text=True,
     )
     calls = trace.read_text().splitlines()
-    assert (result.returncode == 0) is (inventory in {'present', 'absent'})
-    assert len(calls) == (2 if inventory in {'present', 'absent'} else 1)
+    assert (result.returncode == 0) is (inventory in {'present', 'present_short', 'absent'})
+    assert len(calls) == (2 if inventory in {'present', 'present_short', 'absent'} else 1)
     if result.returncode == 0:
-        operation = 'update' if inventory == 'present' else 'create'
+        operation = 'update' if inventory in {'present', 'present_short'} else 'create'
         assert calls[1].startswith(f'tasks queues {operation} batch-quarantine-recovery ')
         for option in [
             '--max-concurrent-dispatches=4',

@@ -5862,3 +5862,15 @@ Upstream retired memory suppression, leaving no backend cohort consumer;
 `FREE_TIER_EMERGENCY_STOP` and the unused backend control plane are retired too.
 The existing remote `free-tier-kill-switch-v1` still covers macOS local inference
 through its client adapter; it grants no cloud entitlement.
+
+### Terminal batch assignment supersession
+
+When sync assignment raises `SyncAssignmentSuperseded`, the batch projector
+persists a ready part receipt with `disposition=superseded` and zero speech usage.
+It writes no conversation content and schedules no playback or enrichment for
+that part. Multipart and sibling completion still use the ordered cursor and
+content ledger; successful parts retain their usage. Completed client results
+include `superseded_segments` with zero failures, rather than reporting silence.
+A fresh transaction rechecks privacy/deletion fences, immutable binding and
+ledger ownership before settlement; a concurrently committed assignment receipt
+wins. Account/protection revocation still follows the existing erasure path.

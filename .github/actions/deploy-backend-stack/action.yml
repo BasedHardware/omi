@@ -849,7 +849,9 @@ runs:
           --project="${{ inputs.project_id }}" \
           --filter="name=$name" --format='value(name)')
         operation=create
-        if [[ "$existing" == "$name" ]]; then
+        # gcloud prints the queue's short id for value(name), not the full
+        # resource path, so accept either form of this exact queue.
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
           operation=update
         elif [[ -n "$existing" ]]; then
           echo 'Unexpected recovery queue inventory' >&2
