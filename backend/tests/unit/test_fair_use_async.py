@@ -1,6 +1,6 @@
 """Tests for async fair-use flows: classifier trigger, notification, and admin router."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -330,6 +330,31 @@ class TestFairUseStatusRestrictionExpiry:
         assert 'temporarily limited' in result['message']
         _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
         _fair_use_db.update_fair_use_state.assert_not_called()
+
+
+class TestAdminSetStageRestrictExpiry:
+    def setup_method(self):
+        _reset()
+        _fair_use_db.update_fair_use_state.reset_mock()
+
+    def test_manual_restrict_carries_an_expiry_that_stage_reads_keep(self):
+        """Stage reads expire a restriction with no future restrict_until, so a manual restrict
+        must store one or the next listen stage read would silently drop it."""
+        before = datetime.now(timezone.utc)
+
+        with patch.object(fair_use_admin_mod, 'fair_use_db', _fair_use_db):
+            result = fair_use_admin_mod.set_user_stage('user1', stage='restrict', admin_id='admin')
+
+        assert result == {'status': 'updated', 'stage': 'restrict'}
+        uid, updates = _fair_use_db.update_fair_use_state.call_args.args
+        assert uid == 'user1'
+        assert updates['stage'] == 'restrict'
+        assert updates['restrict_until'] >= before + timedelta(days=30)
+
+        _redis().get.return_value = None
+        with patch.object(_fair_use_db, 'get_fair_use_state', return_value=dict(updates)):
+            assert fair_use_mod.get_enforcement_stage('user1') == 'restrict'
+        _fair_use_db.update_fair_use_state.assert_called_once()
 
 
 class TestOverflowAndInvalidData:
