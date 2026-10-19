@@ -99,7 +99,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return null;
 
     try {
@@ -175,9 +175,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
 
     if (pageCount > 30) {
-      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
+      // Wal.id is device_timerStart, and this list is rebuilt on connect, on every
+      // discovery and after every sync pass. Keep the start estimated when this
+      // backlog (same pendant, same first page) was listed, so the recording keeps
+      // its id; a fresh estimate from the clock gave it a new id on every rebuild.
+      final listed = _wals.where((w) => w.device == deviceId && w.storageOffset == _oldestPage).firstOrNull;
+      int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) return [];
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
