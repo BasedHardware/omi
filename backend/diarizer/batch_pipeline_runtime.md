@@ -110,8 +110,13 @@ embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 
 HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
-3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
-sampler alive; zero is rejected until an independent sampler exists. Enable
+3600s, with 300s downscale stabilization. Each worker samples queue age every
+15s on its own supervised task, independent of the GPU batch, so series stay
+fresh while every replica is busy. Minimum one worker keeps the queue
+sampler alive; zero is rejected until an independent sampler exists. With
+several replicas, lease recovery and the result-ready drain run on one replica
+per 30-second lease (`pump_recovery` in `{namespace}_leases`); each pump still
+drains the owners of its own completions, and a lease-store error fails open. Enable
 PodMonitoring only where its CRD is installed (it defaults on). The worker exports
 `worker_release`; a different collector must preserve the same label plus
 namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing

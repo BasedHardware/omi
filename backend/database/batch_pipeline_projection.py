@@ -104,7 +104,7 @@ class ProjectionStore:
     def mark_enrichment(
         self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str, *, part_index=None
     ):
-        from utils.sync import reprocess
+        from utils.enrichment import outbox as reprocess
 
         def mutate(document_id, operation):
             @firestore.transactional
