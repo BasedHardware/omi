@@ -1,4 +1,4 @@
-progressDeadlineSeconds: 3000
+progressDeadlineSeconds: 4200
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -811,7 +811,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
+  minReplicas: 40
   maxReplicas: 60
   behavior:
     scaleDown:
