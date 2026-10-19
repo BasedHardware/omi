@@ -46,7 +46,8 @@ def _task(payload: object) -> tuple[str, str] | None:
     return key, token
 
 
-def _consume(key: str, token: str):
+def consume(key: str, token: str):
+    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler."""
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
@@ -66,5 +67,5 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    result = await run_blocking(postprocess_executor, _consume, *task)
+    result = await run_blocking(postprocess_executor, consume, *task)
     return http_response(result)
