@@ -304,12 +304,14 @@ class OmiClient:
         A browser-login profile carries BOTH a Firebase ID token and the
         minted dev key: ``/v1/dev/user/*`` routes authenticate through the
         backend's ``get_api_key_auth`` which only accepts an ``omi_dev_…``
-        key — a JWT there 401s. ``/v2/*`` (and ``POST /v1/dev/keys``) need
-        the ID token instead. One shared client header can't serve both, so
-        the dev-user family overrides it here. None → the client's default
-        Authorization applies unchanged."""
+        key — a JWT there 401s. So does ``GET /v1/dev/key``, the dev key
+        describing itself, which ``auth login --browser`` calls first.
+        ``/v2/*`` (and ``POST /v1/dev/keys``) need the ID token instead. One
+        shared client header can't serve both, so the dev-key family
+        overrides it here. None → the client's default Authorization applies
+        unchanged."""
         p = self._profile
-        if p.auth_method == "oauth" and p.api_key and                 path.startswith("/v1/dev/user"):
+        if p.auth_method == "oauth" and p.api_key and (path.startswith("/v1/dev/user") or path == "/v1/dev/key"):
             return {"Authorization": f"Bearer {p.api_key}"}
         return None
 
