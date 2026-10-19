@@ -14,6 +14,7 @@ import time
 from typing import Any, Callable
 
 from config import rollout_cohorts as policy
+from config.policy.cohorts import batch_members, recovery_members
 from config.rollout_cohorts import (
     COLLECTION as COLLECTION,
     COHORT_ENVS,
@@ -167,5 +168,9 @@ def _rollout_cohort_members(name: str) -> tuple[str, ...]:
 
 def configure_rollout_runtime() -> None:
     policy.configure_resolvers(
-        _in_rollout_cohort, _rollout_cohort_members, _load_rollout_cohorts, _warm_rollout_cohorts
+        _in_rollout_cohort,
+        _rollout_cohort_members,
+        _load_rollout_cohorts,
+        _warm_rollout_cohorts,
+        env_readers={'batch-pipeline': batch_members, 'batch-pipeline-recovery': recovery_members},
     )

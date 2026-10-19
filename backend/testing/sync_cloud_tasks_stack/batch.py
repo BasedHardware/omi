@@ -99,6 +99,18 @@ class BatchStack(Stack):
         self.control_dir = state_dir / 'batch-control'
         super().__init__(state_dir)
         self.control_dir.mkdir(parents=True, exist_ok=True)
+        from config.policy import resolve_batch_policy
+
+        policy = resolve_batch_policy(
+            'synthetic-stack-owner',
+            flags={
+                'BATCH_PIPELINE_ENABLED': 'true',
+                'BATCH_PIPELINE_PERCENT': '100',
+            },
+        )
+        # No owner identity is serialized; this 100% policy covers every
+        # synthetic owner through the admission seam.
+        (self.control_dir / 'policy.json').write_text(json.dumps(policy.to_dict()))
         self.owner_variants = 0
         self.worker_generation = 0
         self.serving_generation = 0
@@ -124,10 +136,11 @@ class BatchStack(Stack):
 
     def _role_env(self, role: str) -> dict[str, str]:
         if role == 'admission':
-            return {'BATCH_PIPELINE_ENABLED': 'true', 'BATCH_PIPELINE_PERCENT': '100'}
+            return {'OMI_BATCH_STACK_POLICY_FILE': str(self.control_dir / 'policy.json')}
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
+                # Only the owning serving role stamps these onto each job.
                 'BATCH_PIPELINE_RECOVERY_MODE': 'on',
                 'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
                 # Projection enrichment obligations bind to an HTTPS sync
@@ -439,6 +452,9 @@ def _upload(
     upload.content_id = intake['content_id']
     for segment in upload.segment_ids:
         job = stack.doc('jobs', segment)
+        expected_policy = json.loads((stack.control_dir / 'policy.json').read_text())
+        if job.get('policy') != expected_policy:
+            raise StackFailure('batch job did not retain the admission policy')
         if not job.get('requires_compute_admission') or not str(job.get('audio_uri', '')).startswith('gs://'):
             raise StackFailure('batch job row lacks compute admission or a staged encrypted artifact')
     _record_job_event(
@@ -524,6 +540,24 @@ def _assert_projected(stack: BatchStack, upload: Upload, status: dict[str, Any],
         job = stack.doc('jobs', segment)
         if job.get('state') != 'committed':
             raise StackFailure(f'batch job ended in state {job.get("state")!r}, expected committed')
+        from config.policy.stages import STAGE_TYPES
+
+        expected_roles = {'scheduler': 'scheduler', 'projection': 'batch-serving'}
+        if provider == 'legacy_sync':
+            expected_roles['recovery'] = 'batch-serving'
+        for stage, role in expected_roles.items():
+            raw = (job.get('policy_parts') or {}).get(stage)
+            if (
+                not raw
+                or raw.get('source_role') != role
+                or STAGE_TYPES[stage].from_dict(raw).policy_id != raw.get('policy_id')
+            ):
+                raise StackFailure('job did not retain a valid owning-role policy stamp')
+    obligation_id = hashlib.sha256(f'{upload.uid}\0{ids[0]}'.encode()).hexdigest()
+    obligation = stack.firestore.collection('sync_reprocess_outbox').document(obligation_id).get().to_dict() or {}
+    summary_part = obligation.get('first_summary_policy') or {}
+    if summary_part.get('source_role') != 'batch-serving' or not summary_part.get('policy_id'):
+        raise StackFailure('first-summary obligation did not retain its creation policy')
     _record_job_event(
         {
             'event': 'batch_projection_verified',
