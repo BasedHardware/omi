@@ -47,7 +47,8 @@ void main() {
     zeroSession(monitor, source: source);
   }
 
-  Future<void> pumpBanner(WidgetTester tester, CaptureWedgeMonitor monitor, {bool tickerEnabled = true}) async {
+  Future<void> pumpBanner(WidgetTester tester, CaptureWedgeMonitor monitor,
+      {bool tickerEnabled = true, bool acuteOnly = false}) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: const [
@@ -60,7 +61,7 @@ void main() {
         home: Scaffold(
           body: TickerMode(
             enabled: tickerEnabled,
-            child: CaptureRecoveryBanner(monitor: monitor),
+            child: CaptureRecoveryBanner(monitor: monitor, acuteOnly: acuteOnly),
           ),
         ),
       ),
@@ -315,6 +316,23 @@ void main() {
 
       expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
       expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+    });
+
+    testWidgets('acuteOnly keeps the banner for an acute link failure', (tester) async {
+      final monitor = makeMonitor();
+      wedge(monitor);
+      await pumpBanner(tester, monitor, acuteOnly: true);
+      expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget,
+          reason: 'an acute episode still shows when Home mounts the banner');
+    });
+
+    testWidgets('acuteOnly hides the slow-burn storage episode', (tester) async {
+      final monitor = makeMonitor();
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      await pumpBanner(tester, monitor, acuteOnly: true);
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing,
+          reason: 'storage at risk is slow-burn and lives in Activity, not Home');
     });
 
     testWidgets('stays hidden for a phone capture source', (tester) async {

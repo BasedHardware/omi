@@ -9,6 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
@@ -608,6 +609,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
+              // Acute capture link failures still warn on Home (the live pill does not
+              // observe the monitor); slow-burn storage/upload problems live in Activity.
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner(acuteOnly: true)),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)

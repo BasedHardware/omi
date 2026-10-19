@@ -525,8 +525,8 @@ final captureScenarios = <AuditScenario>[
     title: 'Live page, pendant, recovery banner',
     page: _live,
     state: 'The pendant streams, but the BLE link stalled: the one banner retries in place '
-        '(never opens settings), explains itself on demand, and can be dismissed. Home carries '
-        'no banner — slow-burn problems live in the Activity bell',
+        '(never opens settings), explains itself on demand, and can be dismissed. Home keeps '
+        'this same acute banner; only slow-burn problems live in the Activity bell',
     run: (a) {
       _seedVisibleWedgeEpisode();
       return _runLivePage(a, AuditLive.pendant).then((_) async {

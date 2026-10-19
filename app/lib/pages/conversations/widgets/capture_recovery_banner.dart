@@ -16,9 +16,18 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// `ingress_recovery_failed` episode is the exception: the app itself owns that recovery and a
 /// Dart-side retry would no-op, so the card informs and explains instead of offering a retry.
 class CaptureRecoveryBanner extends StatelessWidget {
-  const CaptureRecoveryBanner({super.key, this.monitor});
+  const CaptureRecoveryBanner({super.key, this.monitor, this.acuteOnly = false});
 
   final CaptureWedgeMonitor? monitor;
+
+  /// Home mounts the banner with this set: slow-burn episodes (storage at risk,
+  /// upload silence) live in Activity's Needs attention rows, not here. The
+  /// capturing page keeps the unfiltered banner — it is the one surface that
+  /// must speak while the reader is watching a capture. Acute link failures
+  /// (zero-byte streaks, rapid reconnects, connected-but-silent, exhausted
+  /// ingress recovery) stay on Home because they ask for attention now and the
+  /// live pill does not observe the monitor.
+  final bool acuteOnly;
 
   void _retry(CaptureWedgeMonitor wedge) {
     wedge.onRecoveryActioned(surface: 'banner');
@@ -32,7 +41,13 @@ class CaptureRecoveryBanner extends StatelessWidget {
       listenable: wedge,
       builder: (context, _) {
         final episode = wedge.visiblePrompt;
-        if (episode == null) return const SizedBox.shrink();
+        // Home asks for acute episodes only: a storage-at-risk (or upload-silence)
+        // episode is slow-burn and lives in Activity's Needs attention rows
+        // instead. Upload silence never reaches this slot (telemetry-only), so
+        // the filter is the storage trigger.
+        if (episode == null || (acuteOnly && episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk)) {
+          return const SizedBox.shrink();
+        }
         final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk;
         // Native ingress recovery is exhausted; the app keeps retrying on its own and a
         // Dart-side retry would no-op (retryVisibleEpisode returns for this trigger).
