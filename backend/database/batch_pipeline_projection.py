@@ -104,51 +104,65 @@ class ProjectionStore:
     def mark_enrichment(
         self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str, *, part_index=None
     ):
+        from config.sync_reprocess import settle_seconds
+        from database.outbox_firestore import FirestoreEnrichmentOutbox
         from utils.enrichment import outbox as reprocess
 
-        def mutate(document_id, operation):
-            @firestore.transactional
-            def commit(transaction):
-                session = self.session(segment_id, binding, now, part_index=part_index)
-                session.prepare(transaction, replay=False)
-                session.guard(transaction, [canonical])
-                receipt = dict(session.receipt())
-                ref = self.client.collection(reprocess.COLLECTION).document(document_id)
-                snapshot = ref.get(transaction=transaction)
-                old = snapshot.to_dict() if snapshot.exists else None
-                if receipt.get('state') == 'ready':
-                    return {**(old or {}), '_wake': False}, True
-                row, result = operation(old)
-                if old is None and session.job.get('priority') != 0:
-                    from utils.cloud_tasks import is_sync_backfill_routing_enabled
+        if not reprocess.owns_runtime():
+            raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
+        document_id = reprocess.key(binding.owner_id, canonical)
+        outbox = FirestoreEnrichmentOutbox(self.client)
 
-                    if is_sync_backfill_routing_enabled():
-                        import os
+        def commit(transaction):
+            session = self.session(segment_id, binding, now, part_index=part_index)
+            session.prepare(transaction, replay=False)
+            session.guard(transaction, [canonical])
+            receipt = dict(session.receipt())
+            if receipt.get('state') == 'ready':
+                return None
+            backfill = session.job.get('priority') != 0
+            # The enrichment obligation and its exactly-once projection
+            # receipt commit together, fenced against account deletion.
+            result = outbox.enqueue(
+                document_id,
+                binding.owner_id,
+                {'conversation_id': canonical, 'language': language},
+                now + settle_seconds(),
+                tx=_ClientTransaction(self.client, transaction),
+                now=now,
+                new_dispatch=self._backfill_dispatch if backfill else None,
+            )
+            receipt.update(state='ready', conversation_id=canonical)
+            session.write_receipt(transaction, receipt)
+            return result
 
-                        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
-                        handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
-                        if not queue or not handler:
-                            raise ProjectionBlocked('backfill enrichment dispatch binding required')
-                        dispatch = {
-                            'queue': queue,
-                            'handler': handler,
-                            'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
-                            'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
-                        }
-                        if not reprocess.valid_dispatch_binding(dispatch):
-                            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
-                        row['dispatch'] = dispatch
-                        result = (row, result[1])
-                # The enrichment obligation and its exactly-once projection
-                # receipt commit together, fenced against account deletion.
-                transaction.set(ref, row)
-                receipt.update(state='ready', conversation_id=canonical)
-                session.write_receipt(transaction, receipt)
-                return result
+        result = self.run(firestore.transactional(commit))
+        if result is not None and result.wake_token:
+            outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
 
-            return self.run(commit)
+    @staticmethod
+    def _backfill_dispatch() -> dict[str, str] | None:
+        """A backfill unit keeps the backfill queue binding on a new obligation (None: host binding)."""
+        from utils.cloud_tasks import is_sync_backfill_routing_enabled
+        from utils.enrichment import outbox as reprocess
 
-        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate)
+        if not is_sync_backfill_routing_enabled():
+            return None
+        import os
+
+        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+        handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
+        if not queue or not handler:
+            raise ProjectionBlocked('backfill enrichment dispatch binding required')
+        dispatch = {
+            'queue': queue,
+            'handler': handler,
+            'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
+            'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
+        }
+        if not reprocess.valid_dispatch_binding(dispatch):
+            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
+        return dispatch
 
     def run(self, operation):
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
@@ -368,3 +382,11 @@ class ProjectionStore:
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result
+
+
+class _ClientTransaction:
+    """A raw Firestore transaction with the client that owns it, for ``Outbox.enqueue(tx=...)``."""
+
+    def __init__(self, client, transaction):
+        self.client = client
+        self.transaction = transaction
