@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-banner-before.png",
+      "platform": "mobile-ios",
+      "description": "Home with an acute capture stall, before cleanup (9351b710eb): repeated 'tap to reconnect' title, amber button, dismiss on its own row; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-banner-after.png",
+      "platform": "mobile-ios",
+      "description": "Home with an acute capture stall, after cleanup: short title, one detail line, white Reconnect, corner dismiss; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-live-banner-before.png",
+      "platform": "mobile-ios",
+      "description": "Live capturing page recovery banner, before cleanup (9351b710eb); synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-live-banner-after.png",
+      "platform": "mobile-ios",
+      "description": "Live capturing page recovery banner, after cleanup; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-activity-attention-before.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention with storage-full and upload-stalled rows, before cleanup (9351b710eb): wrapping titles, identical warning icons, amber pills; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-activity-attention-after.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention, after cleanup: per-problem icons, one-line titles, count and kept-audio subtitle, neutral actions; synthetic local state, headless widget capture at 390x844 (visual_audit.sh)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
