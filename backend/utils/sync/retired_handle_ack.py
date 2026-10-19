@@ -111,7 +111,9 @@ def get_retired_handle_ack(job_id: str, uid: str, *, firestore_client: Any = Non
     except BatchPrivacyBlocked as error:
         logger.warning('event=sync_retired_handle_ack outcome=privacy_blocked fence_reason=%s', error.reason.value)
         return None
-    if status is not None:
+    if not isinstance(status, dict):
+        return None
+    if status.get('status') == 'completed':
         logger.info('event=sync_retired_handle_ack outcome=acknowledged')
         record_fallback(
             component='sync_dispatch',
