@@ -33,7 +33,7 @@ class PeopleFirestore(StrictFirestore):
     """StrictFirestore plus the equality query this path streams inside its transaction.
 
     The shared fixture models only id-projected, bounded queries. Its transaction still
-    applies: a read after the first write fails, and ``create`` refuses an existing id.
+    applies: a read after the first write fails.
     """
 
     def collection(self, name):
@@ -92,7 +92,7 @@ def test_existing_active_person_is_returned_instead_of_a_second_one():
 
     assert person['id'] == 'p1' and person['name'] == 'Alice'
     assert 'p2' not in _people(store)
-    assert store.transactions[-1].creates == []
+    assert store.transactions[-1].sets == []
 
 
 def test_person_is_created_when_only_a_dismissed_or_differently_named_person_exists():
@@ -108,7 +108,7 @@ def test_person_is_created_when_only_a_dismissed_or_differently_named_person_exi
 
     assert person == _person('p4', 'Alice')
     assert store.rows[(*PEOPLE, 'p4')] == {**_person('p4', 'Alice'), 'is_user_created': True}
-    assert [path for path, _ in store.transactions[-1].creates] == [(*PEOPLE, 'p4')]
+    assert [path for path, _ in store.transactions[-1].sets] == [(*PEOPLE, 'p4')]
 
 
 def test_retried_create_returns_the_person_the_first_request_created():

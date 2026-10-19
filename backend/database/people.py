@@ -52,7 +52,9 @@ def get_or_create_person_by_name(uid: str, data: Dict[str, Any], *, firestore_cl
             person = snapshot.to_dict() or {}
             if person.get('is_dismissed') is not True:
                 return {**person, 'id': person.get('id') or snapshot.id}
-        transaction.create(people_ref.document(data['id']), {**data, 'is_user_created': True})
+        # The transaction's read of every same-name person guards the race; `set` (like the
+        # action-item dedupe) also persists under the hermetic E2E Firestore fake.
+        transaction.set(people_ref.document(data['id']), {**data, 'is_user_created': True})
         return None
 
     existing = run_with_transaction_contention_retry(client.transaction, apply, operation_name='person_get_or_create')
