@@ -192,7 +192,9 @@ def classify(source: str, uid: str, name: str, size: int, metadata: dict[str, st
 
 def prefixes_for(source: str, uid: str) -> list[str]:
     if source == 'private-cloud-sync':
-        return [f'chunks/{uid}/', f'raw-sync/{uid}/', f'raw-mobile-batch/{uid}/']
+        # David's 10-19 grant is conditioned to chunks/<uid>/ only (title david-archive-prefix-only);
+        # never list or read another prefix of this bucket.
+        return [f'chunks/{uid}/']
     if source == 'syncing-local':
         return [f'syncing/{uid}/']
     raise MirrorRefused(f'unknown source {source!r}')
@@ -247,16 +249,30 @@ def take_inventory(buckets: dict[str, ReadOnlyBucket], uid: str) -> Inventory:
 
 
 def select_groups(
-    inv: Inventory, *, max_groups: int, since: float | None = None, families: tuple[str, ...] = ('chunk', 'upload')
+    inv: Inventory,
+    *,
+    max_groups: int,
+    since: float | None = None,
+    families: tuple[str, ...] = ('chunk', 'upload'),
+    spread: bool = False,
+    max_group_bytes: int | None = None,
 ) -> list[list[SourceObject]]:
-    """Newest ``max_groups`` recordings (by last capture), optionally since an epoch."""
+    """``max_groups`` recordings: the newest, or (``spread``) evenly spaced across the capture history.
+
+    ``max_group_bytes`` skips recordings larger than the bound (multi-hour batch containers).
+    """
     groups = [
         files
         for (family, _), files in inv.groups().items()
-        if family in families and (since is None or files[-1].capture_start >= since)
+        if family in families
+        and (since is None or files[-1].capture_start >= since)
+        and (max_group_bytes is None or sum(o.size for o in files) <= max_group_bytes)
     ]
     groups.sort(key=lambda files: files[-1].capture_start, reverse=True)
-    return groups[:max_groups]
+    if not spread or len(groups) <= max_groups:
+        return groups[:max_groups]
+    step = len(groups) / max_groups
+    return [groups[int(i * step)] for i in range(max_groups)]
 
 
 def inventory_record(inv: Inventory, selected: list[list[SourceObject]] | None = None) -> dict[str, Any]:
@@ -458,7 +474,14 @@ def run(args: argparse.Namespace) -> int:
     buckets = {s: ReadOnlyBucket(prod_storage, SOURCE_BUCKETS[s]) for s in args.source}
     inv = take_inventory(buckets, uid)
     since = datetime.now(timezone.utc).timestamp() - args.since_days * 86400 if args.since_days else None
-    selected = select_groups(inv, max_groups=args.max_conversations, since=since)
+    selected = select_groups(
+        inv,
+        max_groups=args.max_conversations,
+        since=since,
+        families=tuple(args.family),
+        spread=args.spread,
+        max_group_bytes=int(args.max_group_mb * 1024 * 1024) if args.max_group_mb else None,
+    )
     record: dict[str, Any] = {
         'mode': 'inventory' if args.cmd == 'inventory' or not args.apply else 'copy',
         'at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -561,6 +584,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--source', action='append', choices=sorted(SOURCE_BUCKETS), default=None)
     parser.add_argument('--max-conversations', type=int, default=200)
     parser.add_argument('--since-days', type=float)
+    parser.add_argument('--family', action='append', choices=['chunk', 'upload'], default=None)
+    parser.add_argument('--spread', action='store_true', help='evenly spaced across history instead of newest')
+    parser.add_argument('--max-group-mb', type=float, help='skip recordings larger than this')
     parser.add_argument('--owner-label', default='owner-a')
     parser.add_argument('--dest-bucket', default=MIRROR_BUCKET)
     parser.add_argument('--staging-secret', default=STAGING_SECRET)
@@ -572,6 +598,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--apply', action='store_true', help='copy: actually read audio and write the mirror')
     args = parser.parse_args(argv)
     args.pin_env = tuple(args.pin_env or PIN_ENVS)
+    args.family = args.family or ['chunk', 'upload']
     # prod-operator can get syncing-local (raw client uploads, short retention) but only
     # list omi-private-cloud-sync; copying chunks needs a David-prefix read grant (human tier).
     args.source = args.source or (
