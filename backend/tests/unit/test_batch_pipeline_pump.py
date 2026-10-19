@@ -275,3 +275,61 @@ async def test_empty_asr_handoff_quarantines_first_attempt_and_stale_token_canno
     assert job['recovery_state'] == 'held' and not job['merge_pending']
     assert ('results', 'first') not in store.rows
     assert not queue.complete(WorkResult('first', 'gs://synthetic/stale'), '', time.time())
+
+
+@pytest.mark.asyncio
+async def test_only_the_lease_holder_runs_recovery_and_global_drain():
+    from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
+
+    store, queue, _ = setup()
+    lease = queue.pull(time.time())[0]
+    queue.complete(WorkResult('first', 'gs://synthetic/result'), lease.token, time.time())
+    pumps = [
+        Pump(
+            queue,
+            Worker(),
+            capacity=lambda: PoolCapacity(time.time(), 8),
+            leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
+        )
+        for _ in range(2)
+    ]
+    assert pumps[0].leader.acquire()  # Replica 0 already leads this tick.
+    recovered = []
+    original = queue.recover
+    queue.recover = lambda now: recovered.append(now) or original(now)
+    assert await pumps[1].run_once() == 0
+    assert not recovered and store.rows['jobs', 'first']['state'] == 'result_ready'
+    assert await pumps[0].run_once() == 0
+    assert len(recovered) == 1 and store.rows['jobs', 'first']['state'] == 'committed'
+
+
+@pytest.mark.asyncio
+async def test_lease_store_failure_keeps_per_replica_recovery():
+    from unittest.mock import Mock
+
+    from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
+
+    broken = Mock()
+    broken.run.side_effect = RuntimeError('lease store down')
+    store, queue, _ = setup()
+    lease = queue.pull(time.time())[0]
+    queue.complete(WorkResult('first', 'gs://synthetic/result'), lease.token, time.time())
+    pump = Pump(queue, Worker(), leader=LeaderLease(broken, PUMP_RECOVERY, ttl_seconds=30))
+    assert await pump.run_once() == 0
+    assert store.rows['jobs', 'first']['state'] == 'committed'
+
+
+@pytest.mark.asyncio
+async def test_external_sampler_owns_metrics_when_inline_sampling_is_off():
+    from unittest.mock import Mock
+
+    metrics = Mock()
+    _, _, inline = setup(metrics=metrics)
+    await inline.run_once()
+    assert metrics.refresh.call_count == 1
+    metrics.reset_mock()
+    store, _, external = setup(metrics=metrics, inline_metrics=False)
+    await external.run_once()
+    metrics.refresh.assert_not_called()
+    await external.sample_metrics()
+    assert metrics.refresh.call_args.args[0] is store
