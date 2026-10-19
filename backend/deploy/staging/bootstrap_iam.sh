@@ -47,7 +47,8 @@
 #                          logging.logWriter, monitoring.metricWriter; workloadIdentityUser for
 #                          KSA staging/staging-worker (batch worker, parakeet, vad)
 #   staging-tasks-invoker  run.invoker on Cloud Run services whose name ends in -staging (condition)
-#   staging-builder        artifactregistry.writer on repo `staging`; logging.logWriter;
+#   staging-builder        artifactregistry.writer on repo `staging`; reader on repo gcr.io (base
+#                          image); logging.logWriter;
 #                          storage.objectViewer on staging-batch (build source)
 #   agent-dev-operator     cloudbuild.builds.editor (project; builds run as staging-builder);
 #                          run.admin only on services ending in -staging (condition; needed to set
@@ -377,6 +378,9 @@ bootstrap() {
   run gcloud artifacts repositories add-iam-policy-binding "$AR_REPO" --project="$DEV" --location="$REGION" \
     --member="$bld" --role=roles/artifactregistry.writer --quiet --format=none
   project_binding "$bld" roles/logging.logWriter
+  # backend/Dockerfile's base image is gcr.io/based-hardware-dev/python:3.11-slim-forky.
+  run gcloud artifacts repositories add-iam-policy-binding gcr.io --project="$DEV" --location=us \
+    --member="$bld" --role=roles/artifactregistry.reader --quiet --format=none
   bucket_binding "${DEV}-staging-batch" "$bld" roles/storage.objectViewer
 
   echo "== agent-dev-operator (deploy identity; staging-scoped)"

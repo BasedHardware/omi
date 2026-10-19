@@ -54,6 +54,7 @@ QUEUES=(
   "staging-provider-stt|16|5|-1|10s|300s"
   "staging-conversation-finalization|16|10|5|5s|60s"
   "staging-audio-merge|16|10|5|5s|60s"
+  "staging-account-deletion|4|4|5|5s|300s"
 )
 
 existing="$(gcloud tasks queues list --location="$REGION" --project="$PROJECT" --format='value(name.basename())')"

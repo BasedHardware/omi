@@ -1,0 +1,254 @@
+#!/usr/bin/env bash
+# Deploy an integration SHA to staging in based-hardware-dev (contract (i), decision S3: script, no workflow).
+#
+#   backend/deploy/staging/deploy.sh <sha> [--services backend,backend-sync,...] [--with-worker]
+#                                          [--skip-build] [--allow-non-integration] [--break-lock]
+#   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services
+#
+# Tier: dev-operator only. Only lanes 1 and 2 deploy staging; other lanes ask on the board.
+# Order (each step gates the next):
+#   1. lock      gs://based-hardware-dev-staging-batch/locks/deploy (generation-match create)
+#   2. source    `git archive <sha>` into a temp dir; OMI_RELEASE_TREE = <sha>^{tree}
+#   3. fence     the staging fence's negative tests and the staging-mirrors-prod check, run on that tree
+#   4. redis     in-cluster Redis applied (namespace staging); its internal LB IP -> REDIS_DB_HOST
+#   5. compose   compose_runtime_env.py --env staging (fails on any prod-pointing value)
+#   6. build     Cloud Build as staging-builder -> us-central1-docker.pkg.dev/based-hardware-dev/staging/*:<sha>
+#   7. deploy    gcloud run deploy <svc>-staging, full declarative env (--env-vars-file, --set-secrets)
+#   8. verify    serving revision has 100% traffic and its env equals the rendered env
+#                (OMI_BACKEND_RELEASE_SHA=<sha>, OMI_RELEASE_TREE=<tree>); values compared, never printed
+#
+# Rollback: re-run with the previous good SHA (logged in data/run-2026-10-19-legacy-retire/lane02/deploys.log),
+# or `gcloud run services update-traffic <svc>-staging --to-revisions=<rev>=100`.
+set -euo pipefail
+
+PROJECT=based-hardware-dev
+REGION=us-central1
+CLUSTER=dev-omi-gke
+NAMESPACE=staging
+LOCK="gs://${PROJECT}-staging-batch/locks/deploy"
+BUILD_SOURCE_DIR="gs://${PROJECT}-staging-batch/cloudbuild/source"
+BUILDER_SA="projects/${PROJECT}/serviceAccounts/staging-builder@${PROJECT}.iam.gserviceaccount.com"
+IMAGE_REPO="us-central1-docker.pkg.dev/${PROJECT}/staging"
+INTEGRATION_REF=origin/integration/legacy-retire
+ALL_SERVICES=(backend backend-sync backend-sync-backfill backend-integration)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+PY="${REPO_ROOT}/backend/.venv/bin/python"
+DEPLOY_LOG="${OMI_STAGING_DEPLOY_LOG:-$HOME/workspace/omi/data/run-2026-10-19-legacy-retire/lane02/deploys.log}"
+
+# Prod-shaped runtime per service (prod live Cloud Run, read 2026-10-19 on ro-prod). Replica counts
+# are staging-sized by the overlay; these mirror concurrency, CPU, memory and timeout.
+shape_flags() {
+  case "$1" in
+    backend) echo "--concurrency=20 --cpu=2 --memory=8Gi --timeout=3600 --ingress=all" ;;
+    backend-sync) echo "--concurrency=20 --cpu=2 --memory=8Gi --timeout=3600 --ingress=all" ;;
+    backend-sync-backfill) echo "--concurrency=6 --cpu=2 --memory=8Gi --timeout=1500 --ingress=all" ;;
+    backend-integration) echo "--concurrency=40 --cpu=2 --memory=2Gi --ingress=all" ;;
+    *) return 1 ;;
+  esac
+}
+# Public API surface takes Firebase-token auth like prod's backend; task targets are IAM-only
+# (staging-tasks-invoker holds run.invoker on *-staging).
+auth_flag() {
+  [[ "$1" == backend ]] && echo --allow-unauthenticated || echo --no-allow-unauthenticated
+}
+
+SHA=""
+SERVICES=("${ALL_SERVICES[@]}")
+WITH_WORKER=false
+SKIP_BUILD=0
+ALLOW_NON_INTEGRATION=0
+BREAK_LOCK=0
+TEARDOWN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --services)
+      IFS=',' read -r -a SERVICES <<<"$2"
+      shift
+      ;;
+    --with-worker) WITH_WORKER=true ;;
+    --skip-build) SKIP_BUILD=1 ;;
+    --allow-non-integration) ALLOW_NON_INTEGRATION=1 ;;
+    --break-lock) BREAK_LOCK=1 ;;
+    --teardown) TEARDOWN=1 ;;
+    -h | --help)
+      sed -n '2,24p' "$0"
+      exit 0
+      ;;
+    -*)
+      echo "unknown flag: $1" >&2
+      exit 2
+      ;;
+    *) SHA="$1" ;;
+  esac
+  shift
+done
+
+die() {
+  echo "deploy.sh: $*" >&2
+  exit 1
+}
+log() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+
+[[ "${GCP_AGENT_TIER:-}" == dev-operator ]] || die "run on the dev-operator tier (source ~/.local/bin/gcp-agent-env.sh dev-operator)"
+[[ "$(gcloud config get-value project 2>/dev/null)" == "$PROJECT" ]] || die "active project must be $PROJECT"
+for svc in "${SERVICES[@]}"; do shape_flags "$svc" >/dev/null || die "unknown service $svc"; done
+
+WORK="$(mktemp -d -t staging-deploy.XXXXXX)"
+KUBECONFIG_FILE="$WORK/kubeconfig"
+LOCK_HELD=0
+cleanup() {
+  if [[ "$LOCK_HELD" == 1 ]]; then
+    gcloud storage rm "$LOCK" --quiet >/dev/null 2>&1 || echo "WARN: could not release $LOCK" >&2
+  fi
+  rm -rf "$WORK"
+  # Clear the GKE auth plugin cache this run may have populated (memory: cache crosses tiers).
+  rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/gke_gcloud_auth_plugin_cache" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+kubectl_staging() {
+  if [[ ! -s "$KUBECONFIG_FILE" ]]; then
+    KUBECONFIG="$KUBECONFIG_FILE" gcloud container clusters get-credentials "$CLUSTER" --region="$REGION" --project="$PROJECT" >/dev/null
+  fi
+  KUBECONFIG="$KUBECONFIG_FILE" kubectl --context="gke_${PROJECT}_${REGION}_${CLUSTER}" -n "$NAMESPACE" "$@"
+}
+
+acquire_lock() {
+  local holder
+  holder="${USER:-agent}@$(hostname -s) sha=${SHA:-teardown} $(date -u +%FT%TZ)"
+  if [[ "$BREAK_LOCK" == 1 ]]; then
+    log "breaking lock: $(gcloud storage cat "$LOCK" 2>/dev/null || echo none)"
+    gcloud storage rm "$LOCK" --quiet >/dev/null 2>&1 || true
+  fi
+  if ! printf '%s\n' "$holder" | gcloud storage cp - "$LOCK" --if-generation-match=0 >/dev/null 2>&1; then
+    die "staging deploy lock held: $(gcloud storage cat "$LOCK" 2>/dev/null || echo unreadable) (one deploy at a time; --break-lock if stale)"
+  fi
+  LOCK_HELD=1
+  log "lock acquired"
+}
+
+if [[ "$TEARDOWN" == 1 ]]; then
+  acquire_lock
+  for svc in "${ALL_SERVICES[@]}"; do
+    gcloud run services delete "${svc}-staging" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null &&
+      log "deleted ${svc}-staging" || log "absent ${svc}-staging"
+  done
+  exit 0
+fi
+
+[[ -n "$SHA" ]] || die "usage: deploy.sh <sha> [...]"
+cd "$REPO_ROOT"
+GIT_SSH_COMMAND="ssh -4" git fetch -q origin integration/legacy-retire || die "fetch integration failed"
+SHA="$(git rev-parse --verify "${SHA}^{commit}")"
+if [[ "$ALLOW_NON_INTEGRATION" != 1 ]] && ! git merge-base --is-ancestor "$SHA" "$INTEGRATION_REF"; then
+  die "$SHA is not on $INTEGRATION_REF (staging deploys integration SHAs; --allow-non-integration for a lane rehearsal)"
+fi
+TREE="$(git rev-parse "${SHA}^{tree}")"
+SHORT="${SHA:0:12}"
+
+acquire_lock
+
+log "source: git archive $SHORT (tree ${TREE:0:12})"
+mkdir -p "$WORK/src"
+git archive "$SHA" | tar -x -C "$WORK/src"
+
+log "fence: negative tests + staging-mirrors-prod on the exported tree"
+(cd "$WORK/src/backend" && "$PY" -m pytest -q -p no:cacheprovider tests/unit/test_staging_fence.py tests/unit/test_staging_overlay.py >"$WORK/fence-tests.log" 2>&1) ||
+  {
+    tail -20 "$WORK/fence-tests.log" >&2
+    die "staging fence tests failed on $SHORT"
+  }
+(cd "$WORK/src/backend" && "$PY" scripts/cross_service_checks/staging.py) || die "staging-mirrors-prod failed on $SHORT"
+
+log "redis: apply in-cluster staging-redis"
+kubectl_staging apply -f "$WORK/src/backend/deploy/staging/redis.yaml" >/dev/null
+kubectl_staging rollout status statefulset/staging-redis --timeout=300s >/dev/null
+REDIS_HOST=""
+for _ in $(seq 1 60); do
+  REDIS_HOST="$(kubectl_staging get service staging-redis -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
+  [[ -n "$REDIS_HOST" ]] && break
+  sleep 5
+done
+[[ -n "$REDIS_HOST" ]] || die "staging-redis internal LB has no IP after 5 min"
+
+log "compose: staging overlay"
+COMPOSED="$WORK/staging.composed.yaml"
+"$PY" "$WORK/src/backend/deploy/compose_runtime_env.py" --env staging \
+  --base "$WORK/src/backend/deploy/runtime_env/_base.yaml" \
+  --runtime-env-dir "$WORK/src/backend/deploy/runtime_env" \
+  --input "STAGING_REDIS_HOST=$REDIS_HOST" --output "$COMPOSED" >/dev/null
+
+if [[ "$SKIP_BUILD" != 1 ]]; then
+  log "build: Cloud Build (backend$([[ "$WITH_WORKER" == true ]] && echo ', batch worker')) as staging-builder"
+  gcloud builds submit "$WORK/src" --project="$PROJECT" --region="$REGION" \
+    --config="$WORK/src/backend/deploy/staging/cloudbuild.yaml" \
+    --substitutions="_SHA=${SHA},_BUILD_WORKER=${WITH_WORKER}" \
+    --service-account="$BUILDER_SA" \
+    --gcs-source-staging-dir="$BUILD_SOURCE_DIR" \
+    --suppress-logs >/dev/null
+fi
+IMAGE="${IMAGE_REPO}/backend:${SHA}"
+gcloud artifacts docker images describe "$IMAGE" --project="$PROJECT" >/dev/null || die "image $IMAGE not found"
+
+verify_service() { # svc deploy_name env_file
+  local svc="$1" name="$2" env_file="$3" state
+  state="$WORK/${svc}.live.json"
+  gcloud run services describe "$name" --region="$REGION" --project="$PROJECT" --format=json >"$state"
+  "$PY" - "$state" "$env_file" "$SHA" <<'PYEOF'
+import json, sys, yaml
+live = json.load(open(sys.argv[1]))
+want = yaml.safe_load(open(sys.argv[2]))
+sha = sys.argv[3]
+status = live['status']
+ready = status.get('latestReadyRevisionName')
+traffic = {t.get('revisionName'): t.get('percent', 0) for t in status.get('traffic', [])}
+problems = []
+if status.get('latestCreatedRevisionName') != ready:
+    problems.append('latest created revision is not ready')
+if traffic.get(ready, 0) != 100:
+    problems.append('serving traffic is not 100% on the latest ready revision')
+container = live['spec']['template']['spec']['containers'][0]
+have = {e['name']: e.get('value') for e in container.get('env', []) if 'value' in e}
+missing = sorted(set(want) - set(have))
+differ = sorted(k for k in want if k in have and have[k] != str(want[k]))
+extra = sorted(set(have) - set(want))
+if have.get('OMI_BACKEND_RELEASE_SHA') != sha:
+    problems.append('OMI_BACKEND_RELEASE_SHA mismatch')
+for label, names in (('missing', missing), ('differs', differ), ('unexpected', extra)):
+    if names:
+        problems.append(f'env {label}: {", ".join(names[:20])}')
+if problems:
+    print('; '.join(problems)); sys.exit(1)
+print(f'serving {ready} at 100%, env matches ({len(want)} vars)')
+PYEOF
+}
+
+for svc in "${SERVICES[@]}"; do
+  name="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" --service "$svc" \
+    --env-file /dev/null --release-sha "$SHA" --release-tree "$TREE" --field deploy_name)"
+  env_file="$WORK/${svc}.env.yaml"
+  render_flags=()
+  rendered="$("$PY" "$WORK/src/backend/deploy/staging/render_cloud_run.py" --composed "$COMPOSED" \
+    --service "$svc" --env-file "$env_file" --release-sha "$SHA" --release-tree "$TREE")" || die "render refused $svc"
+  while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <<<"$rendered"
+  [[ "${#render_flags[@]}" -gt 0 ]] || die "render produced no flags for $svc"
+  # shellcheck disable=SC2207  # shape flags are fixed tokens without spaces
+  shape=($(shape_flags "$svc"))
+  log "deploy: $name @ $SHORT"
+  gcloud run deploy "$name" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
+    --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" "$(auth_flag "$svc")" \
+    --no-cpu-throttling --cpu-boost --execution-environment=gen2 \
+    --labels="env=staging,release-sha=${SHORT}" --revision-suffix="${SHORT}-$(date -u +%H%M%S)" \
+    --quiet >/dev/null
+  gcloud run services update-traffic "$name" --to-latest --region="$REGION" --project="$PROJECT" --quiet >/dev/null
+  verdict="$(verify_service "$svc" "$name" "$env_file")" || die "verify failed for $name: $verdict"
+  log "verify: $name $verdict"
+done
+
+mkdir -p "$(dirname "$DEPLOY_LOG")"
+printf '%s sha=%s tree=%s services=%s worker=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
+  "$(
+    IFS=,
+    echo "${SERVICES[*]}"
+  )" "$WITH_WORKER" >>"$DEPLOY_LOG"
+log "done: staging serves $SHORT (tree ${TREE:0:12})"

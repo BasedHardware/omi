@@ -58,7 +58,7 @@ PROD_DATA_PLANE_HASHES: frozenset[str] = frozenset(
 
 # Production references by shape. ``based-hardware`` not followed by ``-dev``,
 # prod Cloud Run URL suffix, and the public prod API.
-_PROD_REFERENCE = re.compile(r'based-hardware(?!-dev)|hhibjajaja|api\.omi\.me', re.IGNORECASE)
+_PROD_REFERENCE = re.compile(r'based-hardware(?!-dev)|hhibjajaja|208440318997|api\.omi\.me', re.IGNORECASE)
 
 _PROJECT_ENV = ('OMI_CUSTOMER_DATA_PROJECT', 'GOOGLE_CLOUD_PROJECT')
 _OPTIONAL_PROJECT_ENV = ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'GCLOUD_PROJECT', 'GCP_PROJECT', 'FIREBASE_PROJECT_ID')
@@ -79,17 +79,17 @@ def _metric():
         from prometheus_client import Counter
     except ImportError:  # unit harnesses without prometheus
         return None
-    global _FENCE_COUNTER
-    if _FENCE_COUNTER is None:
-        _FENCE_COUNTER = Counter(
+    global _fence_counter
+    if _fence_counter is None:
+        _fence_counter = Counter(
             'omi_staging_fence_total',
             'Staging isolation fence evaluations by outcome reason.',
             ['reason'],
         )
-    return _FENCE_COUNTER
+    return _fence_counter
 
 
-_FENCE_COUNTER = None
+_fence_counter = None
 _checked = False
 _lock = Lock()
 
@@ -192,6 +192,6 @@ def _assert(env: Mapping[str, str]) -> None:
     raise StagingFenceError(violations)
 
 
-def _reset_for_tests() -> None:
+def reset_for_tests() -> None:
     global _checked
     _checked = False

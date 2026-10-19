@@ -1,0 +1,28 @@
+# Staging image build (contract (i)), submitted by deploy.sh on dev-operator; runs as staging-builder.
+# Builds from a `git archive` of the integration SHA, never a working tree.
+substitutions:
+  _REPO: us-central1-docker.pkg.dev/based-hardware-dev/staging
+  _SHA: ''
+  _BUILD_WORKER: 'false'
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 3600s
+steps:
+  - id: backend
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, backend/Dockerfile, -t, '${_REPO}/backend:${_SHA}', .]
+  - id: push-backend
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_REPO}/backend:${_SHA}']
+  - id: batch-worker
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [[ "${_BUILD_WORKER}" == true ]]; then
+          docker build -f backend/diarizer/Dockerfile.batch-pipeline -t "${_REPO}/batch-pipeline-worker:${_SHA}" . &&
+          docker push "${_REPO}/batch-pipeline-worker:${_SHA}"
+        fi
+    waitFor: ['-']

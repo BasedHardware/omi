@@ -159,17 +159,17 @@ def test_error_never_contains_values():
 
 
 def test_process_env_check_is_cached(monkeypatch):
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
     monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware')
     with pytest.raises(StagingFenceError):
         assert_staging_isolation()
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
     monkeypatch.delenv('OMI_DEPLOYMENT')
     assert_staging_isolation()  # non-staging: no-op, then cached
     monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
     assert_staging_isolation()  # cached: does not re-evaluate
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
 
 
 # database/_client.py named-DB allowance (contract (i)).
@@ -183,7 +183,7 @@ def _set_env(monkeypatch, env: dict[str, str]) -> None:
             monkeypatch.delenv(name)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
 
 
 def test_client_allows_staging_db_only_for_staging_in_dev_project(monkeypatch):
@@ -195,7 +195,7 @@ def test_client_allows_staging_db_only_for_staging_in_dev_project(monkeypatch):
         _client._firestore_database_id('based-hardware')
     with pytest.raises(RuntimeError, match='restricted'):
         _client._firestore_database_id(None)
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
 
 
 def test_client_refuses_staging_db_outside_staging(monkeypatch):
@@ -203,10 +203,10 @@ def test_client_refuses_staging_db_outside_staging(monkeypatch):
 
     monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
     with pytest.raises(RuntimeError, match='restricted'):
         _client._firestore_database_id('based-hardware-dev')
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
 
 
 def test_client_runs_fence_before_building_a_client(monkeypatch):
@@ -217,4 +217,4 @@ def test_client_runs_fence_before_building_a_client(monkeypatch):
     _set_env(monkeypatch, env)
     with pytest.raises(StagingFenceError):
         _client._firestore_database_id('based-hardware')
-    staging_fence._reset_for_tests()
+    staging_fence.reset_for_tests()
