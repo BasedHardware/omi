@@ -18,6 +18,7 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
@@ -318,7 +319,11 @@ class PipelineWorker:
         self.recover_words = recover_words
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
-        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
+        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
+        # Same-owner predecessor tails for units whose speech starts at sample 0.
+        self.left_context = LeftContextIndex(
+            max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
+        )
         # Artifact IO only (fetch/decrypt/decode, encrypt/upload). Model calls,
         # CUDA work and the chain lock stay on the calling thread.
         self.io_concurrency = io_concurrency if io_concurrency is not None else worker_io_concurrency()
@@ -393,6 +398,44 @@ class PipelineWorker:
         except Exception:
             pass  # Observability cannot change the diarization result.
         return self.diarize(samples)
+
+    def _with_left_context(self, state, clips):
+        """Prefix the first window with the predecessor's speech-run audio.
+
+        Only a unit whose VAD speech starts at sample 0 qualifies. Window core
+        ownership still starts at 0, so prefix words are never emitted.
+        """
+        item, samples = state['item'], state['samples']
+        first = clips[0]
+        if (
+            self.config.asr_left_context_seconds <= 0
+            or first.start != 0
+            or not isinstance(samples, np.ndarray)
+            or not starts_in_speech(state.get('vad_raw') or [])
+        ):
+            return clips
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        if context is None:
+            return clips
+        room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
+        if room <= 0:
+            return clips
+        context = context[-room:]
+        state['left_context'] = context
+        self.counts['left_context'] += 1
+        prefixed = Window(
+            first.segment_id,
+            np.concatenate([context.astype(samples.dtype, copy=False), first.samples]),
+            -len(context) / SAMPLE_RATE,
+            first.core_start,
+            first.core_end,
+        )
+        return [prefixed, *clips[1:]]
+
+    @staticmethod
+    def _recovery_context(state):
+        context = state.get('left_context')
+        return {'left_context': context} if context is not None else {}
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
@@ -575,9 +618,28 @@ class PipelineWorker:
                         state['reused'] = True
                         self.counts['reused_live'] += 1
                     else:
-                        windows.extend(clips)
+                        state['asr_clips'] = clips
+                        state['vad_raw'] = spans
                 except Exception as exc:
                     fail(item, exc, stage)
+
+            # Predecessors in this flight become visible before any lookup;
+            # earlier flights' tails persist in the bounded index.
+            for state in states.values():
+                if state['item'].segment_id not in failed:
+                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+            attached = self.counts['left_context']
+            for state in states.values():
+                clips = state.pop('asr_clips', None)
+                if not clips or state['item'].segment_id in failed:
+                    continue
+                windows.extend(self._with_left_context(state, clips))
+            if self.counts['left_context'] > attached:
+                logger.info(
+                    'event=batch_asr_left_context units=%d attached=%d',
+                    len(items),
+                    self.counts['left_context'] - attached,
+                )
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
@@ -609,7 +671,8 @@ class PipelineWorker:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2
                             if window.core_start <= midpoint < window.core_end:
-                                states[window.segment_id]['words'].append({**word, 'timestamp': [start, end]})
+                                # A left-context window may own a word straddling the seam.
+                                states[window.segment_id]['words'].append({**word, 'timestamp': [max(0.0, start), end]})
                     except Exception as exc:
                         fail(states[window.segment_id]['item'], exc, 'word_clocks')
 
@@ -640,6 +703,7 @@ class PipelineWorker:
                                 self.config.max_padded_seconds,
                                 before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
                                 after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
+                                **self._recovery_context(state),
                             )
                             if recovered is None and (
                                 fits_retry
@@ -654,7 +718,9 @@ class PipelineWorker:
                                 results.append(HeldWork(item.segment_id))
                                 continue
                         else:
-                            recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                            recovered = self.recover_words(
+                                state['samples'], self.config.max_padded_seconds, **self._recovery_context(state)
+                            )
                         if recovered is None or not fits_retry:
                             words = []
                             state['padded_retry'] = 'skipped_oversize'

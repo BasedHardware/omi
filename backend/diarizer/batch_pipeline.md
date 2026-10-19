@@ -33,6 +33,21 @@ speaker labels never pool across owners. Payloads retain words and turns as
 separate evidence for the downstream projection/assignment layer; this worker
 does not name speakers or write user conversation records.
 
+Capture units are cut at upload boundaries, so a unit whose VAD speech starts at
+sample 0 usually starts mid-utterance, and Parakeet TDT v3 then decodes nothing
+(decoder start-state blank; KB `projects/parakeet-primary/evidence/2026-09-21-tdt-empty-output-root-cause.md`).
+For such a unit the worker prefixes its first ASR window with the same owner's
+contiguous predecessor audio (gap within 1s, same privacy generation), starting
+0.5s before the onset of the speech run that crosses the seam, at most
+`BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` (default 8; 0 disables). Predecessors
+come from the same flight or a bounded process-local tail cache
+(`BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS`, default 64, 10-minute TTL). Window core
+ownership still starts at the unit's first sample, so prefix words are never
+emitted or double-counted; a seam-straddling word is clipped to the capture. The
+padded empty-ASR retry uses the same prefix instead of synthetic left silence.
+Ordering, owner, merge and paid-recovery semantics are unchanged; only the ASR
+input of the first window changes.
+
 Pre-STT live reuse additionally defaults off. It requires existing lineage gates
 plus an injected resolver's immutable-audio-bound full-source-coverage and
 words-of-record-quality receipt. Current lexical dedupe runs after STT and cannot
