@@ -229,6 +229,7 @@ def test_existing_cohort_membership_stays_correlated():
 
 @pytest.fixture
 def sync_jobs_with_redis(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     import fakeredis
     from database import sync_jobs
 
@@ -298,3 +299,51 @@ def test_guard_rejects_a_stage_reresolving_through_a_legacy_getter():
     source = "from config.policy import resolve_batch_policy\ndef enqueue_in_transaction():\n    return resolve_batch_policy('owner')\n"
     assert not stage_policy_reads(source, 'utils/batch_pipeline/scheduler.py')
     assert len(stage_policy_reads(source, 'utils/batch_pipeline/projection.py')) == 1
+
+
+def test_partial_recorded_snapshot_uses_original_defaults_not_current_env(monkeypatch):
+    customer = CustomerData()
+    customer.add_user('owner')
+    store = SimStore(customer)
+    store.rows[('jobs', 'old')] = {'owner_id': 'owner', 'segment_id': 'old', 'policy': {}}
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
+    _, policy = load_job_policy(store, 'old')
+    assert policy == BatchUnitPolicy()
+
+
+def test_legacy_policy_repair_does_not_block_other_privacy_eligible_owners():
+    customer = CustomerData()
+    store = SimStore(customer)
+    queue = Scheduler(store)
+    for owner in ('blocked', 'healthy'):
+        customer.add_user(owner)
+        queue.enqueue(WorkItem(owner, owner, 1, 'sim://audio', 1, Priority.FRESH), 1)
+        store.rows[('jobs', owner)].pop('policy')
+    customer.block_privacy('blocked')
+    leases = queue.pull(2)
+    assert [lease.item.owner_id for lease in leases] == ['healthy']
+    assert 'policy' not in store.get('jobs', 'blocked')
+
+
+def test_legacy_fallback_can_anchor_on_an_unfenced_sibling():
+    from dataclasses import asdict
+
+    customer = CustomerData()
+    customer.add_user('owner')
+    customer.add_conversation('owner', 'old-target')
+    customer.add_conversation('owner', 'live-target')
+    customer.delete_conversation('owner', 'old-target')
+    store = SimStore(customer)
+    binding = asdict(ProjectionBinding('owner', 'job', 'content', ('old', 'live')))
+    for sid, target in [('old', 'old-target'), ('live', 'live-target')]:
+        store.rows[('jobs', sid)] = {
+            'segment_id': sid,
+            'owner_id': 'owner',
+            'conversation_id': target,
+            'projection_binding': binding,
+        }
+    _, policy = load_job_policy(store, 'live')
+    assert store.get('jobs', 'live')['policy'] == policy.to_dict()
+    assert not store.get('jobs', 'old').get('policy')

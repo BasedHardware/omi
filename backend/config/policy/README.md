@@ -16,9 +16,11 @@ abort admitted work. It still checks live ownership and privacy data.
 
 Old Redis sync jobs use a compare-and-set read repair that preserves progress and
 the existing TTL; a concurrent persisted policy wins. Old Firestore rows resolve once in `database/batch_pipeline_policy.py`. The
-transaction serializes through the first extant sibling and copies the chosen
+transaction serializes through the first extant, privacy-eligible sibling and copies the chosen
 snapshot into the current binding/job. Other siblings adopt that same winner
-before use, without rewriting 128 sibling documents for every queue visited. Rows record `policy_source=fallback`;
+before use, without rewriting 128 sibling documents for every queue visited. Pre-E1 sibling
+bindings adopt that recorded policy during immutable-binding comparisons; their
+other identity fields must still match. Fenced rows cannot obstruct healthy queues. Rows record `policy_source=fallback`;
 committed loads emit `omi_batch_unit_policy_total{policy_source="fallback"}` and a
 bounded log. New admissions record `policy_source=admission`. No policy hash is a
 metric label. An old row with no snapshot cannot reconstruct a historical env;

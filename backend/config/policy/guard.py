@@ -20,6 +20,7 @@ DEFERRED_READS = {
         'BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED',
         'BATCH_PIPELINE_SERVING_ENABLED',
         'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE',
+        'BATCH_PIPELINE_WORKER_IO_CONCURRENCY',
     },
     'config/batch_pipeline_providers.py': {
         'BATCH_PIPELINE_CONTEXT_SECONDS',
@@ -143,7 +144,10 @@ def stage_policy_reads(source, relative):
             else (node.func.attr if isinstance(node.func, ast.Attribute) else '')
         )
         if called == 'resolve_batch_policy' and relative == 'utils/batch_pipeline/scheduler.py':
-            if any(f.name == 'enqueue_in_transaction' and f.lineno <= node.lineno <= f.end_lineno for f in functions):
+            if any(
+                f.name == 'enqueue_in_transaction' and f.lineno <= node.lineno <= (f.end_lineno or f.lineno)
+                for f in functions
+            ):
                 continue  # Standalone queue admission is an explicit resolver edge.
         if called in SNAPSHOT_GETTERS or called == 'resolve_batch_policy':
             out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')

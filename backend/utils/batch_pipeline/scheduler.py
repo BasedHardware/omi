@@ -91,7 +91,6 @@ def _prefer_merge_head(
         or head['state'] != 'ready'
         or head['priority'] != job['priority']
         or not _pool_allows(head, max_seconds, shared_gpu)
-        or not policy_in_transaction(tx, head, observations=observations).head_priority
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
@@ -106,6 +105,8 @@ def _prefer_merge_head(
                 linked.get('privacy_generation'),
             )
     except BatchPrivacyBlocked:
+        return job
+    if not policy_in_transaction(tx, head, observations=observations).head_priority:
         return job
     previous['next'] = head['next']
     tx.put('jobs', previous['segment_id'], previous)
@@ -272,33 +273,46 @@ class Scheduler:
                     continue
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
-                    policy = policy_in_transaction(tx, job, observations=observations)
-                    if policy.head_priority:
-                        job = _prefer_merge_head(
-                            tx,
-                            queue,
-                            job,
-                            head_budget,
-                            observations,
-                            now=now,
-                            max_seconds=max_seconds,
-                            shared_gpu=bool(gpu_key),
-                        )
-                    job.setdefault('unit_kind', 'conversation')
                     try:
                         tx.check_privacy(
                             job['owner_id'],
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
                         )
-                        policy = policy_in_transaction(tx, job)
-                        allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (not gpu_key or policy.shared_live)
                     except BatchPrivacyBlocked:
-                        allowed = False
-                    if allowed:
-                        eligible_queues[queue_key] = job['duration_seconds']
-                    else:
                         blocked.add(queue_key)
+                    else:
+                        privacy_checked_segment = job['segment_id']
+                        policy = policy_in_transaction(tx, job, observations=observations)
+                        if policy.head_priority:
+                            job = _prefer_merge_head(
+                                tx,
+                                queue,
+                                job,
+                                head_budget,
+                                observations,
+                                now=now,
+                                max_seconds=max_seconds,
+                                shared_gpu=bool(gpu_key),
+                            )
+                        job.setdefault('unit_kind', 'conversation')
+                        try:
+                            if job['segment_id'] != privacy_checked_segment:
+                                tx.check_privacy(
+                                    job['owner_id'],
+                                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                                    job.get('privacy_generation'),
+                                )
+                            policy = policy_in_transaction(tx, job)
+                            allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
+                                not gpu_key or policy.shared_live
+                            )
+                        except BatchPrivacyBlocked:
+                            allowed = False
+                        if allowed:
+                            eligible_queues[queue_key] = job['duration_seconds']
+                        else:
+                            blocked.add(queue_key)
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):

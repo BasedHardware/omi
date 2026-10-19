@@ -608,7 +608,7 @@ def _await_recovery_task(stack: BatchStack, upload: Upload) -> dict[str, Any]:
 def _empty_asr_recovery(stack: BatchStack) -> None:
     upload = _upload(stack, 'batch-empty-asr', words='empty')
     status = _quarantine(stack, upload)
-    if status.get('status') != 'failed':
+    if status.get('status') != 'processing':
         raise StackFailure(f'quarantined job reported {status.get("status")!r} while recovery was pending')
     task = _await_recovery_task(stack, upload)
     first = stack.deliver_recovery(task, retry_count=0)

@@ -300,11 +300,12 @@ def _pin_legacy_job_policy(job_id: str, job: Dict[str, Any], raw: str) -> Option
             return None
         try:
             raw = _as_redis_text(current)
-            job = json.loads(raw)
+            decoded = json.loads(raw)
         except (TypeError, ValueError):
             return None
-        if not isinstance(job, dict) or job.get('uid') != original_uid:
+        if not isinstance(decoded, dict) or decoded.get('uid') != original_uid:
             return None
+        job = decoded
         if isinstance(job.get('policy'), dict):
             return job  # A concurrent reader's persisted snapshot wins.
     raise RuntimeError('sync job policy persistence contended')  # Never expose an unrecorded policy.

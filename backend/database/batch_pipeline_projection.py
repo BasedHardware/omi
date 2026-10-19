@@ -42,7 +42,7 @@ class ProjectionStore:
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
-        if job.get('projection_binding') and not job['projection_binding'].get('policy'):
+        if job.get('projection_binding') and job['projection_binding'].get('policy') is None:
             job, _ = load_job_policy(self.store, segment_id)
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
@@ -184,7 +184,7 @@ class ProjectionStore:
                 if job.get('state') == 'quarantined':
                     if (
                         not job.get('projection_binding')
-                        or normalized_binding(job['projection_binding']) != binding
+                        or normalized_binding(job['projection_binding'], policy=binding.policy) != binding
                         or job.get('merge_pending') is not False
                     ):
                         raise ProjectionBlocked('quarantined sibling binding mismatch')
@@ -263,7 +263,10 @@ class ProjectionStore:
                     terminal_empty_count += 1
                 live_siblings.append(sibling)
                 captured_seconds += job.get('duration_seconds', 0.0)
-                if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
+                if (
+                    not job.get('projection_binding')
+                    or normalized_binding(job['projection_binding'], policy=binding.policy) != binding
+                ):
                     raise ProjectionBlocked('sibling binding mismatch')
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
