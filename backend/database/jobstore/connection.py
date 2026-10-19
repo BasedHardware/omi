@@ -18,7 +18,8 @@ MAX_POOL_SIZE = 4
 
 def _psycopg():
     try:
-        import psycopg
+        # psycopg joins the lockfile separately; until then pyright cannot resolve it.
+        import psycopg  # pyright: ignore[reportMissingImports]
     except ImportError as exc:  # pragma: no cover - exercised only where the driver is absent
         raise RuntimeError('psycopg 3 is required to use the Postgres job store') from exc
     return psycopg
