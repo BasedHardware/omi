@@ -544,6 +544,46 @@ def _happy_path(stack: BatchStack) -> None:
     _record_job_event({'event': 'batch_happy_verified', 'job_id': upload.job_id, 'fair_use_ms': meter})
 
 
+def _assert_recovery_pending(stack: BatchStack, upload: Upload, phase: str) -> dict[str, Any]:
+    """A quarantined unit whose recovery is held/prepared/running polls as live work.
+
+    The client must keep polling (processing, nonzero hint) rather than surface a
+    failure that recovery may still repair. Only terminal quarantine reports failed.
+    """
+    code, status = _status(stack, upload)
+    hint = status.get('poll_after_ms')
+    if (
+        code != 200
+        or status.get('status') != 'processing'
+        or not isinstance(hint, int)
+        or hint <= 0
+        or status.get('failed_segments')
+    ):
+        raise StackFailure(
+            f'quarantined job {phase} polled HTTP {code} status={status.get("status")!r} '
+            f'poll_after_ms={hint!r} failed_segments={status.get("failed_segments")!r}, '
+            'expected processing with a nonzero poll hint while recovery is pending'
+        )
+    return status
+
+
+def _assert_recovery_failed(stack: BatchStack, upload: Upload) -> dict[str, Any]:
+    code, status = _status(stack, upload)
+    if (
+        code != 200
+        or status.get('status') != 'failed'
+        or status.get('poll_after_ms') != 0
+        or status.get('failed_segments') != len(upload.segment_ids)
+        or status.get('result') is not None
+    ):
+        raise StackFailure(
+            f'terminal recovery failure polled HTTP {code} status={status.get("status")!r} '
+            f'poll_after_ms={status.get("poll_after_ms")!r} failed_segments={status.get("failed_segments")!r}, '
+            'expected failed'
+        )
+    return status
+
+
 def _quarantine(stack: BatchStack, upload: Upload) -> dict[str, Any]:
     _wait_job(
         stack,
@@ -552,12 +592,11 @@ def _quarantine(stack: BatchStack, upload: Upload) -> dict[str, Any]:
         label='empty-ASR quarantine',
         timeout=60.0,
     )
-    code, status = _status(stack, upload)
+    status = _assert_recovery_pending(stack, upload, 'awaiting recovery dispatch')
     _record_job_event(
         {
             'event': 'batch_quarantine_observed',
             'job_id': upload.job_id,
-            'status_http': code,
             'client_status': status.get('status'),
             'poll_after_ms': status.get('poll_after_ms'),
         }
@@ -587,10 +626,9 @@ def _await_recovery_task(stack: BatchStack, upload: Upload) -> dict[str, Any]:
 
 def _empty_asr_recovery(stack: BatchStack) -> None:
     upload = _upload(stack, 'batch-empty-asr', words='empty')
-    status = _quarantine(stack, upload)
-    if status.get('status') != 'failed':
-        raise StackFailure(f'quarantined job reported {status.get("status")!r} while recovery was pending')
+    _quarantine(stack, upload)
     task = _await_recovery_task(stack, upload)
+    _assert_recovery_pending(stack, upload, 'with prepared recovery')
     first = stack.deliver_recovery(task, retry_count=0)
     if first.status_code != 200 or first.json().get('status') != 'recovered':
         raise StackFailure(f'recovery delivery returned HTTP {first.status_code} {first.text[:120]}')
@@ -607,6 +645,34 @@ def _empty_asr_recovery(stack: BatchStack) -> None:
     late = stack.deliver_recovery(task, retry_count=2)
     if late.status_code != 200 or stack.paid_calls(upload.pcm_digest) != 1:
         raise StackFailure('late duplicate recovery after projection issued another paid call')
+
+
+def _empty_asr_recovery_failure(stack: BatchStack) -> None:
+    upload = _upload(stack, 'batch-empty-asr-failure', words='empty')
+    stack.set_paid(upload.pcm_digest, mode='fail')
+    _quarantine(stack, upload)
+    task = _await_recovery_task(stack, upload)
+    _assert_recovery_pending(stack, upload, 'with prepared recovery')
+    first = stack.deliver_recovery(task, retry_count=0)
+    if first.status_code != 200 or first.json().get('status') != 'failed_held':
+        raise StackFailure(f'failed recovery delivery returned HTTP {first.status_code} {first.text[:120]}')
+    job = stack.doc('jobs', upload.segment_ids[0])
+    if job.get('state') != 'quarantined' or job.get('recovery_state') != 'failed_held':
+        raise StackFailure(f'failed paid recovery left recovery state {job.get("recovery_state")!r}')
+    stack.reconcile()
+    status = _assert_recovery_failed(stack, upload)
+    duplicate = stack.deliver_recovery(task, retry_count=1)
+    if duplicate.status_code != 200 or stack.paid_calls(upload.pcm_digest) != 1:
+        raise StackFailure('duplicate delivery after terminal recovery failure issued another paid call')
+    _assert_recovery_failed(stack, upload)
+    _record_job_event(
+        {
+            'event': 'batch_recovery_failure_terminal',
+            'job_id': upload.job_id,
+            'client_status': status.get('status'),
+            'poll_after_ms': status.get('poll_after_ms'),
+        }
+    )
 
 
 def _worker_sigterm_drains(stack: BatchStack) -> None:
@@ -751,15 +817,15 @@ def _serving_killed_mid_paid_call(stack: BatchStack) -> None:
         raise StackFailure('replacement serving re-issued a paid call whose outcome was unknown')
     if job.get('recovery_state') != 'running' or job.get('state') != 'quarantined':
         raise StackFailure(f'unknown paid outcome left recovery state {job.get("recovery_state")!r}')
-    code, status = _status(stack, upload)
+    status = _assert_recovery_pending(stack, upload, 'with running recovery')
     _record_job_event(
         {
             'event': 'batch_serving_kill_paid_call',
             'redelivery_http': redelivered.status_code,
             'redelivery_status': redelivered.json().get('status') if redelivered.status_code == 200 else None,
             'recovery_state': job.get('recovery_state'),
-            'client_status_http': code,
             'client_status': status.get('status'),
+            'poll_after_ms': status.get('poll_after_ms'),
         }
     )
 
@@ -864,6 +930,7 @@ def _burst_drain(stack: BatchStack) -> None:
 SCENARIOS: tuple[tuple[str, Callable[[BatchStack], None]], ...] = (
     ('batch-happy', _happy_path),
     ('batch-empty-asr-recovery', _empty_asr_recovery),
+    ('batch-empty-asr-recovery-failure', _empty_asr_recovery_failure),
     ('batch-worker-sigterm-drain', _worker_sigterm_drains),
     ('batch-worker-kill-lease-recovery', _worker_killed_after_grace),
     ('batch-serving-sigterm-paid-call', _serving_replacement_mid_paid_call),
