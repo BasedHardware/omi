@@ -32,7 +32,7 @@ from config.stt_provider_policy import (
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
-from config.policy.listen import service_models, listen_value
+from config.policy.listen import service_models, account_circuit_cooldown
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
 from utils.stt.live_health import health
 from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
@@ -249,9 +249,7 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
         return False
     circuit = _circuit_for_primary(service)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
-        circuit.record_account_failure(
-            float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
-        )
+        circuit.record_account_failure(account_circuit_cooldown())
     else:
         if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
             circuit = target_circuit(
@@ -858,9 +856,7 @@ def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     if base_lang and base_lang != 'en':
         return 'requested_non_en'
-    if any(m.strip() for m in service_models(stt_service_models)):
-        return 'configured'
-    return 'none'
+    return 'configured' if any(m.strip() for m in service_models(stt_service_models)) else 'none'
 
 
 def _requested_stt_language(

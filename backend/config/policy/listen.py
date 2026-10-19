@@ -229,6 +229,10 @@ def listen_value(field, key, default):
     return os.environ.get(key, default)
 
 
+def account_circuit_cooldown() -> float:
+    return float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+
+
 def service_models(default: list[str]) -> list[str]:
     policy = current_listen_policy.get()
     return list(policy.service_models) if policy is not None else default
