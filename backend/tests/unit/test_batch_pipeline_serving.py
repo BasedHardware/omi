@@ -387,7 +387,9 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     finally:
         release.set()
     assert await task == {'status': 'recovered'}
-    service.reconcile_async.assert_awaited_once_with()
+    service.reconcile_async.assert_awaited_once_with(
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
+    )
     assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
 
 

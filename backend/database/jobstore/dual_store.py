@@ -14,6 +14,12 @@ and compares it with what Firestore returned. A complete mirror holds the same p
   written before the shadow started, until the A6 backfill, or a lost mirror write); ``extra`` (Postgres
   has a document Firestore lacks); ``uncomparable`` (a value the job store cannot encode).
 - ``op=write``: ``mirrored``; ``error``; ``timeout``; ``dropped`` (queue full); ``skipped`` (kill switch).
+- ``op=refresh``: the same outcomes, for documents re-copied after a writer outside ``Store.run``.
+
+Writers that commit outside ``Store.run`` (the projection apply transaction, purge) call
+``mirror_refresh(namespace, keys)`` after their commit: the mirror thread re-reads those documents from the
+primary and copies them to Postgres, or deletes the copy when the primary no longer has the document. It
+returns at once, without constructing anything, unless this process runs ``BATCH_JOBSTORE_MODE=shadow``.
 
 Customer documents (``conversations``, ``content``) are never mirrored. The selector is
 ``BATCH_JOBSTORE_MODE=shadow`` (default ``firestore``: no shadow, no Postgres connection), and the live
@@ -121,12 +127,21 @@ class _Recorder:
 class DualStore:
     """``Store`` protocol: every call is the primary's; committed batch writes are mirrored to ``shadow``."""
 
-    def __init__(self, primary: Any, shadow: Any, *, budget_s: float = BUDGET_S, queue_limit: int = QUEUE_LIMIT):
+    def __init__(
+        self,
+        primary: Any,
+        shadow: Any,
+        *,
+        budget_s: float = BUDGET_S,
+        queue_limit: int = QUEUE_LIMIT,
+        inline: bool = False,
+    ):
         if getattr(primary, 'namespace', None) != getattr(shadow, 'namespace', None):
             raise ValueError('primary and shadow must share one namespace')
         self.primary = primary
         self.shadow = shadow
         self.budget_s = budget_s
+        self.inline = inline  # single-threaded harnesses mirror in the caller, deterministically
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -159,8 +174,11 @@ class DualStore:
             for table, _ in writes:
                 _count(table, 'write', ShadowParityOutcome.SKIPPED)
             return
+        if self.inline:
+            self.mirror(view.reads, writes)
+            return
         try:
-            self._queue.put_nowait((view.reads, writes))
+            self._queue.put_nowait(('txn', view.reads, writes))
         except queue.Full:
             for table, _ in writes:
                 _count(table, 'write', ShadowParityOutcome.DROPPED)
@@ -178,11 +196,55 @@ class DualStore:
 
     def _drain_forever(self) -> None:
         while True:
-            reads, writes = self._queue.get()
+            kind, first, second = self._queue.get()
             try:
-                self.mirror(reads, writes)
+                if kind == 'refresh':
+                    self.refresh_now(first)
+                else:
+                    self.mirror(first, second)
             finally:
                 self._queue.task_done()
+
+    def refresh(self, keys) -> None:
+        """Queue a re-copy of ``keys`` from the primary (after a commit outside ``Store.run``). Never raises."""
+        keys = sorted({(table, key) for table, key in keys if table in MIRRORED_TABLES})
+        if not keys:
+            return
+        if not shadow_writes_enabled():
+            for table, _ in keys:
+                _count(table, 'refresh', ShadowParityOutcome.SKIPPED)
+            return
+        if self.inline:
+            self.refresh_now(keys)
+            return
+        try:
+            self._queue.put_nowait(('refresh', keys, None))
+        except queue.Full:
+            for table, _ in keys:
+                _count(table, 'refresh', ShadowParityOutcome.DROPPED)
+            return
+        self._ensure_worker()
+
+    def refresh_now(self, keys: list[tuple[str, str]]) -> None:
+        """Read ``keys`` from the primary, then upsert (or delete) each Postgres copy. Never raises."""
+        try:
+            docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+            with self.shadow.pool.connection(timeout=self.budget_s) as conn:
+                with conn.transaction():
+                    conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                    for (table, key), doc in docs.items():
+                        if doc:
+                            self.shadow.write_doc(conn, table, key, doc)
+                        else:
+                            self.shadow.delete_doc(conn, table, key)
+        except Exception as exc:
+            outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
+            for table, _ in keys:
+                _count(table, 'refresh', outcome)
+            logger.warning('event=jobstore_shadow op=refresh outcome=%s error=%s', outcome.value, type(exc).__name__)
+            return
+        for table, _ in keys:
+            _count(table, 'refresh', ShadowParityOutcome.MIRRORED)
 
     def mirror(self, reads: dict[tuple[str, str], dict], writes: dict[tuple[str, str], dict]) -> None:
         """One Postgres transaction: compare the read pre-images, then apply the writes. Never raises."""
@@ -253,3 +315,23 @@ def shadow_from_env(primary: Any) -> Any:
         _SHADOWED[namespace] = DualStore(primary, shadow)
         logger.info('event=jobstore_shadow outcome=enabled')
         return _SHADOWED[namespace]
+
+
+def mirror_refresh(namespace: str, keys) -> None:
+    """Post-commit hook for batch writers outside ``Store.run``: re-copy ``keys`` [(table, key)] to the shadow.
+
+    A strict no-op (nothing constructed, nothing read) unless this process runs ``BATCH_JOBSTORE_MODE=shadow``;
+    otherwise queued for the mirror thread. Never raises into the caller.
+    """
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or namespace == 'batch_pipeline_prod':
+        return
+    try:
+        store = _SHADOWED.get(namespace)
+        if store is None:
+            from database.batch_pipeline_store import FirestoreStore
+
+            store = shadow_from_env(FirestoreStore(namespace))
+        if isinstance(store, DualStore):
+            store.refresh(keys)
+    except Exception:
+        logger.warning('event=jobstore_shadow op=refresh outcome=hook_error', exc_info=True)

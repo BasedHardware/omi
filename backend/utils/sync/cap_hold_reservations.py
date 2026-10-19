@@ -47,6 +47,12 @@ CAP_HOLD_RESERVATIONS_RELEASED = Counter(
     ['outcome'],
 )
 
+
+def _bounded_outcome(outcome: str) -> str:
+    """Label value for CAP_HOLD_RESERVATIONS_RELEASED: a member of OUTCOMES, else 'unknown'."""
+    return outcome if outcome in OUTCOMES else 'unknown'
+
+
 StatusReader = Callable[[str, str], str]  # (uid, batch_job_id) -> 'projected' | 'failed' | 'abandoned' | 'pending'
 
 
@@ -156,7 +162,7 @@ def _settle(uid: str, settled: dict[str, str], stale: list[str], stamp: float, c
     with external_write_fence(uid, firestore_client=client):
         commit(client.transaction())
     for outcome in settled.values():
-        CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome=outcome).inc()
+        CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome=_bounded_outcome(outcome)).inc()
     for _ in stale:
         # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
         CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='stale').inc()

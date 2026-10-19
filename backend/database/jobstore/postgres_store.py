@@ -290,6 +290,14 @@ class PostgresStore:
                 (self.namespace, table, key, jsonb(value)),
             )
 
+    def delete_doc(self, conn: Any, table: str, key: str) -> None:
+        if table in _TYPED:
+            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+        else:
+            conn.execute(
+                'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
+            )
+
     def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')

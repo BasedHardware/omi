@@ -243,8 +243,8 @@ def test_reason_label_counts_unknown_without_raising():
 
 def test_migrated_constants_are_unchanged_and_misses_are_counted():
 
-    assert len(LIVE_STT_REASONS) == 32 and LIVE_STT_REASONS == LIVE_STT_FAILURE_REASONS | {'text', 'no_text'}
-    assert 'unknown' not in LIVE_STT_REASONS and 'cancelled' in LIVE_STT_FAILURE_REASONS
+    assert len(LIVE_STT_REASONS) == 33 and LIVE_STT_REASONS == LIVE_STT_FAILURE_REASONS | {'text', 'no_text'}
+    assert 'unknown' not in LIVE_STT_REASONS and {'cancelled', 'replay_ring_overflow'} <= LIVE_STT_FAILURE_REASONS
 
     def count(family: str) -> float:
         return REGISTRY.get_sample_value('omi_reason_unknown_total', {'family': family}) or 0.0

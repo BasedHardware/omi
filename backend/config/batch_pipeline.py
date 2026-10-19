@@ -221,6 +221,12 @@ def projection_pagination_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
 
 
+def owner_chain_projection_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
+
+
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
 WORKER_PIPELINE_DEPTH_MAX = 4
 

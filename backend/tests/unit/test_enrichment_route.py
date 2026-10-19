@@ -172,6 +172,35 @@ async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, m
     assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,code', [(500, 409), (502, 409), (429, 409), (400, 500)])
+async def test_legacy_handler_retries_processing_dependency_failures_without_5xx(monkeypatch, status, code):
+    """Lane 4 staging replay 10-19: 51/63 sync-jobs deliveries answered 500 on HTTPException from processing."""
+    from fastapi import HTTPException
+    from routers import batch_pipeline
+
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(batch_pipeline, 'run_enrichment', Mock(side_effect=HTTPException(status_code=status)))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
+    assert response.status_code == code
+    if code == 409:
+        assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
+
+
+def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(rows):
+    from fastapi import HTTPException
+
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, Mock(side_effect=HTTPException(status_code=502)))
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
 def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
     from services import summary_debt_repair
     from database.outbox import SweepCounts

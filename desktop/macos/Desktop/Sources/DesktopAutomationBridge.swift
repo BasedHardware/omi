@@ -2106,6 +2106,25 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "clear_main_chat",
+      effects: [.localState, .networkOrModel, .remoteWrite],
+      summary: "Run the main chat's Clear Chat action (the menu item's path, without its confirmation)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_main_chat is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      await provider.clearChat()
+      if let error = provider.errorMessage, !error.isEmpty {
+        return ["error": error]
+      }
+      return ["cleared": "true"]
+    }
+
+    register(
       name: "present_onboarding_opener",
       effects: [.localState, .networkOrModel],
       summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",

@@ -241,14 +241,27 @@ export function useActionItems(): UseActionItemsReturn {
   // even if `items` is already populated.
   const hasLoadedRef = useRef(false);
 
-  // Fetch action items
-  const fetchItems = useCallback(async () => {
+  // One list read at a time. Each successful delete invalidates the action-items
+  // cache, so bulk-deleting N tasks asked for N reloads at once. Past the backend's
+  // 12 list reads per minute the extra reads were 429ed and the page showed that
+  // error although every delete had succeeded; and whichever read answered last
+  // won, even one that predated a later delete, so deleted tasks came back. A
+  // reload requested while one is in flight now shares it and queues one more read.
+  const fetchInFlightRef = useRef<Promise<void> | null>(null);
+  const refetchQueuedRef = useRef(false);
+
+  // Read the task list once
+  const loadItems = useCallback(async () => {
     try {
       if (!hasLoadedRef.current) {
         setLoading(true);
       }
       setError(null);
       const { items: data } = await getActionItems({ limit: 500 });
+      // Another reload was requested while this read was in flight, usually
+      // because a delete committed, so this answer can still list that task.
+      // Keep what is shown; the queued read replaces it.
+      if (refetchQueuedRef.current && hasLoadedRef.current) return;
       // Ensure we always set an array
       setItems(Array.isArray(data) ? data : []);
       hasLoadedRef.current = true;
@@ -262,6 +275,26 @@ export function useActionItems(): UseActionItemsReturn {
       setLoading(false);
     }
   }, []);
+
+  // Fetch action items
+  const fetchItems = useCallback((): Promise<void> => {
+    if (fetchInFlightRef.current) {
+      refetchQueuedRef.current = true;
+      return fetchInFlightRef.current;
+    }
+    const run = (async () => {
+      try {
+        do {
+          refetchQueuedRef.current = false;
+          await loadItems();
+        } while (refetchQueuedRef.current);
+      } finally {
+        fetchInFlightRef.current = null;
+      }
+    })();
+    fetchInFlightRef.current = run;
+    return run;
+  }, [loadItems]);
 
   // Initial fetch
   useEffect(() => {
@@ -430,33 +463,42 @@ export function useActionItems(): UseActionItemsReturn {
   );
 
   // Toggle completion
-  const toggleComplete = useCallback(async (id: string, completed: boolean) => {
-    // Optimistic update
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              completed,
-              completed_at: completed ? new Date().toISOString() : null,
-            }
-          : item,
-      ),
-    );
+  const toggleComplete = useCallback(
+    async (id: string, completed: boolean) => {
+      const item = items.find((i) => i.id === id);
+      if (!item) return;
 
-    try {
-      await toggleActionItemCompleted(id, completed);
-    } catch (err) {
-      console.error('Failed to toggle completion:', err);
-      // Revert on error
+      // Optimistic update
       setItems((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, completed: !completed, completed_at: null } : item,
+        prev.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                completed,
+                completed_at: completed ? new Date().toISOString() : null,
+              }
+            : i,
         ),
       );
-      setError(err instanceof Error ? err.message : 'Failed to update task');
-    }
-  }, []);
+
+      try {
+        await toggleActionItemCompleted(id, completed);
+      } catch (err) {
+        console.error('Failed to toggle completion:', err);
+        // Revert on error to the values this toggle replaced, so a task that
+        // fails to reopen keeps the date it was completed on
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === id
+              ? { ...i, completed: item.completed, completed_at: item.completed_at }
+              : i,
+          ),
+        );
+        setError(err instanceof Error ? err.message : 'Failed to update task');
+      }
+    },
+    [items],
+  );
 
   // Snooze (add days to due date)
   const snooze = useCallback(

@@ -143,26 +143,71 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   CaptureUploadStall? get uploadStall => _uploadStall;
 
-  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null;
+  /// The acute link episode the reader is being asked about (a stalled or
+  /// silent pendant link, or an exhausted ingress recovery), if any. The
+  /// storage episode shares the prompt slot but is slow-burn: it has its own
+  /// [storageAtRisk] row, so it is not acute.
+  CaptureWedgeEpisode? get acuteEpisode {
+    // Every device, not just [visiblePrompt]'s first hit: an open storage episode on the local
+    // WAL must not hide a pendant stall behind it.
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.promptVisible && episode.trigger != triggerStorageAtRisk) return episode;
+    }
+    return null;
+  }
+
+  /// Whether an acute link episode is open at all, prompt shown or not: it also holds while the
+  /// reader's retry is in flight (the prompt steps aside until that retry settles), so the live
+  /// header keeps saying "Reconnecting" instead of falling back to a live label while no audio
+  /// reaches the app.
+  bool get linkStalled {
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.trigger != triggerStorageAtRisk) return true;
+    }
+    return false;
+  }
+
+  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
 
   /// True while a capture attention row is newer than the last Activity visit:
-  /// lights the bell's warning dot. A new episode re-lights it.
+  /// lights the bell's warning dot. A new episode re-lights it. Acute link
+  /// episodes count too: Home has no banner, so the dot is how a stall reaches
+  /// a reader who is not on the live page.
   final ValueNotifier<bool> hasUnseenCaptureAttention = ValueNotifier(false);
+
+  /// Records that Activity rendered its capture rows. With [through], marks
+  /// seen only the episodes a build actually included: the timestamp of the
+  /// newest row on screen at build time. An incident declared after that build
+  /// stays unseen — the bell keeps warning — until a frame shows its row. The
+  /// seen timestamp never rewinds.
+  void markCaptureAttentionSeen({DateTime? through}) {
+    final at = through ?? _now();
+    final seen = _captureAttentionSeenAt;
+    _captureAttentionSeenAt = seen == null || seen.isBefore(at) ? at : seen;
+    _updateUnseenCaptureAttention();
+  }
 
   /// Activity showed its capture attention rows: the bell goes dark until a new
   /// episode arrives. In memory only — after a restart the live observations
   /// re-declare any condition that still holds.
-  void markCaptureAttentionSeen() {
-    _captureAttentionSeenAt = _now();
-    _updateUnseenCaptureAttention();
-  }
-
   void _updateUnseenCaptureAttention() {
     final seen = _captureAttentionSeenAt;
     final storage = _storageAtRisk;
     final upload = _uploadStall;
+    final acute = acuteEpisode;
     hasUnseenCaptureAttention.value = (storage != null && (seen == null || storage.engagedAt.isAfter(seen))) ||
-        (upload != null && (seen == null || upload.since.isAfter(seen)));
+        (upload != null && (seen == null || upload.since.isAfter(seen))) ||
+        (acute != null && (seen == null || acute.declaredAt.isAfter(seen)));
+  }
+
+  /// Every episode change (declared, retried, resolved, dismissed) passes through
+  /// here, so the bell's acute half stays in step without each path recomputing it.
+  @override
+  void notifyListeners() {
+    _updateUnseenCaptureAttention();
+    super.notifyListeners();
   }
 
   /// Ends the slow-burn rows the way their episodes end: resolved, dismissed, or reset.
@@ -172,6 +217,46 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _uploadStall = null;
     _updateUnseenCaptureAttention();
     notifyListeners();
+  }
+
+  /// Ends the storage row the way its own condition ends: the disk admitted a
+  /// write again (or the retention diagnostic stopped reporting a risk). Upload
+  /// progress must not clear it — a full disk keeps refusing recordings while
+  /// an unrelated backlog drains. The retention fingerprint resets so a risk
+  /// that re-reports after a clear re-engages the row instead of being ignored.
+  void clearStorageAtRisk() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _lastRetentionRiskFingerprint = null;
+    _resolveStorageEpisodeIfAny();
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// Ends a storage row engaged by disk-admission failure without touching the
+  /// retention fingerprint: the caller has a fresher observation whose telemetry
+  /// dedupe must hold, and whose reason differs, so a returning disk failure
+  /// re-engages the row on its own fingerprint.
+  void _endStorageAtRiskRow() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _resolveStorageEpisodeIfAny();
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// A storage row ending with its own condition also ends the local-WAL
+  /// episode that declared it: the capturing page's banner must stop reporting
+  /// a recovered storage problem, and `_canDeclare` must let a later disk
+  /// incident start a fresh recovery. The upload-silence telemetry episode is
+  /// independent and stays for `onUploadCompleted` to later resolve on its own
+  /// terms.
+  void _resolveStorageEpisodeIfAny() {
+    final state = _devices[localWalDeviceId];
+    if (state?.episode?.trigger == triggerStorageAtRisk) {
+      _safeTrack('Capture Recovery Resolved', {'source': state!.episode!.source, 'trigger': triggerStorageAtRisk});
+      state.episode = null;
+    }
   }
 
   void setNativeIngressOwner(String deviceId, bool active) {
@@ -454,6 +539,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     };
     // Count-cap pressure is diagnostic only; storage prompts are reserved for disk admission failures.
     if (reason == 'count_cap') {
+      // A count-cap reading proves the disk admitted a write again, so any storage
+      // row a disk failure engaged has ended the way its own condition ends — the
+      // risk now reported is count pressure, which never owns the row. The
+      // fingerprint stays so this diagnostic observation keeps its telemetry
+      // dedupe; a disk failure that returns re-engages the row on its own
+      // (different reason, different fingerprint).
+      _endStorageAtRiskRow();
       final depth = _silenceAge(localWalDeviceId);
       _safeTrack('Capture Wedge Detected', {
         'source': localWalSource,
@@ -572,7 +664,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     }
   }
 
+  /// The episode the reader is asked about. An acute link episode outranks a storage episode:
+  /// it is the one the live page's header and Reconnect speak for, and its retry must not land
+  /// on the storage transfer instead. Map order alone would pick whichever device came first.
   CaptureWedgeEpisode? get visiblePrompt {
+    final acute = acuteEpisode;
+    if (acute != null) return acute;
     for (final state in _devices.values) {
       final episode = state.episode;
       if (episode != null && episode.promptVisible) return episode;
@@ -797,7 +894,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state, {bool bleIngressOnly = false}) {
     if (bleIngressOnly && !_isBleIngressTrigger(state.episode?.trigger ?? '')) return;
-    if (deviceId == localWalDeviceId) _clearCaptureAttention();
+    if (deviceId == localWalDeviceId) {
+      // A resolving local-WAL observation proves upload progress, not recovered
+      // disk: the storage row ends only with its own retention observation.
+      if (_uploadStall != null) {
+        _uploadStall = null;
+        _updateUnseenCaptureAttention();
+        notifyListeners();
+      }
+    }
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during
       // the alert must still release the telemetry slot: native-owned devices
