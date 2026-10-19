@@ -838,3 +838,105 @@ def test_v2_listen_wakeup_uses_isolated_redis(monkeypatch):
         'uid': 'synthetic',
         'notification_type': 'proactivity_v2',
     }
+
+
+def test_dedupe_history_sorts_mixed_naive_aware_iso_and_epoch_timestamps_without_type_error(lane):
+    from database import proactivity_producers as storage
+    import database.chat as chat
+
+    base = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    lane.monkeypatch.setattr(
+        storage,
+        'delivered_mentor_items',
+        lambda uid: [
+            {'delivered_at': (base - timedelta(minutes=2)).replace(tzinfo=None), 'body': 'v2 naive'},
+            {'delivered_at': (base - timedelta(minutes=4)).isoformat().replace('+00:00', 'Z'), 'body': 'v2 iso'},
+            {'body': 'v2 missing timestamp'},
+        ],
+    )
+    lane.monkeypatch.setattr(
+        producers.spine, 'decode_feed_item', lambda uid, item: SimpleNamespace(body=item.get('body'))
+    )
+    lane.monkeypatch.setattr(
+        chat,
+        'get_app_messages',
+        lambda *args, **kwargs: [
+            {'sender': 'ai', 'text': 'legacy aware newest', 'created_at': base},
+            {
+                'sender': 'ai',
+                'text': 'legacy iso',
+                'created_at': (base - timedelta(minutes=1)).isoformat().replace('+00:00', 'Z'),
+            },
+            {
+                'sender': 'ai',
+                'text': 'legacy epoch',
+                'created_at': (base - timedelta(minutes=3)).timestamp(),
+            },
+        ],
+    )
+
+    assert lane.history_fn('u') == [
+        'legacy aware newest',
+        'legacy iso',
+        'v2 naive',
+        'legacy epoch',
+        'v2 iso',
+    ]
+
+
+def test_dedupe_history_skips_messages_missing_text_or_empty_body(lane):
+    from database import proactivity_producers as storage
+    import database.chat as chat
+
+    now = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    lane.monkeypatch.setattr(
+        storage,
+        'delivered_mentor_items',
+        lambda uid: [
+            {'delivered_at': now, 'body': ''},
+            {'delivered_at': now - timedelta(minutes=1), 'body': 'valid v2'},
+        ],
+    )
+    lane.monkeypatch.setattr(
+        producers.spine, 'decode_feed_item', lambda uid, item: SimpleNamespace(body=item.get('body'))
+    )
+    lane.monkeypatch.setattr(
+        chat,
+        'get_app_messages',
+        lambda *args, **kwargs: [
+            {'sender': 'ai', 'created_at': now},
+            {'sender': 'ai', 'text': None, 'created_at': now},
+            {'sender': 'ai', 'text': '', 'created_at': now},
+            {'sender': 'ai', 'text': 'valid legacy', 'created_at': now - timedelta(minutes=2)},
+        ],
+    )
+
+    assert lane.history_fn('u') == ['valid v2', 'valid legacy']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad_due', ['', '   ', 'not-a-timestamp'])
+async def test_followup_malformed_due_at_string_returns_without_claiming(lane, bad_due):
+    task = {'conversation_id': 'c', 'due_at': bad_due, 'completed': False}
+    lane.monkeypatch.setattr(producers.tasks, 'get_action_item', MagicMock(return_value=task))
+
+    await producers.produce_followup('u', 't', '2026-10-05T12:00:00+00:00')
+
+    lane.claim.assert_not_awaited()
+    lane.publish.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_followup_malformed_current_due_at_during_generation_closes_suppressed(lane):
+    due = datetime.now(timezone.utc) - timedelta(minutes=1)
+    task = {'conversation_id': 'c', 'due_at': due, 'completed': False}
+    lane.monkeypatch.setattr(
+        producers.tasks,
+        'get_action_item',
+        MagicMock(side_effect=[task, dict(task, due_at='corrupt-due-at')]),
+    )
+
+    await producers.produce_followup('u', 't', due.isoformat())
+
+    lane.publish.assert_not_awaited()
+    lane.close.assert_awaited_once_with(item=lane.item, state='suppressed', reason='source_changed')

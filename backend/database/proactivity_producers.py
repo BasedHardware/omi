@@ -1,12 +1,33 @@
 """Bounded producer history/outcome lookups on the existing item authority."""
 
-from datetime import timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.proactivity_v2 import ProactivityDenied, utc_now
 from database import proactivity as ledger
+
+
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        normalized = raw[:-1] + '+00:00' if raw.endswith('Z') else raw
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
 
 
 def mentor_history_query(client: Any, uid: str) -> Any:
@@ -64,12 +85,16 @@ def record_mentor_reply(uid: str, *, firestore_client: Any = None) -> None:
         item = snapshot.to_dict()
         if not item or item.get('state') != 'ready':
             continue
-        anchor = item.get('delivered_at') or (
+        item_id = item.get('item_id')
+        if not isinstance(item_id, str) or not item_id:
+            continue
+        raw_anchor = item.get('delivered_at') or (
             item.get('mentor_chat_persisted_at') if item.get('mentor_chat_message_id') else None
         )
+        anchor = _coerce_utc_datetime(raw_anchor)
         if anchor is not None and anchor <= now <= anchor + timedelta(hours=24):
             try:
-                ledger.record_server_outcome(item['item_id'], 'replied', uid=uid, firestore_client=client, now=now)
+                ledger.record_server_outcome(item_id, 'replied', uid=uid, firestore_client=client, now=now)
             except ProactivityDenied:
                 continue
 
@@ -81,8 +106,11 @@ def record_task_completion(uid: str, task_id: str, *, firestore_client: Any = No
         item = snapshot.to_dict()
         if not item or item.get('producer') != 'commitment_followup' or item.get('state') != 'ready':
             continue
+        item_id = item.get('item_id')
+        if not isinstance(item_id, str) or not item_id:
+            continue
         # Retain even an independently completed task; the spine refuses value credit without exposure.
         try:
-            ledger.record_server_outcome(item['item_id'], 'accepted', uid=uid, firestore_client=client, now=now)
+            ledger.record_server_outcome(item_id, 'accepted', uid=uid, firestore_client=client, now=now)
         except ProactivityDenied:
             continue
