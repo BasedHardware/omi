@@ -259,7 +259,9 @@
           "--base-url",
           "{base_url}"
         ],
-        "marker": "app:ready"
+        "marker": "app:ready",
+        "timeout_seconds": 120,
+        "retry_timeout_seconds": 60
       },
       "traffic_promotion": "candidate_after_browser_acceptance"
     },
