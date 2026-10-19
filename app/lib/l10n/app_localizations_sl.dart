@@ -9346,9 +9346,7 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ še $count';
-  }
+  String get quoteShowSources => 'Pokaži vire';
 
   @override
   String get jumpToLatestMessage => 'Skoči na najnovejše sporočilo';
@@ -11095,7 +11093,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get openCall => 'Odpri klic';
 
   @override
-  String get captureRecoveryBanner => 'Omi ne pošilja zvoka — tapnite za ponovno povezavo';
+  String get captureRecoveryBannerTitle => 'Omi ne pošilja zvoka';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pred snemanjem s telefonom ustavite Transcribe Later na obesku.';
@@ -11113,17 +11111,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get captureBannerRetrySync => 'Ponovi sinhronizacijo';
 
   @override
-  String get captureBannerWhatsWrong => 'Kaj se dogaja?';
-
-  @override
-  String get captureBannerDismiss => 'Skrij';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Avdio povezava se je ustavila — prepis se nadaljuje, ko se obnovi';
 
   @override
   String get captureIngressNeedsReconnect => 'Zvok ne dosega aplikacije — znova priključite Omi';
@@ -13714,7 +13703,30 @@ class AppLocalizationsSl extends AppLocalizations {
   String get activityRetryAll => 'Poskusi vse znova';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Shrambe ni mogoče preveriti';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Posnetki so pavzirani';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Nalaganje se je ustavilo';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Čaka $count posnetkov',
+      one: 'Čaka 1 posnetek',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
+
+  @override
+  String get activityAttentionSemantics => 'Dejavnost, zahteva pozornost';
 
   @override
   String get connectAgentHeadline => 'Uporabljajte svoj spomin Omi v ChatGPT in svojih agentih UI';
@@ -14395,4 +14407,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Shranjeno $saved od $total zvoka';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi še vedno snema';
 }

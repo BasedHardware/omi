@@ -9184,9 +9184,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count개 더';
-  }
+  String get quoteShowSources => '출처 보기';
 
   @override
   String get jumpToLatestMessage => '최신 메시지로 이동';
@@ -10902,7 +10900,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openCall => '통화 열기';
 
   @override
-  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
+  String get captureRecoveryBannerTitle => 'Omi가 오디오를 보내지 않고 있습니다';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.';
@@ -10920,17 +10918,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get captureBannerRetrySync => '동기화 재시도';
 
   @override
-  String get captureBannerWhatsWrong => '무슨 일인가요?';
-
-  @override
-  String get captureBannerDismiss => '닫기';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => '오디오 연결이 중단되었습니다 — 복구되면 전사가 계속됩니다';
 
   @override
   String get captureIngressNeedsReconnect => '오디오가 앱에 도달하지 못합니다 — Omi를 다시 연결하세요';
@@ -13500,7 +13489,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get activityRetryAll => '모두 다시 시도';
 
   @override
+  String get activityAttentionStorageUnknownTitle => '저장 공간을 확인할 수 없음';
+
+  @override
+  String get activityAttentionStorageSubtitle => '녹음 일시중지됨';
+
+  @override
+  String get activityAttentionUploadStalledTitle => '업로드 중단됨';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개 대기 중',
+      one: '녹음 1개 대기 중',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
+
+  @override
+  String get activityAttentionSemantics => '활동, 주의 필요';
 
   @override
   String get connectAgentHeadline => 'ChatGPT와 AI 에이전트에서 Omi 메모리를 사용하세요';
@@ -14168,4 +14180,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '오디오 $saved 저장됨 (전체 $total)';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi에서 계속 녹음 중';
 }

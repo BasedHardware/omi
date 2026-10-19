@@ -182,7 +182,9 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
-ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout'})
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'queue_timeout'})
+# Bounded ramp-watch reasons with their own failure-detail series.
+FAILURE_DETAIL_REASONS = frozenset({'first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable'})
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',
@@ -287,11 +289,7 @@ def record_fallback(
                 FAILURE_DETAIL,
                 {
                     'demand_cohort': detail_cohort,
-                    'reason': (
-                        reason_label
-                        if reason_label in {'first_text_deadline', 'capacity_full', 'gate_unavailable'}
-                        else 'other'
-                    ),
+                    'reason': reason_label if reason_label in FAILURE_DETAIL_REASONS else 'other',
                     'capacity_subtype': (
                         (capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown')
                         if reason_label == 'capacity_full'
@@ -312,13 +310,10 @@ def record_fallback(
         fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
         if reason_label == 'capacity_full':
             subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
-            detail = (
-                replay_diagnostics.log_fields()
-                if subtype == 'replay_ring_cap' and replay_diagnostics is not None
-                else ''
-            )
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'replay_ring_overflow' and replay_diagnostics is not None:
             emit_log.warning(
-                '%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s%s', *fields, subtype, detail
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s', *fields, replay_diagnostics.log_fields()
             )
         elif reason_label == 'first_text_deadline' and first_text_diagnostics is not None:
             emit_log.warning(
