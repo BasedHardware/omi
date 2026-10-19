@@ -238,7 +238,64 @@ class BatteryHistorySessionStoreTest {
         assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
     }
 
-    @Test fun `orphan marker without a covering row is not billed and start clears it`() {
+    @Test fun `ambiguous marker within echo tolerance of the overwritten start is cleared`() {
+        val disk = mutableMapOf<String, String>()
+        val startedAt = 12_000L
+        val marker = startedAt - AUDIO_OUTAGE_ECHO_TOLERANCE_MS
+        disk["session_device"] = JSONObject().put("device", "device").put("started_at", startedAt)
+            .put("identity_epoch", 7).toString()
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = marker.toString()
+        disk["disconnect_history_device"] = "[]"
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertEquals(startedAt, sessionStartMatchingMarker(disk["session_device"], 7L, marker))
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], disk["session_device"], 7L, marker, true),
+        )
+        assertNull(store.openSince("device"))
+        assertEquals(marker.toString(), disk["audio_outage_device"])
+        store.start("device", 30_000, "build")
+        assertNull(store.openSince("device"))
+        assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
+        assertTrue(disk["session_device"]!!.contains("30000"))
+    }
+
+    @Test fun `ambiguous marker far after the overwritten start is kept and not billed`() {
+        val disk = mutableMapOf<String, String>()
+        val startedAt = 12_000L
+        val marker = 90_000L
+        disk["session_device"] = JSONObject().put("device", "device").put("started_at", startedAt)
+            .put("identity_epoch", 7).toString()
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = marker.toString()
+        disk["disconnect_history_device"] = "[]"
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertNull(sessionStartMatchingMarker(disk["session_device"], 7L, marker))
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], disk["session_device"], 7L, marker, true),
+        )
+        assertNull(store.openSince("device"))
+        store.start("device", 200_000, "build")
+        assertEquals(marker.toString(), disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        // openSince is what recordAudioPacket and both diagnostics emitters publish.
+        // Ambiguous stays null, so none of them write lost audio for this marker.
+        assertNull(store.openSince("device"))
+        val session = disk["session_device"]
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, marker, true),
+        )
+        val plan = planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, marker, true)
+        assertFalse(plan.dropMarker)
+        assertNull(plan.rewrittenHistory)
+    }
+
+    @Test fun `orphan marker without a covering row is not billed and start keeps it`() {
         val disk = mutableMapOf<String, String>()
         disk["session_device"] = JSONObject().put("device", "device").put("started_at", 1000)
             .put("identity_epoch", 7).toString()
@@ -254,7 +311,12 @@ class BatteryHistorySessionStoreTest {
         assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], disk["session_device"], 7L, 90000L, true).dropMarker)
         store.start("device", 100000, "build")
         assertNull(store.openSince("device"))
-        assertFalse(disk.keys.any { it.startsWith("audio_outage_") })
+        assertEquals("90000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], disk["session_device"], 7L, 90000L, true),
+        )
     }
 
     @Test fun `disconnect row is sealed only after an unproven marker is gone`() {

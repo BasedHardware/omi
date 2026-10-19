@@ -179,11 +179,13 @@ internal fun historyCoversMarker(history: JSONArray, marker: Long): Boolean {
 /**
  * GENUINE is billed. ECHO is a session-start copy with positive proof and is deleted.
  * AMBIGUOUS cannot be proved either way: do not bill it. [BatteryHistorySessionStore.start]
- * deletes it. Leaving it across a new session bills the old timestamp once the new
- * start is no longer within the echo tolerance.
+ * deletes an ambiguous marker only when [sessionStartMatchingMarker] matches the
+ * session row being overwritten. A marker far after that start is not an echo. It
+ * stays on disk, unbilled, until a later unambiguous state resolves it.
  *
- * An unproven delete can drop a real outage of a link shorter than the tolerance
- * while history is corrupt. That bounded loss is accepted over unbounded overbilling.
+ * Deleting an echo-plausible marker can drop a real outage of a link shorter than
+ * the tolerance while history is corrupt. That bounded loss is accepted over billing
+ * a copied session start.
  */
 internal enum class AudioOutageMarkerVerdict { GENUINE, ECHO, AMBIGUOUS }
 
@@ -254,6 +256,20 @@ internal class BatteryHistorySessionStore(
         remove("audio_outage_epoch_$device")
     }
 
+    /**
+     * Clear an ambiguous marker only when it can be a copy of the session row
+     * [start] is about to overwrite. [sessionStartMatchingMarker] is that test:
+     * same epoch, timestamp within the echo tolerance of `started_at`. A marker
+     * further after that start stays on disk. [openSince] keeps returning null,
+     * so nothing bills it, until a later unambiguous state resolves it.
+     * No marker still drops a leftover epoch key.
+     */
+    private fun clearEchoPlausibleMarker(device: String) {
+        val marker = read("audio_outage_$device")?.toLongOrNull()
+        if (marker != null && sessionStartMatchingMarker(read("session_$device"), epoch(), marker) == null) return
+        discardUnprovenMarker(device)
+    }
+
     fun start(device: String, now: Long, build: String) {
         if (!enabled() || device in live) return
         val preserved = openSince(device)
@@ -261,7 +277,7 @@ internal class BatteryHistorySessionStore(
             write("audio_outage_epoch_$device", epoch().toString())
             write("audio_outage_$device", preserved.toString())
         } else {
-            discardUnprovenMarker(device)
+            clearEchoPlausibleMarker(device)
         }
         write("session_$device", JSONObject().put("device", device).put("started_at", now)
             .put("app_build", build).put("identity_epoch", epoch()).toString())
@@ -274,9 +290,9 @@ internal class BatteryHistorySessionStore(
         // the link came up; billing from it charges the whole connected interval.
         // An echo is deleted only when history covers the marker and no disconnect
         // row records it. Without that coverage the marker is ambiguous: return
-        // nothing and leave it for start() to delete. A marker after started_at,
-        // with a row that records it, is a short link that died before the session
-        // row was removed.
+        // nothing. start() deletes it only when it still matches this session.
+        // A marker after started_at, with a row that records it, is a short link
+        // that died before the session row was removed.
         val markerEpochMatches = read("audio_outage_epoch_$device")?.toLongOrNull() == epoch()
         val marker = read("audio_outage_$device")?.toLongOrNull() ?: return null
         if (!markerEpochMatches) return null
