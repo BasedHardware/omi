@@ -62,7 +62,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            users_routes.delete_person_endpoint(
+            users_routes.delete_followup_question_endpoint(
                 memory_id='conv-deleted-1',
                 uid='user-1',
             )
@@ -79,7 +79,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            users_routes.delete_person_endpoint(
+            users_routes.delete_followup_question_endpoint(
                 memory_id='conv-nonexistent',
                 uid='user-1',
             )
@@ -96,7 +96,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            users_routes.delete_person_endpoint(
+            users_routes.delete_followup_question_endpoint(
                 memory_id='conv-locked-1',
                 uid='user-1',
             )
@@ -116,7 +116,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
             lambda uid, segments: 'What are the next steps for the project?',
         )
 
-        result = users_routes.delete_person_endpoint(
+        result = users_routes.delete_followup_question_endpoint(
             memory_id='conv-active-1',
             uid='user-1',
         )
@@ -136,7 +136,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
             lambda uid, segments: 'What happened during the conversation?',
         )
 
-        result = users_routes.delete_person_endpoint(
+        result = users_routes.delete_followup_question_endpoint(
             memory_id='0',
             uid='user-1',
         )
@@ -152,7 +152,7 @@ class TestJoanFollowupQuestionTombstoneGuard:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            users_routes.delete_person_endpoint(
+            users_routes.delete_followup_question_endpoint(
                 memory_id='0',
                 uid='user-1',
             )

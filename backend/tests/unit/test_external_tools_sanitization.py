@@ -104,6 +104,7 @@ for _name, _attrs in {
     "utils.mcp_client": ["call_mcp_tool"],
     "utils.executors": ["db_executor", "run_blocking"],
     "utils.notifications": ["send_notification"],
+    "utils.generated_compute": ["require_current_generated_compute", "generated_compute_enabled"],
 }.items():
     _m = _mod(_name)
     for _a in _attrs:
@@ -111,6 +112,10 @@ for _name, _attrs in {
             setattr(_m, _a, MagicMock())
 
 _mod("utils.log_sanitizer").sanitize = lambda x: str(x)
+# Generated-compute gating is default-off; these tests cover exception sanitization only.
+_mod("utils.generated_compute").generated_compute_enabled = lambda: False
+# Stdlib-only formatting helpers; load the real module so output framing is exercised.
+_load("utils.model_text", "utils/model_text.py")
 
 # Load target modules directly
 perplexity_mod = _load("utils.retrieval.tools._test_perplexity", "utils/retrieval/tools/perplexity_tools.py")
