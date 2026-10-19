@@ -131,7 +131,7 @@ class ReviewProvider extends ChangeNotifier {
   }
 
   Future<void> _load() async {
-    // First release: TestFlight and dev builds only. Store builds never ask, whatever the server says.
+    // Availability comes from the server, including Store builds and auto-only changes.
     if (!_isEligible()) {
       availability = ReviewAvailability.off;
       _notify();
@@ -159,8 +159,13 @@ class ReviewProvider extends ChangeNotifier {
     _notify();
   }
 
-  /// Sends [answer]. The item leaves the list immediately and comes back if the send fails.
+  /// True when the last failed answer was a stale suggestion (409): it stays gone.
+  bool lastAnswerConflict = false;
+
+  /// Sends [answer]. The item leaves the list immediately and comes back if the send fails,
+  /// except a 409, which means the item's evidence changed and it no longer applies.
   Future<bool> answer(ReviewItem item, ReviewAnswer answer) async {
+    lastAnswerConflict = false;
     final index = items.indexWhere((i) => i.itemId == item.itemId);
     if (index < 0) return false;
     if (playingItemId == item.itemId) await stopPlayback();
@@ -176,6 +181,12 @@ class ReviewProvider extends ChangeNotifier {
         return true;
       case ApiFailure(:final problem):
         Logger.debug('review answer failed: $problem');
+        if (problem.statusCode == 409) {
+          lastAnswerConflict = true;
+          remainingToday = beforeRemaining;
+          _notify();
+          return false;
+        }
         if (!items.any((i) => i.itemId == item.itemId)) {
           items = before;
           remainingToday = beforeRemaining;
@@ -264,7 +275,7 @@ class ReviewProvider extends ChangeNotifier {
   static String _defaultReleaseChannel() =>
       Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev');
 
-  static bool _defaultEligible() => Env.isTestFlight || F.env == Environment.dev;
+  static bool _defaultEligible() => true;
 
   static Future<ApiResult<Uint8List>> _defaultLoadClip(SpeakerItem speaker) => speaker_api.getSpeakerTagPromptClip(
         conversationId: speaker.conversationId,

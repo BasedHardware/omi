@@ -185,34 +185,6 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     }
 
 
-def test_jit_projection_declares_optional_plugin_sdk_fallback(contracts_module):
-    projection = _contract(contracts_module, 'jit-qa-typesense-projection-runner')
-
-    # The static import walk sees the optional SDK symbols inside the
-    # ModuleNotFoundError-protected branch of models.structured.  The image
-    # intentionally relies on that backend-owned fallback, so the exclusion
-    # must be scoped to this SDK prefix rather than weakening all dependency
-    # probes.
-    # Walk only the defining module here; the full projection entrypoint graph
-    # is covered by the registry/source-closure checks and is too expensive for
-    # the per-test fast-unit CPU budget.
-    unfiltered = replace(
-        projection,
-        entrypoints=('models.structured',),
-        dependency_probe_exclusions=frozenset(),
-    )
-    dependencies = contracts_module.third_party_dependency_modules(unfiltered)
-    assert 'omi_plugin_sdk.models.ActionItem' in dependencies
-    filtered = replace(unfiltered, dependency_probe_exclusions=projection.dependency_probe_exclusions)
-    filtered_dependencies = contracts_module.third_party_dependency_modules(filtered)
-    assert not any(
-        dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.')
-        for dependency in filtered_dependencies
-    )
-    assert 'pydantic' in filtered_dependencies
-    assert projection.dependency_probe_exclusions == frozenset({'omi_plugin_sdk'})
-
-
 def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
     models_root = tmp_path / 'models'
     models_root.mkdir()
@@ -276,6 +248,25 @@ def test_dependency_probe_checks_dotted_module_when_namespace_exists(contracts_m
 
     with pytest.raises(AssertionError, match='google.cloud.tasks_v2'):
         exec(contracts_module._dependency_probe_code(('google.cloud.tasks_v2',)), {})
+
+
+def test_dependency_probe_reports_the_underlying_import_exception(contracts_module, monkeypatch):
+    """Image smoke must show why an installed distribution still fails to import."""
+
+    def raise_audio_metadata(name):
+        raise AttributeError("module 'torchaudio' has no attribute 'AudioMetaData'")
+
+    monkeypatch.setattr(importlib.util, 'find_spec', raise_audio_metadata)
+    monkeypatch.setattr(importlib, 'import_module', raise_audio_metadata)
+
+    with pytest.raises(
+        AssertionError,
+        match=(
+            "missing installed dependency modules: pyannote.audio.Pipeline; "
+            "pyannote.audio.Pipeline: AttributeError: module 'torchaudio' has no attribute 'AudioMetaData'"
+        ),
+    ):
+        exec(contracts_module._dependency_probe_code(('pyannote.audio.Pipeline',)), {})
 
 
 def test_image_smoke_is_network_isolated_and_uses_registered_entrypoint(contracts_module, monkeypatch):

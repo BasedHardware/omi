@@ -40,13 +40,16 @@ class Document(StrictFirestoreDocument):
 
     def get(self, transaction=None, **kwargs):
         self._database.reads.append(self.path)
-        result = super().get(transaction=transaction, **kwargs)
+        result = super().get(transaction=transaction)
         result.reference = self
         result.id = self.id
         return result
 
     def set(self, data, merge=False):
         self._database.rows[self.path] = merged(self._database.rows.get(self.path, {}), data, merge)
+
+    def delete(self):
+        self._database.rows.pop(self.path, None)
 
 
 class Query:
@@ -96,6 +99,30 @@ class Query:
 
 
 class Transaction(StrictFirestoreTransaction):
+    def update(self, ref, data):
+        # Dotted paths and DELETE_FIELD are witnessed by the real local SDK
+        # overlay/invalidation/Undo test, rather than guessed in this fixture.
+        super().update(ref, data)
+        row = self._database.rows[ref.path]
+        for field, value in data.items():
+            if '.' not in field:
+                if value is firestore.DELETE_FIELD:
+                    row.pop(field, None)
+                continue
+            row.pop(field, None)
+            parent = row
+            parts = field.split('.')
+            for part in parts[:-1]:
+                if value is firestore.DELETE_FIELD and part not in parent:
+                    parent = None
+                    break
+                parent = parent.setdefault(part, {})
+            if parent is not None:
+                if value is firestore.DELETE_FIELD:
+                    parent.pop(parts[-1], None)
+                else:
+                    parent[parts[-1]] = deepcopy(value)
+
     def set(self, ref, data, merge=False):
         super().set(ref, merged(self._database.rows.get(ref.path, {}), data, merge))
 
@@ -136,3 +163,11 @@ class DreamFirestore(StrictFirestore):
 
     def batch(self):
         return Batch(self)
+
+    def get_all(self, references, *, transaction=None, timeout=None, field_paths=None):
+        assert len(references) <= 100
+        if field_paths is not None:
+            return super().get_all(references, transaction=transaction, field_paths=field_paths)
+        if timeout is not None:
+            assert 0 < timeout <= 3
+        return [reference.get(transaction=transaction) for reference in references]

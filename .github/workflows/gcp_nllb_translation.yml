@@ -15,6 +15,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      rollback_digest:
+        description: 'Replay the recorded prior serving sha256 digest without rebuilding historical source'
+        required: false
+        default: ''
       release_version:
         description: 'Release version (optional)'
         required: false
@@ -52,7 +56,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.rollback_digest != '' && 'main' || github.event.inputs.branch }}
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.
@@ -83,8 +87,10 @@ jobs:
         run: echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Docker image
+        if: github.event.inputs.rollback_digest == ''
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile backend/${{ env.SERVICE_UNDERSCORE }}/
+          build_context=$(python3 -c 'import json; print(next(image["build_context"] for image in json.load(open("backend/runtime_images.json"))["images"] if image["name"] == "nllb-translation"))')
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile "$build_context"
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/nllb_translation/Dockerfile \
             --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
@@ -97,13 +103,34 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Record serving image and validate rollback receipt
+        env:
+          ROLLBACK_DIGEST: ${{ github.event.inputs.rollback_digest }}
+          SOURCE_TAG: ${{ steps.vars.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          kubectl -n ${{ vars.ENV }}-omi-backend get deployment ${{ vars.ENV }}-omi-${{ env.SERVICE }} --ignore-not-found -o json > /tmp/nllb-deployment.json
+          kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-${{ env.SERVICE }} -o json > /tmp/nllb-pods.json
+          candidate_digest=''
+          if [[ -z "$ROLLBACK_DIGEST" ]]; then
+            candidate_digest=$(gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$SOURCE_TAG" --format='value(image_summary.digest)')
+          fi
+          python3 backend/scripts/nllb_release_image.py \
+            --deployment /tmp/nllb-deployment.json --pods /tmp/nllb-pods.json \
+            --repository gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            --tag "$SOURCE_TAG" --rollback-digest "$ROLLBACK_DIGEST" --candidate-digest "$candidate_digest" --output /tmp/nllb-release-values.json
+          if [[ -n "$ROLLBACK_DIGEST" ]]; then
+            actual=$(gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@$ROLLBACK_DIGEST" --format='value(image_summary.digest)')
+            [[ "$actual" == "$ROLLBACK_DIGEST" ]]
+          fi
+
       - name: Deploy NLLB Translation to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml -f /tmp/nllb-release-values.json --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify rollout
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout=600s; then
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout=1800s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }} || true
             exit 1
           fi
@@ -111,8 +138,9 @@ jobs:
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-summary
+        uses: BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ github.event.inputs.rollback_digest || steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
@@ -120,8 +148,9 @@ jobs:
 
       - name: Notify deployment status on Telegram
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-notifier
+        uses: BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ github.event.inputs.rollback_digest || steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}

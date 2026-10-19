@@ -502,7 +502,7 @@ class TestRestListCursorContract:
         # in-window continuation must surface as X-Next-Cursor, not a body field.
         memories = [_memory(f"m{i}") for i in range(5)]
         service = MagicMock()
-        service.read.side_effect = lambda uid, limit=None, offset=0: memories
+        service.read.side_effect = lambda uid, limit=None, offset=0, budget=None: memories
         monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda db_client=None: service)
         resp = client.get("/v1/mcp/memories", params={"limit": 2})
         assert resp.status_code == 200
@@ -864,6 +864,8 @@ class TestRestMemoryListScanContract:
             }
 
         monkeypatch.setattr(rest.mcp_memory_handlers, "collect_filtered_memories", fake_collect)
+        service = SimpleNamespace(read=lambda *args, **kwargs: [])
+        monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda **kwargs: service)
         resp = client.get("/v1/mcp/memories", params={"sort": "created_desc"})
         assert resp.status_code == 200
         assert resp.json()[0]["id"] == "m1"
@@ -1062,6 +1064,14 @@ class TestSyncedWriterTimestamps:
 
         docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
         _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
+        import database.account_deletion_marker as marker
+
+        miss = SimpleNamespace(exists=False, to_dict=lambda: None)
+        monkeypatch.setattr(
+            marker,
+            'get_data_plane_firestore_client',
+            lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
+        )
 
         action_items_db.unlock_all_action_items(UID)
 
@@ -1074,7 +1084,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 
@@ -1087,7 +1097,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 

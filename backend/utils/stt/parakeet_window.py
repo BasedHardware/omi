@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from config.policy import kill_switch
+from config.policy.listen import current_listen_policy
+
 import asyncio
 import logging
 import math
@@ -20,6 +23,9 @@ from utils.stt.batch_pressure import BatchPressure
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_metrics import (
     WINDOW_ACTIVE,
     WINDOW_ADMISSION,
@@ -97,11 +103,20 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
+DEADLINE_CUT_POST_LATENCY_SECONDS = 1.2
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
 ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS = 3.0
 MAX_EMPTY_STREAK = 4
+
+
+def stranded_drift_settle_enabled() -> bool:
+    """Kill switch, default on: settle stranded answers whose text was unplaceable."""
+    policy = current_listen_policy.get()
+    return kill_switch(
+        'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', policy_id=policy.policy_id if policy is not None else 'control'
+    )
 
 
 def _positive_float_env(name: str, default: float) -> float:
@@ -287,10 +302,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self._demand_cohort = demand_cohort()
+        # Pin intent-to-treat identity before any POST/background callback. A
+        # fallback leg keeps the session arm even if task context later changes.
+        self._routing_cohort = current_routing_cohort.get()
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
             'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
+        )
+        self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
+        self._deadline_cut_post_latency = _positive_float_env(
+            'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
         )
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
@@ -439,7 +462,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._session_outcome_recorded or self._first_speech_at is None:
             return
         self._session_outcome_recorded = True
-        reason = self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak'} else 'none'
+        reason = (
+            self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak', 'cancelled'} else 'none'
+        )
         WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text', reason=reason).inc()
 
     def _cancel_first_text_timer(self) -> None:
@@ -665,7 +690,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
-        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
+        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'}:
             self._typed_death_reason = reason
         # Observers must see the root cause before they see the dead latch.
         self._dead = True
@@ -743,6 +768,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         except asyncio.CancelledError:
             # A deadline can cancel an in-flight POST through finish(). Preserve
             # that first failure so session telemetry matches the replay reason.
+            # Otherwise listen cancelled this task (owner close, recovery switch,
+            # teardown): bounded, censored 'cancelled' (live_reason), never a
+            # provider connection_lost. The raw death_reason carries it, so a
+            # listen-local cause (send_failed/vad_failed) still takes precedence.
             if not self._dead:
                 self._dead = True
                 self._dead_reason = 'cancelled'
@@ -797,6 +826,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
+        # Sentence anchoring may hold a healthy nonempty answer until the
+        # context cap (24s), beyond the first/progress deadline (12s). If the
+        # remaining budget is within the qualified POST latency allowance,
+        # publish the held tail using the existing timestamp-preserving cut.
+        # A normal first POST after 6s of capture must still hold its sentence;
+        # neither a full pace nor the next pacing wait is a cut allowance.
+        # Empty answers and in-flight faults retain the original deadline.
+        deadline_cut = (
+            self._deadline_cut_enabled
+            and self._deadline_speech_at is not None
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and self._deadline_speech_at + self._first_text_deadline - time.monotonic()
+            <= self._deadline_cut_post_latency
+        )
         decision = decide_window(
             segments,
             job.duration,
@@ -808,7 +851,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # the long held tail only when another pace of audio would leave
             # too little room for the next POST to make progress.
             min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
-            force_replay_cut=self._replay_cut_requested,
+            force_replay_cut=self._replay_cut_requested or deadline_cut,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -826,7 +869,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._first_text_recorded = True
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
-                        WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
+                        first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
+                        record_metric(
+                            WINDOW_FIRST_TEXT,
+                            {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
+                            first_text_seconds,
+                            observe=True,
+                        )
+                        cohort = getattr(self, '_routing_cohort', None)
+                        if cohort is not None:
+                            cohort.window_first_text(first_text_seconds)
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,
@@ -869,8 +921,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._beyond_window_repost = None
         elif emitted:
             self._beyond_window_repost = None
-        if job.stranded_flush and not segments:
-            self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
+        # A stranded flush is the last POST this silence selects: its answer
+        # must settle capacity, or a held anchor waits for a repost that never
+        # comes and the near-silent capture ring overflows into failover. Text
+        # whose timestamps fell in the silence envelope cannot be placed, so
+        # settle it like an empty answer: context and replay are retained.
+        unplaced = bool(segments) and beyond_window and stranded_drift_settle_enabled()
+        if job.stranded_flush and unplaced:
+            WINDOW_STRANDED_FLUSHES.labels(outcome='settled_unplaced').inc()
+        if job.stranded_flush and (not segments or unplaced):
+            if not segments:
+                self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
             # Successful empty decoding after a long silence settles capacity
             # only. Keep the POST anchor/PCM and replay copy for later context.
             self._accounted_speech_end = max(self._accounted_speech_end, job.end_bytes)
@@ -878,11 +939,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._answered_empty_span = (first, self._accounted_speech_end)
             self._answered_context_ends.append((job.end_bytes, self._capture_seconds))
             self._stranded_fragment_answered = not self._has_unanswered_speech()
-            new_anchor_bytes = None
+            if not emitted:
+                new_anchor_bytes = None
             if self._stranded_fragment_answered:
                 self._replay_cut_requested = False
                 if (
-                    not self._first_text_recorded
+                    not segments
+                    and not self._first_text_recorded
                     and self._capture_silence_seconds >= STRANDED_SILENCE_SECONDS
                     and self._deadline_speech_bytes < self._to_bytes(SHORT_SPEECH_EPISODE_SECONDS)
                     and self._answered_empty_speech_bytes < self._to_bytes(ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS)

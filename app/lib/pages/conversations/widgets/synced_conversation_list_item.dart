@@ -100,7 +100,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                     ? GestureDetector(
                         onTap: () async {
                           setReprocessing(true);
-                          var mem = await reProcessConversationServer(conversation.id);
+                          var mem = (await reProcessConversationServer(conversation.id)).conversation;
                           if (!context.mounted) return;
                           if (mem != null) {
                             setState(() {

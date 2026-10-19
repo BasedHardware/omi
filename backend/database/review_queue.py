@@ -4,9 +4,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
 from fastapi import HTTPException
+from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, Query
 
 from config.memory_confidence import CONFIDENCE_BANDS
+from database.legal_holds import assert_destructive_gate_still_ours
 from database import memory_ledger
 from database.firestore_index_registry import (
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
@@ -24,7 +26,7 @@ from database.memory_non_active_routes import (
 from database.read_boundary import parse_snapshot_or_none
 from models.memory_review import build_memory_review_conflict
 from models.product_memory import MemoryItem, MemoryItemStatus
-from ._client import db
+from ._client import db, get_firestore_client
 
 users_collection = 'users'
 review_queue_collection = 'memory_review_queue'
@@ -38,6 +40,8 @@ REVIEW_LIST_MAX_LIMIT = 500
 REVIEW_LIST_LEGACY_SCAN_LIMIT = 100
 REVIEW_LIST_LEGACY_CURSOR_SCHEMA_VERSION = 'memory_review_legacy_scan_cursor.v1'
 REVIEW_LIST_LEGACY_CREATED_AT_SENTINEL = datetime.min.replace(tzinfo=timezone.utc)
+REVIEW_EXPIRE_PAGE_SIZE = 100
+REVIEW_EXPIRE_REASON = 'review_queue_expired_by_owner'
 _UNREAD_SOURCE_SNAPSHOT = object()
 
 ACTION_POLICY: Dict[str, Set[str]] = {
@@ -47,13 +51,14 @@ ACTION_POLICY: Dict[str, Set[str]] = {
     'contradicted': {'uncertainty_history'},
     'rejected': {'audit_debug'},
     'dropped': set(),
+    'expired': set(),
     'tombstoned': set(),
     'source_tombstoned': set(),
 }
 
 
 def permitted_uses(status: str) -> Set[str]:
-    return ACTION_POLICY.get(status or 'accepted', ACTION_POLICY['accepted'])
+    return ACTION_POLICY.get(status, set())
 
 
 def can_use_for_action(status: str, action_kind: str) -> bool:
@@ -98,10 +103,82 @@ def create_review_conflict(
         ttl_hours=ttl_hours,
     )
     client = db_client if db_client is not None else db
-    client.collection(users_collection).document(uid).collection(review_queue_collection).document(
-        item["review_id"]
-    ).set(item)
+    reference = (
+        client.collection(users_collection)
+        .document(uid)
+        .collection(review_queue_collection)
+        .document(item["review_id"])
+    )
+    try:
+        reference.create(item)
+    except AlreadyExists:
+        # Deterministic producer replay must not reopen a resolved review.
+        return cast(Dict[str, Any], reference.get().to_dict())
     return item
+
+
+def expire_review_conflicts(
+    uid: str,
+    *,
+    created_before: datetime,
+    dry_run: bool = True,
+    firestore_client: Any = None,
+) -> Dict[str, Dict[str, int]]:
+    """Retire old pending reviews without invoking any memory resolution authority.
+
+    Counts cover eligible rows only, grouped by resulting status and authority.
+    Scan document IDs so sparse historical rows need no new composite index.
+    A concurrent update fails the precondition instead of overwriting a decision;
+    rerunning is safe, including after a partially completed pass.
+    """
+    if created_before.tzinfo is None or created_before.utcoffset() is None:
+        raise ValueError('created_before must be timezone-aware')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    queue_ref = client.collection(users_collection).document(uid).collection(review_queue_collection)
+    query = queue_ref.select(['status', 'authority', 'created_at']).order_by('__name__')
+    counts: Dict[str, Dict[str, int]] = {}
+    cursor: Any = None
+    while True:
+        page_query = query.start_after(cursor) if cursor is not None else query
+        documents = list(page_query.limit(REVIEW_EXPIRE_PAGE_SIZE).stream())
+        if not documents:
+            break
+        for document in documents:
+            item = document.to_dict() or {}
+            status = item.get('status')
+            created_at = item.get('created_at')
+            if status not in {'pending', 'pending_review'}:
+                continue
+            if (
+                not isinstance(created_at, datetime)
+                or created_at.tzinfo is None
+                or created_at.utcoffset() is None
+                or created_at >= created_before
+            ):
+                continue
+            authority = item.get('authority')
+            authority = (
+                'canonical_memory' if authority == 'canonical_memory' else 'legacy' if not authority else 'other'
+            )
+            if not dry_run:
+                now = datetime.now(timezone.utc)
+                document.reference.update(
+                    {
+                        'status': 'expired',
+                        'resolved_at': now,
+                        'updated_at': now,
+                        'reason': REVIEW_EXPIRE_REASON,
+                        'permitted_uses': [],
+                    },
+                    option=LastUpdateOption(document.update_time),
+                )
+                status = 'expired'
+            status_counts = counts.setdefault(status, {})
+            status_counts[authority] = status_counts.get(authority, 0) + 1
+        if len(documents) < REVIEW_EXPIRE_PAGE_SIZE:
+            break
+        cursor = documents[-1]
+    return counts
 
 
 def purge_stale_review_conflicts_for_memories(
@@ -112,6 +189,8 @@ def purge_stale_review_conflicts_for_memories(
     db_client: Any = None,
     include_legacy_commits: bool = False,
     preserve_source_replacement_receipts: bool = False,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> List[str]:
     """Purge every review-derived record that references removed memories."""
     target_ids = sorted({memory_id for memory_id in memory_ids if memory_id})
@@ -167,6 +246,8 @@ def purge_stale_review_conflicts_for_memories(
                     # material, so even a redacted row is a dictionary oracle.
                     # The server-keyed deletion receipt is the only surviving
                     # audit fence; remove this derived document whole.
+                    if revalidate_gate:
+                        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=client)
                     doc.reference.delete()
                     purged.add(str(item.get('review_id') or doc.id))
 
@@ -176,6 +257,8 @@ def purge_stale_review_conflicts_for_memories(
     _purge_correction_history_for_memories(
         uid,
         target_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         reason=reason,
         db_client=client,
     )
@@ -185,6 +268,8 @@ def purge_stale_review_conflicts_for_memories(
             target_ids,
             firestore_client=client,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
         )
     return sorted(purged)
 
@@ -207,6 +292,8 @@ def _purge_correction_history_for_memories(
     *,
     reason: str,
     db_client: Any,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> List[str]:
     """Exhaustively scrub legacy and current correction rows for deleted IDs.
 
@@ -241,6 +328,8 @@ def _purge_correction_history_for_memories(
             # payload redaction alone cannot meet source-identifier deletion.
             # The canonical deletion receipt is the bounded audit authority;
             # derived correction history is removed completely.
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
             doc.reference.delete()
             scrubbed.append(str(item.get('correction_id') or doc.id))
         if len(page) < REVIEW_PURGE_PAGE_SIZE:

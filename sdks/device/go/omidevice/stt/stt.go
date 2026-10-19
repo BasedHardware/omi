@@ -103,6 +103,7 @@ type wsTranscriber struct {
 	ready     atomic.Bool
 	finalize  []byte
 	done      chan struct{} // closed when the read loop returns
+	readErr   error         // why the read loop returned; read only after done is closed
 	drainWait time.Duration
 }
 
@@ -111,9 +112,26 @@ func (t *wsTranscriber) AppendPCM(pcm []byte) error {
 		return fmt.Errorf("not connected")
 	}
 	if !t.ready.Load() {
-		return nil
+		return t.closedBeforeReady()
 	}
 	return t.conn.WriteMessage(websocket.BinaryMessage, pcm)
+}
+
+// closedBeforeReady reports a stream the server closed before sending ready,
+// e.g. Parakeet's 1013 capacity_full or service_not_ready. Such a stream never
+// becomes ready, so treating it as still pending would drop every later chunk.
+// It returns nil while the stream may still become ready.
+func (t *wsTranscriber) closedBeforeReady() error {
+	select {
+	case <-t.done:
+	default:
+		return nil
+	}
+	// done closes after the read loop's last write to ready and readErr.
+	if t.ready.Load() || t.readErr == nil {
+		return nil
+	}
+	return fmt.Errorf("stream closed before ready: %w", t.readErr)
 }
 
 func (t *wsTranscriber) Stop() error {
@@ -134,7 +152,12 @@ func (t *wsTranscriber) Stop() error {
 	case <-t.done:
 	case <-time.After(wait):
 	}
-	return t.conn.Close()
+	// Check before Close: closing also ends a read loop still awaiting ready.
+	refused := t.closedBeforeReady()
+	if err := t.conn.Close(); err != nil {
+		return err
+	}
+	return refused
 }
 
 func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
@@ -208,6 +231,7 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
+				t.readErr = err
 				return
 			}
 			var msg map[string]any

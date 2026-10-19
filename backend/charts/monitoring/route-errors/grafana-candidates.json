@@ -1,0 +1,245 @@
+[
+  {
+    "uid": "omi-desktop-platform-5xx-ratio-candidate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Route errors - candidates",
+    "title": "Desktop backend - service 5xx ratio above 5%",
+    "condition": "C",
+    "isPaused": true,
+    "noDataState": "NoData",
+    "execErrState": "Error",
+    "for": "2m",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 1200,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((sum(increase({__name__=\"run.googleapis.com/request_count\",monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\",service_name=\"desktop-backend\",response_code=~\"5[0-9][0-9]\"}[10m])) / clamp_min(sum(increase({__name__=\"run.googleapis.com/request_count\",monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\",service_name=\"desktop-backend\"}[10m])), 1)) > bool 0.05) * (sum(increase({__name__=\"run.googleapis.com/request_count\",monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\",service_name=\"desktop-backend\"}[10m])) >= bool 100)",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "A",
+          "refId": "C",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "labels": {
+      "alert_identity": "omi-desktop-platform-5xx-ratio-candidate",
+      "component": "desktop-backend",
+      "impact": "user-experience",
+      "severity": "critical",
+      "admission": "held"
+    },
+    "annotations": {
+      "summary": "Desktop backend - service 5xx ratio above 5%",
+      "description": "All desktop-backend requests; 10-minute ratio of counts with >=100 requests/10min. This is service-wide, not Gemini-only.",
+      "admission_hold": "GMP datasource, DELTA PromQL semantics and volume threshold need live replay; no service-name or response-code label assumptions without verification.",
+      "verification": "Verify exact descriptor, live labels, bounded time-series query, datasource canary and notification receipt before admission.",
+      "safe_next_action": "Inspect aggregate platform metrics and bounded logs; preserve global security and 5xx alerts."
+    }
+  },
+  {
+    "uid": "omi-desktop-long-504-candidate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Route errors - candidates",
+    "title": "Desktop backend - at least five long 504s in five minutes",
+    "condition": "C",
+    "isPaused": true,
+    "noDataState": "NoData",
+    "execErrState": "Error",
+    "for": "0s",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 1200,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase({__name__=\"logging.googleapis.com/user/omi_cloud_run_long_504\",monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\",service_name=\"desktop-backend\"}[5m])) >= bool 5",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "A",
+          "refId": "C",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "labels": {
+      "alert_identity": "omi-desktop-long-504-candidate",
+      "component": "desktop-backend",
+      "impact": "user-experience",
+      "severity": "critical",
+      "admission": "held"
+    },
+    "annotations": {
+      "summary": "Desktop backend - at least five long 504s in five minutes",
+      "description": "Platform request logs, latency >=290s, status=504; count >=5 over 5min. Separate from provider-unavailable 503s.",
+      "admission_hold": "Counter creation is prepared; post-create increments, actual resource/label domains, request-log coverage and threshold replay remain unverified.",
+      "verification": "Verify exact descriptor, live labels, bounded time-series query, datasource canary and notification receipt before admission.",
+      "safe_next_action": "Inspect aggregate platform metrics and bounded logs; preserve global security and 5xx alerts."
+    }
+  },
+  {
+    "uid": "omi-armor-storm-escalation-candidate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Route errors - candidates",
+    "title": "Cloud Armor - denial storm exceeds prior ceiling",
+    "condition": "C",
+    "isPaused": true,
+    "noDataState": "NoData",
+    "execErrState": "Error",
+    "for": "10m",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 1200,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate({__name__=\"logging.googleapis.com/user/cloud_armor_policy_denied_requests\",monitored_resource=\"https_lb_rule\",project_id=\"based-hardware\"}[5m])) * 60 > bool 15000",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "A",
+          "refId": "C",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "labels": {
+      "alert_identity": "omi-armor-storm-escalation-candidate",
+      "component": "api-edge",
+      "impact": "user-experience",
+      "severity": "critical",
+      "admission": "held"
+    },
+    "annotations": {
+      "summary": "Cloud Armor - denial storm exceeds prior ceiling",
+      "description": "Candidate >15,000 observed denials/min for 10min, above supplied 10\u201312k/min incident ceiling. Scope matches global denial counter, not a known route.",
+      "admission_hold": "Verify actual monitored_resource type and same-metric baseline/sampling first; no broad inhibition permitted.",
+      "verification": "Verify exact descriptor, live labels, bounded time-series query, datasource canary and notification receipt before admission.",
+      "safe_next_action": "Inspect aggregate platform metrics and bounded logs; preserve global security and 5xx alerts."
+    }
+  }
+]

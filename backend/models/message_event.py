@@ -99,6 +99,9 @@ class MessageServiceStatusEvent(MessageEvent):
     reason: Optional[str] = None
     retry_after: Optional[int] = None
 
+    # Additive capability: absent on old servers means live-only on new clients.
+    mobile_standard_batch: Optional[bool] = None
+
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not
         # nullable noise on legacy ready and initiating status events.
@@ -201,6 +204,22 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
             j.pop("suggested_person_id", None)
         if not self.retracted:
             j.pop("retracted", None)
+        return j
+
+
+class SttCapLiveHeldEvent(MessageEvent):
+    """Session-scoped UI receipt. Seconds count only durably held live PCM."""
+
+    event_type: str = "stt_cap_live_held"
+    session_id: str
+    held_seconds: int
+    paused: bool
+    reset_at: int
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 

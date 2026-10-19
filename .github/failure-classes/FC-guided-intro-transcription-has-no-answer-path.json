@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-guided-intro-transcription-has-no-answer-path",
+  "violated_contract": "An onboarding prompt must remain answerable when transcription cannot start, times out, returns an HTTP error, or hears no speech. A recorded answer must have an explicit heard-you receipt before advancing, and a saved answer must have a visible payoff without waiting indefinitely for chat.",
+  "canonical_prevention": "Gate recording with bounded transcription readiness; preserve distinct failure classes and the transcription path; allow a typed answer through the same reviewed and content-locked save pipeline; present saved facts immediately and bound the optional chat payoff to eight seconds with an always-enabled Continue.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/guided_voice_experience_test.dart",
+    "app/test/providers/guided_voice_requests_test.dart",
+    "app/test/widgets/guided_voice_render_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/pages/onboarding/guided_voice*.dart", "app/lib/pages/onboarding/speech_profile_widget.dart"],
+  "status": "open"
+}

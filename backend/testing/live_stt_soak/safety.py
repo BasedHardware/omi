@@ -28,7 +28,7 @@ def validate_environment(env: Mapping[str, str]) -> None:
         'REDIS_DB_PORT': '6379',
         'GOOGLE_CLOUD_PROJECT': PROJECT,
         'FIREBASE_PROJECT_ID': PROJECT,
-        'OMI_JIT_QA_LOCAL_STACK': '1',
+        'OMI_ISOLATED_LOCAL_STACK': '1',
     }
     if any(env.get(key) != value for key, value in required.items()) or any(env.get(key) for key in FORBIDDEN):
         raise ValueError('soak requires local emulators, demo project, no customer credentials and no shared Redis')

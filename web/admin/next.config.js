@@ -1,8 +1,3 @@
-// Self-hosted Grafana behind admin.omi.me/grafana (Cloud Run, us-central1).
-const GRAFANA_ORIGIN =
-  process.env.GRAFANA_ORIGIN ??
-  "https://omi-grafana-208440318997.us-central1.run.app";
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
@@ -11,13 +6,6 @@ const nextConfig = {
   // output under that path, which breaks the Dockerfile's
   // `COPY .next/standalone ./` + `CMD ["node","server.js"]`.
   outputFileTracingRoot: __dirname,
-  // Next aborts rewrite proxies at 30s with "Error: socket hang up".
-  // /grafana panel queries (infinity datasource → stats routes) regularly
-  // take longer; the slowest successful read in production was ~317s.
-  // 6 minutes covers that tail. Cloud Run's own limit stays 3600s.
-  experimental: {
-    proxyTimeout: 360_000,
-  },
   images: { unoptimized: true },
   async redirects() {
     return [
@@ -26,17 +14,6 @@ const nextConfig = {
         source: "/dashboard/analytics",
         destination: "/dashboard",
         permanent: false,
-      },
-    ];
-  },
-  async rewrites() {
-    // /dashboard embeds the self-hosted Grafana (Cloud Run) same-origin.
-    // Grafana serves itself under the /grafana sub-path (serve_from_sub_path).
-    return [
-      { source: "/grafana", destination: `${GRAFANA_ORIGIN}/grafana` },
-      {
-        source: "/grafana/:path*",
-        destination: `${GRAFANA_ORIGIN}/grafana/:path*`,
       },
     ];
   },
@@ -49,13 +26,6 @@ const nextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-        ],
-      },
-      {
-        source: "/grafana/:path*",
-        headers: [
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
         ],
       },
     ];

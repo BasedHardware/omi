@@ -33,17 +33,20 @@ SPEC.loader.exec_module(renderer)
 IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
 
 
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_source):
-    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
-    # Use the equivalent safe C parser for the large committed manifest so
-    # this scope contract fits the fast-unit CPU budget on CI runners.
+@pytest.fixture(scope='module', params=['committed', 'composed'])
+def runtime_manifest(request):
     loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     manifest = (
         yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
+        if request.param == 'committed'
         else compose_manifest()
     )
+    return loader, manifest
+
+
+def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_manifest):
+    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
+    loader, manifest = runtime_manifest
 
     def declarations(node, path=()):
         if isinstance(node, dict):
@@ -85,15 +88,9 @@ def test_stable_recovery_code_default_remains_off(monkeypatch, value):
         current_recovery_enabled.reset(token)
 
 
-@pytest.mark.parametrize('runtime_source', ['committed', 'composed'])
-def test_stable_idle_close_is_scoped_to_prod_listen(runtime_source):
+def test_idle_close_uses_code_default_in_every_environment(runtime_manifest):
     flag = 'SONIOX_IDLE_CLOSE_SECONDS'
-    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
-    manifest = (
-        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
-        if runtime_source == 'committed'
-        else compose_manifest()
-    )
+    loader, manifest = runtime_manifest
 
     def declarations(node, path=()):
         if isinstance(node, dict):
@@ -106,9 +103,9 @@ def test_stable_idle_close_is_scoped_to_prod_listen(runtime_source):
             for index, value in enumerate(node):
                 yield from declarations(value, (*path, index))
 
-    assert dict(declarations(manifest)) == {
-        ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': '45', 'category': 'rollout'},
-    }
+    # The code default (45 s, on) governs every environment; a declaration
+    # would only be needed for a value that differs from it.
+    assert dict(declarations(manifest)) == {}
     prod_values = yaml.load(
         (ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
         Loader=loader,
@@ -117,18 +114,22 @@ def test_stable_idle_close_is_scoped_to_prod_listen(runtime_source):
         (ROOT / 'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml').read_text(),
         Loader=loader,
     )
-    assert [entry for entry in prod_values['env'] if entry['name'] == flag] == [{'name': flag, 'value': '45'}]
+    assert [entry for entry in prod_values['env'] if entry['name'] == flag] == []
     assert [entry for entry in dev_values['env'] if entry['name'] == flag] == []
 
 
-@pytest.mark.parametrize('value', [None, '0', '-1', 'nope'], ids=['unset', 'zero', 'negative', 'invalid'])
-def test_stable_idle_close_code_default_remains_off(monkeypatch, value):
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 45.0), ('nope', 45.0), ('0', 0.0), ('-1', 0.0), ('off', 0.0)],
+    ids=['unset', 'invalid', 'zero', 'negative', 'off'],
+)
+def test_idle_close_code_default_is_on_with_kill_switch(monkeypatch, value, expected):
     flag = 'SONIOX_IDLE_CLOSE_SECONDS'
     if value is None:
         monkeypatch.delenv(flag, raising=False)
     else:
         monkeypatch.setenv(flag, value)
-    assert idle_close_seconds() == 0.0
+    assert idle_close_seconds() == expected
 
 
 @pytest.mark.parametrize('environment', ['prod', 'dev'])

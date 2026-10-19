@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections import deque
 from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
+from config.batch_pipeline import live_record_admission_enabled
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -11,6 +12,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
+from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from utils.pusher_protocol import (
@@ -64,6 +66,8 @@ from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
 from utils.speaker_learning_jobs import run_authorized_person_learning, schedule_person_voice_learning_retry
 import logging
+
+from config.rollout_cohorts import warm_rollout_cohorts
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +191,7 @@ async def _websocket_util_trigger(
         await websocket.close(code=1001)
         return
 
+    await warm_rollout_cohorts(uid)
     journey_attempt = JourneyAttempt('pusher_session')
     websocket_active = True
     shutdown_event = asyncio.Event()
@@ -229,6 +234,17 @@ async def _websocket_util_trigger(
     # retries never lends its digest to a later replay: that range stays
     # unverifiable (a counted conflict) instead of trusted.
     v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
+    record_close_requests: set[str] = set()
+    record_owners: dict[str, str] = {}
+    record_upload_failed = False
+    failed_recordings: set[str] = set()
+
+    def fail_recording(conversation_id: str) -> None:
+        nonlocal record_upload_failed
+        if len(failed_recordings) < 128:
+            failed_recordings.add(conversation_id)
+        else:
+            record_upload_failed = True  # bounded fail-closed overflow, never forget a failed source
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -239,7 +255,7 @@ async def _websocket_util_trigger(
         - The websocket disconnects (shutdown flush).
         """
         nonlocal websocket_active
-        nonlocal application_failed
+        nonlocal application_failed, record_upload_failed
 
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
@@ -254,10 +270,16 @@ async def _websocket_util_trigger(
         # stop uploading rather than leaving more orphans in the bucket (#11742).
         deleted_conversations: set[str] = set()
         identity_refreshed: set[str] = set()
+        # Set when the storage authority refuses this account's writes because a
+        # destructive operation owns the gate (account deletion in progress): the
+        # refusal is permanent for the session, so later batches drop fast instead
+        # of replaying the same fenced write every flush.
+        upload_fenced: bool = False
 
         def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
+            nonlocal record_upload_failed
             conv_id = chunk_info['conversation_id']
-            if conv_id in deleted_conversations:
+            if conv_id in deleted_conversations or upload_fenced:
                 audio_budget.release(len(chunk_info['data']))
                 return
             span = chunk_info.get('span')
@@ -276,7 +298,10 @@ async def _websocket_util_trigger(
                         ready_batches.append(batch)
                     batch = None
             if batch is None:
+                before = set(pending)
                 bound_private_pending(pending, audio_budget)
+                for dropped_id in before - set(pending):
+                    fail_recording(dropped_id)
                 batch = {
                     'data': bytearray(),
                     'conversation_id': conv_id,
@@ -299,8 +324,15 @@ async def _websocket_util_trigger(
 
         async def _upload_batch(batch: Optional[Dict[str, Any]]):
             """Upload a batched chunk and update audio files."""
-            nonlocal application_failed
+            nonlocal application_failed, upload_fenced, record_upload_failed
             if not batch or len(batch['data']) == 0:
+                return
+            if upload_fenced:
+                # The fence latched earlier this session: this batch was already
+                # queued before the refusal — drop it instead of replaying a
+                # write the authority has refused for the rest of the session.
+                audio_budget.release(len(batch['data']))
+                batch['data'] = bytearray()
                 return
             conv_id = batch['conversation_id']
             chunk_data = bytes(batch['data'])
@@ -345,6 +377,7 @@ async def _websocket_util_trigger(
                             uid,
                             conv_id,
                             {'audio_files': files_payload},
+                            record_owner_out=record_owners if len(record_owners) < 128 else None,
                         )
                         if applied:
                             schedule_person_voice_learning_retry(uid, conv_id)
@@ -381,7 +414,31 @@ async def _websocket_util_trigger(
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
             except Exception as e:
-                if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
+                if isinstance(e, DestructiveOperationInProgress):
+                    # The storage authority fenced this account: a destructive
+                    # operation (account deletion) owns the gate for hours. The
+                    # refusal is permanent — no retry of this batch can pass the
+                    # fence, and every later flush would burn the same three
+                    # doomed attempts against the same authority reads. Latch
+                    # the session: drop what is queued and stop accepting more,
+                    # like the deleted-conversation path, and keep the session
+                    # itself healthy (the closure is by design, not a fault).
+                    upload_fenced = True
+                    audio_budget.release(len(chunk_data))
+                    PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
+                    record_fallback(
+                        component='pusher',
+                        from_mode='private_cloud_sync',
+                        to_mode='drop',
+                        reason='policy',
+                        outcome='exhausted',
+                        log=logger,
+                    )
+                    logger.warning(
+                        f'Private cloud sync stopped: account writes are fenced by a destructive operation '
+                        f'(no retry) {uid} {conv_id}'
+                    )
+                elif retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
                     # Retry in the ordered ready lane on a later process tick,
@@ -397,13 +454,24 @@ async def _websocket_util_trigger(
                     audio_budget.release(len(chunk_data))
                     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
                     application_failed = True
+                    fail_recording(conv_id)
                     logger.info(
                         f"Private cloud batch upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping: {e} {uid} {conv_id}"
                     )
             del chunk_data
 
-        while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0 or ready_batches:
+        while (
+            websocket_active
+            or len(private_cloud_queue) > 0
+            or len(pending) > 0
+            or ready_batches
+            or record_close_requests
+        ):
             await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+
+            if record_upload_failed or upload_fenced:
+                record_close_requests.clear()
+            record_close_requests.difference_update(failed_recordings)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -412,7 +480,20 @@ async def _websocket_util_trigger(
                 for chunk_info in chunks_to_process:
                     _add_to_batch(chunk_info)
 
-            if not pending and not ready_batches:
+            if upload_fenced:
+                # The fence latched mid-session: anything still held is dropped
+                # fast (budget released, no upload, no retries) so the loop's
+                # drain contract still completes and shutdown stays bounded.
+                while ready_batches:
+                    dropped = ready_batches.pop(0)
+                    payload = dropped.get('data')
+                    audio_budget.release(len(payload) if payload else 0)
+                for dropped in list(pending.values()):
+                    audio_budget.release(len(dropped.get('data', b'')))
+                pending.clear()
+                continue
+
+            if not pending and not ready_batches and not record_close_requests:
                 # `pending` alone must not gate the iteration: a failed
                 # upload's retry batch lives in `ready_batches`, and skipping
                 # the ready lane below with `continue` would leave the loop
@@ -440,11 +521,27 @@ async def _websocket_util_trigger(
                 is_shutdown = not websocket_active
                 is_size_ready = len(batch['data']) >= batch_size_threshold
                 is_age_ready = batch_age >= PRIVATE_CLOUD_BATCH_MAX_AGE
-                if is_shutdown or is_size_ready or is_age_ready:
+                owned_close = conv_id in record_close_requests and (
+                    live_record_admission_enabled() or conv_id in record_owners
+                )
+                if is_shutdown or is_size_ready or is_age_ready or owned_close:
                     conv_ids_to_flush.append(conv_id)
 
             for conv_id in conv_ids_to_flush:
                 await _flush_batch(conv_id)
+            for conv_id in list(record_close_requests):
+                if (
+                    not record_upload_failed
+                    and conv_id not in failed_recordings
+                    and not upload_fenced
+                    and conv_id not in pending
+                    and not any(b['conversation_id'] == conv_id for b in ready_batches)
+                    and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
+                ):
+                    if live_record_admission_enabled() or conv_id in record_owners:
+                        await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
+                    record_owners.pop(conv_id, None)
+                    record_close_requests.discard(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
         # and eligibility precedes the eight-pass selection limit.
@@ -550,7 +647,7 @@ async def _websocket_util_trigger(
     async def receive_tasks() -> None:
         nonlocal websocket_active
         nonlocal websocket_close_code
-        nonlocal application_failed
+        nonlocal application_failed, record_upload_failed
         nonlocal speaker_sample_queue
         nonlocal transcript_queue
         nonlocal audio_bytes_queue
@@ -566,9 +663,11 @@ async def _websocket_util_trigger(
         audio_timeline_last_end: Optional[float] = None
 
         def _queue_private_cloud_chunk() -> None:
+            nonlocal record_upload_failed
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return
             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                fail_recording(private_cloud_queue[0]['conversation_id'])
                 logger.warning(
                     f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                     f"dropping oldest chunk to prevent OOM {uid}"
@@ -689,6 +788,8 @@ async def _websocket_util_trigger(
                             )
                         _queue_private_cloud_chunk()
                         _reset_private_cloud_buffer()
+                        if private_cloud_sync_enabled and len(record_close_requests) < 128:
+                            record_close_requests.add(current_conversation_id)
                     current_conversation_id = new_conversation_id
                     # A conversation boundary ends the current v2 run: the
                     # next audio starts a fresh continuity window.
@@ -748,6 +849,13 @@ async def _websocket_util_trigger(
                     ):
                         raise ValueError('dispatch_generation must be an integer')
                     if conversation_id:
+                        if private_cloud_sync_enabled and (
+                            live_record_admission_enabled() or conversation_id in record_owners
+                        ):
+                            _queue_private_cloud_chunk()
+                            _reset_private_cloud_buffer()
+                            if len(record_close_requests) < 128:
+                                record_close_requests.add(conversation_id)
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
                         # Durable finalization already has a Firestore owner. It
                         # must survive an originating listen socket close after
@@ -872,12 +980,14 @@ async def _websocket_util_trigger(
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
 
-                        extend_bounded(
+                        stored_capture = extend_bounded(
                             private_cloud_sync_buffer,
                             audio_data,
                             'private_cloud_buffer',
                             audio_budget,
                         )
+                        if not stored_capture:
+                            fail_recording(current_conversation_id)
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
                             _queue_private_cloud_chunk()
@@ -939,6 +1049,8 @@ async def _websocket_util_trigger(
             if len(private_cloud_sync_buffer) > 0:
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             _queue_private_cloud_chunk()
+            if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
+                record_close_requests.add(current_conversation_id)
             websocket_active = False
             audio_bytes_event.set()
 

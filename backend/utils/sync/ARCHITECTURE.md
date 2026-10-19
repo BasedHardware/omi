@@ -5,7 +5,7 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 ## Boundaries
 
 - `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
-- `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
+- `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. `input_limits.py` bounds historical batches before custody transfer and each worker attempt, including codec expansion and retryable tmpfs pressure. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
 - `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. `uid_sequencer.py` dispatches accepted backfill jobs through the Firestore owner/pending registry in `database/sync_backfill_sequencer.py`; it owns no STT or conversation writes. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
 - `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
@@ -22,7 +22,7 @@ The 2026-09-19 incident was **sync adopting live-flap stubs**: failed live STT c
 
 `assignment_index.py` stores metadata-only UTC day buckets under `users/{uid}/sync_assignment`. Every occupied day indexes the component. Buckets do not evict entries; Firestore size limits fail visibly. The old `recent` document remains a bounded migration hint and serialization fence, alongside the legacy timestamp-query hint. Pre-index history is not comprehensively backfilled. `_OrderedTurnstile` reduces bridge work within a job; correctness does not depend on it.
 
-`utils/conversation_continuity.py` owns the gap predicate: an uncovered gap **at least 120 seconds** splits. Both paths measure speech silence. Sync uses the VAD-segment origin through the last word end, exactly as before; no quiet-file coverage expands that interval. Source, device ID and lock state form disjoint partitions. Any retained `sync_capture_id` is provenance only; an explicit existing target is authoritative independently of temporal assignment. Missing device ID is its own partition, never a wildcard joining two known devices. Every provenance-compatible, non-deleted explicit target retains its ID, including an empty live record or an existing sync row. Fresh admission can verify server capture proof before any live transcript exists; emptiness is not evidence to reject that target. Missing or tombstoned explicit targets use ordinary temporal assignment, subject to independent retry-lineage deletion fences. Timestamp hints never adopt live rows, regardless of content, status or discarded flag. Explicit live targets acquire `sync_live_target` and remain excluded from automatic bridges after sync adds content and revisions. Shared, photo-bearing or user-curated sync rows also stay intact; they cannot donate content or change identity automatically.
+`utils/conversation_continuity.py` owns the gap predicate: an uncovered gap **at least 120 seconds** splits. Both paths measure speech silence. Sync uses the VAD-segment origin through the last word end, exactly as before; no quiet-file coverage expands that interval. Source, device ID and lock state form disjoint partitions. Any retained `sync_capture_id` is provenance only; an explicit existing target is authoritative independently of temporal assignment. Missing device ID is its own partition, never a wildcard joining two known devices. Every provenance-compatible, non-deleted explicit target retains its ID, including an empty live record or an existing sync row. Fresh admission can verify server capture proof before any live transcript exists; emptiness is not evidence to reject that target. Missing or tombstoned explicit targets use ordinary temporal assignment, subject to independent retry-lineage deletion fences. Ordinary near-time hints never adopt live stubs. With `SYNC_LIVE_OVERLAP_ENABLED` (default on), a separate bounded metadata query discovers strictly overlapping live rows with content from the same known device, source and lock partition, in completed or in-progress state. The assignment transaction rechecks every candidate and uses the greatest overlap as its target. It retains the live identity and the existing transcript, relevance, revision and speaker merge semantics. Other live identities are never donated. Explicit targets retain priority. Set the env to `false` to restore the prior admission path. Discovery failure publishes through ordinary sync intake immediately; a full live document uses the existing size-rollover path. No hidden donor or pending-merge queue is introduced, so neither failure needs a later upload or cleanup scheduler to make retained speech visible. Commit/storage failures remain retryable rather than bypassing persistence fences. Explicit live targets acquire `sync_live_target` and remain excluded from automatic bridges after sync adds content and revisions. Shared, photo-bearing or user-curated sync rows also stay intact; they cannot donate content or change identity automatically.
 
 A live conversation folded into its predecessor by smart merge (`utils/conversations/smart_merge.py`) is a redirect tombstone marked `smart_merge.role=donor`. An explicit target that is such a donor resolves through `sync_merged_into` to its survivor, which then acts as the explicit live target (text-deduplicated repair audio, no temporal re-creation of the donor); a deleted survivor supersedes the chunk. Sync bridge donors keep the temporal fallback.
 
@@ -40,11 +40,11 @@ With the flag on, sync enrichment defers while an explicit live target is `in_pr
 
 ### Staged rollout (uid allowlist)
 
-`SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids, whitespace-trimmed; empty or unset admits every user) gates, by the owning uid, every sync-side behavior the kill switch turns on: the per-segment binding request (`lineage_resolution_requested`, independent durable refresh debt survives later narrowing), the pinned live origin in `assign_in_transaction` (uid = `user_ref.id`), the live `sync_content_revision` advance in `database/conversations.update_conversation_segments` (backend-listen), and the open-live enrichment deferral in `_reprocess_conversation_after_update`. The gate is `config/sync_lineage.sync_lineage_resolve_active_for`: the kill switch wins, then the list. For a uid outside a non-empty list each of those sites behaves exactly as with the kill switch off. The `/v4/listen` origin stamp is metadata only and stays under the kill switch alone, so widening later finds lineage already stamped. An eligible upload refused by the list records `outcome=not_allowlisted` on the metric and log line with `job_ref=none` (no uid, job or conversation id).
+`SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids, whitespace-trimmed; empty or unset admits every user) gates the per-segment binding request by the owning uid (`lineage_resolution_requested`, independent durable refresh debt survives later narrowing). The gate is `config/sync_lineage.sync_lineage_resolve_active_for`: the kill switch wins, then the list. For a uid outside a non-empty list binding behaves exactly as with the kill switch off. Live-target origin pinning in `assign_in_transaction` and live `sync_content_revision` advances in `database/conversations.update_conversation_segments` are unconditional: once sync and live share a row, cached live offsets and late finals must stay safe even without `audio_timeline` or lineage admission. Open-live enrichment always defers to live finalization. The `/v4/listen` origin stamp is metadata only and stays under the kill switch alone, so widening later finds lineage already stamped. An eligible upload refused by the list records `outcome=not_allowlisted` on the metric and log line with `job_ref=none` (no uid, job or conversation id).
 
 `SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank means on, explicit on-tokens mean on, any unrecognized value including a typo means off) adds a claim gate inside `lineage_resolution_requested`, after the kill switch and the allowlist. With the gate on, per-segment binding additionally requires `CAPTURE_EVIDENCE_V1_DARK_WRITE` admission plus a complete validated S1 claim set for the exact uploaded basename set, checked through the existing `parse_sync_file_claims` bounds (at most 20 files, bounded JSON, matching root/epoch/rate/channel/codec). An absent, invalid, incomplete, wrong-filename or otherwise malformed claim set returns false and the upload takes the pre-lineage whole-batch resolver — even for admitted users and with an empty allowlist. Each refusal emits exactly one bounded `s1_refused` outcome on `OMI_SYNC_LINEAGE_RESOLVE_TOTAL` plus one log line with a closed reason (`no_claims`, `parse_failed`, `count_mismatch`, `filename_mismatch`, `not_admitted`), `job_ref=none`, and no ids, filenames, roots or claim content; claims rejected at the upload HTTP boundary arrive as `{}` and classify as `no_claims` because the queued shape does not retain the earlier refusal. After decode and coverage, a second check at the coordinator disables lineage and resolves the same whole-batch target when the observed source-position mapping count differs from the surviving WAV set, emitting `count_mismatch` once before that resolution; valid decoded prefixes still count as observed mappings, and a fully committed suppression leaves no segments to bind. No new policy runs inside `process_segment`, so direct legacy callers keep the old contract. Turning the gate off restores prior ungated lineage binding and thereby broadens eligibility; it is not a lineage kill switch. The gate never widens the uid allowlist and never bypasses `SYNC_LINEAGE_RESOLVE_ENABLED`. Deployment declares the value `true` on Cloud Run `backend`, `backend-sync`, `backend-sync-backfill` and `backend-integration`.
 
-The gate uses the service env and the row's owning uid; the env is fixed per revision/pod. Landed segments stay skipped, and a changed allowlist controls only the remaining appends. An admitted append checkpoints `lineage_enrichment_pending` before its processed-segment marker, in both the job and durable content receipts. Narrowing the list or turning the kill switch off must still finish that existing refresh debt for a completed row, using its stored language, without reappending audio. Fenced targets are excluded. A retry refresh of an open live row still defers to live finalization even after narrowing. This is completion of an already admitted effect, not a pinned permission for new appends; untouched refused owners retain the exact OFF outcome. Pre-marker receipts restore under an admitted attempt only. Widening may put remaining segments on different rows, but never rebinds landed speech. Avoid changing membership while a user's live recording or retry job is running: mixed revisions can disagree on pin preservation and revision fencing. Drain first when narrowing; disabling does not undo doubled speech.
+The gate uses the service env and the row's owning uid; the env is fixed per revision/pod. Landed segments stay skipped, and a changed allowlist controls only the remaining appends. An admitted append checkpoints `lineage_enrichment_pending` before its processed-segment marker, in both the job and durable content receipts. Narrowing the list or turning the kill switch off must still finish that existing refresh debt for a completed row, using its stored language, without reappending audio. Fenced targets are excluded. A retry refresh of an open live row still defers to live finalization even after narrowing. This is completion of an already admitted effect, not a pinned permission for new appends; untouched refused owners retain the exact OFF outcome. Pre-marker receipts restore under an admitted attempt only. Widening may put remaining segments on different rows, but never rebinds landed speech. Avoid changing membership while a user's live recording or retry job is running: mixed revisions can disagree on binding (and older code can disagree on origin and revision fencing). Drain first when narrowing; disabling does not undo doubled speech.
 
 Deployment: prod declares the value on Cloud Run `backend` (inline BYOK sync), `backend-sync` and `backend-sync-backfill` and `backend-integration` (`backend/deploy/runtime_env/prod.overlay.yaml`, composed into `runtime_env.yaml` and applied by the backend deploy's `render_backend_runtime_env.py`), and on GKE `backend-listen` (`backend/charts/backend-listen/prod_omi_backend_listen_values.yaml`, applied by the listen Helm deploy and checked against `runtime_env.yaml`). Dev leaves it unset. Keep the five identical: a service without the variable admits everyone. `omi_sync_lineage_resolve_total` is emitted from backend-sync, which is not scraped, so the `event=sync_lineage_resolve` and `event=sync_lineage_lookup` log lines are the watch source, not the metric.
 
@@ -69,11 +69,42 @@ Offline replay: `scripts/sync_live_dedupe_replay.py` replays supplied STT candid
 
 ## Relevance and remaining differences
 
+### Phone Transcribe Later / Process Now
+
+`LocalRecordingsProvider` uploads one selected native file at a time through
+`/v2/sync-local-files`. The native `audio_omibatchphone_` marker denotes explicit
+Transcribe Later; `audio_omibatchphoneauto_` denotes automatic offline fallback.
+The shared job coordinator recognizes only a single explicit file, covering
+already-released clients without a new request field. Mixed/bulk jobs retain
+automatic relevance policy.
+
+After all speech segments finish assignment, the coordinator enrolls every
+resulting retained row for enrichment, including rule-discard rows that intake
+normally excludes. It calls `lifecycle.restore_discarded` before reprocessing,
+persisting the existing `sync_relevance_user_kept` authority transactionally.
+Applying this after assembly preserves the normal joining of a long recording's
+chunks. Later relevance and list refreshes honor the same stored choice.
+Silence produces no IDs and no restore. Deletion fences still win; keep-write
+and enrichment errors propagate to the existing job retry/failure path.
+
+Implementation checklist for [#20459](https://github.com/BasedHardware/omi/issues/20459):
+
+- [x] Carry the existing native manual/automatic distinction through job completion.
+- [x] Restore retained rule-discards before enrichment through the lifecycle owner.
+- [x] Guard short speech, automatic/mixed jobs, write failures and deletion with
+  `tests/unit/test_phone_batch_process_now.py`.
+- [ ] Verify a released build on a physical iPhone and with the reporter. The
+  earlier disappearing-live-recording report has no confirmed common cause.
+
 Speech the deterministic relevance rules (`utils/conversations/relevance_rules.py`) discard outright gets `sync_relevance=review` and skips enrichment; everything else is assessed by the relevance step as a `SYNC_UPDATE` when the pipeline processes it. Uncurated completed review fragments are stored `discarded=True`: hidden from default lists/search, retained with their transcript/audio, and recoverable through Show discarded. Readers trust that stored flag alone; `scripts/conversation_relevance_backfill.py` rewrites rows stored before intake did so. Explicit restoration of any row sets `sync_relevance_user_kept` so later intake and reassessment honor that choice. Curated, shared, photo-bearing, and live-target records are protected; a generated summary is not curation and protects nothing. Duration alone never discards meaningful speech. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
 
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. Recording lineage binding (below) covers uploads that carry a recording id; historical rows are not migrated.
 
 The shared arithmetic does not unify the observed clocks: live finished_at is currently callback wall time, while sync uses VAD/word ends. Another boundary-policy input difference is timeout configuration: realtime can configure its timeout per session; shipped WALs do not carry that setting, so sync uses the default 120 seconds. Tests replay the in-order realtime speech rule as the reference and require identical sync membership, absolute transcript ranges and extents across arrival permutations for temporal intake, including 119-second joins and >=120-second splits with hint-only live stubs and missing target IDs present. Sync enrichment remains per finishing job and revision-fenced, not quiescence-debounced. Historical aliases already returned to clients may require a history refresh. Tests model serial commit permutations and replay failures hermetically; Firestore retry contention and live UI acceptance require separate evidence.
+
+### Operator minimal redrive
+
+An operator-built Cloud Tasks payload with `redrive_mode: 'minimal'` (`utils/sync/minimal_redrive.py`; clients never set it) keeps the ledger, dedupe and receipts but pins Parakeet through `selected_service`, skips paid empty-segment recovery (a double empty is silence), and fails retryably with `sync_minimal_provider_unavailable` when Parakeet cannot serve the language. Before temporal assignment it passes the closest same-partition, non-deleted completed row within 10 minutes as the explicit `target_id`; normal traffic keeps the ±2 minute hint and 120-second continuity. Post-processing is replaced: appended rows get no enrichment, and each new row gets one `sync_redrive_title` (gpt-5-nano) title and overview through `persist_processed_conversation`, keeping the deterministic minimum if that call fails. `SYNC_MINIMAL_REDRIVE_ENABLED=false` refuses such tasks with a retryable 409 before any work.
 
 ## Assignment outcomes
 
@@ -92,6 +123,14 @@ existing job error taxonomy. Copy/checkpoint failures also retain retry behavior
 Donor retraction that collides with the account destructive-operation gate is
 deferred and converges on a later append; it does not fail the accepted chunk.
 
+Batch projection uses the same terminal assignment outcome: a metadata-only ready
+receipt records `disposition=superseded`, contributes zero content speech usage,
+and advances the ordered cursor only after the final part. Successful parts and
+siblings retain their own receipts and usage. The content ledger completes with
+zero errors and `superseded_segments`, without returning IDs for rejected parts.
+Settlement rechecks the existing privacy, deletion, binding and ledger fences;
+privacy revocation remains owned by erasure, not by this acknowledgment.
+
 ## Speaker identity
 
 Speaker IDs are conversation-local. Each independently transcribed WAL chunk
@@ -108,3 +147,37 @@ bridge's redirect tombstone remains available to owner detail reads and manual
 speaker assignment: the assignment transaction follows the survivor chain and
 maps the donor's selected speaker number through stable segment IDs so it never
 labels a different survivor voice.
+
+## Fleet safety-WAL dual-write suppression
+
+`SYNC_SAFETY_WAL_DEDUPE_ENABLED` is on in dev/prod runtime config for Cloud Run
+backend, backend-sync, backend-sync-backfill and backend-integration; code defaults
+off. Set it to `false` on all four services and redeploy runtime env to restore
+coverage, transcript dedupe and provider stamps to their previous behavior.
+Playback merge is unchanged, including negative gaps and nested legacy chunks.
+
+Before VAD/STT, stored chunks are listed and decoded once per conversation per job.
+A uniquely locked clock offset is reused, but each six-second WAL tile requires
+its own non-silent envelope correlation and per-bin energy agreement before it
+can supply coverage. Spans alone and an opening fingerprint authorize no cut.
+One-second margins and unmatched tiles remain; this path always retains boundary
+audio and cannot authorize a suppress-all SUCCESS. Future derivative filenames,
+weak or silent probes, unknown legacy batch gaps and lookup failures keep originals.
+Existing S1-mapped paths retain their separate committed-frame handling.
+
+Live text drops require an explicitly corroborated offset or two independent exact
+anchor lines agreeing within two seconds. Each matched live line is consumed once,
+including constituents of a combined live window. Only known compatible speaker
+identity can match; provider-local labels are not identity proof. After clock
+correction, lines must align within two seconds, so later sayings survive. There
+is no default-zero offset. The token floor is eight: 8–11 tokens require exact
+tokens; longer lines require an order-sensitive sequence ratio of at least 0.95.
+This intentionally preserves uncertain duplicates and changed short instructions.
+No clock slop is removed after a sync revision.
+
+Observe `sync_safety_wal_seconds_skipped_total`,
+`sync_safety_wal_segments_deduped_total`, `sync_safety_wal_audio_bytes_not_stored_total`
+(by reason) and `event=sync_safety_wal_coverage` per job. Byte counters measure
+suppressed decoded PCM bytes. No historical rewrite. Client 30-second edge
+suppression remains separate. #20688 touches different VAD/cleanup hunks in
+`pipeline.py`; #21362 touches client WAL recovery.

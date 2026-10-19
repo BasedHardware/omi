@@ -19,7 +19,15 @@ def manifest_committed(env, monkeypatch):
     monkeypatch.setattr(
         pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [SimpleNamespace(model_dump=lambda: {})]
     )
-    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', lambda *a: True)
+
+    def update_unowned_conversation(*_args, record_owner_out=None):
+        # This fixture's rows are unowned; mirror the new result-out parameter
+        # without fabricating an owner for the pusher drain.
+        if record_owner_out is not None:
+            assert record_owner_out == {}
+        return True
+
+    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update_unowned_conversation)
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *a: None)
 
 
@@ -75,6 +83,9 @@ async def test_process_admits_only_two_late_jobs_even_while_threads_block(env, m
 
 async def test_cancelling_waiters_does_not_free_slots_before_threads_finish(env, monkeypatch):
     from utils.conversations import speaker_identity_retry as retry
+
+    # Exhaust metadata waiting capacity too: cancelled active workers still own their slots.
+    monkeypatch.setattr(retry, '_waiting_slots', SimpleNamespace(acquire=lambda **kw: False))
 
     release = threading.Event()
     futures = []

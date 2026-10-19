@@ -2,6 +2,7 @@ export interface NoteSectionInput {
   heading?: string | null;
   body_markdown?: string | null;
   kind?: string | null;
+  source_segment_ids?: string[] | null;
 }
 
 export function isFirstPartyNoteSelection(kind: string, sections: unknown): boolean {

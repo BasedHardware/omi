@@ -15,7 +15,9 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -71,7 +73,7 @@ class ConversationListItem extends StatefulWidget {
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
   final bool allowSelection;
 
-  /// Drawn inside a [LockedConversationRun]: the run blurs the card under its one upgrade action,
+  /// Drawn inside a [LockedConversationRun]: the run blurs the card under its one usage action,
   /// so the row draws no padding or lock of its own but keeps its gestures (open, long-press menu,
   /// swipe-to-delete, selection).
   final bool inLockedRun;
@@ -113,6 +115,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,
         conversation.isLocked,
+        conversation.processingDeferred,
       );
 
   @override
@@ -125,7 +128,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final reprocess = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
       final updated = await reprocess(widget.conversation.id);
       if (!mounted) return;
       final provider = context.read<ConversationProvider>();
@@ -176,8 +179,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-      routeToPage(context, const UsagePage(showUpgradeDialog: true));
+      routeToPage(context, const UsagePage());
       return;
     }
     HapticFeedback.selectionClick();
@@ -426,7 +428,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
-    return OmiLockedPreview(label: context.l10n.upgradeToUnlimited, onPressed: onTap, child: content);
+    return OmiLockedPreview(
+      status: context.l10n.statusPending,
+      label: context.l10n.viewUsage,
+      onPressed: onTap,
+      child: content,
+    );
   }
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
@@ -464,7 +471,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded;
-    final discardedSnippet = discarded ? conversationSnippet(widget.conversation) : '';
+    final discardedSnippet =
+        discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
     return Stack(
       children: [
         Column(
@@ -507,6 +515,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
+                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
+                      OnDeviceProvenanceChip(conversationId: widget.conversation.id),
                       if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
@@ -835,7 +845,7 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
 }
 
 /// Two or more locked rows in a row on the free plan: one frosted card holding all of them, with a
-/// single "Upgrade to Unlimited" instead of one per row. A lone locked row stays a
+/// single usage action instead of one per row. A lone locked row stays a
 /// [ConversationListItem] with its own [OmiLockedPreview].
 class LockedConversationRun extends StatelessWidget {
   const LockedConversationRun({super.key, required this.conversations, required this.date});
@@ -843,7 +853,7 @@ class LockedConversationRun extends StatelessWidget {
   final List<ServerConversation> conversations;
   final DateTime date;
 
-  Future<void> _upgrade(BuildContext context) async {
+  Future<void> _openUsage(BuildContext context) async {
     // Same as a lone locked row's action: while merging, a locked row can't be picked.
     if (context.read<ConversationProvider>().isSelectionModeActive) {
       HapticFeedback.lightImpact();
@@ -851,8 +861,7 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
-    routeToPage(context, const UsagePage(showUpgradeDialog: true));
+    routeToPage(context, const UsagePage());
   }
 
   @override
@@ -863,8 +872,9 @@ class LockedConversationRun extends StatelessWidget {
         key: const Key('locked_conversation_run'),
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
-        label: context.l10n.upgradeToUnlimited,
-        onPressed: () => _upgrade(context),
+        status: context.l10n.statusPending,
+        label: context.l10n.viewUsage,
+        onPressed: () => _openUsage(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

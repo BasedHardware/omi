@@ -7,6 +7,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
+import config.owner_recognition_diagnostics as owner_diagnostics
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -151,13 +152,14 @@ class SharedActionItem(BaseModel):
 
 
 class SharedSection(BaseModel):
-    """Public note content, without internal transcript evidence IDs."""
+    """Public note content linked to the transcript segments on the same share payload."""
 
     model_config = {'extra': 'ignore'}
 
     heading: str
     body_markdown: str
     kind: Literal['main', 'side_notes'] = 'main'
+    source_segment_ids: List[str] = Field(default_factory=list)
 
 
 class SharedEvent(BaseModel):
@@ -232,12 +234,20 @@ class SharedTranscriptSegment(BaseModel):
 
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
     start: float
     end: float
+
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
 
 
 class SharedAppResult(BaseModel):
@@ -435,6 +445,9 @@ class CaptureEvidenceMetadata(BaseModel):
 
 
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
@@ -454,6 +467,8 @@ class Conversation(BaseModel):
     # the isolated fair-use lane and the conversation-processing credit gate:
     # custom-STT still hits LLM/post-processing metering (#7690).
     uses_custom_stt: bool = False
+    # Server route arbitration; canonical writers preserve the durable value.
+    record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
     structured: Structured
 
@@ -509,6 +524,13 @@ class Conversation(BaseModel):
     speaker_resolution: Optional[ConversationSpeakers] = None
     speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
 
+    owner_recognition_diagnostics: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+
+    @field_validator('owner_recognition_diagnostics', mode='before')
+    @classmethod
+    def _validate_owner_diagnostics(cls, value):
+        return owner_diagnostics.normalize(value) or None
+
     @field_validator('speaker_match_scores', mode='before')
     @classmethod
     def _validate_match_scores(cls, value):
@@ -537,6 +559,13 @@ class Conversation(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize_match_scores(self, handler, info):
         data = handler(self)
+        if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
+            data.pop('processing_deferred', None)
+        if info.mode == 'python' and self.owner_recognition_diagnostics:
+            excluded = info.exclude or ()
+            included = info.include
+            if owner_diagnostics.FIELD not in excluded and (included is None or owner_diagnostics.FIELD in included):
+                data[owner_diagnostics.FIELD] = owner_diagnostics.normalize(self.owner_recognition_diagnostics)
         if info.mode == 'python' and self.speaker_match_scores is not None:
             excluded = info.exclude or ()
             included = info.include
@@ -567,6 +596,9 @@ class Conversation(BaseModel):
     # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
+    user_corrections: List[Dict] = Field(default_factory=list)
+    user_overview: Optional[str] = None
+
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
@@ -590,6 +622,8 @@ class Conversation(BaseModel):
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
     # (get_conversation_by_id → process_conversation). Cleared once enriched.
     deferred: bool = False
+    # Stored transcripts waiting for an explicit, budgeted backlog choice.
+    processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
@@ -747,6 +781,7 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 

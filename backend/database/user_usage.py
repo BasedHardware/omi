@@ -1,6 +1,9 @@
 import logging
+import math
+from database.fsr_read_cache import cache_writer, cached_read, plane_id, ttl
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from functools import wraps
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 
 import pytz
 from google.cloud import firestore
@@ -9,7 +12,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
-from .llm_usage import resolve_usage_plan_id
+from .llm_usage import nest_usage_fields, resolve_usage_plan_id
+from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
 
 logger = logging.getLogger(__name__)
@@ -320,8 +324,8 @@ def get_usage_by_plan(
     )
     for snap in query.stream():
         data = _typed_doc(snap)
-        plan_usage = data.get('plan_usage')
-        if not isinstance(plan_usage, dict):
+        plan_usage = normalize_plan_usage(data)
+        if not plan_usage:
             row = report.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             _accumulate_plan_data(row, data)
             row['cost_status'] = 'missing'
@@ -350,6 +354,7 @@ def get_usage_by_plan(
     return report
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage(
     uid: str,
     date: datetime,
@@ -359,6 +364,7 @@ def update_hourly_usage(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> None:
     """Updates or creates usage stats for a specific hour using Firestore atomic increments.
@@ -417,7 +423,8 @@ def update_hourly_usage(
     if platform in ('desktop', 'mobile'):
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
-    hourly_usage_ref.set(update_doc, merge=True)
+    update_doc.update(hourly_shadow(updates, usage_metadata))
+    hourly_usage_ref.set(nest_usage_fields(update_doc), merge=True)
 
 
 @firestore.transactional
@@ -436,6 +443,7 @@ def _update_hourly_usage_once_transaction(
     return True
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage_once(
     uid: str,
     date: datetime,
@@ -445,6 +453,7 @@ def update_hourly_usage_once(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> bool:
     """Atomically increment hourly usage once for a stable sync content key."""
@@ -453,50 +462,27 @@ def update_hourly_usage_once(
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
     usage_ref = user_ref.collection('hourly_usage').document(doc_id)
     marker_ref = user_ref.collection('sync_content_ledger').document(idempotency_key)
-    update_doc: Dict[str, Any] = {
-        'last_updated': datetime.now(timezone.utc),
-        'year': date.year,
-        'month': date.month,
-        'day': date.day,
-        'hour': date.hour,
-        'id': doc_id,
-    }
-    for key, value in updates.items():
-        if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-            and value > 0
-        ):
-            update_doc[key] = firestore.Increment(value)
-    has_increments = any(
+    from database.hourly_usage_updates import prepare_hourly_usage_updates
+
+    if not any(
         key in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-        for key in update_doc
-    )
-    if not has_increments:
+        and value > 0
+        for key, value in updates.items()
+    ):
         return False
-    plan_key = resolve_usage_plan_id(uid, firestore_client=client) or _UNATTRIBUTED_PLAN
-    plan_prefix = f'plan_usage.{plan_key}'
-    for key, value in updates.items():
-        if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-            and value > 0
-        ):
-            update_doc[f'{plan_prefix}.{key}'] = firestore.Increment(value)
-    if cost_usd is not None:
-        update_doc[f'{plan_prefix}.cost_usd'] = firestore.Increment(cost_usd)
-    normalized_status = cost_status if cost_status in {'complete', 'partial', 'missing', 'excluded'} else 'missing'
-    effective_exclusion = cost_exclusion or (
-        'provider_cost_not_recorded' if normalized_status in {'missing', 'partial'} else None
+    update_doc = prepare_hourly_usage_updates(
+        date,
+        updates,
+        resolve_usage_plan_id(uid, firestore_client=client),
+        cost_usd=cost_usd,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        usage_metadata=usage_metadata,
     )
-    update_doc[f'{plan_prefix}._metadata.cost_status_counts.{normalized_status}'] = firestore.Increment(1)
-    update_doc[f'{plan_prefix}._metadata.last_cost_status'] = normalized_status
-    if effective_exclusion:
-        safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
-        update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
     return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
 
 
+@cache_writer('usage_month_cache')
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
     """Batch updates or creates usage stats for multiple hours."""
     batch_size = 400
@@ -586,6 +572,36 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
     return stats, document_count
 
 
+def _s4_valid_month_stats(value) -> bool:
+    fields = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
+    return isinstance(value, dict) and all(
+        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0 for key in fields
+    )
+
+
+def _s4_month_cache(since=False):
+    def decorate(fn):
+        @wraps(fn)
+        def read(uid, date, *args, **kwargs):
+            variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:all'
+            if since:
+                start_date = args[0] if args else kwargs['start_date']
+                variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:since:{start_date.date().isoformat()}'
+            return cached_read(
+                'usage_month_cache',
+                uid,
+                variant,
+                lambda: fn(uid, date, *args, **kwargs),
+                seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
+                cacheable=_s4_valid_month_stats,
+            )
+
+        return read
+
+    return decorate
+
+
+@_s4_month_cache()
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
     user_ref = db.collection('users').document(uid)
@@ -597,6 +613,7 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+@_s4_month_cache(since=True)
 def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
     user_ref = db.collection('users').document(uid)

@@ -30,6 +30,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import (
     raw_transcript_bytes,
     recovery_audio_file_ids,
+    recovery_terminal_minimum_output,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -199,11 +200,19 @@ def _verify_pending_attempts(
             raw_transcript_bytes(conversation) >= int(job.get('selfheal_transcript_bytes') or 0)
             and recorded_ids <= current_ids
         )
-        valid_output = structured_is_rich(conversation.get('structured')) or verified_recovery_discard(
-            conversation.get('discarded'), conversation.get('relevance_decision')
+        terminal_minimum = recovery_terminal_minimum_output(conversation)
+        valid_output = (
+            structured_is_rich(conversation.get('structured'))
+            or verified_recovery_discard(conversation.get('discarded'), conversation.get('relevance_decision'))
+            or terminal_minimum
         )
         if preserved and valid_output:
-            _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
+            _log_action(
+                'verified',
+                reason='kept_minimum' if terminal_minimum else 'ok',
+                uid=uid,
+                conversation_id=conversation_id,
+            )
             counters['verified'] += 1
         else:
             _refuse_verification(
@@ -287,18 +296,17 @@ def _evaluate_row(
     data = row['data']
     finished_at = data.get('finished_at')
     if isinstance(finished_at, datetime):
-        if finished_at.tzinfo is None:
-            finished_at = finished_at.replace(tzinfo=timezone.utc)
-    stale = isinstance(finished_at, datetime) and finished_at <= stale_cutoff
+        finished_at = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+    s_cut = stale_cutoff if stale_cutoff.tzinfo else stale_cutoff.replace(tzinfo=timezone.utc)
+    stale = isinstance(finished_at, datetime) and finished_at <= s_cut
     has_content = False
     if stale:
         has_content = _row_has_content(uid, data)
         if has_content:
             counters['content_holding'] += 1
-            counters['oldest_age_seconds'] = max(
-                counters['oldest_age_seconds'], max(0.0, (now - finished_at).total_seconds())
-            )
-            if finished_at <= page_cutoff:
+            now_dt = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+            counters['oldest_age_seconds'] = max(counters['oldest_age_seconds'], (now_dt - finished_at).total_seconds())
+            if finished_at <= (page_cutoff if page_cutoff.tzinfo else page_cutoff.replace(tzinfo=timezone.utc)):
                 counters['content_holding_over_12h'] += 1
     refusal = jobs_db.recovery_admission_refusal(uid, data, stale_cutoff)
     if refusal is None:
@@ -326,7 +334,7 @@ def run_selfheal_tick(
     wedge_runner: Callable[..., dict[str, int]] | None = None,
 ) -> dict[str, Any]:
     """Run one bounded sweep plus the wedge check; return the emitted counters."""
-    now = now or datetime.now(timezone.utc)
+    now = now if now and now.tzinfo else (now.replace(tzinfo=timezone.utc) if now else datetime.now(timezone.utc))
     mode = mode if mode is not None else selfheal_mode()
     dry_run = selfheal_dry_run() if dry_run is None else dry_run
     allowlist = selfheal_uid_allowlist() if uid_allowlist is None and use_configured_uid_allowlist else uid_allowlist

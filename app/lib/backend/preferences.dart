@@ -18,6 +18,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
@@ -28,6 +29,8 @@ class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
   static FlutterSecureStorage? _secureStorage;
+  final _deviceChanges = StreamController<void>.broadcast(sync: true);
+  Stream<void> get deviceChanges => _deviceChanges.stream;
 
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
@@ -999,6 +1002,15 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  /// `tooShort` or `discardedOnly` while Home should explain a missing conversation.
+  String get homeEmptyExplanation => getString('homeEmptyExplanation');
+
+  set homeEmptyExplanation(String value) => saveString('homeEmptyExplanation', value);
+
+  bool get discardedOnlyExplained => getBool('discardedOnlyExplained');
+
+  set discardedOnlyExplained(bool value) => saveBool('discardedOnlyExplained', value);
+
   // Show short conversations - default is false (hidden)
   bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
 
@@ -1131,8 +1143,29 @@ class SharedPreferencesUtil {
   }
 
   set cachedConversations(List<ServerConversation> value) {
+    _cachedConversationsGeneration++;
     final List<String> conversations = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedConversations', conversations);
+  }
+
+  /// Bumped by every cache write and by [clear]; an older background write
+  /// never lands over a newer write or a sign-out clear.
+  static int _cachedConversationsGeneration = 0;
+
+  @visibleForTesting
+  static int cachedConversationsBackgroundEncodeThreshold = 20;
+
+  /// Same as the [cachedConversations] setter, but encodes a large list off the
+  /// UI isolate. The cache holds full transcripts and is refreshed on resume.
+  Future<void> cacheConversations(List<ServerConversation> value) async {
+    final generation = ++_cachedConversationsGeneration;
+    final snapshot = List<ServerConversation>.of(value);
+    final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
+        size: snapshot.length,
+        threshold: cachedConversationsBackgroundEncodeThreshold,
+        debugName: 'conversation_cache_encode');
+    if (generation != _cachedConversationsGeneration) return;
+    await saveStringList('cachedConversations', encoded);
   }
 
   List<ServerMessage> get cachedMessages {
@@ -1484,7 +1517,12 @@ class SharedPreferencesUtil {
       ? _preferences?.getStringList(key) ?? defaultValue
       : _readOrDefault(key, defaultValue);
 
-  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async {
+    final changed = key == 'btDevice' && _preferences?.getString(key) != value;
+    final write = _preferences?.setString(key, value);
+    if (changed) _deviceChanges.add(null);
+    return await write ?? false;
+  }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 
@@ -1498,6 +1536,8 @@ class SharedPreferencesUtil {
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
   Future<bool> clear() async {
+    // Drop any in-flight background conversation cache write (sign-out, account deletion).
+    _cachedConversationsGeneration++;
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     return await _preferences?.clear() ?? false;

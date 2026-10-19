@@ -13,6 +13,11 @@ import google.auth.credentials  # noqa: F401
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.structured import ActionItem, Structured
 from testing.import_isolation import stub_modules
+
+# This module registers process-global Prometheus counters at import. Keep it
+# cached outside the scoped import cleanup so a later fixture does not register
+# the same collectors a second time in a combined run.
+import utils.llm.shaped_agent  # noqa: F401
 from utils.llm.model_config import LUNA_MODEL
 
 

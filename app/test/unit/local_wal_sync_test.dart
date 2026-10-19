@@ -1,3 +1,6 @@
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -14,10 +17,13 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -43,6 +49,9 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -51,8 +60,106 @@ void main() {
       },
     );
 
+    await WalFileManager.init();
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
+  });
+
+  tearDown(() {
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
+  });
+
+  for (final origin in [WalStorage.sdcard, WalStorage.flashPage]) {
+    for (final legacyStamp in [false, true]) {
+      test(
+          'historical $origin (legacy=$legacyStamp) import while local remains uploadable after route change and explicit retry',
+          () async {
+        final directory = await Directory.systemTemp.createTemp('historical-import');
+        addTearDown(() => directory.delete(recursive: true));
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
+        var uploads = 0;
+        var accept = false;
+        final persisted = <Map<String, dynamic>>[];
+        final local = LocalWalSyncImpl(_MockListener(),
+            loadWals: () async => [],
+            persistWals: (wals) async {
+              persisted.clear();
+              persisted.addAll(wals.map((w) => w.toJson()));
+            },
+            uploadGate: SyncUploadGate(
+                limiter: SyncRateLimiter.instance,
+                fairUseStatusLoader: () async => null,
+                uploader: (files,
+                    {onUploadProgress,
+                    conversationId,
+                    captureEvidence,
+                    recordingSessionId,
+                    audioStartSeconds,
+                    audioEndSeconds,
+                    claimLiveCapture = false,
+                    geolocation}) async {
+                  uploads++;
+                  if (!accept) throw StateError('synthetic refused upload');
+                  return UploadFilesResult.queued('historical-job');
+                }));
+        addTearDown(local.stop);
+        LocalSttCustody.selectedLocalRoute = true;
+        addTearDown(() => LocalSttCustody.selectedLocalRoute = false);
+        local.start();
+        await local.walReady;
+        const name = 'historical_audio.bin';
+        await File('${directory.path}/$name').writeAsBytes([1, 2, 3]);
+        final imported = Wal(
+            timerStart: 100,
+            codec: BleAudioCodec.pcm16,
+            seconds: 1,
+            storage: WalStorage.disk,
+            originalStorage: origin,
+            onDeviceOnly: legacyStamp,
+            filePath: name,
+            status: WalStatus.miss);
+        final historical = legacyStamp ? Wal.fromJson(imported.toJson()) : imported;
+        await local.addExternalWal(historical, admittedGeneration: local.sessionGeneration);
+        expect(historical.onDeviceOnly, isFalse);
+        LocalSttCustody.selectedLocalRoute = false;
+        expect(isAutoUploadEligible(historical), isTrue);
+        await local.syncAll();
+        expect(uploads, 1);
+        accept = true;
+        await local.syncWal(wal: historical);
+        expect(uploads, 2, reason: 'explicit retry reaches the real uploader after a refused upload');
+        expect(historical.status, WalStatus.uploaded);
+        expect(persisted.single['on_device_only'], isFalse);
+        // Repair a pre-fix persisted stamp without weakening recording-time local consent.
+        final old = historical.toJson()..['on_device_only'] = true;
+        old.remove('captured_on_device_only');
+        final repaired = Wal.fromJson(old);
+        expect(repaired.onDeviceOnly, isFalse);
+        expect(repaired.toJson()['on_device_only'], isFalse);
+        old['captured_on_device_only'] = true;
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue);
+        old.remove('original_storage');
+        old.remove('captured_on_device_only');
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue, reason: 'legacy phone-local custody is preserved');
+      });
+    }
+  }
+
+  test('import repair retains an existing local conversation and phone-only custody', () {
+    final wal = Wal(
+        timerStart: 1,
+        seconds: 1,
+        originalStorage: WalStorage.sdcard,
+        codec: BleAudioCodec.opus,
+        storage: WalStorage.sdcard,
+        onDeviceOnly: true,
+        onDeviceConversation: {'id': 'local-result'});
+    final restored = Wal.fromJson(wal.toJson());
+    expect(restored.onDeviceOnly, isTrue);
+    expect(restored.onDeviceConversation?['id'], 'local-result');
   });
 
   group('onFrameCaptured', () {
@@ -163,6 +270,36 @@ void main() {
   });
 
   group('markFrameSynced', () {
+    test('local enqueue is not a receipt: audio persists phone-only and cannot cloud-upload', () async {
+      LocalSttCustody.selectedLocalRoute = true;
+      await SharedPreferencesUtil()
+          .saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false));
+      addTearDown(() async {
+        LocalSttCustody.selectedLocalRoute = false;
+        await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+      });
+      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
+      sync.setDeviceInfo('phone', 'Phone');
+      for (var i = 0; i < 100; i++) {
+        final key = FrameSyncKey([i]);
+        sync.onFrameCaptured(WalFrame(payload: List<int>.filled(320, i), syncKey: key));
+        sync.markFrameSynced(key);
+      }
+      expect(sync.testFrameSynced, everyElement(false));
+      await sync.finalizeCurrentSession();
+      LocalSttCustody.selectedLocalRoute = false;
+      final wals = await sync.getAllWals();
+      expect(wals, isNotEmpty);
+      for (final wal in wals) {
+        expect(wal.onDeviceOnly, isTrue);
+        expect(wal.capturedOnDeviceOnly, isTrue);
+        expect(isAutoUploadEligible(wal), isFalse);
+        expect(await sync.syncWal(wal: wal), isNull);
+        expect(Wal.fromJson(wal.toJson()).onDeviceOnly, isTrue);
+        expect(await sync.hasDurableWal(wal, admittedGeneration: sync.sessionGeneration), isTrue);
+      }
+    });
+
     test('marks matching frame as synced', () {
       final key = FrameSyncKey([0x10, 0x20, 0x30]);
       sync.onFrameCaptured(WalFrame(payload: [1], syncKey: key));
@@ -463,6 +600,48 @@ void main() {
       expect(batch.length, 5);
       expect(canClaimLiveCapture(batch, oversized, now), isFalse);
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+
+    test('pendant custody 10s WALs upload in jobs of 200s of audio, not 50s', () {
+      // #21177: pendant ring custody drains audio into ~10s WALs, and a five-file
+      // batch made every sync job 50s long. The manifest's 20-file limit binds
+      // before the 300s audio budget does for WALs this short.
+      const now = 2000000000;
+      final custodyTail = List.generate(
+        40,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 10, codec: BleAudioCodec.opus, seconds: 10),
+      );
+
+      final batch = nextSyncUploadBatch(custodyTail.reversed.toList(), now);
+
+      expect(batch, hasLength(syncUploadBatchMaxFiles));
+      expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 200);
+      expect(
+        batch.map((wal) => wal.timerStart),
+        custodyTail.take(syncUploadBatchMaxFiles).map((wal) => wal.timerStart),
+      );
+    });
+
+    test('a batch is bounded by audio seconds, not by file count', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        10,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 45, codec: BleAudioCodec.opus, seconds: 45),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch, hasLength(6), reason: 'six 45s WALs are 270s; a seventh would pass 300s');
+    });
+
+    test('a WAL longer than the audio budget still uploads, alone', () {
+      const now = 2000000000;
+      final long = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 400);
+      final older = Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 10);
+
+      final batch = nextSyncUploadBatch([older, long], now);
+
+      expect(batch, [long]);
     });
   });
 
@@ -885,6 +1064,313 @@ void main() {
 
       expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
     });
+  });
+
+  group('reconcile empty-completion diagnostics', () {
+    late Directory directory;
+    final now = DateTime.fromMillisecondsSinceEpoch(1790730000 * 1000);
+    final staleReports = <Map<String, Object?>>[];
+
+    setUpAll(() async {
+      directory = await Directory.systemTemp.createTemp('wal_reconcile_empty_');
+    });
+
+    setUp(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async {
+          if (call.method == 'getApplicationDocumentsDirectory') return directory.path;
+          return null;
+        },
+      );
+      await WalFileManager.init();
+      await DebugLogManager.setEnabled(true);
+      await DebugLogManager.clear();
+      staleReports.clear();
+      SyncRateLimiter.instance.clear();
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      await DebugLogManager.setEnabled(false);
+      SyncRateLimiter.instance.clear();
+    });
+
+    tearDownAll(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async => directory.parent.path,
+      );
+      await WalFileManager.init();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      if (directory.existsSync()) await directory.delete(recursive: true);
+    });
+
+    Wal member({int index = 0, int retryCount = 0}) {
+      final name = 'audio_reconcile_$index.bin';
+      File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
+      return Wal(
+        timerStart: 1790728361 + index * 10,
+        device: 'E6:28:6D:ED:4E:45',
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        filePath: name,
+        retryCount: retryCount,
+      )..jobId = 'b4b06584';
+    }
+
+    LocalWalSyncImpl build(SyncJobStatusResponse status) => LocalWalSyncImpl(
+          listener,
+          now: () => now,
+          jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status),
+          staleWalTelemetry: staleReports.add,
+        );
+
+    SyncJobStatusResponse completed({
+      List<String> newIds = const [],
+      List<String> updatedIds = const [],
+      bool missingResult = false,
+      int processedSegments = 0,
+      String? reasonCode,
+    }) =>
+        SyncJobStatusResponse(
+          jobId: 'b4b06584',
+          status: 'completed',
+          processedSegments: processedSegments,
+          reasonCode: reasonCode,
+          result: missingResult
+              ? null
+              : SyncLocalFilesResponse(newConversationIds: newIds, updatedConversationIds: updatedIds),
+        );
+
+    Future<List<Map<String, dynamic>>> readEvents() async {
+      final events = <Map<String, dynamic>>[];
+      for (final log in await DebugLogManager.listLogFiles()) {
+        events.addAll((await log.readAsLines()).map((line) => jsonDecode(line) as Map<String, dynamic>));
+      }
+      return events;
+    }
+
+    Future<List<Map<String, dynamic>>> pollEvents(String type) async {
+      for (var attempt = 0; attempt < 100; attempt++) {
+        final events = await readEvents();
+        if (events.any((event) => event['type'] == type)) return events;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      fail('Timed out waiting for $type in DebugLogManager.listLogFiles');
+    }
+
+    for (final handle in <String?>[null, '', '   ']) {
+      test('orphaned uploaded WAL with job handle "$handle" requeues retained audio durably', () async {
+        var polls = 0;
+        final local = LocalWalSyncImpl(listener,
+            now: () => now,
+            jobStatusFetcher: (_) async {
+              polls++;
+              return SyncJobFetch(SyncJobFetchOutcome.ok, completed());
+            });
+        final wal = member(retryCount: 2)..jobId = handle;
+        local.testWals = [wal];
+        final path = File('${directory.path}/${wal.filePath}');
+        final original = await path.readAsBytes();
+        final response = await local.reconcileUploadedWals();
+        expect(polls, 0);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.jobId, isNull);
+        expect(wal.retryCount, 2);
+        expect(listener.syncedWals, isEmpty);
+        expect(response.newConversationIds, isEmpty);
+        expect(await path.readAsBytes(), original);
+        final restored = (await WalFileManager.loadWals()).single;
+        expect(restored.status, WalStatus.miss);
+        expect(restored.retryCount, 2);
+      });
+    }
+
+    test('orphaned upload without retained audio stays visible as unavailable, never synced', () async {
+      final local = build(completed());
+      final wal = member()..jobId = null;
+      await File('${directory.path}/${wal.filePath}').delete();
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.corrupted);
+      expect(listener.syncedWals, isEmpty);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.corrupted);
+    });
+
+    test('restored orphan audio completes the retained-file upload and polling lifecycle', () async {
+      var clock = now;
+      var uploads = 0;
+      final wal = member()..jobId = null;
+      final source = File('${directory.path}/${wal.filePath}');
+      final original = await source.readAsBytes();
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => clock,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          fairUseStatusLoader: () async => {'stage': 'none'},
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads++;
+            expect(await files.single.readAsBytes(), original);
+            return UploadFilesResult.queued('recovered-job');
+          },
+        ),
+        jobStatusFetcher: (id) async => SyncJobFetch(
+            SyncJobFetchOutcome.ok,
+            SyncJobStatusResponse(
+                jobId: id,
+                status: 'completed',
+                result: SyncLocalFilesResponse(
+                    newConversationIds: ['recovered-conversation'], updatedConversationIds: []))),
+      );
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.miss);
+      clock = clock.add(const Duration(minutes: 1));
+      await local.syncAll();
+      expect(uploads, 1);
+      expect(wal.status, WalStatus.uploaded);
+      expect(wal.jobId, 'recovered-job');
+      clock = clock.add(SyncJobPoller.minimumInterval);
+      final result = await local.reconcileUploadedWals();
+      expect(result.newConversationIds, ['recovered-conversation']);
+      expect(wal.status, WalStatus.synced);
+      expect(listener.syncedWals, [wal]);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.synced);
+      expect(await source.readAsBytes(), original);
+    });
+
+    test('queued then completed 0/0/0 acknowledges the WAL and emits a diagnostic', () async {
+      var polls = 0;
+      var pollNow = now.subtract(SyncJobPoller.minimumInterval);
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => pollNow,
+        jobStatusFetcher: (jobId) async => SyncJobFetch(
+          SyncJobFetchOutcome.ok,
+          polls++ == 0 ? SyncJobStatusResponse(jobId: jobId, status: 'queued') : completed(),
+        ),
+        staleWalTelemetry: staleReports.add,
+      );
+      final wal = member();
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.uploaded);
+      expect(wal.retryCount, 0);
+
+      await local.reconcileUploadedWals();
+      expect(polls, 1, reason: 'the first poll is immediate, repeated same-time passes are deferred');
+      expect(wal.status, WalStatus.uploaded);
+      pollNow = now; // exactly one minimum interval; retain the original ACK timestamp.
+      final response = await local.reconcileUploadedWals();
+      expect(response.newConversationIds, isEmpty);
+      expect(response.updatedConversationIds, isEmpty);
+      expect(polls, 2);
+      // capture_recovery_replay_scenarios_test.dart: acknowledgement resolves by
+      // polling, never by re-uploading bytes, including legitimate empty results.
+      expect(wal.status, WalStatus.synced);
+      expect(wal.syncedAt, 1790730000);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, 0);
+      expect(wal.lastRetryAt, 0);
+      expect(listener.syncedWals, [wal]);
+      final restored = (await WalFileManager.loadWals()).single;
+      expect(restored.id, wal.id);
+      expect(restored.status, WalStatus.synced);
+      expect(restored.syncedAt, wal.syncedAt);
+      expect(restored.jobId, isNull);
+      expect(restored.retryCount, 0);
+      local.reportStaleMissingWals(trigger: 'test');
+      expect(staleReports, isEmpty);
+
+      final events = await pollEvents('reconcile_completed_empty');
+      final event = events.singleWhere((event) => event['type'] == 'reconcile_completed_empty');
+      expect(event['jobId'], 'b4b06584');
+      expect(event['walId'], 'E6:28:6D:ED:4E:45_1790728361');
+      expect(event['walKey'], '${wal.id}|${wal.filePath}');
+      expect(event['newConversations'], 0);
+      expect(event['updatedConversations'], 0);
+      expect(event['processedSegments'], 0);
+      expect(event['totalSegments'], 0);
+      expect(event['retryCount'], 0);
+      expect(event['capacityLimited'], false);
+      expect(event['retryCountBumped'], false);
+
+      await local.reconcileUploadedWals();
+      expect(polls, 2, reason: 'the acknowledged terminal job is detached');
+      expect(listener.syncedWals, [wal]);
+      expect((await readEvents()).where((event) => event['type'] == 'reconcile_completed_empty'), hasLength(1));
+    });
+
+    test('completed without a result acknowledges and reports existing retry accounting', () async {
+      final local = build(completed(missingResult: true, processedSegments: 1));
+      final wal = member(retryCount: walMaxAutoRetries)..lastRetryAt = 123;
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.synced);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, walMaxAutoRetries);
+      expect(wal.lastRetryAt, 123);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.synced);
+      final events = await pollEvents('reconcile_completed_empty');
+      final event = events.singleWhere((event) => event['type'] == 'reconcile_completed_empty');
+      expect(event['newConversations'], 0);
+      expect(event['updatedConversations'], 0);
+      expect(event['processedSegments'], 1);
+      expect(event['retryCount'], walMaxAutoRetries);
+      expect(event['retryCountBumped'], false);
+    });
+
+    test('empty completion with a capacity hint acknowledges without applying backoff', () async {
+      final local = build(completed(reasonCode: 'backfill_capacity'));
+      final wal = member(retryCount: 1)..lastRetryAt = 123;
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.synced);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, 1);
+      expect(wal.lastRetryAt, 123);
+      expect(SyncRateLimiter.instance.isLimited, isFalse);
+      await pollEvents('reconcile_completed_empty');
+    });
+
+    for (final updatedOnly in [false, true]) {
+      test('completed with ${updatedOnly ? 'updated' : 'new'} output acknowledges all five members', () async {
+        final local = build(
+          completed(newIds: updatedOnly ? [] : ['conversation-1'], updatedIds: updatedOnly ? ['conversation-1'] : []),
+        );
+        final members = List.generate(5, (index) => member(index: index)..jobId = 'eab86592');
+        local.testWals = members;
+        final response = await local.reconcileUploadedWals();
+        expect(updatedOnly ? response.updatedConversationIds : response.newConversationIds, ['conversation-1']);
+        expect(members.map((wal) => wal.status), everyElement(WalStatus.synced));
+        expect(members.map((wal) => wal.jobId), everyElement(isNull));
+        expect(members.map((wal) => wal.syncedAt), everyElement(1790730000));
+        expect(listener.syncedWals, members);
+        expect((await WalFileManager.loadWals()).map((wal) => wal.status), everyElement(WalStatus.synced));
+        local.reportStaleMissingWals(trigger: 'test');
+        expect(staleReports, isEmpty);
+        final events = await pollEvents('reconcile_poll');
+        expect(events.where((event) => event['type'] == 'reconcile_completed_empty'), isEmpty);
+      });
+    }
   });
 
   group('silent upload death recovery', () {
@@ -1949,7 +2435,9 @@ void main() {
   group('syncWal — orphan WAL guard', () {
     // A WAL the user taps "sync" on may already be gone from `_wals` (a
     // concurrent delete/reload). Previously `.first` on the empty match list
-    // threw an uncaught StateError; the guard now bails out to null instead.
+    // threw an uncaught StateError. The local guard bails out to null; the
+    // flash-page guard throws a readable error instead, because Transfer to
+    // Phone shows any normal return as a finished transfer.
     test('LocalWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
       final orphan = Wal(timerStart: 123, codec: BleAudioCodec.opus, seconds: 10);
 
@@ -1958,13 +2446,11 @@ void main() {
       expect(result, isNull);
     });
 
-    test('FlashPageWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+    test('FlashPageWalSyncImpl.syncWal fails when the WAL is not tracked', () async {
       final flashSync = FlashPageWalSyncImpl(listener);
       final orphan = Wal(timerStart: 456, codec: BleAudioCodec.opus, seconds: 10);
 
-      final result = await flashSync.syncWal(wal: orphan);
-
-      expect(result, isNull);
+      await expectLater(flashSync.syncWal(wal: orphan), throwsException);
     });
   });
 

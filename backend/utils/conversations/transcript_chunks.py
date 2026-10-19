@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.model_text import DisplayClock, format_instant, format_span
 
 # ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed precisely.
 CHUNK_WINDOW = 8
@@ -46,6 +47,8 @@ def build_transcript_chunks(
     window: int = CHUNK_WINDOW,
     stride: int = CHUNK_STRIDE,
     people_by_id: Optional[Dict[str, str]] = None,
+    clock: DisplayClock = DisplayClock.utc(),
+    finished_at: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """Return [{'text', 'created_at' (unix ts), 'chunk_index'}] for vector_db upsert."""
     lines: List[str] = []
@@ -61,7 +64,8 @@ def build_transcript_chunks(
     created_ts = 0
     dt = _coerce_started_at(started_at)
     if dt is not None:
-        date_header = f"[Conversation on {dt.strftime('%d %b %Y, %H:%M')}]\n"
+        date_label = format_span(dt, finished_at, clock) if finished_at is not None else format_instant(dt, clock)
+        date_header = f"[Conversation on {date_label}]\n"
         created_ts = int(dt.timestamp())
 
     chunks: List[Dict[str, Any]] = []
@@ -81,7 +85,9 @@ def build_transcript_chunks(
     return chunks
 
 
-def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def hydrate_chunk_texts(
+    uid: str, rows: List[Dict[str, Any]], clock: Optional[DisplayClock] = None
+) -> List[Dict[str, Any]]:
     """Attach verbatim text to chunk references returned by vector search."""
     if not (conv_ids := list({r['conversation_id'] for r in rows if r.get('conversation_id')})):
         return []
@@ -90,10 +96,14 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
     )
     chunks_by_conv: Dict[str, Dict[int, str]] = {}
     meta_by_conv: Dict[str, Dict[str, Any]] = {}
+    clock = clock or DisplayClock.utc()
     for c in conversations:
         segs: List[Dict[str, Any]] = c.get('transcript_segments') or []
         started = c.get('started_at') or c.get('created_at')
-        chunks_by_conv[c['id']] = {ch['chunk_index']: ch['text'] for ch in build_transcript_chunks(segs, started)}
+        chunks_by_conv[c['id']] = {
+            ch['chunk_index']: ch['text']
+            for ch in build_transcript_chunks(segs, started, clock=clock, finished_at=c.get('finished_at'))
+        }
         structured = c.get('structured')
         title = structured.get('title') if isinstance(structured, dict) else None
         meta_by_conv[c['id']] = {'conversation_title': title, 'conversation_started_at': started}

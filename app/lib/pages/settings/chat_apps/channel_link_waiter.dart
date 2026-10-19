@@ -25,6 +25,8 @@ mixin ChannelLinkWaiter<T extends StatefulWidget> on State<T>, WidgetsBindingObs
   Set<String> _known = const {};
   DateTime? _until;
   bool _checking = false;
+  int _attempts = 0;
+  bool _foreground = true;
 
   bool get isWaitingForLink => _timer != null;
 
@@ -43,7 +45,8 @@ mixin ChannelLinkWaiter<T extends StatefulWidget> on State<T>, WidgetsBindingObs
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && isWaitingForLink) unawaited(checkForLink());
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && isWaitingForLink) unawaited(checkForLink());
   }
 
   /// Starts (or restarts) waiting until [until]. Links already present are ignored.
@@ -54,7 +57,20 @@ mixin ChannelLinkWaiter<T extends StatefulWidget> on State<T>, WidgetsBindingObs
     }
     _until = until;
     _timer?.cancel();
-    _timer = Timer.periodic(interval, (_) => unawaited(checkForLink()));
+    _attempts = 0;
+    _scheduleCheck();
+  }
+
+  void _scheduleCheck() {
+    final multiplier = 1 << _attempts.clamp(0, 4);
+    final delay = Duration(milliseconds: (interval.inMilliseconds * multiplier).clamp(0, 30000));
+    _timer = Timer(delay, () async {
+      await checkForLink();
+      if (mounted && isWaitingForLink) {
+        _attempts++;
+        _scheduleCheck();
+      }
+    });
   }
 
   void stopWaiting() {
@@ -70,6 +86,7 @@ mixin ChannelLinkWaiter<T extends StatefulWidget> on State<T>, WidgetsBindingObs
       if (mounted) setState(() {});
       return;
     }
+    if (!_foreground) return;
     _checking = true;
     try {
       await context.read<MessagingChannelsProvider>().refreshLinks();

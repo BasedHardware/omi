@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 10,
+  "show_subscription_ui": true,
+  "header": "你的 Plus 套餐将于 11月1日 结束",
+  "current": {
+    "plan_id": "plus",
+    "name": "Plus",
+    "price_id": "price_plus_month",
+    "interval": "month",
+    "legacy": false,
+    "cancel_at_period_end": true,
+    "line": "你当前使用的是 Plus · $19.99/月",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "unavailable",
+    "percent": null,
+    "period_id": null,
+    "reset_label": null,
+    "meter_line": null,
+    "nudge_line": null,
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
+  },
+  "tiers": [
+    {
+      "tier_id": "plus:ladder_v1",
+      "plan_id": "plus",
+      "name": "Plus",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "每月约可录制 100 小时，平均每天约 3 小时",
+      "bullets": [],
+      "action": "checkout",
+      "cta_label": "重新订阅",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_plus_month",
+          "interval": "month",
+          "amount_minor": 1999,
+          "currency": "usd",
+          "headline": "$19.99/月",
+          "subline": null,
+          "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
+        }
+      ]
+    },
+    {
+      "tier_id": "basic:ladder_v1",
+      "plan_id": "basic",
+      "name": "Free",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "每月约可录制 15 小时",
+      "bullets": [],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "请先重新订阅，再更改套餐",
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
+    },
+    {
+      "tier_id": "operator:ladder_v1",
+      "plan_id": "operator",
+      "name": "Pro",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "每月约可录制 280 小时，足够全天佩戴使用",
+      "bullets": [
+        "Omi 会提醒你要做的事情",
+        "在 Mac 上，Omi 能看到你正在处理的内容并提供帮助",
+        "每天 5,000 次 MCP 请求"
+      ],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "请先重新订阅，再更改套餐",
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_operator_month",
+          "interval": "month",
+          "amount_minor": 4999,
+          "currency": "usd",
+          "headline": "$49.99/月",
+          "subline": null,
+          "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
+        },
+        {
+          "price_id": "price_operator_year",
+          "interval": "year",
+          "amount_minor": 49990,
+          "currency": "usd",
+          "headline": "$41.66/月",
+          "subline": "年付 $499.90 · 免费 2 个月",
+          "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "architect:ladder_v1",
+      "plan_id": "architect",
+      "name": "Architect",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "每月约可录制 1,200 小时，适合在多台设备上全天使用",
+      "bullets": [
+        "包含 Pro 的全部功能，用量超过 4 倍",
+        "每天至少 5,000 次 MCP 请求"
+      ],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "请先重新订阅，再更改套餐",
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_architect_month",
+          "interval": "month",
+          "amount_minor": 19900,
+          "currency": "usd",
+          "headline": "$199/月",
+          "subline": null,
+          "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
+        },
+        {
+          "price_id": "price_architect_year",
+          "interval": "year",
+          "amount_minor": 199000,
+          "currency": "usd",
+          "headline": "$165.83/月",
+          "subline": "年付 $1,990 · 免费 2 个月",
+          "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
+          "months_free": 2
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": null
+}

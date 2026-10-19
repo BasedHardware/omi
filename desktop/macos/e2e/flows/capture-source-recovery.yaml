@@ -1,0 +1,68 @@
+version: 2
+name: capture-source-recovery
+tier: manual
+description: Native tap/mixer/session continuity across injected microphone watchdog events; requires microphone and system audio grants
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Audio/CaptureStreamActivity.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationCaptureRecoveryActions.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+CaptureDeviceManagement.swift
+  - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
+  - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/AudioCaptureService.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Start real local-profile capture
+    do: "On a non-production local harness profile, grant microphone/system audio access and choose Always On. Play harmless test audio through the computer. Keep the microphone digitally muted so no live microphone signal clears the warning during the next steps. Do not use capture_test_transcript: both CoreAudio drivers must be real."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2
+    name: Prove native capture and tap liveness
+    bridge.action:
+      name: capture_source_recovery_snapshot
+    expect:
+      result.detail.is_live_capturing: "true"
+      result.detail.microphone_capturing: "true"
+      result.detail.system_audio_live: "true"
+
+  - id: S3
+    name: First microphone recovery preserves the other source
+    bridge.action:
+      name: inject_silent_microphone_trip
+    expect:
+      result.detail.same_session: "true"
+      result.detail.same_system_tap: "true"
+      result.detail.same_mixer: "true"
+      result.detail.system_audio_live: "true"
+
+  - id: S4
+    name: Second microphone recovery preserves the other source
+    bridge.action:
+      name: inject_silent_microphone_trip
+    expect:
+      result.detail.same_session: "true"
+      result.detail.same_system_tap: "true"
+      result.detail.same_mixer: "true"
+      result.detail.system_audio_live: "true"
+
+  - id: S5
+    name: Exhaustion continues system audio with a truthful warning
+    bridge.action:
+      name: inject_silent_microphone_trip
+    expect:
+      result.detail.same_session: "true"
+      result.detail.same_system_tap: "true"
+      result.detail.same_mixer: "true"
+      result.detail.system_audio_live: "true"
+      result.detail.is_transcribing: "true"
+      result.detail.microphone_signal_missing: "true"
+
+  - id: S6
+    name: Recover microphone without restarting the recording
+    do: "Unmute the microphone and speak harmless test words. Verify the no-microphone-signal warning clears, the recording does not stop/start, and the existing recording receives microphone and system audio. Stop only the synthetic local-profile recording when finished."
+    expect:
+      interactive_count: { min: 1 }

@@ -14,13 +14,21 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 const _title = 'Planning the next team meeting';
-const _upgrade = 'Upgrade to Unlimited';
+// The locked preview routes to the usage page, so its action says so.
+const _upgrade = 'View Usage';
 
 class _Routes extends NavigatorObserver {
   final pushed = <Route<dynamic>>[];
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => pushed.add(route);
+}
+
+class _Usage extends UsageProvider {
+  _Usage(this.visible);
+  final bool visible;
+  @override
+  bool get showSubscriptionUI => visible;
 }
 
 void main() {
@@ -103,6 +111,9 @@ void main() {
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_title)), findsOneWidget);
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_upgrade)), findsNothing);
         expect(find.byType(BackdropFilter), findsNothing);
+        expect(find.text('Pending'), findsOneWidget);
+        expect(find.byIcon(Icons.lock_outline), findsNothing);
+        expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
         expect(find.bySemanticsLabel(_upgrade), findsOneWidget);
 
@@ -139,7 +150,7 @@ void main() {
     expect(find.text(_upgrade), findsNothing);
   });
 
-  testWidgets('the upgrade action keeps the existing paywall destination', (tester) async {
+  testWidgets('the waiting preview opens usage without forcing a paywall', (tester) async {
     final routes = _Routes();
     await pumpRow(tester, observer: routes);
     await tester.tap(find.byKey(const Key('locked_preview_action')));
@@ -147,7 +158,7 @@ void main() {
     final route = routes.pushed.last as MaterialPageRoute;
     final destination = route.builder(tester.element(find.byType(ConversationListItem)));
     expect(destination, isA<UsagePage>());
-    expect((destination as UsagePage).showUpgradeDialog, isTrue);
+    expect((destination as UsagePage).showUpgradeDialog, isFalse);
     // Check navigation without building the network-backed usage screen.
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -214,7 +225,9 @@ void main() {
       tester,
       body: LockedConversationRun(conversations: run, date: run.first.createdAt),
     );
-    await tester.longPress(find.text('$_title 1'));
+    final row = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
+    // The central usage action is interactive; the leading edge still opens this row's menu.
+    await tester.longPressAt(Offset(row.left + 16, row.center.dy));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
   });
@@ -235,4 +248,55 @@ void main() {
     expect(conversations.selectedConversationIds, isEmpty);
     expect(tester.takeException(), isNull);
   });
+  for (final visible in [true, false]) {
+    for (final grouped in [true, false]) {
+      testWidgets('frost tap on ${grouped ? 'grouped' : 'single'} held conversation visibility $visible',
+          (tester) async {
+        usage.dispose();
+        usage = _Usage(visible);
+        final routes = _Routes();
+        final run = lockedRun();
+        await pumpRow(tester,
+            observer: routes,
+            body: grouped ? LockedConversationRun(conversations: run, date: run.first.createdAt) : null);
+        final rect =
+            tester.getRect(grouped ? find.byKey(const ValueKey('locked_locked-1')) : find.byType(OmiLockedPreview));
+        await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
+        expect(routes.pushed, hasLength(visible ? 2 : 1));
+        if (visible) {
+          expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(OmiLockedPreview))),
+              isA<UsagePage>());
+          await tester.pumpWidget(const SizedBox.shrink());
+        } else {
+          await tester.pumpAndSettle();
+          expect(find.byType(UsagePage), findsNothing);
+          expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
+  }
+  for (final visible in [true, false]) {
+    testWidgets('gap in held conversation run uses guarded action visibility $visible', (tester) async {
+      usage.dispose();
+      usage = _Usage(visible);
+      final routes = _Routes();
+      final run = lockedRun();
+      await pumpRow(tester,
+          observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
+      final first = tester.getRect(find.byKey(const ValueKey('locked_locked-0')));
+      final second = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
+      await tester.tapAt(Offset(first.left + 16, (first.bottom + second.top) / 2));
+      expect(routes.pushed, hasLength(visible ? 2 : 1));
+      if (visible) {
+        expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
+            isA<UsagePage>());
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else {
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 }

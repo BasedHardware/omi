@@ -18,6 +18,9 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'capacity_full',
+        # The session's capture replay ring outgrew its horizon before the
+        # leg emitted; session-local, never provider capacity or failure.
+        'replay_ring_overflow',
         'allocation_rejected',
         'capability_mismatch',
         'first_text_deadline',
@@ -27,6 +30,9 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'vad_failed',
         'client_disconnect',
         'normal_close',
+        # Listen cancelled the leg's own task (owner close, recovery switch,
+        # teardown). Censored: it is not evidence about the provider.
+        'cancelled',
         'other',
         'config_incomplete',
         'auth',

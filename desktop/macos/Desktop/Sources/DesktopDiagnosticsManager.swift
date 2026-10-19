@@ -538,6 +538,8 @@ final class DesktopDiagnosticsManager {
         "intent": intent,
         "telemetry_schema_version": 1,
       ])
+    ClientTelemetryShadow.capturePhysicalVoice(
+      phase: "started", turnID: turnID, intent: intent, route: "unknown", reason: nil, durationMs: nil)
   }
 
   func recordVoiceTurnTerminal(
@@ -565,6 +567,13 @@ final class DesktopDiagnosticsManager {
       properties["duration_ms"] = max(0, durationMs)
     }
     record(.voiceTurnTerminal, properties: properties)
+    ClientTelemetryShadow.capturePhysicalVoice(
+      phase: "terminal",
+      turnID: turnID,
+      intent: intent,
+      route: route,
+      reason: reason,
+      durationMs: durationMs)
     if let outcome = AnalyticsManager.questionOutcome(forVoiceTerminalReason: reason, answerDelivered: answerDelivered)
     {
       let surface = AnalyticsManager.questionSurface(forVoiceRoute: route)
@@ -647,6 +656,12 @@ final class DesktopDiagnosticsManager {
       }
     }
     record(.fallbackTriggered, properties: properties, trackRemotely: true)
+    ClientTelemetryShadow.captureFallback(
+      area: clientTelemetryShadowArea(area),
+      from: clientTelemetryShadowEndpoint(from),
+      to: clientTelemetryShadowEndpoint(to),
+      reason: clientTelemetryShadowReason(reason),
+      outcome: outcome.rawValue)
   }
 
   /// A deterministic screen-verification failure reached the user as spoken local text.
@@ -1440,6 +1455,11 @@ final class DesktopDiagnosticsManager {
     "account_cutover",
     "voice_typing",
     "rewind_database", "meeting_screen_evidence",
+    // The memories cache reconcile degrading to its bounded in-launch retry
+    // (and, when that exhausts, to next launch). Named so a release-health
+    // query can watch the truncated-list rate without reading it out of
+    // `other`.
+    "memories-cache",
     "other",
   ]
 
@@ -1481,6 +1501,10 @@ final class DesktopDiagnosticsManager {
     "state_divergence",
     "status_inferred",
     "engine_failed",
+    // The server returned a truncated memories list, so absence proved nothing
+    // about that pull — the signal behind the memories-cache reconcile's
+    // in-launch retry and next-launch deferral.
+    "list_truncated",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
@@ -1492,6 +1516,40 @@ final class DesktopDiagnosticsManager {
     let label = safeFallbackLabel(reason, default: "other")
     return Self.allowedFallbackReasons.contains(label) ? label : "other"
   }
+
+  /// Shadow collector area. PostHog keeps its wider area allowlist; the replacement
+  /// observation uses the frozen five-value area set.
+  func clientTelemetryShadowArea(_ area: String) -> String {
+    let label = safeFallbackLabel(area, default: "other")
+    return Self.shadowFallbackAreas.contains(label) ? label : "other"
+  }
+
+  /// Unregistered reasons become `unknown` on the shadow observation. PostHog still
+  /// buckets those same reasons to `other`.
+  func clientTelemetryShadowReason(_ reason: String) -> String {
+    let label = safeFallbackLabel(reason, default: "unknown")
+    return Self.allowedFallbackReasons.contains(label) ? label : "unknown"
+  }
+
+  func clientTelemetryShadowEndpoint(_ value: String) -> String {
+    let label = safeFallbackLabel(value, default: "unknown")
+    if Self.shadowFallbackEndpoints.contains(label) || Self.allowedFallbackReasons.contains(label)
+      || Self.shadowFallbackAreas.contains(label)
+    {
+      return label
+    }
+    return "unknown"
+  }
+
+  private static let shadowFallbackAreas: Set<String> = [
+    "realtime_hub", "ptt_cascade", "screen_task_gate", "screen_task_extraction", "other",
+  ]
+
+  private static let shadowFallbackEndpoints: Set<String> = [
+    "openai", "gemini", "gemini_3_8", "gemini_2_5_flash", "gemini_2_5_flash_lite", "legacy", "jev", "claude",
+    "local", "cloud", "primary", "secondary", "hub", "stt", "on_device", "deepgram", "disabled", "enabled",
+    "floating_voice", "none", "unknown",
+  ]
   /// Closed set for the realtime token-mint `phase` dimension (#10425): a release
   /// query can rely on `warm` (background pre-warm) vs `barge_in_replacement`
   /// (socket replacement during an active turn) instead of an open string.

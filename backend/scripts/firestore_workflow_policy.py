@@ -7,6 +7,7 @@ import pathlib
 import re
 import shlex
 from dataclasses import dataclass
+from functools import lru_cache
 
 import yaml
 
@@ -202,10 +203,8 @@ NON_FIRESTORE_IMAGE_EXCLUSIONS = {
     'parakeet': 'self-hosted STT service with its own source root; queries no Firestore collections',
     'nllb-translation': 'self-hosted translation service with its own source root; queries no Firestore collections',
     'plugins': 'built from the plugins tree, not backend source',
-    'typesense-jit-qa': 'JIT QA repins the upstream Typesense image; it carries no backend query code',
 }
 NON_BACKEND_DOCKERFILE_EXCLUSIONS = {
-    'backend/Dockerfile.jit_qa_typesense': 'JIT QA repins the upstream Typesense image',
     'backend/modal/Dockerfile.finops_unit_cost_job': (
         'batch unit-cost job reads Firestore as a pull input and does not serve a Firestore-backed API'
     ),
@@ -238,7 +237,7 @@ _CUTOVER = re.compile(r'sync_ledger_fence_cutover\.py\s+(?:stage|activate)')
 _CUTOVER_WORKFLOW = 'sync_ledger_fence_cutover.yml'
 _LISTEN_REPLAY = re.compile(r'BACKEND_LISTEN_IMAGE_TAG|\brollback\b')
 _LISTEN_MUTATION_RUN = re.compile(
-    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:upgrade|rollback)\b'
+    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:[^\s]+\s+){0,4}(?:upgrade|rollback)\b'
 )
 _LISTEN_SELECT_STEP = 'Resolve backend-listen image tag'
 _LISTEN_DEPLOY_IF = "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
@@ -288,6 +287,7 @@ def _runtime_images(root):
     return dockerfiles
 
 
+@lru_cache(maxsize=256)
 def _yaml_document(text):
     return yaml.load(text, Loader=_YAML_LOADER)
 
@@ -943,7 +943,12 @@ def _dependency_allows(job: dict, dep_condition_atoms, dep_id: str) -> bool:
 
 
 def workflow_gate_violations(
-    text: str, *, name: str, local_actions: dict[str, str] | None = None, dockerfiles=None
+    text: str,
+    *,
+    name: str,
+    local_actions: dict[str, str] | None = None,
+    dockerfiles=None,
+    known: frozenset[str] | None = None,
 ) -> list[str]:
     """Return Firestore readiness coverage violations for one workflow document."""
 
@@ -959,7 +964,7 @@ def workflow_gate_violations(
         return errors
     local_actions = local_actions or {}
     dockerfiles = dockerfiles or {}
-    known = _known_image_names(dockerfiles)
+    known = known if known is not None else _known_image_names(dockerfiles)
 
     is_listen = pathlib.Path(name).name == LISTEN_WORKFLOW
     if is_listen and ('BACKEND_LISTEN_ROLLBACK_REVISION' in text or '--revision' in text):
@@ -987,6 +992,7 @@ def workflow_gate_violations(
             )
 
     gate_jobs: set[str] = set()
+    listen_mutation_jobs: set[str] = set()
     uncovered: dict[str, list[frozenset[str]]] = {}
     job_if_atoms: dict[str, frozenset | None] = {}
     for job_id, job in jobs.items():
@@ -1028,16 +1034,14 @@ def workflow_gate_violations(
         gate_positions = [(index, scope) for index, _step, scope in valid_gates]
         if is_listen:
             gate_index = next((index for index, _step, scope in valid_gates if scope == {_LISTEN_SOURCE_ATOM}), None)
-            if gate_index is None:
-                errors.append(
-                    f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate'
-                )
             mutations = [
                 index
                 for index, step in enumerate(expanded)
                 if isinstance(step.get('run'), str) and _LISTEN_MUTATION_RUN.search(step['run'])
             ]
-            if mutations and (gate_index is None or gate_index > min(mutations)):
+            if mutations:
+                listen_mutation_jobs.add(job_id)
+            if mutations and gate_index is not None and gate_index > min(mutations):
                 errors.append(
                     f'{name}:{job_id}: the conditional readiness gate must run before any '
                     'backend config, secret, or Helm mutation step'
@@ -1071,6 +1075,12 @@ def workflow_gate_violations(
                     changed = True
                     break
 
+    for job_id in listen_mutation_jobs - protected:
+        errors.append(
+            f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate '
+            'in this job or a successful required job'
+        )
+
     for job_id, names_list in uncovered.items():
         if job_id not in gate_jobs and job_id in protected:
             continue
@@ -1088,11 +1098,39 @@ def workflow_gate_violations(
     return errors
 
 
-def repository_gate_violations(root) -> list[str]:
-    """Scan every workflow and local composite action for gate coverage."""
+def _policy_text_has_relevant_signal(text: str) -> bool:
+    return (
+        any(
+            pattern.search(text)
+            for pattern in (
+                _DOCKER_BUILD,
+                _DOCKER_PUSH,
+                _RUN_DEPLOY,
+                _HELM_MUTATION,
+                _CUTOVER,
+                _RUN_SERVICES_UPDATE,
+            )
+        )
+        or 'docker/build-push-action' in text
+        or 'google-github-actions/deploy-cloudrun' in text
+        or 'actions/firestore-readiness' in text
+        or 'firestore_readiness' in text
+        or re.search(r'(?m)^\s*uses:\s*[^\s#]+\.ya?ml(?:@|\s|$)', text)
+    )
+
+
+def _workflow_policy_relevant(text: str, local_action_names: frozenset[str] = frozenset()) -> bool:
+    return _policy_text_has_relevant_signal(text) or any(
+        f'./.github/actions/{name}' in text for name in local_action_names
+    )
+
+
+def repository_gate_violations(root, *, validate_unrelated_workflows: bool = True) -> list[str]:
+    """Scan shipment, composite-action, and readiness-gate workflows for coverage."""
 
     root = pathlib.Path(root)
     dockerfiles = _runtime_images(root)
+    known = _known_image_names(dockerfiles)
     actions_dir = root / '.github' / 'actions'
     local_actions = (
         {
@@ -1102,15 +1140,46 @@ def repository_gate_violations(root) -> list[str]:
         if actions_dir.is_dir()
         else {}
     )
+    action_names_by_path = {
+        key: key.removeprefix('.github/actions/').removesuffix('/action.yml').removesuffix('/action.yaml')
+        for key in local_actions
+    }
+    relevant_action_names = {
+        action_names_by_path[key] for key, text in local_actions.items() if _policy_text_has_relevant_signal(text)
+    }
+    changed = True
+    while changed:
+        changed = False
+        for key, text in local_actions.items():
+            name = action_names_by_path[key]
+            if name not in relevant_action_names and any(
+                f'./.github/actions/{relevant_name}' in text for relevant_name in relevant_action_names
+            ):
+                relevant_action_names.add(name)
+                changed = True
+    relevant_actions = frozenset(relevant_action_names)
     errors: list[str] = []
     workflows_dir = root / '.github' / 'workflows'
     for path in sorted(workflows_dir.rglob('*.yml')) + sorted(workflows_dir.rglob('*.yaml')):
+        text = path.read_text(encoding='utf-8')
+        if not _workflow_policy_relevant(text, relevant_actions):
+            if not validate_unrelated_workflows:
+                continue
+            try:
+                # Keep malformed workflow YAML fail-closed without constructing a
+                # full Python object tree for workflows outside this policy's scope.
+                for _event in yaml.parse(text, Loader=_YAML_LOADER):
+                    pass
+            except Exception:
+                errors.append(f'{path.relative_to(root)}: workflow YAML must parse')
+            continue
         errors.extend(
             workflow_gate_violations(
-                path.read_text(encoding='utf-8'),
+                text,
                 name=str(path.relative_to(root)),
                 local_actions=local_actions,
                 dockerfiles=dockerfiles,
+                known=known,
             )
         )
     return errors

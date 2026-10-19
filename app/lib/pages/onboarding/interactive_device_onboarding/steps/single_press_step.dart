@@ -51,6 +51,13 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
+    // Reopened from All Set after a question was answered: show that answer and Continue rather than
+    // waiting on "Processing your question…" for a message that already arrived (#20787).
+    final onboardingProvider = context.read<DeviceOnboardingProvider>();
+    if (onboardingProvider.questionSent && onboardingProvider.aiResponse != null) {
+      _aiResponse = onboardingProvider.aiResponse;
+      _showContinue = true;
+    }
   }
 
   void _onMessagesChanged() {

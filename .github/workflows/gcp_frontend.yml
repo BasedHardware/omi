@@ -5,6 +5,7 @@ on:
     branches: ["main", "development"]
     paths:
       - 'web/frontend/**'
+      - 'web/packages/note-shared/**'
       - 'config/public-build-*.json'
       - '.github/actions/deploy-public-build/**'
       - '.github/actions/prepare-public-build/**'

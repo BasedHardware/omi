@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
 import 'package:omi/pages/review/widgets/review_parts.dart';
 import 'package:omi/pages/review/widgets/review_question_card.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/speaker_picker.dart';
 
 /// The one detail sheet every Review question opens: the question, the evidence (the only part
 /// that differs by kind), and every answer. The sheet returns to whatever screen opened it.
@@ -44,6 +47,7 @@ class ReviewItemDetail extends StatelessWidget {
       ReviewItemKind.task => _TaskDetail(item: item, onDone: done),
       ReviewItemKind.samePerson => _SamePersonDetail(item: item, onDone: done),
       ReviewItemKind.spelling => _SpellingDetail(item: item, onDone: done),
+      ReviewItemKind.agentProposal => _ProposalDetail(item: item, onDone: done),
     };
   }
 }
@@ -118,8 +122,9 @@ class _SpeakerChoice {
 
 class _SpeakerDetailState extends State<_SpeakerDetail> {
   _SpeakerChoice? _choice;
-  bool _naming = false;
-  final _nameController = TextEditingController();
+
+  /// A name picked as a brand-new person in the picker, waiting on Confirm.
+  String? _newName;
 
   @override
   void initState() {
@@ -128,10 +133,30 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
     if (first != null) _choice = _SpeakerChoice.person(first.personId);
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
+  /// "Someone Else…": the shared picker searches every person, so an existing speaker can be
+  /// picked by id instead of a lookalike new name.
+  Future<void> _someoneElse() async {
+    final speaker = widget.item.speaker!;
+    final people = context.read<PeopleProvider?>()?.people ?? const <Person>[];
+    final choice = await showSpeakerPicker(
+      context,
+      candidates: [
+        for (final c in speaker.candidates) SpeakerPickerCandidate(personId: c.personId, name: c.name),
+      ],
+      people: people,
+      // The sheet's own Not Sure button already covers "don't know".
+      allowUnknown: false,
+    );
+    if (choice == null || !mounted) return;
+    setState(() {
+      if (choice.personId != null) {
+        _choice = _SpeakerChoice.person(choice.personId!);
+        _newName = null;
+      } else if (choice.name != null) {
+        _choice = null;
+        _newName = choice.name;
+      }
+    });
   }
 
   @override
@@ -139,18 +164,20 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
     final l10n = context.l10n;
     final provider = context.watch<ReviewProvider>();
     final speaker = widget.item.speaker!;
+    final people = context.watch<PeopleProvider?>()?.people ?? const <Person>[];
     final playing = provider.playingItemId == widget.item.itemId;
-    final chosenName = switch (_choice) {
-      _SpeakerChoice(isMe: true) => l10n.reviewAnswerMe,
-      _SpeakerChoice(:final personId?) =>
-        speaker.candidates.where((c) => c.personId == personId).map((c) => c.name).firstOrNull,
-      _ => null,
-    };
-    final newName = _nameController.text.trim();
-    final canConfirm = _naming ? newName.isNotEmpty : _choice != null;
+    final chosenName = _newName ??
+        switch (_choice) {
+          _SpeakerChoice(isMe: true) => l10n.reviewAnswerMe,
+          _SpeakerChoice(:final personId?) =>
+            speaker.candidates.where((c) => c.personId == personId).map((c) => c.name).firstOrNull ??
+                people.where((p) => p.id == personId).map((p) => p.name).firstOrNull,
+          _ => null,
+        };
+    final canConfirm = _newName != null || _choice != null;
 
     Widget choice({required String label, String? subtitle, required _SpeakerChoice value, required Widget avatar}) {
-      final selected = !_naming && _choice == value;
+      final selected = _choice == value;
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Material(
@@ -162,7 +189,7 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
           child: InkWell(
             borderRadius: const BorderRadius.all(Radius.circular(14)),
             onTap: () => setState(() {
-              _naming = false;
+              _newName = null;
               _choice = value;
             }),
             child: Semantics(
@@ -211,7 +238,9 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
             children: [
               ReviewPlayButton(playing: playing, onPressed: () => provider.togglePlay(widget.item)),
               const SizedBox(width: OmiSpacing.sm),
-              Expanded(child: _Waveform(seed: speaker.promptId.hashCode, active: playing)),
+              Expanded(
+                child: _Waveform(seed: speaker.promptId.hashCode, active: playing),
+              ),
             ],
           ),
         ),
@@ -245,37 +274,29 @@ class _SpeakerDetailState extends State<_SpeakerDetail> {
             child: Icon(Icons.person, size: 18, color: OmiColors.textPrimary),
           ),
         ),
-        if (_naming)
-          Padding(
-            padding: const EdgeInsets.only(top: OmiSpacing.xxs),
-            child: TextField(
-              key: const Key('review_speaker_new_name'),
-              controller: _nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(labelText: l10n.reviewNewPersonName),
-            ),
-          )
-        else
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: OmiButton.tertiary(
-              label: l10n.reviewSomeoneElse,
-              icon: Icons.search,
-              onPressed: () => setState(() => _naming = true),
-            ),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: OmiButton.tertiary(
+            key: const Key('review_speaker_someone_else'),
+            label: l10n.reviewSomeoneElse,
+            icon: Icons.search,
+            // Fire-and-forget: the picker is modal, and a pending future would spin this button
+            // for as long as the user keeps it open.
+            onPressed: () {
+              _someoneElse();
+            },
           ),
+        ),
         _Actions(
           primary: OmiButton(
             key: const Key('review_speaker_confirm'),
-            label: _naming || chosenName == null ? l10n.reviewConfirm : l10n.reviewConfirmPerson(chosenName),
+            label: chosenName == null ? l10n.reviewConfirm : l10n.reviewConfirmPerson(chosenName),
             onPressed: canConfirm
                 ? () => _send(
                       context,
                       widget.item,
-                      _naming
-                          ? ReviewAnswer.speaker(newName: newName)
+                      _newName != null
+                          ? ReviewAnswer.speaker(newName: _newName)
                           : _choice!.isMe
                               ? const ReviewAnswer.speaker(isMe: true)
                               : ReviewAnswer.speaker(personId: _choice!.personId),
@@ -335,8 +356,15 @@ class _TranscriptLineView extends StatelessWidget {
                 Text.rich(
                   TextSpan(
                     children: [
-                      TextSpan(text: label, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      if (time != null) TextSpan(text: ' · $time', style: TextStyle(color: OmiColors.textSecondary)),
+                      TextSpan(
+                        text: label,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (time != null)
+                        TextSpan(
+                          text: ' · $time',
+                          style: TextStyle(color: OmiColors.textSecondary),
+                        ),
                     ],
                   ),
                   style: OmiType.footnote,
@@ -522,11 +550,17 @@ class _TaskDetailState extends State<_TaskDetail> {
                     runSpacing: OmiSpacing.xs,
                     children: [
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonAlreadyDone, onPressed: () => dismiss(TaskDismissReason.alreadyDone)),
+                        label: l10n.reviewReasonAlreadyDone,
+                        onPressed: () => dismiss(TaskDismissReason.alreadyDone),
+                      ),
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonNotMine, onPressed: () => dismiss(TaskDismissReason.notMine)),
+                        label: l10n.reviewReasonNotMine,
+                        onPressed: () => dismiss(TaskDismissReason.notMine),
+                      ),
                       ReviewAnswerPill(
-                          label: l10n.reviewReasonNotUseful, onPressed: () => dismiss(TaskDismissReason.notUseful)),
+                        label: l10n.reviewReasonNotUseful,
+                        onPressed: () => dismiss(TaskDismissReason.notUseful),
+                      ),
                     ],
                   ),
                 ),
@@ -711,7 +745,10 @@ class _SpellingDetailState extends State<_SpellingDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.item.quote != null) ...[
+        if (spelling.context != null) ...[
+          ReviewSpellingContext(context: spelling.context!),
+          const SizedBox(height: OmiSpacing.md),
+        ] else if (widget.item.quote != null) ...[
           _EvidenceBox(children: [Text('“${widget.item.quote}”', style: OmiType.callout)]),
           const SizedBox(height: OmiSpacing.md),
         ],
@@ -751,6 +788,79 @@ class _SpellingDetailState extends State<_SpellingDetail> {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+// --- Dream suggestion ----------------------------------------------------------------------
+
+class _ProposalDetail extends StatelessWidget {
+  const _ProposalDetail({required this.item, required this.onDone});
+
+  final ReviewItem item;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final proposal = item.agentProposal!;
+    final reason = proposal.reason;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (proposal.before.isNotEmpty || proposal.after.isNotEmpty) ...[
+          _EvidenceBox(
+            children: [
+              if (proposal.before.isNotEmpty) _ProposalValue(label: l10n.current, value: proposal.before),
+              if (proposal.before.isNotEmpty && proposal.after.isNotEmpty) const SizedBox(height: OmiSpacing.sm),
+              if (proposal.after.isNotEmpty) _ProposalValue(label: l10n.reviewProposalSuggested, value: proposal.after),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.md),
+        ],
+        if (reason != null) Text(reason, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
+        _Actions(
+          primary: OmiButton(
+            label: l10n.reviewProposalApply,
+            onPressed: () => _send(context, item, const ReviewAnswer.acceptProposal(), onDone),
+          ),
+          secondary: [
+            OmiButton.secondary(
+              label: l10n.dismiss,
+              onPressed: () => _send(context, item, const ReviewAnswer.dismissProposal(), onDone),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.xs),
+          child: OmiButton.secondary(
+            label: l10n.reviewNotSure,
+            onPressed: () => _send(context, item, const ReviewAnswer.notSure(), onDone),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProposalValue extends StatelessWidget {
+  const _ProposalValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: 3),
+        Text(value, style: OmiType.callout),
       ],
     );
   }

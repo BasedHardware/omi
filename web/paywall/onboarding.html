@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Welcome to Omi</title>
+<style>
+  :root { --bg:#000; --surface:#1c1c1e; --border:#38383a; --text:#fff; --text2:#aeaeb2; --text3:#8e8e93; --accent:#fff; --on:#000; --ok:#30d158; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  body { min-height:100vh; display:flex; flex-direction:column; }
+  main { flex:1; display:flex; flex-direction:column; padding:calc(24px + env(safe-area-inset-top)) 24px calc(16px + env(safe-area-inset-bottom)); gap:14px; }
+  .step { display:none; flex:1; flex-direction:column; gap:14px; }
+  .step.active { display:flex; }
+  .progress { display:flex; gap:4px; }
+  .progress i { width:22px; height:3px; border-radius:2px; background:rgba(255,255,255,.25); }
+  .progress i.done { background:var(--accent); }
+  h1 { margin:0; font-size:32px; line-height:1.1; letter-spacing:-0.6px; font-weight:600; }
+  p { margin:0; color:var(--text2); font-size:16px; line-height:1.4; }
+  input { width:100%; height:54px; border-radius:14px; border:1px solid var(--border); background:var(--surface); color:var(--text); font:400 17px/1 inherit; padding:0 16px; outline:none; }
+  .row { display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--border); border-radius:16px; background:var(--surface); }
+  .row .t { flex:1; } .row .t b { display:block; font-size:16px; font-weight:600; } .row .t span { font-size:13px; color:var(--text2); }
+  .row button { height:36px; border:0; border-radius:10px; background:var(--accent); color:var(--on); font:600 14px/1 inherit; padding:0 14px; }
+  .row.granted button { background:var(--ok); }
+  .spacer { flex:1; }
+  button.cta { height:54px; border:0; border-radius:14px; background:var(--accent); color:var(--on); font:600 17px/1 inherit; width:100%; }
+  button.cta:disabled { opacity:.35; }
+  button.text { height:54px; border:0; background:none; color:var(--text2); font:600 17px/1 inherit; width:100%; }
+</style>
+</head>
+<body>
+<main>
+  <section class="step active" id="s1">
+    <div class="progress"><i class="done"></i><i></i></div>
+    <h1>What should Omi call you?</h1>
+    <p>Just your first name.</p>
+    <input id="name" placeholder="Your name" autocomplete="given-name" autocapitalize="words">
+    <div class="spacer"></div>
+    <button class="cta" id="next1" type="button">Continue</button>
+  </section>
+  <section class="step" id="s2">
+    <div class="progress"><i class="done"></i><i class="done"></i></div>
+    <h1 id="h2">Let Omi work in the background</h1>
+    <p>Omi needs a few permissions to remember your day.</p>
+    <div class="row" id="p-notifications"><div class="t"><b>Notifications</b><span>Reminders and insights</span></div><button type="button" data-kind="notifications">Allow</button></div>
+    <div class="row" id="p-location"><div class="t"><b>Location</b><span>Where conversations happened</span></div><button type="button" data-kind="location">Allow</button></div>
+    <div class="spacer"></div>
+    <button class="cta" id="done" type="button">Start using Omi</button>
+    <button class="text" id="native" type="button">Use the regular setup</button>
+  </section>
+</main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  function send(msg) {
+    var channel = window.OmiOnboarding;
+    if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
+    else console.log('[OmiOnboarding]', JSON.stringify(msg));
+  }
+  var nameInput = document.getElementById('name');
+  if (q.get('name')) nameInput.value = q.get('name');
+  function show(id) { document.querySelectorAll('.step').forEach(function (s) { s.classList.toggle('active', s.id === id); }); }
+  document.getElementById('next1').addEventListener('click', function () {
+    var name = nameInput.value.trim();
+    if (name) { send({ type: 'set_name', name: name }); document.getElementById('h2').textContent = 'Hi ' + name + ', let Omi work in the background'; }
+    show('s2');
+  });
+  document.querySelectorAll('button[data-kind]').forEach(function (b) {
+    b.addEventListener('click', function () { b.disabled = true; send({ type: 'permission', kind: b.dataset.kind }); });
+  });
+  window.OmiOnboardingHost = {
+    onPermission: function (kind, status) {
+      var row = document.getElementById('p-' + kind); if (!row) return;
+      var b = row.querySelector('button'); b.disabled = false;
+      if (status === 'granted') { row.classList.add('granted'); b.textContent = 'Allowed'; b.disabled = true; }
+      else if (status === 'serviceOff' || status === 'blocked') { b.textContent = 'Settings'; }
+    }
+  };
+  document.getElementById('done').addEventListener('click', function () { send({ type: 'complete' }); });
+  document.getElementById('native').addEventListener('click', function () { send({ type: 'fallback' }); });
+  send({ type: 'ready' });
+})();
+</script>
+</body>
+</html>

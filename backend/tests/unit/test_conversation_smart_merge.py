@@ -7,12 +7,14 @@ logic run for real. All text is synthetic.
 """
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
 from config import conversation_smart_merge as config
 from database import conversation_finalization_jobs as jobs_db
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges, action_item_refresh as refresh_db
@@ -195,7 +197,6 @@ class World:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     return World(monkeypatch)
 
 
@@ -228,13 +229,6 @@ def test_unset_mode_is_merge_by_default(monkeypatch):
     monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
     assert config.smart_merge_mode() is config.SmartMergeMode.MERGE
     assert config.DEFAULT_SMART_MERGE_MODE is config.SmartMergeMode.MERGE
-
-
-def test_uid_allowlist(monkeypatch):
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, 'a, b')
-    assert config.smart_merge_uid_allowed('a') and not config.smart_merge_uid_allowed('c')
-    monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, '')
-    assert config.smart_merge_uid_allowed('c')
 
 
 def test_metric_reason_is_bounded_to_known_values(monkeypatch):
@@ -959,3 +953,21 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+@pytest.mark.parametrize('protected', ['p', 'n'])
+def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.raw(protected)['has_transcript_corrections'] = True
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *_: (_ for _ in ()).throw(AssertionError('corrected captures must not reach the merge planner')),
+        firestore_client=world.store,
+    )
+    assert result.outcome == 'rejected'
+    assert world.store.rows == before

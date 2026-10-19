@@ -2,13 +2,15 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import wave
+import pytest
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
-from utils.conversations import finalizer
+from utils.conversations import finalizer, final_pass_pyannote
 
 
 def test_finalizer_starts_shadow_only_for_enabled_admission(monkeypatch):
@@ -266,7 +268,11 @@ def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels
 
 def test_duplicate_reservation_never_writes_or_counts_result(monkeypatch):
     conversation = SimpleNamespace(audio_files=[SimpleNamespace(duration=10, chunk_timestamps=[100])])
-    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', lambda *_args: {'synthetic': True})
+    monkeypatch.setattr(
+        shadow.conversations_db,
+        'get_conversation',
+        lambda *_args: {'synthetic': True, 'record_lane_owner': 'legacy_final_pass_v1'},
+    )
     monkeypatch.setattr(shadow, 'deserialize_conversation', lambda _raw: conversation)
     monkeypatch.setattr(shadow, '_enabled', lambda *_args: True)
     monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: 'duplicate')
@@ -326,3 +332,83 @@ def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
     shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
     parent.get.assert_called_once_with(transaction=transaction)
     transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
+
+
+def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
+    """Fixture executed from origin/main e2edc7c15ca (not this PR's code).
+
+    Capture uses synthetic PCM, ASR, cache and a fixed segment UUID; only the
+    provider seams are mocked. The real main _make_pass generated the fixture.
+    """
+    import json
+    from uuid import UUID
+    from models import transcript_segment
+
+    monkeypatch.setattr(transcript_segment.uuid, 'uuid4', lambda: UUID(int=1))
+    monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_a: iter([(100.0, b'\x01\x00' * 160000)]))
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_a, **_kw: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+    monkeypatch.setattr(
+        final_pass_pyannote, 'run_final_pass', lambda *_a, **_kw: pytest.fail('flag-off calls diarizer')
+    )
+    monkeypatch.setitem(sys.modules, 'utils.conversations.final_pass_pyannote', None)
+    monkeypatch.setattr(
+        shadow,
+        'parakeet_prerecorded_from_bytes',
+        lambda *_a, **_kw: [{'timestamp': [2.0, 3.0], 'speaker': 'SPEAKER_00', 'text': 'synthetic'}],
+    )
+
+    def run():
+        conversation = SimpleNamespace(
+            id='fixture',
+            language='en',
+            audio_files=[SimpleNamespace(chunk_timestamps=[100.0])],
+            started_at=None,
+            finished_at=None,
+            transcript_segments=[],
+        )
+        segments, audio = shadow._make_pass('fixture', conversation, deadline=float('inf'), reserved_seconds=10)
+        return json.dumps({'segments': [s.model_dump() for s in segments], 'audio': audio}, sort_keys=True)
+
+    monkeypatch.delenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', raising=False)
+    absent = run()
+    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy')
+    explicit = run()
+    expected = (Path(__file__).parent / 'fixtures' / 'transcription_shadow_main.json').read_bytes().rstrip(b'\n')
+    assert absent.encode() == expected
+    assert explicit.encode() == expected
+
+
+def test_v2_audio_collection_and_duplicate_trim_stay_on_pcm16_sample_boundaries(monkeypatch):
+    base = 100.123
+    chunks = [(base, b'\x01\x00' * 160000), (base + 9.001, b'\x01\x00' * 160000)]
+    assert int((base + 10 - chunks[1][0]) * 32000) % 2 == 1  # Legacy float truncation can split a sample.
+    monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_a: iter(chunks))
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_a, **_kw: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+
+    def transcribe(part, **_kw):
+        assert len(part) % 2 == 0
+        return [{'timestamp': [0, 1], 'text': 'synthetic', 'speaker': 'SPEAKER_00'}]
+
+    monkeypatch.setattr(shadow, 'parakeet_prerecorded_from_bytes', transcribe)
+    captured = []
+
+    def final(pcm, *_a, **_kw):
+        captured.append(pcm)
+        return None, {'outcome': 'skipped_single'}
+
+    monkeypatch.setattr(final_pass_pyannote, 'run_final_pass', final)
+    conversation = SimpleNamespace(
+        id='fixture',
+        language='en',
+        audio_files=[SimpleNamespace(chunk_timestamps=[t for t, _ in chunks])],
+        started_at=None,
+        finished_at=None,
+        transcript_segments=[],
+    )
+    shadow._make_pass('fixture', conversation, deadline=float('inf'), reserved_seconds=20, final_result={})
+    assert len(captured) == 1 and len(captured[0]) % 2 == 0
+    assert captured[0][1::2] == b'\x00' * (len(captured[0]) // 2)

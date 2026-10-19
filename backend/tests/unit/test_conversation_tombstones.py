@@ -14,6 +14,7 @@ from fastapi import HTTPException
 import pytest
 
 from database import conversation_tombstones as tombstones
+from database import user_data_deletion
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
 
@@ -75,6 +76,7 @@ def function(path, name, namespace):
 def store(monkeypatch):
     store = Store()
     monkeypatch.setattr(tombstones, 'db', store)
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', MagicMock())
     store.rows['users/u/conversations/c'] = {
         'created_at': 'original-time',
         'external_data': {'from_segments_client_session_id': 'session', 'calendar_event': 'private'},
@@ -112,13 +114,15 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_conversation_audio_files': audio,
+        'delete_privacy_conversation_audio': audio,
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
-    assert delete('c', MagicMock(), False, None, 'u') == {'status': 'Ok'}
+    # The handler returns no body: the route is 204 No Content, the contract the
+    # released mobile client gates on (test_conversation_delete_wire_contract.py).
+    assert delete('c', MagicMock(), False, None, 'u') is None
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
 
@@ -146,6 +150,8 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
+        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
         'ConversationReplacementConflictError': Conflict,
@@ -153,7 +159,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'delete_conversation_screen_frames': cleanup,
         'delete_conversation_and_frame_evidence': hard_delete,
         'action_items_db': MagicMock(get_action_items_by_conversation=MagicMock(return_value=[])),
-        'delete_conversation_audio_files': MagicMock(),
+        'delete_privacy_conversation_audio': MagicMock(),
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
@@ -165,13 +171,20 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
             delete('c', MagicMock(), True, None, 'u')
         assert 'users/u/conversations/c' in store.rows
     else:
-        assert delete('c', MagicMock(), True, None, 'u') == {'status': 'Ok'}
+        tasks = MagicMock()
+        assert delete('c', tasks, True, None, 'u') is None
+        tasks.add_task.assert_called_once_with(
+            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+        )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
 
 
-def test_account_wipe_enumerates_tombstones_even_without_root(store):
+def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):
     tombstones.record_deletion('u', 'c')
+    data_plane = Store()
+    data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -188,6 +201,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store):
         },
     )
     wipe('u')
+    assert data_plane.rows == {}
     assert store.rows == {}
     assert not tombstones.is_deleted('u', 'c')
 

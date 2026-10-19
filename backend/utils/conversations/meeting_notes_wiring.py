@@ -1,4 +1,4 @@
-"""Flag-gated rich meeting-notes inputs shared by the notes, memory, and app prompts.
+"""Rich meeting-notes inputs shared by the notes, memory, and app prompts.
 
 The notes path gathers the background context pack; the memory and app prompts
 share only the normalized roster. Everything here is best effort — every read
@@ -10,7 +10,6 @@ payloads that could carry participant data. This module must never import
 from __future__ import annotations
 
 import logging
-import os
 from importlib import import_module
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -36,34 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 def meeting_context_sources() -> Any:
-    """The rich retrieval backend is optional; flag-off hot imports must stay cheap."""
+    """The rich retrieval backend is optional; hot imports stay cheap until used."""
     return import_module('utils.conversations.meeting_context_pack')
 
 
-def _flag_enabled(name: str, *, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
-def meeting_notes_rich_context_enabled() -> bool:
-    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
-    return True
-
-
-def meeting_notes_screen_text_context_enabled() -> bool:
-    # Graduated to always-on behavior 2026-10-08; the env switch is retired.
-    return True
-
-
-def meeting_notes_screen_frames_context_enabled() -> bool:
-    """Attach up to four approved screenshots as images on the notes call."""
-    return _flag_enabled('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED')
-
-
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Screen text is always available; images still have their own gate.
+    # Only already-approved, retained frame evidence can enter the notes prompt.
     return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
 
 
@@ -183,8 +160,9 @@ def rich_notes_inputs(
         conversation,
         calendar_context,
     )
+    corrections = confirmed_corrections_context(conversation)
     if roster is None or not include_background:
-        return roster, None, desktop_capture, ()
+        return roster, corrections or None, desktop_capture, ()
     started_at = frame_evidence_started_at(conversation)
     block = _rich_meeting_context_block(
         uid,
@@ -196,9 +174,22 @@ def rich_notes_inputs(
         screen_moments=screen_moment_lines(evidence, started_at) if include_screen_text else (),
     )
     images: Tuple[NotesFrameImage, ...] = ()
-    if meeting_notes_screen_frames_context_enabled():
-        try:
-            images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
-        except Exception as exc:  # noqa: BLE001 - frame images are best effort
-            logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
+    try:
+        images = load_notes_frame_images(uid, getattr(conversation, 'id', None), evidence, started_at)
+    except Exception as exc:  # noqa: BLE001 - frame images are best effort
+        logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
+    if corrections:
+        block = (block or '') + corrections
     return roster, block, desktop_capture, images
+
+
+def confirmed_corrections_context(conversation):
+    notes = getattr(conversation, 'user_corrections', None) or []
+    if not notes:
+        return ''
+    # Confirmed owner corrections are evidence about content, never instructions.
+    text = '\n'.join(str(note.get('note', ''))[:2000] for note in notes[-100:])
+    return (
+        '\nOwner-confirmed corrections (use these facts in the title and summary; do not rewrite the transcript):\n'
+        + text
+    )

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -13,6 +16,7 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -61,11 +65,14 @@ class _FakeRingDevice implements DeviceConnection {
   _FakeRingDevice({required this.ringInfo, this.caps = 0});
 
   RingInfo ringInfo;
+  Object? ringInfoError;
+  Object? readError;
   final int caps;
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
   final _firstAdvance = Completer<void>();
+  final _readReady = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
   RingInfo? postAckInfo;
   int custodyEpochValue = 7;
@@ -75,8 +82,12 @@ class _FakeRingDevice implements DeviceConnection {
   /// Completes when the first advance reaches the card.
   Future<void> get firstAdvance => _firstAdvance.future;
 
+  /// Wait for the listener and transfer state to be ready before delivering bytes.
+  Future<void> get readReady => _readReady.future;
+
   @override
   Future<RingInfo?> getRingInfo() async {
+    if (ringInfoError != null) throw ringInfoError!;
     final after = postAckInfo;
     if (after != null && advances.isNotEmpty) {
       final r = after;
@@ -91,7 +102,14 @@ class _FakeRingDevice implements DeviceConnection {
       RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: 1);
 
   @override
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async => true;
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+    if (!_readReady.isCompleted) _readReady.complete();
+    if (readError != null) throw readError!;
+    return true;
+  }
+
+  @override
+  Future<bool> stopStorageSync() async => true;
 
   @override
   Future<RingCommandAck?> advanceRingCustody(
@@ -230,6 +248,54 @@ void main() {
         storageTotalBytes: records * 444,
       );
 
+  test('syncAll persists the failure cause, original stack and phase for list and transfer errors', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() => DebugLogManager.setEnabled(false));
+    // DebugLogManager caches its log file. Exercise both phases in the same
+    // test directory, clearing through its ordered writer between failures.
+    for (final phase in ['list-read', 'transfer']) {
+      await DebugLogManager.clear();
+      final error = StateError('ring $phase failed');
+      final card = _FakeRingDevice(ringInfo: _info());
+      if (phase == 'list-read') {
+        card.ringInfoError = error;
+      } else {
+        card.readError = error;
+      }
+      addTearDown(card.controller.close);
+      final wal = ringWal()..deviceDownloadFraction = 0.5;
+      final sync = syncWith(_FakeLocalSync(), card, wal);
+
+      final response = await sync.syncAll();
+
+      // Logging is fire-and-forget in production; wait for the actual persisted record.
+      Map<String, dynamic>? failure;
+      for (var attempt = 0; attempt < 100 && failure == null; attempt++) {
+        final logFiles = await DebugLogManager.listLogFiles();
+        final lines = logFiles.isEmpty ? <String>[] : await logFiles.first.readAsLines();
+        for (final line in lines) {
+          final record = jsonDecode(line) as Map<String, dynamic>;
+          if (record['message'] == 'RingStorageSync failed') failure = record;
+        }
+        if (failure == null) await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
+      expect(failure, isNotNull, reason: '$phase failure must retain its diagnostic cause after cleanup');
+      expect(failure!['level'], 'ERROR');
+      expect(failure['extra'], {'device': 'devkit-1', 'error': error.toString(), 'phase': phase});
+      expect(failure['stack'], contains('_FakeRingDevice.${phase == 'list-read' ? 'getRingInfo' : 'readRingFromSeq'}'));
+      expect(response, isNotNull);
+      expect(response!.newConversationIds, isEmpty);
+      expect(response.updatedConversationIds, isEmpty);
+      expect(sync.isSyncing, isFalse);
+      expect(wal.status, WalStatus.miss);
+      expect(wal.deviceDownloadFraction, isNull);
+      expect(card.advances, isEmpty);
+    }
+  });
+
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {
     final card = _FakeRingDevice(ringInfo: _info());
     final local = _FakeLocalSync();
@@ -237,7 +303,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -264,7 +330,7 @@ void main() {
       final sync = syncWith(local, card, wal);
 
       final future = sync.syncWal(wal: wal);
-      await Future.delayed(const Duration(milliseconds: 50));
+      await card.readReady.timeout(const Duration(seconds: 5));
       card.emit(_readBegin(5, 63));
       for (var i = 0; i < 61; i++) {
         card.emit(_record(frameSizes: List.filled(100, 1)));
@@ -302,7 +368,7 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
@@ -323,11 +389,11 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(wal.status, isNot(WalStatus.synced));
@@ -346,11 +412,11 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, hasLength(1));
     expect(card.advances.single.ringId, 42);
@@ -366,12 +432,12 @@ void main() {
     final sync = syncWith(local, card, wal);
 
     final future = sync.syncWal(wal: wal);
-    await Future.delayed(const Duration(milliseconds: 50));
+    await card.readReady.timeout(const Duration(seconds: 5));
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.custodyEpochValue = 8;
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advances, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));

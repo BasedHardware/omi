@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from config.policy.listen import listen_value
+
 import asyncio
 import logging
-import os
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Mapping
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
@@ -20,6 +21,8 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
@@ -68,7 +71,7 @@ _recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
 
 def _connect_failures_before_shed() -> int:
     try:
-        return min(1000, max(1, int(os.getenv('STT_SHED_CONNECT_FAILURES', '3'))))
+        return min(1000, max(1, int(listen_value('shed_connect_failures', 'STT_SHED_CONNECT_FAILURES', '3'))))
     except ValueError:
         return 3
 
@@ -132,7 +135,7 @@ async def connect_configured_chain(
     *,
     primary_service: STTService,
     connect_primary: Connect,
-    callbacks: dict[STTService, Connect | None],
+    callbacks: Mapping[STTService, Connect | None],
     failed: set[str],
     models: list[str],
     routing_uid: str | None = None,
@@ -141,6 +144,7 @@ async def connect_configured_chain(
     routing_models: dict[str, str | None] | None = None,
     failed_targets: set[str] | None = None,
     _routing_static: bool = False,
+    optional_handover: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -385,7 +389,7 @@ async def connect_configured_chain(
     prior_outcome: LiveLegOutcome | None = None
     attempted = False
     primary_open = False
-    probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
+    probes = max(1, int(listen_value('circuit_half_open_probes', 'STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
     capacity_resorts = []
     backoff_skipped = []
@@ -610,6 +614,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 close_rejected_socket(socket)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
@@ -628,7 +634,11 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    )
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
@@ -850,6 +860,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if socket is not None and rejected_outcome.connection_cause is None:
+                rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
                 await abort_replay_socket(socket, timeout=cleanup_budget())
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
@@ -868,7 +880,11 @@ async def connect_configured_chain(
             if active and target is not None and reason == 'capacity_full':
                 COST_DECISION.labels(target=target.id, reason='capacity_skip').inc()
             if reason == 'auth' or account_rejection:
-                circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                circuit.record_account_failure(
+                    float(
+                        listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
+                    )
+                )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
                     health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
@@ -1064,7 +1080,9 @@ async def connect_configured_chain(
             if result is not None:
                 return result
             break
-    CHAIN_EXHAUSTED.inc()
+    if optional_handover:
+        raise RejectedStream(prior_reason)
+    record_metric(CHAIN_EXHAUSTED, {'demand_cohort': demand_cohort()}, 1)
     pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,

@@ -179,6 +179,7 @@ def test_resolution_apply_marks_matched_identity_auto():
         {'s0': 4},
         {4: Identity(is_user=False, person_id='p1')},
         {4: 'not_user'},
+        owner_voiceprint_available=True,
     )
     segment = conversation.transcript_segments[0]
     assert segment.person_id == 'p1' and segment.speaker_match_source == MATCH_SOURCE

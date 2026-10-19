@@ -13,6 +13,7 @@ Usage:
     logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -22,12 +23,19 @@ from typing import Protocol, Sequence, cast
 logger = logging.getLogger(__name__)
 
 # Matches email addresses — mask local part, keep domain for debugging.
-_EMAIL_PATTERN = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
+_EMAIL_PATTERN = re.compile(
+    r'(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]++@(?:[A-Za-z0-9\-]++\.)+[A-Za-z]{2,}(?![A-Za-z0-9\-])'
+)
 
 # Matches continuous runs of 8+ chars from the token character set.
 # Only masks runs that contain at least one digit or base64 char (+/),
 # so regular words like "access_token" and "exchange" are preserved.
 _TOKEN_CHARS = re.compile(r'[A-Za-z0-9+/_\-]{8,}')
+
+
+def hash_log_identifier(value: object) -> str:
+    """Bounded correlation for opaque IDs without exposing their private text."""
+    return hashlib.sha256(str(value).encode('utf-8', errors='replace')).hexdigest()[:12]
 
 
 class _ValidationErrorLike(Protocol):
