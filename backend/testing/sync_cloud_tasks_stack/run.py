@@ -74,10 +74,29 @@ def _anonymous_google_credentials(
 google.auth.default = _anonymous_google_credentials
 
 
+def _free_ports(count: int) -> list[int]:
+    """Reserve and return `count` distinct ephemeral ports on loopback.
+
+    Holding all probe sockets open simultaneously guarantees that the kernel
+    allocates non-conflicting, unique port numbers across the stack's services (#20322).
+    """
+    probes = []
+    ports = []
+    try:
+        for _ in range(count):
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind(('127.0.0.1', 0))
+            probes.append(probe)
+            ports.append(int(probe.getsockname()[1]))
+        return ports
+    finally:
+        for probe in probes:
+            probe.close()
+
+
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(('127.0.0.1', 0))
-        return int(probe.getsockname()[1])
+    return _free_ports(1)[0]
 
 
 def _wait_for_port(port: int, *, label: str, timeout: float = 30.0) -> None:
@@ -149,9 +168,10 @@ class Stack:
         self.evidence_dir = state_dir / 'evidence'
         self.storage_dir = state_dir / 'local-storage'
         self.gate_dir = state_dir / 'processor-gate' if hold_processor else None
-        self.redis_port = _free_port()
-        self.admission_port = _free_port()
-        self.worker_port = _free_port()
+        ports = _free_ports(3)
+        self.redis_port = ports[0]
+        self.admission_port = ports[1]
+        self.worker_port = ports[2]
         self.task_ack_failures = task_ack_failures
         self.worker_failures = worker_failures
         self.pre_ledger_failures = pre_ledger_failures
@@ -220,6 +240,7 @@ class Stack:
                 'SYNC_TASKS_INVOKER_SA': LOCAL_INVOKER_SA,
                 'SYNC_TASKS_MAX_ATTEMPTS': '2',
                 'HTTP_SYNC_JOBS_RUN_TIMEOUT': '30',
+                'SYNC_JOB_HANDLER_BUDGET_SECONDS': '20',
                 'FAIR_USE_ENABLED': 'true',
                 'MAX_DAILY_AUDIO_HOURS': '30',
                 'STT_PRERECORDED_MODEL': 'parakeet',

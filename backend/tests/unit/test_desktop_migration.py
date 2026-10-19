@@ -179,7 +179,7 @@ models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 # Resolve pure read-cache/lever helpers while retaining explicit heavy-dependency stubs.
 _ensure_package_path("utils", BACKEND_DIR / "utils")
 _stub_package("utils.other")
-_stub_package("utils.observability")
+_ensure_package_path("utils.observability", BACKEND_DIR / "utils" / "observability")
 profile_authority_stub = _stub_module("database.speaker_profile_authority")
 profile_authority_stub.person_teaching_authorized = MagicMock(return_value=False)
 fallback_stub = _stub_module("utils.observability.fallback")

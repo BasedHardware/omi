@@ -85,6 +85,12 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("backend/service.py:4: unregistered feature flag: OTHER_ENABLED", errors)
         self.assertIn("backend/service.py:5: unregistered feature flag: THIRD_STOP", errors)
 
+    def test_central_kill_switch_reads_are_not_stale_and_still_require_registration(self) -> None:
+        self.write("backend/service.py", "from config.policy import kill_switch\nkill_switch('EXAMPLE_ENABLED')\n")
+        self.assertEqual([], self.errors())
+        self.write("backend/service.py", "from config.policy import kill_switch\nkill_switch('EXAMPLE_ENABLED')\nkill_switch('MISSING_ENABLED')\n")
+        self.assertIn("backend/service.py:3: unregistered feature flag: MISSING_ENABLED", self.errors())
+
     def test_swift_dart_and_build_define_patterns_require_registry_entries(self) -> None:
         self.write(
             "desktop/macos/Desktop/Sources/Feature.swift",

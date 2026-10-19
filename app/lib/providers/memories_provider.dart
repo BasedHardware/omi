@@ -259,7 +259,11 @@ class MemoriesProvider extends ChangeNotifier {
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_showOnlyManual) {
+      if (_searchQuery.isNotEmpty) {
+        // A search looks in every category, as Global Search does when it opens this list filtered
+        // by its query. A category filter saved on an earlier visit must not hide the tapped memory.
+        categoryMatch = true;
+      } else if (_showOnlyManual) {
         // Show only manual memories (exclude system and interesting)
         categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
@@ -318,7 +322,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
+    // Kept as typed so the Memories search field can show it again; filteredMemories ignores case.
+    _searchQuery = query;
     notifyListeners();
   }
 

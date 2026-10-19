@@ -18,6 +18,7 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
@@ -307,6 +308,7 @@ class PipelineWorker:
         recover_words: Callable | None = None,
         gpu_lock=None,
         io_concurrency: int | None = None,
+        flight_models=None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -316,9 +318,16 @@ class PipelineWorker:
         self.live_words, self.single_speaker = live_words, single_speaker
         self.on_failure = on_failure
         self.recover_words = recover_words
+        # Optional packed pyannote stages (diarizer.batch_pipeline_flight).
+        # Absent or failed, every item takes the serial vad/diarize calls.
+        self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
-        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
+        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
+        # Same-owner predecessor tails for units whose speech starts at sample 0.
+        self.left_context = LeftContextIndex(
+            max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
+        )
         # Artifact IO only (fetch/decrypt/decode, encrypt/upload). Model calls,
         # CUDA work and the chain lock stay on the calling thread.
         self.io_concurrency = io_concurrency if io_concurrency is not None else worker_io_concurrency()
@@ -329,6 +338,40 @@ class PipelineWorker:
             if self.io_concurrency > 1
             else None
         )
+
+    def _fatal(self, exc):
+        self._unavailable = True
+        raise FatalGpuError('fatal CUDA error; restart GPU chain') from exc
+
+    def _flight_segment(self, decoded):
+        if self.flight is None or not decoded:
+            return [None] * len(decoded)
+        try:
+            features = list(self.flight.segment([samples for _, samples in decoded]))
+            if len(features) != len(decoded):
+                raise ValueError('flight segmentation cardinality mismatch')
+            return features
+        except Exception as exc:
+            if is_fatal_cuda_error(exc):
+                self._fatal(exc)
+            logger.warning('event=batch_flight_fallback stage=segmentation exception_type=%s', type(exc).__name__)
+            return [None] * len(decoded)
+
+    def _flight_diarize(self, pending):
+        # Packed embeddings describe the full unit; speech-only diarization
+        # clusters a compacted waveform, so it keeps its own serial call.
+        if self.flight is None or not pending or diarize_speech_only_enabled():
+            return {}
+        try:
+            outcomes = list(self.flight.diarize_many([(s['samples'], s.get('flight_features')) for s in pending]))
+            if len(outcomes) != len(pending):
+                raise ValueError('flight diarization cardinality mismatch')
+            return {s['item'].segment_id: outcome for s, outcome in zip(pending, outcomes)}
+        except Exception as exc:
+            if is_fatal_cuda_error(exc):
+                self._fatal(exc)
+            logger.warning('event=batch_flight_fallback stage=diarization exception_type=%s', type(exc).__name__)
+            return {}
 
     def _diarize_unit(self, samples, evidence, words):
         """Diarize retained speech only; any doubt diarizes the full unit.
@@ -393,6 +436,38 @@ class PipelineWorker:
         except Exception:
             pass  # Observability cannot change the diarization result.
         return self.diarize(samples)
+
+    def _with_left_context(self, state, clips):
+        """Prefix the first window with the predecessor's speech-run audio.
+
+        Only a unit whose VAD speech starts at sample 0 qualifies. Window core
+        ownership still starts at 0, so prefix words are never emitted.
+        """
+        item, samples = state['item'], state['samples']
+        first = clips[0]
+        if (
+            self.config.asr_left_context_seconds <= 0
+            or first.start != 0
+            or not isinstance(samples, np.ndarray)
+            or not starts_in_speech(state.get('vad_raw') or [])
+        ):
+            return clips
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        if context is None:
+            return clips
+        room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
+        if room <= 0:
+            return clips
+        context = context[-room:]
+        self.counts['left_context'] += 1
+        prefixed = Window(
+            first.segment_id,
+            np.concatenate([context.astype(samples.dtype, copy=False), first.samples]),
+            -len(context) / SAMPLE_RATE,
+            first.core_start,
+            first.core_end,
+        )
+        return [prefixed, *clips[1:]]
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
@@ -513,19 +588,41 @@ class PipelineWorker:
                 silence_records.append(item.segment_id)
 
         try:
-            for index, item in enumerate(items):
-                self.counts['items'] += 1
-                stage = 'fetch_decode'
+
+            def decoded_units():
+                for index, item in enumerate(items):
+                    self.counts['items'] += 1
+                    try:
+                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        shapes[item.segment_id]['samples'] = len(samples)
+                        duration = len(samples) / SAMPLE_RATE
+                        if (
+                            not 0 < duration <= self.config.max_unit_seconds
+                            or abs(duration - item.duration_seconds) > 0.1
+                        ):
+                            raise ValueError('decoded duration differs from admitted capture')
+                    except Exception as exc:
+                        fail(item, exc, 'fetch_decode')
+                        continue
+                    yield item, samples
+
+            if self.flight is None:
+                # Serial: VAD each unit as soon as it is decoded (prefetch overlap).
+                units = ((unit, None) for unit in decoded_units())
+            else:
+                # One packed segmentation pass shared by VAD and diarization; a
+                # None feature selects the unchanged serial VAD call for that unit.
+                decoded = list(decoded_units())
+                units = zip(decoded, self._flight_segment(decoded))
+            for (item, samples), features in units:
+                stage = 'vad_windows'
                 try:
-                    samples = prefetch.take(index) if prefetch is not None else self.decode(item)
-                    shapes[item.segment_id]['samples'] = len(samples)
                     duration = len(samples) / SAMPLE_RATE
-                    if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
-                        raise ValueError('decoded duration differs from admitted capture')
-                    stage = 'vad_windows'
                     silence = None
                     try:
-                        spans = list(self.vad(samples))
+                        spans = list(
+                            self.vad(samples) if features is None else self.flight.vad_spans(samples, features)
+                        )
                     except BatchValidationError as error:
                         if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
                             raise
@@ -554,11 +651,14 @@ class PipelineWorker:
                         'speech_seconds': sum(span['end'] - span['start'] for span in speech_spans),
                         'window_min_samples': min((len(w.samples) for w in clips), default=0),
                         'window_max_samples': max((len(w.samples) for w in clips), default=0),
+                        'flight_features': features,
                     }
                     states[item.segment_id] = state
                     if not clips:
                         self.counts['silence'] += 1
                         continue
+                    # Every non-silent unit can be a later unit's predecessor.
+                    state['vad_raw'] = spans
                     receipt = None
                     if self.config.reuse_live and self.live_words:
                         if sync_live_dedupe_active_for(item.owner_id):
@@ -575,9 +675,27 @@ class PipelineWorker:
                         state['reused'] = True
                         self.counts['reused_live'] += 1
                     else:
-                        windows.extend(clips)
+                        state['asr_clips'] = clips
                 except Exception as exc:
                     fail(item, exc, stage)
+
+            # Predecessors in this flight become visible before any lookup;
+            # earlier flights' tails persist in the bounded index.
+            for state in states.values():
+                if state['item'].segment_id not in failed:
+                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+            attached = self.counts['left_context']
+            for state in states.values():
+                clips = state.pop('asr_clips', None)
+                if not clips or state['item'].segment_id in failed:
+                    continue
+                windows.extend(self._with_left_context(state, clips))
+            if self.counts['left_context'] > attached:
+                logger.info(
+                    'event=batch_asr_left_context units=%d attached=%d',
+                    len(items),
+                    self.counts['left_context'] - attached,
+                )
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
@@ -604,20 +722,23 @@ class PipelineWorker:
                 for window, hypothesis in zip(batch, hypotheses):
                     try:
                         checked_words = validate_words(hypothesis, window.duration)
-                        shapes[window.segment_id]['asr_words'] += len(checked_words)
                         for word in checked_words:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2
+                            if midpoint < 0:
+                                # Left-context words are the predecessor's; they never
+                                # count as this unit's ASR output (empty_asr stays empty_asr).
+                                continue
+                            shapes[window.segment_id]['asr_words'] += 1
                             if window.core_start <= midpoint < window.core_end:
-                                states[window.segment_id]['words'].append({**word, 'timestamp': [start, end]})
+                                # A left-context window may own a word straddling the seam.
+                                states[window.segment_id]['words'].append({**word, 'timestamp': [max(0.0, start), end]})
                     except Exception as exc:
                         fail(states[window.segment_id]['item'], exc, 'word_clocks')
 
+            prepared = []
             for state in states.values():
                 item = state['item']
-                # Bound in-flight encrypted writes; settle outside any item handler.
-                while len(pending_persist) >= self.io_concurrency:
-                    settle_persist(pending_persist.pop(0))
                 if item.segment_id in held:
                     results.append(HeldWork(item.segment_id))
                     continue
@@ -717,6 +838,25 @@ class PipelineWorker:
                     # calibrated single label only once a prod-revision paired
                     # run qualifies it (see batch_pipeline_runtime.md).
                     short = not single and short_speech_single_enabled() and short_single_region(evidence)
+                    prepared.append((item, state, words, silence, duration, single, evidence, short))
+                except Exception as exc:
+                    fail(item, exc, stage)
+
+            # Speaker labels never pool across units: packing shares only model
+            # forwards. Missing outcomes take the serial diarize call below.
+            flight_diarized = self._flight_diarize(
+                [
+                    state
+                    for _, state, _, _, _, single, _, short in prepared
+                    if not state['silence'] and not single and not short
+                ]
+            )
+            for item, state, words, silence, duration, single, evidence, short in prepared:
+                # Bound in-flight encrypted writes; settle outside any item handler.
+                while len(pending_persist) >= self.io_concurrency:
+                    settle_persist(pending_persist.pop(0))
+                stage = 'assemble_words'
+                try:
                     if state['silence']:
                         diarization = {'turns': [], 'outcome': 'silence'}
                     elif single or short:
@@ -729,7 +869,11 @@ class PipelineWorker:
                             record_decision('skipped_short', unit_seconds=duration)
                     else:
                         stage = 'diarize'
-                        diarization = self._diarize_unit(state['samples'], evidence, words)
+                        diarization = flight_diarized.get(item.segment_id)
+                        if isinstance(diarization, BaseException):
+                            raise diarization
+                        if diarization is None:
+                            diarization = self._diarize_unit(state['samples'], evidence, words)
                     payload = {
                         'words': words,
                         'diarization': diarization,

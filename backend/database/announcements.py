@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
@@ -333,7 +334,10 @@ def update_announcement(
     if not getattr(doc, "exists", False):
         return None
 
-    doc_ref.update(updates)
+    try:
+        doc_ref.update(updates)
+    except NotFound:
+        return None
     return get_announcement_by_id(clean_id, firestore_client=client)
 
 
@@ -363,7 +367,10 @@ def deactivate_announcement(announcement_id: str, *, firestore_client: Optional[
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.update({"active": False})
+    try:
+        doc_ref.update({"active": False})
+    except NotFound:
+        return False
     return True
 
 

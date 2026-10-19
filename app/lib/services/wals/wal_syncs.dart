@@ -376,6 +376,9 @@ class WalSyncs implements IWalSync {
       if (wal.fileNum == -1) {
         return _ringSync.syncWal(wal: wal, progress: progress);
       }
+      if (_storageSync.owns(wal)) {
+        return _storageSync.syncWal(wal: wal, progress: progress);
+      }
       return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);

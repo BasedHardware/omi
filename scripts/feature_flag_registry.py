@@ -188,7 +188,7 @@ def relevant_code(path: str) -> bool:
 
 def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]:
     if not any(
-        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var")
+        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var", "kill_switch")
     ):
         return []
     tree = ast.parse(text, filename=path)

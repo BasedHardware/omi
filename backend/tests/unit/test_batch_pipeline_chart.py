@@ -87,6 +87,8 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'
     assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED'] == 'false'
@@ -164,7 +166,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
-    assert deployment['spec']['replicas'] == 1
+    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
+    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
         'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
@@ -288,6 +291,15 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
+
+
+@pytest.mark.parametrize('arguments,expected', [((), '2'), (('--set', 'worker.pipelineDepth=1'), '1')])
+def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == expected
 
 
 def test_gpu_skip_switches_render_overrides():

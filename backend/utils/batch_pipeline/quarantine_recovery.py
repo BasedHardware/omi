@@ -3,6 +3,7 @@
 from dataclasses import fields
 import hashlib
 import os
+import re
 from urllib.parse import urlsplit
 import io
 import logging
@@ -14,16 +15,13 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
-    recovery_owners,
     recovery_dispatch_batch_size,
-    recovery_tasks_enabled,
-    recovery_enabled_for,
-    recover_all_admitted,
+    recovery_wake_lease_seconds,
     empty_asr_disposition_enabled,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_policy import load_stage_policy
+from config.policy import RecoveryPolicy, kill_switch
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
@@ -38,10 +36,16 @@ from utils.batch_pipeline.recovery_disposition import (
     terminal_empty_payload,
 )
 
-from utils.cloud_tasks import enqueue_named_task
+from utils.cloud_tasks import enqueue_named_task, named_task_exists
 from utils.sync.stage import current_stage
 
 logger = logging.getLogger(__name__)
+
+# A delivered wake that could not start (allowance, cap or transient refusal)
+# is retried on the former 120s cadence rather than waiting out the lease.
+REWAKE_AFTER_HELD_SECONDS = 120
+# Consecutive failed custody probes before a new wake is minted regardless.
+MAX_WAKE_PROBE_ERRORS = 3
 
 
 def log_failure(failure):
@@ -78,7 +82,7 @@ def transcribe(item, binding, audio, *, multilingual=None):
         clean.writeframes(pcm)
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
-    use_multilingual = speech_empty_multilingual_enabled() if multilingual is None else multilingual
+    use_multilingual = RecoveryPolicy().speech_empty_multilingual if multilingual is None else multilingual
     if use_multilingual:
         # Unknown intake language currently selects Parakeet again. Its European
         # language model cannot recover unsupported-language speech by repadding.
@@ -128,12 +132,14 @@ class QuarantineRecovery:
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
-        self._cohort_offset = 0
 
     def recover(self, segment_id, owner_id):
-        if not recovery_enabled_for(owner_id):
-            return 'disabled'
         try:
+            job, policy = load_stage_policy(self.store, segment_id, 'recovery')
+            if not job or job.get('owner_id') != owner_id:
+                return 'held'
+            if not policy.recovery_enabled:
+                return 'disabled'
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
             if job is None:
                 return 'held'
@@ -176,8 +182,8 @@ class QuarantineRecovery:
                 and not sync_allowed(owner_id, item.duration_seconds)
             ):
                 return 'held'
-            multilingual = speech_empty_multilingual_enabled()
-            if not recovery_enabled_for(owner_id) or not self.protocol.start(
+            multilingual = policy.speech_empty_multilingual
+            if not self.protocol.start(
                 segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
             ):
                 return 'held'
@@ -222,7 +228,7 @@ class QuarantineRecovery:
                     else {'stage': 'provider', 'reason': 'operation_failed'}
                 )
                 if (
-                    terminal_empty_disposition_enabled()
+                    policy.terminal_empty_disposition
                     and multilingual
                     and padded_empty(job)
                     and isinstance(error, MultilingualEmpty)
@@ -291,7 +297,10 @@ class QuarantineRecovery:
             return self.recover(segment_id, owner_id)
 
     def _dispatch(self, segment_id, owner_id):
-        if not recovery_enabled_for(owner_id):
+        existing, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        if not existing or existing.get('owner_id') != owner_id:
+            return 'held'
+        if not policy.recovery_enabled:
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue
         # acknowledgement loss never spends the intent. The HTTP handler or
@@ -312,56 +321,95 @@ class QuarantineRecovery:
         ):
             raise ValueError('recovery task requires the serving origin audience')
         token = job['recovery']['token']
-        # Repair an exhausted/missing wake without ever resetting its paid
-        # intent. Parallel deliveries remain fenced by RecoveryStore.start.
-        wake = int(self.clock() // 120)
-        task_id = f'bpr-{current_stage()}-{hashlib.sha256(segment_id.encode()).hexdigest()}-{token}-{wake}'
-        enqueue_named_task(
-            os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
-            audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
-            task_id,
-            {'stage': current_stage(), 'segment_id': segment_id},
-            audience=audience,
-            invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
-        )
+        digest = hashlib.sha256(segment_id.encode()).hexdigest()
+        queue = os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', '')
+        lease, seq = recovery_wake_lease_seconds(), 0
+        if lease:
+            # One outstanding wake per intent. A leased wake is queued or being
+            # delivered, so the sweep adds nothing. At expiry only an
+            # authoritative NotFound for that task permits the next wake: a
+            # task still waiting in a saturated queue keeps its lease. Parallel
+            # deliveries remain fenced by RecoveryStore.start.
+            now = self.clock()
+            wake = job.get('recovery_wake') or {}
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current and wake.get('wake_until', 0) > now:
+                return 'pending'  # Read from prepare()'s snapshot: no extra transaction.
+            if current and wake.get('probe_errors', 0) < MAX_WAKE_PROBE_ERRORS:
+                previous = f'bpr-{current_stage()}-{digest}-{token}-w{current}'
+                probe_error = False
+                try:
+                    alive = named_task_exists(wake.get('queue') or queue, previous)
+                except Exception:
+                    # Unknown custody keeps the old wake; bounded so a broken
+                    # probe cannot strand the intent.
+                    alive, probe_error = True, True
+                if alive:
+                    self.protocol.extend_wake(segment_id, token, current, now, lease, probe_error=probe_error)
+                    return 'pending'
+            seq = self.protocol.claim_wake(segment_id, token, now, lease, queue=queue, expected_seq=current)
+            if seq is None:
+                return 'pending'
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-w{seq}'
+        else:
+            # Kill switch: legacy time-bucketed wake on every sweep.
+            task_id = f'bpr-{current_stage()}-{digest}-{token}-{int(self.clock() // 120)}'
+        try:
+            enqueue_named_task(
+                queue,
+                audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
+                task_id,
+                {'stage': current_stage(), 'segment_id': segment_id},
+                audience=audience,
+                invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
+            )
+        except Exception:
+            # The task may not exist. If the inline fallback leaves the intent
+            # prepared, re-wake on the 120s cadence rather than the full lease.
+            if lease:
+                try:
+                    self.protocol.shorten_wake(segment_id, seq, self.clock(), REWAKE_AFTER_HELD_SECONDS)
+                except Exception:
+                    pass
+            raise
         return 'queued'
+
+    def delivered(self, segment_id, outcome, task_name=None):
+        """A delivery of wake ``-w<seq>`` that left the intent prepared re-arms the
+        120s cadence for that wake only. Legacy or unnamed deliveries change nothing."""
+        match = re.search(r'-w([0-9]{1,9})$', str(task_name or '').rsplit('/', 1)[-1])
+        if outcome == 'held' and match and recovery_wake_lease_seconds():
+            self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
 
     def sweep(self):
         counts = {}
-        all_admitted = recover_all_admitted()
-        owners = (None,) if all_admitted else recovery_owners()
         budget = recovery_dispatch_batch_size()
-        # Rotate allowlisted cohorts so a global pass bound cannot starve later
-        # owners. The all-admitted document cursor already rotates its page.
-        offset = self._cohort_offset % len(owners) if owners else 0
-        owners = owners[offset:] + owners[:offset]
-        for index, selected_owner in enumerate(owners):
-            if all_admitted:
-                candidates = recovery_candidates(
-                    self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
+        # Discovery is independent of today's admission/recovery cohort. Every
+        # candidate is authorized by its recorded policy; rollback must drain it.
+        candidates = recovery_candidates(
+            self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
+        )
+        if not candidates:
+            self._candidate_after = None
+        for segment_id, owner_id in candidates[:budget]:
+            self._candidate_after = segment_id
+            try:
+                _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+                task = (
+                    kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', policy_id=policy.policy_id)
+                    if policy
+                    else False
                 )
-            else:
-                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner, limit=budget)
-            if all_admitted and not candidates:
-                self._candidate_after = None  # Wrap next tick, without a second query.
-            for segment_id, owner_id in candidates:
-                budget -= 1  # Held/error rows also consume bounded work this pass.
-                if all_admitted:
-                    self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
-                try:
-                    outcome = (self.dispatch if recovery_tasks_enabled() else self.recover)(segment_id, owner_id)
-                except Exception as error:
-                    logger.warning(
-                        'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
-                        type(error).__name__,
-                    )
-                    outcome = 'held'
-                counts[outcome] = counts.get(outcome, 0) + 1
-                try:
-                    logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
-                except Exception:
-                    pass
-                if budget == 0:
-                    self._cohort_offset = offset + index + 1
-                    return counts
+                outcome = (self.dispatch if task else self.recover)(segment_id, owner_id)
+            except Exception as error:
+                logger.warning(
+                    'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
+                    type(error).__name__,
+                )
+                outcome = 'held'
+            counts[outcome] = counts.get(outcome, 0) + 1
+            try:
+                logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
+            except Exception:
+                pass
         return counts

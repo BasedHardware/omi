@@ -52,6 +52,9 @@ _DROP_FIELDS = frozenset(
         'previous',
         'shared_gpu_key',
         'projection_binding',
+        'policy',  # metadata, not part of the pre-E1 external behavior trace
+        'policy_source',
+        'policy_parts',
         'segment_id',
         'segment_ids',
         'log_tail',
@@ -79,7 +82,8 @@ def _dropped(key: str) -> bool:
 class _Aliases:
     """Synthetic ID -> stable alias, assigned by first appearance."""
 
-    def __init__(self):
+    def __init__(self, *, include_policy=False):
+        self.include_policy = include_policy
         self.names: dict[str, str] = {}
         self.counts: dict[str, int] = {}
 
@@ -94,7 +98,11 @@ class _Aliases:
     def scrub(self, value: Any) -> Any:
         """Recursively drop volatile fields, rename known IDs and round floats."""
         if isinstance(value, dict):
-            return {key: self.scrub(item) for key, item in value.items() if not _dropped(key)}
+            return {
+                key: (item if key == 'policy_id' and self.include_policy else self.scrub(item))
+                for key, item in value.items()
+                if not _dropped(key) or self.include_policy and key in {'policy', 'policy_source', 'policy_parts'}
+            }
         if isinstance(value, (list, tuple)):
             return [self.scrub(item) for item in value]
         if isinstance(value, float):
@@ -129,9 +137,9 @@ class _Recorder:
         sim.store.delete = recorded_delete  # instance attribute; purge() resolves it through self
         handler = sim._recover_handler
 
-        async def recorded_handler(segment_id: str) -> str:
+        async def recorded_handler(segment_id: str, task_id: str | None = None) -> str:
             try:
-                outcome = await handler(segment_id)
+                outcome = await handler(segment_id, task_id)
             except asyncio.CancelledError:
                 # Only the end of the run cancels a delivery (request-scoped work survives revision drain).
                 self.responses.setdefault(segment_id, []).append('unfinished_at_end')
@@ -208,7 +216,7 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
     result = sim.run()
     store = result.store
 
-    aliases = _Aliases()
+    aliases = _Aliases(include_policy=config.trace_policy)
     by_upload = {record.spec.upload_id: record for record in result.records}
     for upload in result.workload.uploads:
         aliases.add(upload.owner, 'owner')
@@ -289,7 +297,7 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
                 'result_artifact': aliases.scrub(_artifact(sim, result_row)),
             }
 
-    return {
+    output = {
         'schema': SCHEMA,
         'config': config.name,
         'seed': config.seed,
@@ -304,6 +312,28 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
             'recovery_states': _count(row.get('recovery_state') for row in store.jobs() if row.get('recovery_state')),
         },
     }
+
+    if any(
+        record.first_summary_policy and not record.first_summary_policy.first_summary_enabled
+        for record in result.records
+    ):
+        from testing.pipeline_sim.scorer import score
+
+        # Expose policy-window grading only when an obligation is outside the
+        # first-summary cohort. Historical (all-enabled) traces stay identical.
+        sample = score(result)
+        output['first_summary_policy'] = {
+            'recorded_enabled': sorted(
+                {
+                    record.first_summary_policy.first_summary_enabled
+                    for record in result.records
+                    if record.first_summary_policy
+                }
+            ),
+            'checked': sample['first_summary_checked_conversations'],
+            'breaches': sample['first_summary_deadline_breaches'],
+        }
+    return output
 
 
 def _lines(entries: list[tuple[str, tuple[str, ...]]]) -> list[str]:
@@ -370,6 +400,38 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.
     'healthy': lambda: _config('healthy'),
+    # Explicit serving-revision split: only the integration owner chooses stage knobs.
+    'role_policy': lambda: _config(
+        'role_policy',
+        trace_policy=True,
+        workload={'owners': 1, 'arrival_seconds': 400.0, 'uploads_per_owner_per_hour': 18.0},
+        stt=STTProfile(min_replicas=2, max_replicas=2, exhaustion=(ExhaustionWindow(0.0, 1500.0, 'error'),)),
+        role_environments={
+            'sync': {
+                'K_SERVICE': 'sync',
+                'BATCH_PIPELINE_RECOVERY_MODE': 'off',
+                'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED': 'false',
+            },
+            'integration': {
+                'K_SERVICE': 'integration',
+                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
+                'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED': 'true',
+            },
+        },
+        stage_roles={
+            'admission': 'sync',
+            'recovery': 'integration',
+            'projection': 'integration',
+            'first_summary': 'integration',
+        },
+    ),
+    # 10-18: creation at percent zero must not acquire a 120s obligation after a ramp.
+    'policy_window': lambda: _config(
+        'policy_window',
+        flags={'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
+        summary_seconds=300.0,
+        summary_sigma=0.0,
+    ),
     # Near-silence with empty first ASR: padded retry recovers some; the rest quarantine as empty_asr,
     # spend one paid call and either recover or settle as terminal empty (no_recoverable_speech).
     'empty_asr_padded_retry': lambda: _config(

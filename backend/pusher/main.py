@@ -21,6 +21,7 @@ from utils.rollout_cohorts import configure_rollout_runtime
 from routers import pusher, metrics
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 from utils.readiness import ReadinessGate
 from utils.env_loader import firebase_admin_options
@@ -62,6 +63,7 @@ async def shutdown_event() -> None:
     # even if the chart preStop hook did not run. Existing in-flight sessions are
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 

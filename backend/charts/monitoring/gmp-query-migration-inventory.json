@@ -850,6 +850,60 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - capacity_full exhausting live sessions",
+      "owner_uid": "omi-stt-capacity-full-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",reason=\"capacity_full\",outcome=\"exhausted\"}[15m])) / on () group_left () clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - capacity_full exhausting live sessions",
+      "owner_uid": "omi-stt-capacity-full-exhausted",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Live STT - provider terminal failures per leg are high",
+      "owner_uid": "omi-stt-provider-terminal-failure-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_live_stt_terminal_failures_total{job=\"backend-listen-metrics\"}[15m])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_terminal_failures_total",
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Live STT - provider terminal failures per leg are high",
+      "owner_uid": "omi-stt-provider-terminal-failure-ratio",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
       "file": "alerts/owner-recognition.json",
       "issues": [],
@@ -1207,6 +1261,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_reason_total",
+        "omi_reason_unknown_total"
+      ],
+      "owner_title": "Reason enums - unknown reason ratio elevated",
+      "owner_uid": "omi-reason-unknown-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
       "file": "alerts/transcription-services.json",
       "issues": [
@@ -1264,11 +1332,13 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+      "expression": "label_replace(((sum(increase(omi_listen_demand_failure_detail_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])), 1)) > 0.1) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])) >= 50), \"gate_scope\", \"admitted\", \"\", \"\") or label_replace(((sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])), 1)) > 0.6) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])) >= 100), \"gate_scope\", \"all_sessions_guard\", \"\", \"\")",
       "file": "alerts/transcription-services.json",
       "issues": [],
       "metrics": [
-        "omi_fallback_total"
+        "omi_fallback_total",
+        "omi_listen_demand_failure_detail_total",
+        "omi_live_session_transcript_outcome_total"
       ],
       "owner_title": "Live STT - demand gate unavailable",
       "owner_uid": "omi-stt-gate-unavailable",
@@ -2931,7 +3001,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 191
+    "query_consumers": 196
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

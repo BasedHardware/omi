@@ -57,6 +57,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -1370,6 +1371,10 @@ class ListenSessionRuntime:
 
 async def run_listen_session(request: ListenRequest) -> None:
     runtime: Optional[ListenSessionRuntime] = None
+    try:
+        ensure_loop_lag_probe()
+    except Exception as error:
+        logger.warning('listen loop lag probe start failed: %s', type(error).__name__)
     try:
         runtime = ListenSessionRuntime(request)
         await runtime.run()

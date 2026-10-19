@@ -202,7 +202,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
@@ -545,3 +545,19 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+## Per-unit policy snapshots
+
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

@@ -12,11 +12,57 @@ from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
 
-from check_public_build_contract import ROOT, load_contract
+from check_public_build_contract import (
+    BROWSER_EXIT_GRACE_SECONDS,
+    DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    DEFAULT_RETRY_TIMEOUT_SECONDS,
+    ROOT,
+    SMOKE_RETRY_ATTEMPTS,
+    SMOKE_RETRY_SLEEP_SECONDS,
+    load_contract,
+)
+
+DEFAULT_VIRTUAL_TIME_BUDGET_MS = 10_000
+MAX_BROWSER_STDERR_CHARS = 2_000
 
 
 class BrowserSmokeError(RuntimeError):
     """The candidate did not render its client public-build canary."""
+
+    def __init__(self, message: str, *, stdout: str = "", stderr: str = "") -> None:
+        super().__init__(message)
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class RenderedDocument(str):
+    """Rendered DOM with the browser stderr needed for a later content verdict."""
+
+    stderr: str
+
+    def __new__(cls, document: str, *, stderr: str) -> RenderedDocument:
+        rendered = super().__new__(cls, document)
+        rendered.stderr = stderr
+        return rendered
+
+
+def _captured_text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
+def _log_failure_diagnostics(*, browser: str, stdout: str, stderr: str) -> None:
+    stderr_tail = _captured_text(stderr)[-MAX_BROWSER_STDERR_CHARS:]
+    print(
+        f"browser failure output: browser={browser} stdout_bytes={'yes' if stdout else 'no'} "
+        "chrome_stderr_tail:",
+        file=sys.stderr,
+    )
+    if stderr_tail:
+        print(stderr_tail, file=sys.stderr)
+    else:
+        print("<empty>", file=sys.stderr)
 
 
 SAFE_BROWSER_SMOKE_REASONS = frozenset(
@@ -29,6 +75,7 @@ SAFE_BROWSER_SMOKE_REASONS = frozenset(
         "client public-build canary did not become ready",
         "client public-build sha did not match",
         "no supported headless browser is available",
+        "browser virtual-time budget must be a positive integer",
     }
 )
 
@@ -58,19 +105,40 @@ def browser_candidates(environment: dict[str, str] | None = None) -> tuple[str, 
     )
 
 
-def render_candidate(*, browser: str, base_url: str) -> str:
-    for attempt in range(3):
+def render_candidate(
+    *,
+    browser: str,
+    base_url: str,
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS,
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS,
+    virtual_time_budget_ms: int = DEFAULT_VIRTUAL_TIME_BUDGET_MS,
+) -> RenderedDocument:
+    browser_label = Path(browser).name or "browser"
+    for attempt in range(SMOKE_RETRY_ATTEMPTS):
+        started = time.monotonic()
         try:
-            # Keep the original first-attempt allowance. With at most five
-            # candidates, two 19s retries plus 5s sleeps add at most 240s.
-            return _render_candidate_once(browser=browser, base_url=base_url, timeout=45 if attempt == 0 else 19)
-        except BrowserSmokeError:
-            if attempt == 2:
+            document = _render_candidate_once(
+                browser=browser,
+                base_url=base_url,
+                timeout=timeout_seconds if attempt == 0 else retry_timeout_seconds,
+                virtual_time_budget_ms=virtual_time_budget_ms,
+            )
+        except BrowserSmokeError as exc:
+            _log_failure_diagnostics(browser=browser_label, stdout=exc.stdout, stderr=exc.stderr)
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            if attempt == SMOKE_RETRY_ATTEMPTS - 1:
                 raise
-            time.sleep(5)
+            time.sleep(SMOKE_RETRY_SLEEP_SECONDS)
+        else:
+            duration = time.monotonic() - started
+            print(f"attempt={attempt + 1} browser={browser_label} duration={duration:.1f}s", file=sys.stderr)
+            return document
 
 
-def _render_candidate_once(*, browser: str, base_url: str, timeout: int) -> str:
+def _render_candidate_once(
+    *, browser: str, base_url: str, timeout: int, virtual_time_budget_ms: int
+) -> RenderedDocument:
     try:
         result = subprocess.run(
             [
@@ -78,24 +146,35 @@ def _render_candidate_once(*, browser: str, base_url: str, timeout: int) -> str:
                 "--headless=new",
                 "--no-sandbox",
                 "--disable-gpu",
-                "--run-all-compositor-stages-before-draw",
-                "--virtual-time-budget=10000",
+                f"--virtual-time-budget={virtual_time_budget_ms}",
                 "--dump-dom",
+                f"--timeout={timeout * 1000}",
                 base_url,
             ],
             cwd=ROOT,
             check=False,
             capture_output=True,
             text=True,
-            timeout=timeout,
+            timeout=timeout + BROWSER_EXIT_GRACE_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
-        raise BrowserSmokeError("headless browser timed out rendering the candidate") from exc
+        raise BrowserSmokeError(
+            "headless browser timed out rendering the candidate",
+            stdout=_captured_text(exc.stdout),
+            stderr=_captured_text(exc.stderr),
+        ) from exc
     except OSError as exc:
         raise BrowserSmokeError("headless browser did not run") from exc
     if result.returncode != 0:
-        raise BrowserSmokeError("headless browser could not render the candidate")
-    return result.stdout
+        raise BrowserSmokeError(
+            "headless browser could not render the candidate",
+            stdout=_captured_text(result.stdout),
+            stderr=_captured_text(getattr(result, "stderr", "")),
+        )
+    return RenderedDocument(
+        _captured_text(result.stdout),
+        stderr=_captured_text(getattr(result, "stderr", "")),
+    )
 
 
 def acceptance_document_matches(
@@ -120,12 +199,16 @@ def smoke(
     contract_path: Path,
     environment: dict[str, str] | None = None,
     expect_sha: str | None = None,
+    virtual_time_budget_ms: int = DEFAULT_VIRTUAL_TIME_BUDGET_MS,
 ) -> None:
+    if type(virtual_time_budget_ms) is not int or virtual_time_budget_ms <= 0:
+        raise BrowserSmokeError("browser virtual-time budget must be a positive integer")
     contract = load_contract(contract_path)
     selected = contract.targets.get(target)
     if selected is None:
         raise BrowserSmokeError("unknown public-build target")
     url = absolute_https_url(base_url)
+    render_url = f"{url}{selected.candidate_acceptance.path}"
     marker = selected.candidate_acceptance.marker
     wants_sha = "{sha}" in selected.candidate_acceptance.command
     sha = (expect_sha or "").strip() or None
@@ -136,11 +219,22 @@ def smoke(
     errors: list[BrowserSmokeError] = []
     for browser in browser_candidates(environment):
         try:
-            document = render_candidate(browser=browser, base_url=url)
+            document = render_candidate(
+                browser=browser,
+                base_url=render_url,
+                timeout_seconds=selected.candidate_acceptance.timeout_seconds,
+                retry_timeout_seconds=selected.candidate_acceptance.retry_timeout_seconds,
+                virtual_time_budget_ms=virtual_time_budget_ms,
+            )
         except BrowserSmokeError as exc:
             errors.append(exc)
             continue
         if not acceptance_document_matches(document, marker=marker, expect_sha=sha):
+            _log_failure_diagnostics(
+                browser=Path(browser).name or "browser",
+                stdout=_captured_text(document),
+                stderr=getattr(document, "stderr", ""),
+            )
             if sha is not None and f'data-omi-public-build-canary="{marker}"' in document:
                 raise BrowserSmokeError("client public-build sha did not match")
             raise BrowserSmokeError("client public-build canary did not become ready")
@@ -155,6 +249,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--target", required=True)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--expect-sha", default="")
+    parser.add_argument(
+        "--virtual-time-budget-ms",
+        type=int,
+        default=DEFAULT_VIRTUAL_TIME_BUDGET_MS,
+        help="Chrome virtual-time budget in milliseconds (default: 10000)",
+    )
     parser.add_argument("--contract", type=Path, default=ROOT / "config" / "public-build-contract.json")
     args = parser.parse_args(argv)
     try:
@@ -163,6 +263,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_url=args.base_url,
             contract_path=args.contract,
             expect_sha=args.expect_sha,
+            virtual_time_budget_ms=args.virtual_time_budget_ms,
         )
     except BrowserSmokeError as exc:
         print(
