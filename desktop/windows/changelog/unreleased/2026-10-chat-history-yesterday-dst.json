@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed: on the day after a daylight-saving change, chat history lists yesterday's chats under Yesterday instead of This Week."
+  ]
+}

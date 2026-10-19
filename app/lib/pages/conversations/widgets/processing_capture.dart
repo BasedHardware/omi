@@ -467,8 +467,14 @@ class _OfflineControls extends StatelessWidget {
 
   static const _gap = OmiSpacing.xs;
 
-  OmiButton _button(_OfflineAction a) =>
-      OmiButton.secondary(label: a.label, icon: a.icon, onPressed: a.onTap, size: OmiButtonSize.compact, expand: true);
+  OmiButton _button(_OfflineAction a) => OmiButton.secondary(
+        key: ValueKey(a.label),
+        label: a.label,
+        icon: a.icon,
+        onPressed: a.onTap,
+        size: OmiButtonSize.compact,
+        expand: true,
+      );
 
   @override
   Widget build(BuildContext context) {
