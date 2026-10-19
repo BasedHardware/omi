@@ -4331,6 +4331,8 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
       "summary": "More than 15% of accepted /v4/listen sessions per 15m end with an exhausted capacity_full failover into one failover target",
       "threshold": "per to_mode: exhausted capacity_full fallbacks / listen-accepted > 0.15 with >= 100 accepted sockets in 15m, for 30m",
       "user_impact": "Sessions lose live transcription because the failover target had no room or the replay ring overflowed; clients fall back to offline sync.",
@@ -4477,6 +4479,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT terminal failures on one provider exceed 75% of its successful leg connects in 15m",
       "threshold": "per provider: omi_live_stt_terminal_failures_total / successful omi_stt_provider_connect_total > 0.75 with >= 30 successful connects in 15m, for 30m",
       "user_impact": "Legs on this provider connect fine and then die. The connect-error alerts cannot see this because handshakes succeed.",
