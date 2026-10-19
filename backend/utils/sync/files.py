@@ -13,7 +13,7 @@ from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
-from utils.sync.input_limits import raise_sync_storage_pressure, sync_pcm_format
+from utils.sync.input_limits import BackfillStoragePressure, raise_sync_storage_pressure, sync_pcm_format
 
 try:
     from opuslib import Decoder
@@ -89,6 +89,9 @@ def decode_opus_file_to_wav(
                         decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
                 except Exception as e:
+                    # A full volume is capacity pressure, never a corrupt frame:
+                    # keeping the decoded prefix would complete a truncated recording.
+                    raise_sync_storage_pressure(e)
                     logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
                     corrupt_stream = True
                     break
@@ -105,8 +108,17 @@ def decode_opus_file_to_wav(
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
         return False
+    except BackfillStoragePressure:
+        if os.path.exists(wav_file_path):
+            os.remove(wav_file_path)
+        raise
     except Exception as e:
-        raise_sync_storage_pressure(e)
+        try:
+            raise_sync_storage_pressure(e)
+        except BackfillStoragePressure:
+            if os.path.exists(wav_file_path):
+                os.remove(wav_file_path)
+            raise
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)

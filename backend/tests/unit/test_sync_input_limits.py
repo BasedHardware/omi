@@ -97,3 +97,131 @@ def test_legacy_pcm_names_and_mixed_codec_markers_use_actual_decoder_expansion(m
     monkeypatch.setattr(limits, 'MAX_BACKFILL_AUDIO_BYTES', 1279)
     with pytest.raises(HTTPException):
         limits.validate_backfill_uploads([uploaded(name=name)])
+
+
+def test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix(tmp_path, monkeypatch):
+    import errno
+    import wave
+
+    from utils.sync import files
+
+    class FakeDecoder:
+        def __init__(self, *args):
+            pass
+
+        def decode(self, data, frame_size):
+            return b'\0' * 320
+
+    raw = tmp_path / 'audio.opus'
+    raw.write_bytes((struct.pack('<I', 4) + b'abcd') * 3)
+    wav_path = tmp_path / 'audio.wav'
+    real_writeframes = wave.Wave_write.writeframes
+    calls = {'n': 0}
+
+    def flaky_writeframes(self, data):
+        calls['n'] += 1
+        if calls['n'] == 2:
+            raise OSError(errno.ENOSPC, 'synthetic tmpfs full')
+        return real_writeframes(self, data)
+
+    monkeypatch.setattr(files, 'Decoder', FakeDecoder)
+    monkeypatch.setattr(wave.Wave_write, 'writeframes', flaky_writeframes)
+    with pytest.raises(limits.BackfillStoragePressure):
+        files.decode_opus_file_to_wav(str(raw), str(wav_path))
+    assert not wav_path.exists()
+    assert raw.exists()
+
+
+class _Blob:
+    def __init__(self, size, generation=7, data=b''):
+        self.size = size
+        self.generation = generation
+        self.content_encoding = None
+        self._data = data
+
+    def reload(self, *args, **kwargs):
+        pass
+
+    def open(self, mode, chunk_size=None):
+        return io.BytesIO(self._data)
+
+
+def _storage_with(monkeypatch, blob, prepared=None):
+    from utils.other import storage
+
+    monkeypatch.setattr(storage, 'syncing_local_bucket', 'bucket', raising=False)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    client = type('C', (), {'bucket': lambda self, name: type('B', (), {'blob': lambda self, path: blob})()})()
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    monkeypatch.setattr(storage.staged_prefetch, 'take', lambda path: prepared)
+    return storage
+
+
+def test_prefetch_hit_short_write_is_cleaned_up_and_mapped_to_capacity_pressure(tmp_path, monkeypatch):
+    import builtins
+    import errno
+
+    from utils.other import storage
+
+    blob = _Blob(size=4)
+    prepared = storage.StagedBytes(b'abcd', 'bucket', 7)
+    mod = _storage_with(monkeypatch, blob, prepared)
+    target = tmp_path / 'staged.bin'
+    real_open = builtins.open
+
+    class FullFile:
+        def __init__(self, path):
+            self._f = real_open(path, 'wb')
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._f.close()
+
+        def write(self, data):
+            self._f.write(data[:1])
+            raise OSError(errno.ENOSPC, 'synthetic full')
+
+    monkeypatch.setattr(
+        mod,
+        'open',
+        lambda path, mode='r': FullFile(path) if str(path) == str(target) else real_open(path, mode),
+        raising=False,
+    )
+    with pytest.raises(limits.BackfillStoragePressure):
+        mod.download_syncing_temporal_file(str(target), max_bytes=1024)
+    assert not target.exists()
+
+
+def test_unknown_blob_size_falls_through_to_the_capped_read(tmp_path, monkeypatch):
+    blob = _Blob(size=None, data=b'x' * 10)
+    mod = _storage_with(monkeypatch, blob)
+    target = tmp_path / 'ok.bin'
+    assert mod.download_syncing_temporal_file(str(target), max_bytes=1024) is True
+    assert target.read_bytes() == b'x' * 10
+
+    big = tmp_path / 'big.bin'
+    blob = _Blob(size=None, data=b'x' * 2048)
+    mod = _storage_with(monkeypatch, blob)
+    with pytest.raises(limits.BackfillInputLimitExceeded):
+        mod.download_syncing_temporal_file(str(big), max_bytes=1024)
+    assert not big.exists()
+
+
+def test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects(tmp_path, monkeypatch):
+    from utils.sync import pipeline
+
+    first = tmp_path / 'first.bin'
+    second = tmp_path / 'second.bin'
+
+    def download(path, max_bytes=None):
+        if path == str(first):
+            first.write_bytes(b'ok')
+            return True
+        raise limits.BackfillStoragePressure('full')
+
+    monkeypatch.setattr(pipeline, 'download_syncing_temporal_file', download)
+    with pytest.raises(limits.BackfillStoragePressure):
+        pipeline._download_staged_files([str(first), str(second)], bounded_backfill=True)
+    assert not first.exists()

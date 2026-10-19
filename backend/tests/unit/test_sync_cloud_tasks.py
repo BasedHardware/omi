@@ -3515,6 +3515,83 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
                 sys.modules[name] = original
 
 
+def _decision(module, lane, reason='synthetic'):
+    return types.SimpleNamespace(
+        lane=lane,
+        reason=reason,
+        trust=module.CaptureTimeTrust.LEGACY,
+        maximum_age_seconds=None,
+        automatic_recovery_allowed=True,
+    )
+
+
+def _restore_modules(saved_modules):
+    sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
+    for name, original in saved_modules.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('legacy_fresh_admits', [False, True])
+async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_backfill_cap(legacy_fresh_admits):
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    if legacy_fresh_admits:
+        module.classify_sync_lane = MagicMock(
+            return_value=_decision(module, module.SyncLane.BACKFILL, 'recent_legacy_capture')
+        )
+        module.legacy_fresh = types.SimpleNamespace(
+            enabled_for=MagicMock(return_value=True),
+            admit=MagicMock(return_value=_decision(module, module.SyncLane.FRESH, 'recent_legacy_capture')),
+        )
+    else:
+        module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
+    module.validate_backfill_uploads = MagicMock()
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        try:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        except module.HTTPException as error:
+            assert error.status_code != 413
+        except Exception:
+            pass  # Later fresh-lane stubs may stop the call; only the cap matters here.
+        module.validate_backfill_uploads.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413():
+    from starlette.datastructures import UploadFile
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.BACKFILL))
+    module.validate_backfill_uploads = MagicMock()
+    module.resolve_client_device_from_request = MagicMock(
+        return_value=types.SimpleNamespace(device_hash='h', platform='p', app_version='v', client_device_id=None)
+    )
+    module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
+    try:
+        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        request = MagicMock()
+        request.headers = {}
+        response = await module.sync_local_files(
+            request=request, response=MagicMock(headers={}), files=uploads, uid='u'
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'backfill_capacity'
+        module.validate_backfill_uploads.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pressure', [False, True])
 async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claims(pressure):
@@ -3532,7 +3609,8 @@ async def test_backfill_limit_or_tmpfs_pressure_preserves_legacy_audio_and_claim
         module._download_staged_files.side_effect = module.BackfillInputLimitExceeded('synthetic')
     try:
         response = await module.run_sync_job(request, task_retry_count=100)
-        assert response.status_code == 503
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
         module._delete_staged_blobs_async.assert_not_awaited()
         module._finalize_sync_job_failure.assert_not_awaited()
         module.release_sync_content_claim_after_job_retired.assert_not_called()

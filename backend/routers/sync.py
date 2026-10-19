@@ -526,8 +526,6 @@ async def sync_local_files(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
     )
-    if lane_decision.lane is SyncLane.BACKFILL:
-        await run_blocking(sync_executor, validate_backfill_uploads, files)
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -2545,10 +2543,13 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         if not queued:
             release_lock = False
             return JSONResponse(status_code=409, content={'status': 'locked'})
-        status = (
-            'backfill_input_limit' if isinstance(error, BackfillInputLimitExceeded) else 'backfill_storage_pressure'
+        # 409, not 503: a fast 503 reads as target overload and slows the whole
+        # queue, and over-limit legacy input fails identically on every attempt.
+        logger.warning(
+            'event=sync_transcription_job outcome=deferred reason=%s',
+            'backfill_input_limit' if isinstance(error, BackfillInputLimitExceeded) else 'backfill_storage_pressure',
         )
-        return JSONResponse(status_code=503, content={'status': status})
+        return JSONResponse(status_code=409, content={'status': 'locked'})
     except SyncJobRunLeaseLost as error:
         latest_job = await run_blocking(db_executor, get_sync_job, job_id)
         if latest_job and latest_job.get('status') in TERMINAL_STATUSES:

@@ -3575,7 +3575,7 @@ def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) 
         if bounded_backfill:
             validate_backfill_paths(blob_paths)
         return True
-    except BackfillInputLimitExceeded:
+    except (BackfillInputLimitExceeded, BackfillStoragePressure):
         _cleanup_files(blob_paths)
         raise
 
