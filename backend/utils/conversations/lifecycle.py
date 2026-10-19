@@ -499,9 +499,35 @@ def open_recording_session(
             firestore_client=firestore_client,
             include_conversation_snapshot=include_conversation_snapshot,
         )
-    except Exception:
+    except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
+        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+            # Firestore replayed the open at both transaction boundaries and
+            # every attempt hit atomic contention or an expired id; nothing was
+            # written. This open proceeds on the shadow legacy route exactly as
+            # a real failure would — audio must keep flowing — but without the
+            # degradation event or the failed-write traceback: the write layer
+            # already retried on fresh transactions and its exhaustion is the
+            # bounded transient, and the session's next open (every reconnect)
+            # retries the durable binding (prod backend-listen 2026-10-14:
+            # `recording session persistence failed; retaining shadow legacy
+            # route` x49/30m with its open_recording_session traceback
+            # sibling, before the write layer had any retry budget).
+            logger.warning(
+                'recording session open contended; retaining shadow legacy route uid=%s session=%s proposed=%s',
+                uid,
+                recording_session_id,
+                proposed_conversation_id,
+            )
+            return {
+                'recording_session_id': recording_session_id,
+                'conversation_id': proposed_conversation_id,
+                'lifecycle_version': None,
+                'lifecycle_phase': None,
+                'lifecycle_sequence': None,
+                'mapping_conflict': False,
+            }
         record_fallback(
             component='other',
             from_mode='recording_session',
@@ -569,9 +595,30 @@ def record_recording_session_event(
             phase,
             firestore_client=firestore_client,
         )
-    except Exception:
+    except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
+        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+            # Same transient arm as the session open: the write layer's budget
+            # already replayed the burst on fresh transactions, so exhaustion
+            # here is bounded contention — this event is dropped with the
+            # shadow legacy envelope and the next lifecycle event re-attempts
+            # the durable one. No omi_fallback_total degradation event and no
+            # failed-write traceback; those stay reserved for real failures.
+            logger.warning(
+                'recording session event contended; emitting shadow legacy event uid=%s session=%s conversation=%s phase=%s',
+                uid,
+                recording_session_id,
+                conversation_id,
+                phase,
+            )
+            return {
+                'recording_session_id': recording_session_id,
+                'conversation_id': conversation_id,
+                'lifecycle_version': None,
+                'lifecycle_phase': None,
+                'lifecycle_sequence': None,
+            }
         record_fallback(
             component='other',
             from_mode='recording_session',

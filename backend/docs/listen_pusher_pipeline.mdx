@@ -2017,6 +2017,28 @@ read, so each burst surfaced as the failed-write ERROR and let the fence run
 down while audio still flowed (prod backend-listen ×29/30m plus its
 renew_live_recording_session_lease traceback sibling, sampled 2026-10-14..16).
 
+Since 2026-10-19 the session open and the lifecycle-event append run on the
+same stack: `create_or_get_recording_session` on
+`recording_session_open`, `record_lifecycle_event` on
+`recording_session_lifecycle_event`, both with the expired-transaction
+restart (commit-side and read-side retirement both recover on a fresh
+transaction). Their shadow fail-open branches learned the same transient
+arm as the renewal's: a budget that exhausts under contention keeps the
+shadow legacy routing — audio never stops — but logs WARNING
+(`recording session open contended` / `recording session event contended`)
+with no stack trace and no `omi_fallback_total` degradation event, because
+the session's next open (every reconnect) retries the durable binding.
+Enforce mode still raises through the budget's exhaustion. The FAILED ERROR
+`recording session persistence failed; retaining shadow legacy route` and
+`recording session event persistence failed; emitting shadow legacy event`
+(with their tracebacks) are reserved for real write failures. Before this,
+both writers ran bare `firestore.transactional` calls, so a mid-open or
+mid-event contention burst surfaced as a permanent rejection and was
+classified as a failed write: prod backend-listen 2026-10-14 showed
+`recording session persistence failed; retaining shadow legacy route`
+×49/30m plus its `open_recording_session` traceback sibling (×49/30m) while
+audio kept flowing on the legacy route.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

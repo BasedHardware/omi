@@ -161,21 +161,42 @@ def create_or_get_recording_session(
     firestore_client: Any = None,
     include_conversation_snapshot: bool = False,
 ) -> dict[str, Any]:
-    """Atomically bind a session to exactly one canonical conversation ID."""
+    """Atomically bind a session to exactly one canonical conversation ID.
+
+    Runs on the shared bounded transaction contention budget with the
+    expired-transaction restart, like the lease renewal it races (and like the
+    recovery admission both of them conflict with). Firestore replays a commit
+    abort on the same — often already retired — transaction id and never
+    retries an abort raised by the body's read, so a bare
+    ``firestore.transactional`` call surfaces a mid-open contention burst as a
+    permanent rejection; the session's shadow fail-open branch then degrades
+    the whole recording to the legacy route (prod backend-listen 2026-10-14:
+    ``recording session persistence failed; retaining shadow legacy route``
+    plus its ``open_recording_session`` traceback sibling, ×49/30m each).
+    """
     if not uid or not recording_session_id or not proposed_conversation_id:
         raise ValueError('uid, recording_session_id, and proposed_conversation_id are required')
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_create_or_get_recording_session_txn)
-    return transactional(
-        transaction,
-        _session_ref(client, uid, recording_session_id),
-        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION),
-        uid,
-        recording_session_id,
-        proposed_conversation_id,
-        _now(),
-        include_conversation_snapshot,
+    session_ref = _session_ref(client, uid, recording_session_id)
+
+    def run_once(transaction: Any) -> dict[str, Any]:
+        return run_transactional(
+            client,
+            firestore.transactional(_create_or_get_recording_session_txn),
+            session_ref,
+            client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION),
+            uid,
+            recording_session_id,
+            proposed_conversation_id,
+            _now(),
+            include_conversation_snapshot,
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='recording_session_open',
     )
 
 
@@ -429,17 +450,33 @@ def record_lifecycle_event(
     *,
     firestore_client: Any = None,
 ) -> RecordingSessionEvent:
-    """Append a monotonic lifecycle envelope, rejecting stale or misbound events."""
+    """Append a monotonic lifecycle envelope, rejecting stale or misbound events.
+
+    Like ``create_or_get_recording_session``, this runs on the shared bounded
+    contention budget with the expired-transaction restart: a burst may replay
+    freely because every rejection here is atomic — the body either reaches a
+    classification without writing or commits its single envelope update. The
+    session's shadow fail-open branch must see only real write failures, not a
+    retried contention burst masquerading as one.
+    """
     if phase not in _PHASE_ORDER:
         raise ValueError(f'unsupported recording lifecycle phase: {phase}')
     client = _client(firestore_client)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_record_lifecycle_event_txn)
-    return transactional(
-        transaction,
-        _session_ref(client, uid, recording_session_id),
-        recording_session_id,
-        conversation_id,
-        phase,
-        _now(),
+
+    def run_once(transaction: Any) -> RecordingSessionEvent:
+        return run_transactional(
+            client,
+            firestore.transactional(_record_lifecycle_event_txn),
+            _session_ref(client, uid, recording_session_id),
+            recording_session_id,
+            conversation_id,
+            phase,
+            _now(),
+            initial_transaction=transaction,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='recording_session_lifecycle_event',
     )
