@@ -25,6 +25,8 @@ SWIFT_FLAG = re.compile(
     r'\bstatic\s+let\s+\w*(?:flagName|FlagName|FlagKey|Flag|enabledFlag|killSwitchFlag|enableFlag)\s*=\s*"([^"\n]+)"'
 )
 SWIFT_LITERAL = re.compile(r'\bisFeatureEnabled\s*\(\s*"([^"\n]+)"')
+SWIFT_STRING_CONSTANT = re.compile(r'\bstatic\s+let\s+([A-Za-z_]\w*)\s*=\s*"([^"\n]+)"')
+SWIFT_POSTHOG_CONSTANT_READ = re.compile(r'\bgetFeatureFlag\s*\(\s*(?:Self\.)?([A-Za-z_]\w*)\s*[,)]')
 SWIFT_HEADER = re.compile(
     r'\blet\s+(?:canonicalLifecycleExposed|deviceScopeSupported|defaultDeleteSupported|beliefEnabled)Header\s*=\s*"(X-Omi-[^"\n]+)"'
 )
@@ -34,6 +36,8 @@ SWIFT_HARDCODED = re.compile(
 DART_DEFINITION = re.compile(r"\bExperimentDefinition(?:<[^>]+>)?\s*\(\s*key\s*:\s*['\"]([^'\"\n]+)['\"]")
 DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
+# PostHog keys on TypeScript clients: `static readonly enabledFlag = 'web-…'`.
+TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\"\n]+)['\"]")
 # Cataloged server-side Node switches are runtime env reads, not build defines.
 # Restrict discovery to known names so this does not re-inventory every legacy
 # private Node setting while registering a new runtime switch.
@@ -136,7 +140,7 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if kind == "posthog":
                     if entry.get("posthog") != {"row": "delete"}:
                         errors.append(f"{label}: retired posthog rows require posthog row: delete")
-                elif kind in {"hardcoded", "env"}:
+                elif kind in {"hardcoded", "env", "server_capability"}:
                     if "posthog" in entry:
                         errors.append(f"{label}: retired hardcoded/env entries must omit posthog")
                 else:
@@ -184,7 +188,7 @@ def relevant_code(path: str) -> bool:
 
 def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]:
     if not any(
-        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var")
+        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var", "kill_switch")
     ):
         return []
     tree = ast.parse(text, filename=path)
@@ -284,7 +288,7 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             patterns = (
                 (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
                 if path.endswith(".swift")
-                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE, NODE_RUNTIME_ENV)
+                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE, TS_POSTHOG_FLAG, NODE_RUNTIME_ENV)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):
@@ -299,6 +303,16 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
                     if pattern is NODE_RUNTIME_ENV and key not in known:
                         continue
                     if not key.startswith("--"):
+                        matches.append((key, text.count("\n", 0, match.start()) + 1))
+            if path.endswith(".swift"):
+                constants: dict[str, list[tuple[str, int]]] = {}
+                for match in SWIFT_STRING_CONSTANT.finditer(text):
+                    if not _in_client_comment(text, match.start()):
+                        constants.setdefault(match[1], []).append((match[2], match.start()))
+                for match in SWIFT_POSTHOG_CONSTANT_READ.finditer(text):
+                    definitions = constants.get(match[1], [])
+                    if not _in_client_comment(text, match.start()) and len(definitions) == 1:
+                        key, _ = definitions[0]
                         matches.append((key, text.count("\n", 0, match.start()) + 1))
             if path.endswith("ContextBucketsFeature.swift"):
                 for match in SWIFT_HARDCODED.finditer(text):

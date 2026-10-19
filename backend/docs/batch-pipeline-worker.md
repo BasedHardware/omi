@@ -140,6 +140,9 @@ that span, it has no batch transcript words and no invented placeholder. Other
 successful units use normal assignment. The durable upload status is `failed`,
 with `failed_segments` and the closed `batch_worker_quarantined` error, no success
 result and no further polling delay. This is a transcript gap, not recovery.
+Once fenced recovery (below) owns the unit, recovery states `held`, `prepared`
+and `running` poll as `processing` with a nonzero `poll_after_ms`; only a
+terminal quarantine such as `failed_held` reports `failed`.
 
 No legacy transcription is dispatched in this change. The upload-wide
 `dispatch_protocol=batch_v1` claim and run fence remain intact; duplicate
@@ -186,6 +189,14 @@ priority, unit kind, optional conversation and pinned privacy generation.
 `process_batch(Sequence[WorkItem]) -> Sequence[WorkResult]`; results may arrive
 out of order. Each result supplies segment ID, encrypted URI and success/silence.
 Missing/failed items retry up to the quarantine ceiling; decode/provider failures never become silence.
+
+Inside one locked flight, artifact IO overlaps GPU work: up to
+`BATCH_PIPELINE_WORKER_IO_CONCURRENCY` (default 3, `1` = serial, max 8) items
+fetch/decrypt/decode ahead of the item on the GPU, and as many encrypted result
+writes run while later items diarize. Prefetch stays inside the existing
+two-audio-hour decode group and, beyond the next item, within 1800 audio seconds
+ahead. Model calls, CUDA work and the chain lock stay on the calling thread; a
+fatal GPU error waits for outstanding IO before the flight raises.
 
 B's dedicated process composes A's `Pump`, a fresh `PoolCapacity` callback and
 CUDA synchronization. Optional service-OIDC pull/heartbeat/complete/fail APIs
@@ -235,3 +246,11 @@ Turning admission off returns new unowned uploads to legacy; existing batch
 claims drain through their recorded protocol. Never copy in-flight work into
 legacy or purge pending artifacts to roll back. Detailed RPC/index/operator
 settings are in `batch-pipeline-serving.md`; no merge/deploy is authorized here.
+
+With dark `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=true`, both exhausted
+padded `empty_asr` and `no_owned_words` hand off immediately to the existing
+fenced CPU recovery lane. Strict local VAD on the original unit makes the final
+silence decision; the GPU worker never infers silence from empty text or from
+words outside its core. Speech gets the once-only legacy recovery attempt.
+See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
+closed diagnostics, historical held-unit disposition and rollback semantics.

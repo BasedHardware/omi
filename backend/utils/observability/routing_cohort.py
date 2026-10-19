@@ -8,7 +8,7 @@ attempts also pin the object so later callbacks cannot borrow another socket.
 from contextvars import ContextVar
 import math
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 
 COHORT_OUTCOMES = Counter(
     'omi_stt_routing_cohort_outcomes_total',
@@ -20,6 +20,12 @@ COHORT_PAID_AUDIO = Counter(
     'Paid adapter accepted PCM seconds including replay, emitted at session end; not vendor billing',
     ['routing_arm', 'provider'],
 )
+COHORT_WINDOW_FIRST_TEXT = Histogram(
+    'omi_stt_routing_cohort_window_first_text_seconds',
+    'Parakeet-window first VAD speech to first emitted text, by pinned routing arm',
+    ['routing_arm'],
+    buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
+)
 _SIGNALS = {
     'terminal': ('success', 'failure', 'cancelled'),
     'transcript': ('transcribed', 'no_transcript', 'too_short'),
@@ -28,6 +34,7 @@ _SIGNALS = {
 }
 _PAID = ('soniox', 'modulate', 'deepgram')
 for _arm in ('off', 'shadow', 'on'):
+    COHORT_WINDOW_FIRST_TEXT.labels(routing_arm=_arm)
     for _signal, _outcomes in _SIGNALS.items():
         for _outcome in _outcomes:
             COHORT_OUTCOMES.labels(routing_arm=_arm, signal=_signal, outcome=_outcome)
@@ -43,6 +50,15 @@ class RoutingCohort:
         self.exhausted = False
         self._finished = False
         self._paid = {provider: 0.0 for provider in _PAID}
+
+    def window_first_text(self, seconds: float) -> None:
+        """Companion to the existing window histogram; one observation per emitting leg."""
+        if not math.isfinite(seconds) or seconds < 0:
+            return
+        try:
+            COHORT_WINDOW_FIRST_TEXT.labels(routing_arm=self.arm).observe(seconds)
+        except Exception:
+            pass  # Companion telemetry must never interrupt serving.
 
     def terminal(self, outcome: str) -> None:
         if outcome in _SIGNALS['terminal']:

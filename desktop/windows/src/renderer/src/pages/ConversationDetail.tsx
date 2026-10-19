@@ -380,9 +380,6 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     try {
       if (isLocal) await window.omi.deleteLocalConversation(id)
       else await deleteCloudConversation(id)
-      // Cloud deletion has no local DB callback; remove any permanent JIT
-      // evidence pin only after the server confirms the conversation is gone.
-      await window.omi.deleteJitConversationKeyframe(id)
       invalidateConversationsCache()
       toast('Conversation deleted', { tone: 'info' })
       navigate('/conversations')

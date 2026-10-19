@@ -536,7 +536,11 @@ class CompatibilityChecker:
             for name in sorted(old_properties):
                 property_path = f'{path}.properties.{name}'
                 if name not in new_properties:
-                    self._issue(property_path, 'released request property was removed')
+                    additional = new.get('additionalProperties', True)
+                    if additional is False:
+                        self._issue(property_path, 'released request property was removed')
+                    elif isinstance(additional, dict):
+                        self._compare_schema(old_properties[name], additional, direction, property_path, seen)
                 else:
                     self._compare_schema(old_properties[name], new_properties[name], direction, property_path, seen)
             for name in sorted(new_required - old_required):

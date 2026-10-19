@@ -3,6 +3,8 @@
 import hashlib
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
 from typing import TypedDict
 
@@ -24,7 +26,10 @@ class LiveDemandConfig:
         if not self.enabled or not uid:
             return False
         bucket = int.from_bytes(hashlib.sha256(('live-demand:' + uid).encode()).digest()[:8], 'big')
-        return uid in self.uids or bucket / 2**64 * 100 < self.percent
+        return (
+            in_rollout_cohort(uid, 'stt-live-demand', legacy_members=tuple(self.uids))
+            or bucket / 2**64 * 100 < self.percent
+        )
 
 
 def resolve_live_demand() -> LiveDemandConfig:

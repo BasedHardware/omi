@@ -12,7 +12,7 @@ from pathlib import Path
 
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
-from render_feature_flag_registry import render, _parse_mapping
+from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
 
 def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]:
@@ -85,6 +85,12 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("backend/service.py:4: unregistered feature flag: OTHER_ENABLED", errors)
         self.assertIn("backend/service.py:5: unregistered feature flag: THIRD_STOP", errors)
 
+    def test_central_kill_switch_reads_are_not_stale_and_still_require_registration(self) -> None:
+        self.write("backend/service.py", "from config.policy import kill_switch\nkill_switch('EXAMPLE_ENABLED')\n")
+        self.assertEqual([], self.errors())
+        self.write("backend/service.py", "from config.policy import kill_switch\nkill_switch('EXAMPLE_ENABLED')\nkill_switch('MISSING_ENABLED')\n")
+        self.assertIn("backend/service.py:3: unregistered feature flag: MISSING_ENABLED", self.errors())
+
     def test_swift_dart_and_build_define_patterns_require_registry_entries(self) -> None:
         self.write(
             "desktop/macos/Desktop/Sources/Feature.swift",
@@ -96,17 +102,26 @@ class RegistryFixture(unittest.TestCase):
         )
         self.write("desktop/windows/src/renderer/flags.ts", "import.meta.env.VITE_ENABLE_MISSING_WINDOWS\n")
         self.write("web/admin/src/flags.ts", "process.env.NEXT_PUBLIC_ENABLE_MISSING_WEB\n")
+        self.write("web/app/src/lib/gate.ts", "class Gate {\n  static readonly enabledFlag = 'missing-web-posthog';\n}\n")
         errors = "\n".join(self.errors())
         for key in (
-            "missing_macos_kill",
-            "missing_enable",
-            "missing-mobile-experiment",
-            "VITE_ENABLE_MISSING_WINDOWS",
-            "NEXT_PUBLIC_ENABLE_MISSING_WEB",
+            "missing_macos_kill", "missing_enable", "missing-mobile-experiment", "VITE_ENABLE_MISSING_WINDOWS", "NEXT_PUBLIC_ENABLE_MISSING_WEB", "missing-web-posthog"
         ):
             self.assertIn(f"unregistered feature flag: {key}", errors)
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
+
+    def test_swift_sdk_constant_read_is_a_real_surface_not_an_unconditional_declaration(self) -> None:
+        key = "fixture-remote-stop"
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag(
+            key, kind="posthog", surfaces=["macos"], posthog={"row": "expected", "role": "kill"}
+        )]))
+        source = 'enum Stop {\n static let key = "fixture-remote-stop"\n static var killed: Bool {\n PostHogSDK.shared.getFeatureFlag(key, sendFeatureFlagEvent: false) as? Bool == true\n }\n}\n'
+        self.write("desktop/macos/Desktop/Sources/Stop.swift", source)
+        self.assertEqual(self.errors(), [])
+        self.write("desktop/macos/Desktop/Sources/Stop.swift", source.replace(
+            ' PostHogSDK.shared.getFeatureFlag', ' // PostHogSDK.shared.getFeatureFlag'))
+        self.assertIn("stale registry entry: delete it or restore the read: " + key, self.errors())
 
     def test_cataloged_node_runtime_gate_is_not_stale(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
@@ -248,6 +263,23 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("(chart)", cells[7])
         empty = next(line for line in output.splitlines() if line.startswith("| `EMPTY_ENABLED` |"))
         self.assertIn("''", empty)
+
+    def test_renderer_indexes_deploy_action_env_overlays(self) -> None:
+        self.write(
+            ".github/actions/sync-backfill-lifecycle/action.yml",
+            'run: |\n  echo "sync_backfill_env_vars<<EOF"\n'
+            '  echo "SYNC_BACKFILL_ROUTING_ENABLED=true"\n  echo "EOF"\n'
+            '  gcloud run services update backend-sync --update-env-vars "SYNC_BACKFILL_EXTRA_ENABLED=on"\n',
+        )
+        self.write(
+            ".github/workflows/deploy-backend-prod.yml",
+            'run: gcloud run services update backend-sync --update-env-vars "PROD_ACTION_KILL=false"\n',
+        )
+        index = _deploy_index(self.root)
+        self.assertEqual(index["dev"]["sync-backfill-lifecycle (action)"]["SYNC_BACKFILL_ROUTING_ENABLED"], "true")
+        self.assertEqual(index["prod"]["sync-backfill-lifecycle (action)"]["SYNC_BACKFILL_EXTRA_ENABLED"], "on")
+        self.assertEqual(index["prod"]["deploy-backend-prod (action)"]["PROD_ACTION_KILL"], "false")
+        self.assertNotIn("PROD_ACTION_KILL", index["dev"].get("deploy-backend-prod (action)", {}))
 
     def test_experiment_requires_prereg(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment")]))

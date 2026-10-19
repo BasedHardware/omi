@@ -8,17 +8,21 @@ import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts
+from config.batch_pipeline import scheduler_control_key
+from config.policy import resolve_batch_policy
+from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.errors import validate_worker_failure
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+HEAD_OWNER_BUDGET = 64
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +53,72 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
+def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
+    return job['duration_seconds'] <= max_seconds and not (
+        shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
+    )
+
+
+def _prefer_merge_head(
+    tx: Transaction,
+    queue: dict,
+    job: dict,
+    budget: list[int],
+    observations: list,
+    *,
+    now: float,
+    max_seconds: float,
+    shared_gpu: bool,
+    candidates=None,
+) -> dict:
+    """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
+
+    The budget bounds owners visited, not positions within an owner's backlog.
+    An ordinary FIFO remains valid with head priority disabled. Compute can run
+    concurrently for an owner; OrderedMerge alone enforces pending predecessors.
+    """
+    if budget[0] <= 0:
+        observations.append(('budget_exhausted', None))
+        return job
+    budget[0] -= 1
+    head = tx.first_pending(job['owner_key'])
+    if not head:
+        observations.append(('head_not_found', None))
+        return job
+    if head['state'] == 'ready':
+        observations.append(('ready_age', max(0.0, now - head['available_at'])))
+    if (
+        head['segment_id'] == job['segment_id']
+        or head['state'] != 'ready'
+        or head['priority'] != job['priority']
+        or not _pool_allows(head, max_seconds, shared_gpu)
+    ):
+        return job
+    previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
+    if not previous or previous.get('next') != head['segment_id']:
+        observations.append(('head_not_found', None))
+        return job
+    try:
+        for linked in (previous, head):
+            tx.check_privacy(
+                linked['owner_id'],
+                (linked['conversation_id'],) if linked.get('conversation_id') else (),
+                linked.get('privacy_generation'),
+            )
+    except BatchPrivacyBlocked:
+        return job
+    if not stage_in_transaction(tx, head, 'scheduler', observations=observations, candidates=candidates).head_priority:
+        return job
+    previous['next'] = head['next']
+    tx.put('jobs', previous['segment_id'], previous)
+    if queue['tail'] == head['segment_id']:
+        queue['tail'] = previous['segment_id']
+    head['next'] = queue['head']
+    queue['head'] = head['segment_id']
+    tx.put('jobs', head['segment_id'], head)
+    return head
+
+
 def owns_lease(job: dict, token: str, now: float) -> bool:
     return job.get('state') == 'leased' and job.get('token') == token and job['lease_until'] > now
 
@@ -72,16 +142,21 @@ class Scheduler:
         self.store = store
         self.metrics = metrics
         self.pool = pool
-        self.max_attempts = max_worker_attempts()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
-    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float) -> bool:
+    def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
         previous = tx.get('jobs', item.segment_id)
         immutable = {**asdict(item), 'priority': int(item.priority)}
-        if previous:
+        if previous.get('state') == 'record_pending' and (
+            previous.get('owner_id') != item.owner_id
+            or previous.get('conversation_id') != item.conversation_id
+            or previous.get('privacy_generation') != item.privacy_generation
+        ):
+            raise ValueError('pending recording owner cannot change')
+        if previous and previous.get('state') != 'record_pending':
             if any(
                 previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
                 for key, value in immutable.items()
@@ -89,12 +164,15 @@ class Scheduler:
             ):
                 raise ValueError('segment ID reused with different immutable work')
             return False
+        policy = policy or resolve_batch_policy(item.owner_id)
         key = owner_key(item.owner_id)
         owner = tx.get('owners', key)
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
             **immutable,
+            'policy': policy.to_dict(),
+            'policy_source': 'admission',
             'protocol_version': 1,
             'owner_key': key,
             'enqueued_at': now,
@@ -126,7 +204,7 @@ class Scheduler:
         # callers must supply a fresh exclusive-admission snapshot every pull.
         allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
         if capacity is not None:
-            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=shared_live_enabled())
+            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=True)
             limit = min(limit, slots)
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
@@ -173,16 +251,19 @@ class Scheduler:
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
         token = uuid.uuid4().hex
+        candidates = {}
 
         def commit(tx):
+            observations = []
             gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
             gpu = tx.get('gpus', gpu_key) if gpu_key else {}
             if gpu.get('token'):
-                return None, 'reserved'
+                return None, 'reserved', observations
             control = read_control(tx, shard)
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
+            head_budget = [HEAD_OWNER_BUDGET]
             for _ in range(MAX_VISITS):
                 if not ring:
                     break
@@ -200,15 +281,43 @@ class Scheduler:
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
                         )
-                        allowed = job['duration_seconds'] <= max_seconds and not (
-                            gpu_key and job['unit_kind'] != 'capture_span'
-                        )
                     except BatchPrivacyBlocked:
-                        allowed = False
-                    if allowed:
-                        eligible_queues[queue_key] = job['duration_seconds']
-                    else:
                         blocked.add(queue_key)
+                    else:
+                        privacy_checked_segment = job['segment_id']
+                        policy = stage_in_transaction(
+                            tx, job, 'scheduler', observations=observations, candidates=candidates
+                        )
+                        if policy.head_priority:
+                            job = _prefer_merge_head(
+                                tx,
+                                queue,
+                                job,
+                                head_budget,
+                                observations,
+                                now=now,
+                                max_seconds=max_seconds,
+                                shared_gpu=bool(gpu_key),
+                                candidates=candidates,
+                            )
+                        job.setdefault('unit_kind', 'conversation')
+                        try:
+                            if job['segment_id'] != privacy_checked_segment:
+                                tx.check_privacy(
+                                    job['owner_id'],
+                                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                                    job.get('privacy_generation'),
+                                )
+                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
+                            allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
+                                not gpu_key or policy.shared_live
+                            )
+                        except BatchPrivacyBlocked:
+                            allowed = False
+                        if allowed:
+                            eligible_queues[queue_key] = job['duration_seconds']
+                        else:
+                            blocked.add(queue_key)
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
                     if len(blocked) == len(ring):
@@ -258,14 +367,29 @@ class Scheduler:
                 control[field(int(priority), 'service')] += cost / owner_count
                 tx.put('control', shard, control)
                 item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
-                return (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']), True
+                return (
+                    (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at']),
+                    True,
+                    observations,
+                )
             control[field(int(priority), 'active')] = bool(ring)
             if not eligible_queues:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
-            return None, bool(eligible_queues)
+            return None, bool(eligible_queues), observations
 
-        return self.store.run(commit)
+        receipt, eligible, observations = self.store.run(commit)
+        record_policy_observations(observations)
+        # Only committed attempts emit telemetry; Firestore may retry callbacks.
+        if self.metrics:
+            for event, age in observations:
+                if event in {'policy_fallback', 'policy_stage'}:
+                    continue
+                try:
+                    self.metrics.record_head(event, priority, age=age)
+                except Exception:
+                    pass  # Metrics cannot turn an issued lease into a failed pull.
+        return receipt, eligible
 
     def heartbeat(self, segment_id: str, token: str, now: float) -> bool:
         def commit(tx):
@@ -304,12 +428,36 @@ class Scheduler:
             self.metrics.record('completed')
         return accepted
 
-    def fail(self, segment_id: str, token: str, now: float, *, quarantine: bool = False) -> bool:
+    def fail(
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        *,
+        quarantine: bool = False,
+        padded_retry_empty: bool = False,
+        padded_retry: str | None = None,
+        worker_failure: dict | None = None,
+    ) -> bool:
+        if worker_failure is not None:
+            validate_worker_failure(worker_failure)
+        if padded_retry is None and padded_retry_empty:
+            padded_retry = 'empty'
+        elif padded_retry == 'empty' and not padded_retry_empty:
+            padded_retry_empty = True
+        if padded_retry not in {None, 'empty', 'skipped_oversize'} or (padded_retry_empty and padded_retry != 'empty'):
+            raise ValueError('invalid padded retry evidence')
+
+        candidates = {}
+        observations = []
+
         def commit(tx):
+            observations.clear()
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if quarantine or job['attempt'] >= self.max_attempts:
+            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])
@@ -324,6 +472,10 @@ class Scheduler:
                     quarantined_at=now,
                     recovery_state='held',
                 )
+                if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
+                    job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
+                if worker_failure is not None:
+                    job['worker_failure'] = dict(worker_failure)
                 job.pop('retry_started_at', None)
                 tx.put('owners', job['owner_key'], owner)
             else:
@@ -332,6 +484,7 @@ class Scheduler:
             return job['state'], job['attempt'], job['duration_seconds']
 
         outcome = self.store.run(commit)
+        record_policy_observations(observations)
         if outcome:
             state, attempt, seconds = outcome
             if state == 'quarantined':
@@ -347,7 +500,12 @@ class Scheduler:
                     pass
             if state == 'quarantined':
                 try:
-                    logger.error('event=batch_quarantined reason=worker_failed attempt=%d recovery=held', attempt)
+                    logger.error(
+                        'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
+                        attempt,
+                        worker_failure['stage'] if worker_failure else 'unknown',
+                        worker_failure['reason'] if worker_failure else 'unclassified',
+                    )
                     logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:
                     pass

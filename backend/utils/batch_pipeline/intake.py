@@ -10,19 +10,23 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import priority_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
+from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import is_valid_completed_sync_content_result
 from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.artifact_policy import create_artifact_store
-from utils.batch_pipeline.audio import decode_units, with_context
+from utils.batch_pipeline.audio import with_context
+from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.other.local_storage import create_storage_client
+from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
 from utils.sync.capture import chunk_identity
@@ -62,7 +66,14 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
-        failed = sum(job.get('state') == 'quarantined' for job in jobs)
+        recovering = any(
+            job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
+        failed = sum(
+            job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
         status = (
             'failed'
             if failed
@@ -71,7 +82,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                 if completed
                 else (
                     'processing'
-                    if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
+                    if recovering or any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
                     else 'queued'
                 )
             )
@@ -93,7 +104,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
     return store.run(read)
 
 
-def _start_response(status: dict) -> JSONResponse:
+def start_response(status: dict) -> JSONResponse:
     return JSONResponse(
         status_code=202,
         content={
@@ -117,8 +128,11 @@ async def accept_upload(
     client_platform: str | None,
     byok_enabled: bool = False,
     intake_context: dict | None = None,
+    record_router=None,
+    policy: BatchUnitPolicy | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -126,7 +140,7 @@ async def accept_upload(
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
-            return _start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
+            return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
             cached = await run_blocking(
                 db_executor,
@@ -146,7 +160,7 @@ async def accept_upload(
             if cached:
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
-                    return _start_response(status)
+                    return start_response(status)
         if previous:
             # Existing legacy ownership includes capped/retryable/missing-Redis
             # recovery. Its original claimant remains the sole authority.
@@ -170,9 +184,47 @@ async def accept_upload(
             requires_compute_admission=True,
             conversation_id=conversation_id,
         )
-        context = await run_blocking(db_executor, batch_artifact_authorize, store, seed)
-        user = await run_blocking(
-            db_executor, lambda: store.client.collection('users').document(uid).get().to_dict() or {}
+        snapshots = {}
+        context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
+        user = snapshots['user']
+        target = snapshots.get('conversations', {}).get(conversation_id) or {}
+        # Privacy authorization already loaded this row. Rollback may drain a
+        # native owner here without adding an ownership-discovery read to dark
+        # uploads, or accidentally admitting a second GPU job.
+        if target.get('record_lane_owner') == 'batch_live_v1':
+            if record_router is None:
+                return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
+            return await record_router(
+                uid=uid,
+                conversation_id=conversation_id,
+                content_id=content_id,
+                paths=paths,
+                source=source,
+                client_device_id=client_device_id,
+                byok_enabled=byok_enabled,
+                loaded_conversation=target,
+                policy=policy,
+            )
+        if target.get('record_lane_owner') == 'legacy_final_pass_v1':
+            return None
+        language = normalized_stt_language(target.get('language') or user.get('language'))
+        if policy.live_record_enabled and language not in (
+            PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+        ):
+            # Keep the supported existing provider route. Never silently send
+            # an unsupported language to the record worker's fixed Parakeet.
+            record_fallback(
+                component='stt_selection', from_mode='none', to_mode='none', reason='other', outcome='recovered'
+            )
+            return None
+        record_origin = bool(
+            target
+            and source == 'desktop'
+            and policy.live_record_enabled
+            and not target.get('uses_custom_stt')
+            and user.get('private_cloud_sync_enabled', True)
+            and normalized_stt_language(target.get('language'))
+            in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
         )
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
@@ -226,6 +278,8 @@ async def accept_upload(
             data_protection_level=context.level,
             target_conversation_id=conversation_id,
             privacy_generation=context.generation,
+            language=target.get('language'),
+            record_origin=record_origin,
         )
         outcome = await run_blocking(
             db_executor,
@@ -235,6 +289,7 @@ async def accept_upload(
             binding,
             time.time(),
             namespace=store.namespace,
+            policy=policy,
             require_artifacts=True,
             intake={
                 'owner_id': uid,
@@ -249,16 +304,10 @@ async def accept_upload(
         )
         if outcome['outcome'] == 'batch':
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
-            return _start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
+            return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
     except BatchPrivacyBlocked:
-        return JSONResponse(
-            status_code=409,
-            content={
-                'code': 'sync_batch_privacy_blocked',
-                'detail': 'Capture is unavailable for server processing',
-            },
-        )
+        return privacy_blocked_response()
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
@@ -274,6 +323,16 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+
+
+def privacy_blocked_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            'code': 'sync_batch_privacy_blocked',
+            'detail': 'Capture is unavailable for server processing',
+        },
+    )
 
 
 def get_durable_job_status(job_id: str, uid: str) -> dict | None:

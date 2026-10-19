@@ -114,6 +114,18 @@ void main() {
       expect(find.byKey(const Key('home_pending_row')), findsOneWidget);
     });
 
+    testWidgets('On the Way lists the server work the row stands for', (tester) async {
+      final store = await _store(pending: const [
+        PendingWorkItem(id: 'conv:a', kind: 'conversation', state: 'summarizing', conversationIds: ['a']),
+      ]);
+      await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
+      await tester.tap(find.byKey(const Key('home_pending_row')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('Processing'), findsOneWidget);
+    });
+
     testWidgets('nothing pending: no row', (tester) async {
       final store = await _store();
       await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));

@@ -9,6 +9,8 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database.batch_pipeline_policy import load_stage_policy
+from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -41,20 +43,30 @@ class ProjectionStore:
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
+        if job.get('projection_binding') and (job.get('policy_parts') or {}).get('projection') is None:
+            job, _ = load_stage_policy(self.store, segment_id, 'projection')
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
         return job, entry, normalized_binding(job['projection_binding'])
 
+    def policy(self, segment_id: str) -> ProjectionPolicy:
+        _, policy = load_stage_policy(self.store, segment_id, 'projection')
+        if policy is None:
+            raise ProjectionBlocked('durable projection policy required')
+        return policy
+
     def session(self, segment_id: str, binding: ProjectionBinding, now: float, **part):
         return ProjectionSession(self, segment_id, binding, now, **part)
 
-    def ready(self, segment_id: str, binding: ProjectionBinding, now: float, *, part_index=None) -> dict:
+    def ready(self, segment_id: str, binding: ProjectionBinding, now: float, *, part_index=None, policy=None) -> dict:
         """Acknowledge a replayable post-persist mark; never append again."""
+
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now, part_index=part_index)
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
             session.prepare(transaction, replay=False)
             receipt = dict(session.receipt())
             if not receipt:
@@ -63,25 +75,28 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit)
+        return self.run(commit, policy=policy)
 
     def check(self, session):
         @firestore.transactional
         def read(transaction):
             session.prepare(transaction)
 
-        self.run(read)
+        self.run(read, policy=session.policy)
 
-    def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float):
+    def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
+
+        policy = policy or self.policy(segment_id)
+
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if session.ledger.get('status') != 'completed':
                 raise ProjectionBlocked('client publication preceded durable completion')
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
-        self.run(commit)
+        self.run(commit, policy=policy)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -101,14 +116,24 @@ class ProjectionStore:
         return self.run(read)
 
     def mark_enrichment(
-        self, segment_id: str, binding: ProjectionBinding, now: float, canonical: str, language: str, *, part_index=None
+        self,
+        segment_id: str,
+        binding: ProjectionBinding,
+        now: float,
+        canonical: str,
+        language: str,
+        *,
+        part_index=None,
+        policy=None,
     ):
         from utils.sync import reprocess
+
+        policy = policy or self.policy(segment_id)
 
         def mutate(document_id, operation):
             @firestore.transactional
             def commit(transaction):
-                session = self.session(segment_id, binding, now, part_index=part_index)
+                session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
                 session.prepare(transaction, replay=False)
                 session.guard(transaction, [canonical])
                 receipt = dict(session.receipt())
@@ -116,7 +141,7 @@ class ProjectionStore:
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
                 if receipt.get('state') == 'ready':
-                    return old or {}, True
+                    return {**(old or {}), '_wake': False}, True
                 row, result = operation(old)
                 if old is None and session.job.get('priority') != 0:
                     from utils.cloud_tasks import is_sync_backfill_routing_enabled
@@ -145,30 +170,35 @@ class ProjectionStore:
                 session.write_receipt(transaction, receipt)
                 return result
 
-            return self.run(commit)
+            return self.run(commit, policy=policy)
 
-        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate)
+        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate, snapshot_summary=True)
 
-    def run(self, operation):
+    def run(self, operation, *, policy=None):
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
         import os
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+        if (
+            not (policy and policy.projection_contention)
+            and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
+        ):
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            operation,
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
             operation_name='batch_projection',
         )
 
-    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float) -> bool:
+    def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None) -> bool:
         """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
+
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if session.receipt().get('state') != 'ready':
                 return False
@@ -187,7 +217,7 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit)
+        return self.run(commit, policy=policy)
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -209,6 +239,8 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        if binding.native_record:
+            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
@@ -230,17 +262,21 @@ class ProjectionStore:
             'completed': ledger.get('status') == 'completed',
         }
 
-    def complete(self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict) -> dict | None:
+    def complete(
+        self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict, *, policy=None
+    ) -> dict | None:
         """Complete only after every bound sibling persisted and marked enrichment."""
+        policy = policy or self.policy(segment_id)
 
         @firestore.transactional
         def commit(transaction):
-            session = self.session(segment_id, binding, now)
+            session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             receipts = []
             live_siblings = []
             erased_count = 0
             captured_seconds = 0.0
+            terminal_empty_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -250,6 +286,8 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
+                    terminal_empty_count += 1
                 live_siblings.append(sibling)
                 captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
@@ -288,6 +326,7 @@ class ProjectionStore:
                     mapped.append((cid, receipt['created'] and cid == original_id))
             new = sorted({cid for cid, created in mapped if created})
             updated = sorted({cid for cid, created in mapped if not created})
+            superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
             result = {
@@ -296,8 +335,16 @@ class ProjectionStore:
                 'failed_segments': 0,
                 'total_segments': len(receipts),
                 'errors': [],
-                'outcome': 'success' if new or updated or erased_count else 'expected_silence',
+                'outcome': (
+                    'success'
+                    if new or updated or erased_count or terminal_empty_count or superseded_count
+                    else 'expected_silence'
+                ),
             }
+            if terminal_empty_count:
+                result['no_recoverable_speech_segments'] = terminal_empty_count
+            if superseded_count:
+                result['superseded_segments'] = superseded_count
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):
@@ -346,7 +393,7 @@ class ProjectionStore:
             return result, True, captured_seconds
 
         with writing('usage_month_cache', binding.owner_id):
-            result, changed, seconds = self.run(commit)
+            result, changed, seconds = self.run(commit, policy=policy)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result

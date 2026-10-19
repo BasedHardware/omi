@@ -8,11 +8,14 @@ import contextlib
 import importlib.util
 import io
 import json
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import call, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_PATH = ROOT / ".github" / "scripts" / "check_public_build_contract.py"
@@ -166,6 +169,75 @@ jobs:
 
     def test_accepts_centralized_public_build_deployment(self) -> None:
         self.assertEqual(self.errors(), [])
+
+    def test_candidate_timeout_fields_must_be_positive_ordered_and_bounded(self) -> None:
+        cases = (
+            ({"timeout_seconds": 0}, "timeout_seconds must be a positive integer"),
+            ({"timeout_seconds": -1}, "timeout_seconds must be a positive integer"),
+            ({"retry_timeout_seconds": 0}, "retry_timeout_seconds must be a positive integer"),
+            ({"retry_timeout_seconds": -1}, "retry_timeout_seconds must be a positive integer"),
+            ({"timeout_seconds": 45, "retry_timeout_seconds": 45}, "must be less than timeout_seconds"),
+            ({"timeout_seconds": 200, "retry_timeout_seconds": 100}, "worst-case smoke"),
+        )
+        for fields, expected in cases:
+            with self.subTest(fields=fields):
+                contract = fixture_contract()
+                contract["targets"]["fake"]["candidate_acceptance"].update(fields)
+                self.write_json("config/public-build-contract.json", contract)
+                with self.assertRaisesRegex(ValueError, expected):
+                    self.target()
+
+    def test_candidate_acceptance_path_is_strict_and_defaults_to_root(self) -> None:
+        self.assertEqual(self.target().candidate_acceptance.path, "/")
+        for candidate_path in (
+            "login",
+            "//example.com",
+            "https://example.com/login",
+            "/login?next=/admin",
+            "/login#section",
+            "/login with space",
+            "/login\\admin",
+            "/登录",
+        ):
+            with self.subTest(path=candidate_path):
+                contract = fixture_contract()
+                contract["targets"]["fake"]["candidate_acceptance"]["path"] = candidate_path
+                self.write_json("config/public-build-contract.json", contract)
+                with self.assertRaisesRegex(ValueError, "candidate_acceptance.path"):
+                    self.target()
+
+    def test_browser_smoke_joins_candidate_path_and_root_default_in_browser_argv(self) -> None:
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["path"] = "/login"
+        self.write_json("config/public-build-contract.json", contract)
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual(run.call_args.args[0][-1], "https://candidate.example/login")
+
+        self.write_json("config/public-build-contract.json", fixture_contract())
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual(run.call_args.args[0][-1], "https://candidate.example/")
+
+    def test_shipped_targets_use_requested_app_timeout_and_default_frontend_timeout(self) -> None:
+        contract = STATIC.load_contract(STATIC.DEFAULT_CONTRACT)
+        app = contract.targets["app"].candidate_acceptance
+        frontend = contract.targets["frontend"].candidate_acceptance
+        self.assertEqual((app.timeout_seconds, app.retry_timeout_seconds), (120, 60))
+        self.assertEqual((frontend.timeout_seconds, frontend.retry_timeout_seconds), (45, 19))
+        self.assertEqual(app.path, "/login")
+        self.assertEqual(frontend.path, "/")
 
     def test_manual_development_dispatch_on_an_exact_pr_head_uses_development(self) -> None:
         self.assertEqual(
@@ -1122,6 +1194,229 @@ jobs:
 
         self.assertTrue(True)
 
+    def test_browser_smoke_retries_render_failures_then_passes(self) -> None:
+        failures = (
+            OSError("browser unavailable"),
+            subprocess.TimeoutExpired("fake-browser", 50),
+            SimpleNamespace(returncode=1, stdout=""),
+        )
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        for failure in failures:
+            for failed_attempts in (1, 2):
+                with self.subTest(failure=failure, failed_attempts=failed_attempts):
+                    with (
+                        patch.object(SMOKE.subprocess, "run", side_effect=[failure] * failed_attempts + [ready]) as run,
+                        patch.object(SMOKE.time, "sleep") as sleep,
+                        contextlib.redirect_stderr(io.StringIO()),
+                    ):
+                        SMOKE.smoke(
+                            target="fake",
+                            base_url="https://candidate.example",
+                            contract_path=self.root / "config/public-build-contract.json",
+                            environment={"OMI_BROWSER_BIN": "fake-browser"},
+                        )
+                    self.assertEqual(run.call_count, failed_attempts + 1)
+                    self.assertEqual([args.args[0][0] for args in run.call_args_list], ["fake-browser"] * run.call_count)
+                    self.assertEqual(sleep.call_args_list, [call(5)] * failed_attempts)
+
+    def test_browser_smoke_uses_target_timeouts_and_keeps_defaults(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"].update(
+            {"timeout_seconds": 120, "retry_timeout_seconds": 60}
+        )
+        self.write_json("config/public-build-contract.json", contract)
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        with (
+            patch.object(
+                SMOKE.subprocess,
+                "run",
+                side_effect=[subprocess.TimeoutExpired("fake-browser", 125), ready],
+            ) as run,
+            patch.object(SMOKE.time, "sleep") as sleep,
+        ):
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        self.assertEqual([call.kwargs["timeout"] for call in run.call_args_list], [125, 65])
+        browser_args = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(
+            [[arg for arg in args if arg.startswith("--timeout=")] for args in browser_args],
+            [["--timeout=120000"], ["--timeout=60000"]],
+        )
+        for args in browser_args:
+            self.assertIn("--virtual-time-budget=10000", args)
+            self.assertNotIn("--run-all-compositor-stages-before-draw", args)
+        self.assertEqual(sleep.call_args_list, [call(5)])
+
+        self.write_json("config/public-build-contract.json", fixture_contract())
+        defaults = self.target().candidate_acceptance
+        self.assertEqual((defaults.timeout_seconds, defaults.retry_timeout_seconds), (45, 19))
+
+    def test_browser_smoke_virtual_time_budget_is_configurable(self) -> None:
+        ready = SimpleNamespace(
+            returncode=0,
+            stdout='<span data-omi-public-build-canary="fake:ready" />',
+            stderr="",
+        )
+        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                virtual_time_budget_ms=2_500,
+            )
+        self.assertIn("--virtual-time-budget=2500", run.call_args.args[0])
+
+    def test_browser_smoke_logs_stderr_tail_and_stdout_presence_on_failure(self) -> None:
+        stderr = "discarded-prefix\n" + ("x" * 2_050) + "\nlast chrome error"
+        failed = SimpleNamespace(returncode=1, stdout="partial DOM", stderr=stderr)
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=[failed, failed, failed]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        diagnostics = output.getvalue()
+        self.assertIn("stdout_bytes=yes", diagnostics)
+        self.assertIn("last chrome error", diagnostics)
+        self.assertNotIn("discarded-prefix", diagnostics)
+
+    def test_browser_smoke_logs_partial_timeout_output(self) -> None:
+        timed_out = subprocess.TimeoutExpired(
+            "fake-browser",
+            50,
+            output=b"partial DOM",
+            stderr=b"last timeout diagnostic",
+        )
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=[timed_out, timed_out, timed_out]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        self.assertIn("stdout_bytes=yes", output.getvalue())
+        self.assertIn("chrome_stderr_tail:\nlast timeout diagnostic", output.getvalue())
+
+    def test_browser_smoke_logs_output_when_the_ready_marker_is_missing(self) -> None:
+        rendered = SimpleNamespace(returncode=0, stdout="partial DOM", stderr="Firebase boot still pending")
+        output = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", return_value=rendered),
+            contextlib.redirect_stderr(output),
+        ):
+            with self.assertRaisesRegex(SMOKE.BrowserSmokeError, "canary did not become ready"):
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                )
+        self.assertIn("stdout_bytes=yes", output.getvalue())
+        self.assertIn("chrome_stderr_tail:\nFirebase boot still pending", output.getvalue())
+
+    def test_browser_smoke_logs_duration_for_each_attempt(self) -> None:
+        stderr = io.StringIO()
+        with (
+            patch.object(SMOKE.subprocess, "run", side_effect=subprocess.TimeoutExpired("fake-browser", 50)),
+            patch.object(SMOKE.time, "monotonic", side_effect=[0.0, 50.0, 55.0, 79.0, 80.0, 104.0]),
+            patch.object(SMOKE.time, "sleep"),
+            contextlib.redirect_stderr(stderr),
+        ):
+            with self.assertRaises(SMOKE.BrowserSmokeError):
+                SMOKE.render_candidate(browser="fake-browser", base_url="https://candidate.example")
+        self.assertIn("attempt=1 browser=fake-browser duration=50.0s", stderr.getvalue())
+        self.assertIn("attempt=2 browser=fake-browser duration=24.0s", stderr.getvalue())
+        self.assertIn("attempt=3 browser=fake-browser duration=24.0s", stderr.getvalue())
+
+    def test_browser_smoke_does_not_retry_acceptance_failures(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
+        self.write_json("config/public-build-contract.json", contract)
+        for document, reason in (
+            ("<html></html>", "client public-build canary did not become ready"),
+            ('<span data-omi-public-build-canary="fake:ready" />', "client public-build sha did not match"),
+            (
+                '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="old" />',
+                "client public-build sha did not match",
+            ),
+        ):
+            # Even after a transient render failure, a completed render is a
+            # final content verdict: no retry or fallback to the next browser.
+            for transient_first in (False, True):
+                with self.subTest(document=document, transient_first=transient_first):
+                    results = [SimpleNamespace(returncode=1, stdout="")] if transient_first else []
+                    results.append(SimpleNamespace(returncode=0, stdout=document))
+                    with (
+                        patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
+                        patch.object(SMOKE.time, "sleep") as sleep,
+                        contextlib.redirect_stderr(io.StringIO()),
+                    ):
+                        with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                            SMOKE.smoke(
+                                target="fake",
+                                base_url="https://candidate.example",
+                                contract_path=self.root / "config/public-build-contract.json",
+                                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                                expect_sha="new",
+                            )
+                    self.assertEqual(str(caught.exception), reason)
+                    self.assertEqual(run.call_count, len(results))
+                    self.assertEqual(sleep.call_args_list, [call(5)] if transient_first else [])
+
+    def test_browser_smoke_exhaustion_preserves_last_reason_and_bounds_runtime(self) -> None:
+        environment = {"OMI_BROWSER_BIN": "fake-browser"}
+        browsers = SMOKE.browser_candidates(environment)
+        for last_failure, reason in (
+            (OSError("sensitive details"), "headless browser did not run"),
+            (
+                subprocess.TimeoutExpired("sensitive command", 24),
+                "headless browser timed out rendering the candidate",
+            ),
+            (SimpleNamespace(returncode=1, stdout=""), "headless browser could not render the candidate"),
+        ):
+            with self.subTest(reason=reason):
+                results = [
+                    subprocess.TimeoutExpired("fake-browser", 50),
+                    OSError("browser unavailable"),
+                    SimpleNamespace(returncode=1, stdout=""),
+                ] * len(browsers)
+                results[-1] = last_failure
+                with (
+                    patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
+                    patch.object(SMOKE.time, "sleep") as sleep,
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                        SMOKE.smoke(
+                            target="fake",
+                            base_url="https://candidate.example",
+                            contract_path=self.root / "config/public-build-contract.json",
+                            environment=environment,
+                        )
+                self.assertEqual(str(caught.exception), reason)
+                self.assertEqual(SMOKE.sanitized_browser_smoke_reason(caught.exception), reason)
+                if isinstance(last_failure, Exception):
+                    self.assertIs(caught.exception.__cause__, last_failure)
+                self.assertEqual(
+                    [args.args[0][0] for args in run.call_args_list],
+                    [browser for browser in browsers for _ in range(3)],
+                )
+                self.assertEqual(sleep.call_args_list, [call(5)] * (2 * len(browsers)))
+                timeouts = [args.kwargs["timeout"] for args in run.call_args_list]
+                self.assertEqual(timeouts[::3], [50] * len(browsers))
+                self.assertEqual(timeouts[1::3], [24] * len(browsers))
+                self.assertEqual(timeouts[2::3], [24] * len(browsers))
+                extra_runtime = sum(timeouts) + sum(args.args[0] for args in sleep.call_args_list) - 45 * len(browsers)
+                self.assertLessEqual(extra_runtime, len(browsers) * 63)
+
     def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
         original = SMOKE.smoke
 
@@ -1281,6 +1576,50 @@ class AcceptanceRouteFixture(unittest.TestCase):
         self.assertEqual(STATIC.serving_revision(document), "svc-live")
         self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
         self.assertEqual(STATIC.serving_revision({}), "")
+
+    def test_stale_candidate_tags_keep_newest_serving_and_current(self) -> None:
+        traffic = [{"revisionName": "admin-live", "percent": 100}]
+        traffic += [
+            {"revisionName": f"admin-r{run}", "tag": f"public-admin-{run}-1", "percent": 0}
+            for run in (900, 1000, 99, 1001, 1002)
+        ]
+        traffic += [
+            {"revisionName": "admin-live", "tag": "public-admin-5-1"},
+            {"revisionName": "admin-old", "tag": "public-admin-f0bebc2-manual"},
+            {"revisionName": "admin-old2", "tag": "admin-2596a67-d1"},
+            {"revisionName": "admin-r1000", "tag": "public-admin-1000-2"},
+            {"revisionName": "other", "tag": "public-adminx-1-1"},
+            {"revisionName": "other", "tag": "canary"},
+        ]
+        document = {"spec": {"traffic": traffic}}
+        stale = STATIC.stale_candidate_tags(document, target="admin", keep_latest=2, keep_tags=["public-admin-99-1"])
+        # Newest two by (run, attempt): 1002-1, 1001-1. Serving revision and the explicit tag are kept.
+        self.assertEqual(
+            stale,
+            ["public-admin-900-1", "public-admin-1000-1", "public-admin-f0bebc2-manual",
+             "admin-2596a67-d1", "public-admin-1000-2"],
+        )
+        self.assertNotIn("public-adminx-1-1", stale)
+        self.assertNotIn("canary", stale)
+        self.assertEqual(STATIC.stale_candidate_tags({}, target="admin", keep_latest=3), [])
+        self.assertEqual(
+            STATIC.stale_candidate_tags({"status": {"traffic": traffic}}, target="admin", keep_latest=2,
+                                        keep_tags=["public-admin-99-1"]),
+            stale,
+        )
+
+    def test_stale_tags_cli_prints_comma_separated(self) -> None:
+        document = {"spec": {"traffic": [
+            {"revisionName": "a", "percent": 100},
+            {"revisionName": "b", "tag": "public-fake-1-1"},
+            {"revisionName": "c", "tag": "public-fake-2-1"},
+        ]}}
+        result = subprocess.run(
+            [sys.executable, str(ROOT / ".github" / "scripts" / "public_build_acceptance_route.py"),
+             "stale-tags", "--target", "fake", "--keep-latest", "1"],
+            input=json.dumps(document), capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "public-fake-1-1")
 
     def test_admin_background_refresh_has_production_cpu_after_the_response(self) -> None:
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["admin"]
@@ -1520,7 +1859,7 @@ class RuntimeServiceAccountPreflightTests(unittest.TestCase):
 class RepositoryBetaRoutingConfig(unittest.TestCase):
     """Keep the public web Beta build on the same development serving plane as other Beta clients."""
 
-    def test_web_development_build_is_beta_and_deploys_remain_manual(self) -> None:
+    def test_web_development_build_is_beta_and_app_deploys_are_scoped(self) -> None:
         contract = json.loads((ROOT / "config/public-build-contract.json").read_text(encoding="utf-8"))
         values = json.loads((ROOT / "config/public-build-values.json").read_text(encoding="utf-8"))
         app_inputs = {item["name"] for item in contract["targets"]["app"]["inputs"]}
@@ -1537,11 +1876,51 @@ class RepositoryBetaRoutingConfig(unittest.TestCase):
 
         workflow = (ROOT / ".github/workflows/gcp_app.yml").read_text(encoding="utf-8")
         personas_workflow = (ROOT / ".github/workflows/gcp_personas.yml").read_text(encoding="utf-8")
-        self.assertNotIn("\n  push:", workflow)
+        # The app auto-deploys from main/development only, behind the reviewed
+        # path filter; personas remain manual-only deployments.
+        self.assertIn('push:\n    branches: ["main", "development"]', workflow)
         self.assertNotIn("\n  push:", personas_workflow)
         self.assertIn("  workflow_dispatch:\n    inputs:", workflow)
         self.assertIn("  workflow_dispatch:\n    inputs:", personas_workflow)
         self.assertIn("environment: ${{ github.event_name == 'workflow_dispatch'", workflow)
+
+        # The app image builds from the repository root (build_context "."),
+        # so the root .dockerignore is a build input and must retrigger the
+        # deploy when its context rules change.
+        self.assertEqual(contract["targets"]["app"]["deployment"]["build_context"], ".")
+        self.assertIn("'.dockerignore'", workflow)
+
+        # Every repository script the shared deploy pipeline executes — plus
+        # each helper those scripts import from .github/scripts — must be in
+        # the push path filter, so a helper fix on main redeploys the app.
+        executed: set[str] = set()
+        for action in (
+            ".github/actions/deploy-public-build/action.yml",
+            ".github/actions/prepare-public-build/action.yml",
+            ".github/actions/public-build-candidate-promotion/action.yml",
+        ):
+            executed.update(
+                re.findall(
+                    r"python3 (\S+\.py)",
+                    (ROOT / action).read_text(encoding="utf-8"),
+                )
+            )
+        scripts = {script for script in executed if (ROOT / script).is_file()}
+        for script in sorted(scripts):
+            self.assertIn(
+                f"'{script}'",
+                workflow,
+                f"gcp_app.yml push paths must cover executed script {script}",
+            )
+            body = (ROOT / script).read_text(encoding="utf-8")
+            for match in re.findall(r"^from (\w+) import", body, re.MULTILINE) + re.findall(r"^import (\w+)$", body, re.MULTILINE):
+                helper = f".github/scripts/{match}.py"
+                if (ROOT / helper).is_file():
+                    self.assertIn(
+                        f"'{helper}'",
+                        workflow,
+                        f"gcp_app.yml push paths must cover {script} dependency {helper}",
+                    )
 
 
 if __name__ == "__main__":

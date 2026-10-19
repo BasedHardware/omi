@@ -14,6 +14,7 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import errno
 import math
 import os
 import secrets
@@ -171,34 +172,56 @@ class Config:
 def load(path: Optional[Path] = None) -> Config:
     """Load the config from disk, returning an empty Config if the file is missing.
 
-    A malformed or undecodable TOML file also yields an empty Config rather
-    than raising, so read-only diagnostics such as ``omi version`` and
-    ``omi config path`` keep working precisely when the config needs repair.
-    The parse failure is recorded on :attr:`Config.load_error`, and
-    :func:`save` refuses to overwrite such a file so a write command cannot
+    A file that is malformed, undecodable, or unreadable altogether also yields
+    an empty Config rather than raising, so read-only diagnostics such as
+    ``omi version`` and ``omi config path`` keep working precisely when the
+    config needs repair. The reason is recorded on :attr:`Config.load_error`,
+    and :func:`save` refuses to overwrite such a file so a write command cannot
     silently destroy config the user could still repair by hand.
     """
     p = path or default_config_path()
-    if not p.exists():
-        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
-
-    with p.open("rb") as fh:
-        try:
+    try:
+        with p.open("rb") as fh:
             data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
+    except FileNotFoundError:
+        if _has_non_directory_parent(p):
+            # A regular file where a parent directory should be. POSIX raises
+            # NotADirectoryError for it; Windows reports the path as not found.
+            # Record it the POSIX way on every OS, so the path is not mistaken
+            # for a config that was never written and save() refuses it.
+            not_a_dir = NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), str(p))
             return Config(
                 path=p,
                 active_profile=DEFAULT_PROFILE_NAME,
                 profiles={},
-                load_error=f"config file is not valid TOML: {exc}",
+                load_error=f"config file could not be read: {not_a_dir}",
             )
-        except UnicodeDecodeError as exc:
-            return Config(
-                path=p,
-                active_profile=DEFAULT_PROFILE_NAME,
-                profiles={},
-                load_error=f"config file is not valid UTF-8: {exc}",
-            )
+        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
+    except tomllib.TOMLDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid TOML: {exc}",
+        )
+    except UnicodeDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid UTF-8: {exc}",
+        )
+    except OSError as exc:
+        # The file is there but we cannot read it — wrong owner after a `sudo`
+        # run, a mode the user tightened, a directory in its place. That is the
+        # state this function exists to survive, so record it like a parse
+        # failure: diagnostics keep working and save() still refuses to clobber.
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file could not be read: {exc}",
+        )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
     if not isinstance(active, str):
@@ -278,6 +301,15 @@ def load(path: Optional[Path] = None) -> Config:
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
+
+
+def _has_non_directory_parent(path: Path) -> bool:
+    """True when a parent of ``path`` exists but is not a directory."""
+    for parent in path.parents:
+        if os.path.exists(parent):
+            # Everything above the nearest existing parent is a directory.
+            return not os.path.isdir(parent)
+    return False
 
 
 def save(config: Config) -> None:

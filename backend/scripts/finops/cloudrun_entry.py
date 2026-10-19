@@ -257,6 +257,10 @@ def subprocess_run(date: str) -> int:
         if p.stdout and p.stdout.strip():
             sys.stderr.write("stdout tail:\n%s\n" % "\n".join(p.stdout.strip().splitlines()[-20:]))
         return p.returncode
+    # Successful child warnings would otherwise disappear before Cloud Logging.
+    for line in (p.stderr or "").splitlines():
+        if line.startswith("WARNING: Mercury"):
+            sys.stderr.write(line + "\n")
     if (p.stdout or "").strip():
         sys.stdout.write(p.stdout.strip() + "\n")
     return 0

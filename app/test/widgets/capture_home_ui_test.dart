@@ -92,8 +92,20 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get isCallActive => callActive;
   @override
   bool get isPhoneMicBatchRecording => batch;
+  bool offlineMutedState = false;
+  int offlineMuteToggles = 0;
   @override
-  bool get offlineMuted => false;
+  bool get offlineMuted => offlineMutedState;
+  @override
+  Future<void> toggleOfflineMute() async {
+    offlineMuteToggles++;
+    offlineMutedState = !offlineMutedState;
+    if (offlineMutedState) {
+      offlineElapsedOverride = 125;
+    }
+    notifyListeners();
+  }
+
   @override
   int? get offlineRecordingElapsedSeconds => offlineElapsedOverride ?? (batch ? 125 : null);
   @override
@@ -649,6 +661,48 @@ void main() {
       final glyphs = tester.widgetList<BatteryGlyph>(find.byType(BatteryGlyph)).toList();
       expect(glyphs.map((g) => g.critical), [false, true]);
       expect(tester.getSize(find.byType(BatteryGlyph).first), const Size(20, 10));
+    });
+  });
+
+  group('Transcribe Later (batch) card controls', () {
+    testWidgets('tapping Pause in batch mode transitions button to Resume, clears spinner, and freezes elapsed timer',
+        (tester) async {
+      final capture = _Capture(_Live.pendantBatch, batch: true);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.recording), findsOneWidget);
+      expect(find.textContaining(en.captureAudioSavedTranscribesLater), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
+
+      await tester.tap(find.text(en.pause));
+      await tester.pumpAndSettle();
+
+      expect(capture.offlineMuteToggles, 1);
+      expect(capture.offlineMuted, isTrue);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.text(en.resume), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, const Duration(seconds: 125));
+
+      // Advance time and verify timer remains frozen
+      await tester.pump(const Duration(seconds: 10));
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, const Duration(seconds: 125));
+    });
+
+    testWidgets('tapping Resume in batch mode unpauses and restores recording state', (tester) async {
+      final capture = _Capture(_Live.pendantBatch, batch: true)..offlineMutedState = true;
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.text(en.resume), findsOneWidget);
+
+      await tester.tap(find.text(en.resume));
+      await tester.pumpAndSettle();
+
+      expect(capture.offlineMuteToggles, 1);
+      expect(capture.offlineMuted, isFalse);
+      expect(find.text(en.recording), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.byType(OmiSpinner), findsNothing);
     });
   });
 }

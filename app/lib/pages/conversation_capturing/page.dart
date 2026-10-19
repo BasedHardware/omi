@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
@@ -181,6 +182,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           body: Column(
             children: [
               const CaptureRecoveryBanner(),
+              const HeldAudioLiveBanner(),
               if (provider.localSttFailure case final failure?)
                 LocalSttRecoveryNotice(
                     failure: failure,
@@ -655,13 +657,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   }
 
   /// The live-capture empty state names only what this session can actually
-  /// produce, and swaps in a truthful state line when the transcript pipeline
-  /// is degraded instead of promising "waiting" forever (#14473): an
-  /// out-of-credits plan can never produce a transcript while waiting, a
-  /// terminal STT failure means the audio is only being saved (the shared
-  /// outage sentence — the app bar names the same moment the same way), an
-  /// offline device is waiting on the network, and `interrupted` means the
-  /// transcription socket dropped and is reconnecting.
+  /// produce. A transcription outage is stated once, by the recovery banner
+  /// (and the LocalSttRecoveryNotice, whose buttons are the point of it): an
+  /// out-of-credits plan, a terminal STT failure and a local STT failure all
+  /// get the truthful unavailable line here instead of copy that promises a
+  /// transcript while none can appear (#14473). An offline device is waiting
+  /// on the network, and `interrupted` means the transcription socket dropped
+  /// and is reconnecting.
   String _liveCaptureEmptyStateText(
     CaptureProvider provider, {
     required ConnectivityProvider connectivity,

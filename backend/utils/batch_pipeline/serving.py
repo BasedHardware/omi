@@ -10,9 +10,11 @@ import time
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
+from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import Projector
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
+from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -32,6 +34,7 @@ class Serving:
         reap_staging=None,
         enrichment_sweep=None,
         recovery=None,
+        leader=None,
     ):
         self.store = store
         self.metrics = metrics
@@ -40,6 +43,8 @@ class Serving:
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
+        # Optional single-owner lease for periodic maintenance (see reconcile).
+        self.leader = leader
         self.merge = OrderedMerge(store, metrics=metrics)
 
     def queue(self, pool='batch'):
@@ -61,7 +66,30 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time()) is None:
                 break
 
-    def reconcile(self, *, recover_quarantine=False):
+    async def reconcile_async(self, *, recover_quarantine=False, periodic=False):
+        await run_blocking(sync_executor, self.reconcile, recover_quarantine=recover_quarantine, periodic=periodic)
+        if self.projector and self.projector.has_async_followups:
+            await self.projector.start_followups()
+
+    def _leads(self, periodic: bool) -> bool:
+        # Explicit RPC callers (POST /reconcile, post-recovery drain) always
+        # run. Periodic ticks (supervisor, metrics scrape) run maintenance on
+        # one serving instance per lease TTL; the lease fails open.
+        return not periodic or self.leader is None or self.leader.acquire()
+
+    def reconcile(self, *, recover_quarantine=False, periodic=False):
+        if self._leads(periodic):
+            self._maintain(recover_quarantine=recover_quarantine)
+        # Projection and the local gauges stay per instance: projection is
+        # throughput (ordered and fenced in its own transactions) and every
+        # instance exports its own queue sample.
+        if self.projector:
+            self.projector.sweep()
+        if self.metrics:
+            self.metrics.refresh(self.store, time.time())
+
+    def _maintain(self, *, recover_quarantine: bool):
+        """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -82,10 +110,6 @@ class Serving:
             if job and job['owner_id'] not in owners:
                 owners.add(job['owner_id'])
                 self.drain_owner(job['owner_id'])
-        if self.projector:
-            self.projector.sweep()
-        if self.metrics:
-            self.metrics.refresh(self.store, time.time())
 
 
 @lru_cache(maxsize=2)
@@ -105,6 +129,8 @@ def serving_for_stage(stage: str) -> Serving:
         cleanup=cleanup_completed_artifacts,
         reap_staging=reap,
         enrichment_sweep=reprocess.sweep,
+        # Supervisor ticks every 20s; a lapsed holder hands over within 60s.
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
     )
 
 
@@ -123,7 +149,8 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await run_blocking(sync_executor, service.reconcile, recover_quarantine=True)
+                await service.reconcile_async(recover_quarantine=True, periodic=True)
+                await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

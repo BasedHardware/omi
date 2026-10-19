@@ -42,8 +42,6 @@ beforeEach(() => {
   resolveActiveTvToken.mockResolvedValue({ id: "abc123", label: "Office TV" });
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
-    if (url.endsWith("/grafana/api/datasources"))
-      return new Response(null, { status: 403 });
     const headers = init.headers as Record<string, string>;
     if (url.startsWith("https://secretmanager.googleapis.com/")) {
       const payload = url.includes("/signing/") ? signing : membership;
@@ -101,6 +99,7 @@ it("mints a namespaced kiosk embed for a validated TV link", async () => {
   expect(data.enabled).toBe(true);
   const url = new URL(data.url);
   expect(url.origin + url.pathname).toBe("https://monitor.omi.me/d/omi-tv-v2");
+  expect(url.searchParams.get("orgId")).toBe("2");
   const [, payload] = url.searchParams.get("auth_token")!.split(".");
   const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
   expect(claims.sub).toMatch(/^omi-business:[0-9a-f]{64}$/);
@@ -137,39 +136,15 @@ it("rejects malformed bodies without touching Firestore", async () => {
   expect(resolveActiveTvToken).not.toHaveBeenCalled();
 });
 
-it("flag-off keeps the kiosk on legacy while it serves anonymous readers", async () => {
+it("flag-off disables the kiosk without probing or framing legacy Grafana", async () => {
   vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
-  const original = fetchMock.getMockImplementation()!;
-  fetchMock.mockImplementation((url: string) =>
-    url.endsWith("/grafana/api/datasources") ? Response.json([]) : original(url)
-  );
-  const open = await callRoute({ token: "c".repeat(43) });
-  const openData = await open.json();
-  expect(openData).toEqual({ enabled: false, legacy: true });
-  expect(
-    fetchMock.mock.calls.some(([url]) => url.includes("secretmanager"))
-  ).toBe(false);
-});
-
-it("flag-off reports the legacy board closed once it denies anonymous readers", async () => {
-  vi.stubEnv("GRAFANA_EMBED_ENABLED", "");
-  fetchMock.mockImplementation(async (url: string) => {
-    if (url.endsWith("/grafana/api/datasources"))
-      return new Response(null, { status: 401 });
-    throw new Error("Unexpected test URL");
-  });
-  const closed = await callRoute({ token: "d".repeat(43) });
-  const closedData = await closed.json();
-  expect(closedData).toEqual({ enabled: false, legacy: false });
-  expect(
-    fetchMock.mock.calls.some(([url]) => url.includes("secretmanager"))
-  ).toBe(false);
+  const response = await callRoute({ token: "c".repeat(43) });
+  expect(await response.json()).toEqual({ enabled: false });
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 it("returns 503 when enrollment fails after validation", async () => {
   fetchMock.mockImplementation(async (url: string) => {
-    if (url.endsWith("/grafana/api/datasources"))
-      return new Response(null, { status: 403 });
     if (url.startsWith("https://secretmanager.googleapis.com/"))
       return new Response(null, { status: 500 });
     throw new Error("Unexpected test URL");
@@ -177,23 +152,3 @@ it("returns 503 when enrollment fails after validation", async () => {
   const response = await callRoute({ token: "e".repeat(43) });
   expect(response.status).toBe(503);
 });
-
-it.each([302, 404, 502])(
-  "flag-off rejects legacy availability status %s",
-  async (status) => {
-    vi.stubEnv("GRAFANA_EMBED_ENABLED", "false");
-    fetchMock.mockResolvedValue(new Response(null, { status }));
-    const response = await callRoute({ token: "f".repeat(43) });
-    expect(await response.json()).toEqual({ enabled: false, legacy: false });
-  }
-);
-
-it.each(["<html>login</html>", JSON.stringify({ message: "login" })])(
-  "flag-off rejects non-datasource legacy responses",
-  async (body) => {
-    vi.stubEnv("GRAFANA_EMBED_ENABLED", "false");
-    fetchMock.mockResolvedValue(new Response(body, { status: 200 }));
-    const response = await callRoute({ token: "g".repeat(43) });
-    expect(await response.json()).toEqual({ enabled: false, legacy: false });
-  }
-);

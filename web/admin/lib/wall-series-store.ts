@@ -231,3 +231,21 @@ export function memorySeriesStore(): SeriesStore & {
     { docs }
   );
 }
+
+/** Reads the shared store; leases and writes stay in `local`. A dev server
+ * (no `K_REVISION`) serves the TV's shared legs but fills whatever is missing
+ * or due in its own memory, so it never writes production docs, whatever
+ * identity it runs as. Its own fills win over the shared doc it read. */
+export function readThroughStore(
+  shared: SeriesStore,
+  local: SeriesStore = memorySeriesStore()
+): SeriesStore {
+  return {
+    read: async <E>(leg: string) =>
+      (await local.read<E>(leg)) ?? shared.read<E>(leg),
+    acquire: (leg, holder, now) => local.acquire(leg, holder, now),
+    renew: (leg, token, now) => local.renew(leg, token, now),
+    write: (leg, token, patch, now) => local.write(leg, token, patch, now),
+    release: (leg, token) => local.release(leg, token),
+  };
+}

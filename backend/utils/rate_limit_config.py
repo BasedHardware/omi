@@ -98,7 +98,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
-    "conversations:reprocess": (3, 3600),
+    # Reprocess is how users try summary templates and retry a missing Omi
+    # summary: 3/hour blocked comparing a few templates on one conversation.
+    # One run is notes + app result + action items + memories (a handful of
+    # LLM calls, well under :create's STT + ~22 calls), so 10/hour/user keeps
+    # the worst case below the :create ceiling while allowing real exploration.
+    "conversations:reprocess": (10, 3600),
     "conversations:merge": (5, 3600),
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
@@ -133,7 +138,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
-    # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
+    # Frame request metadata is cheap, but uploads carry bounded pixel bytes.
     "frame_requests:read": (120, 3600),
     "frame_requests:write": (120, 3600),
     "frame_requests:upload": (30, 3600),

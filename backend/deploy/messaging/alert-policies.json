@@ -168,7 +168,7 @@
       {
         "displayName": "shaped context degraded above 5%",
         "conditionPrometheusQueryLanguage": {
-          "query": "(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome=\"degraded\"}[30m])) / clamp_min(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])), 0.000001) > 0.05) and on (surface) (sum by (surface) (increase(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])) >= 20)",
+          "query": "(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome=~\"degraded|summary_pending\"}[30m])) / clamp_min(sum by (surface) (rate(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])), 0.000001) > 0.05) and on (surface) (sum by (surface) (increase(omi_chat_context_turns_total{cluster=\"__run__\",namespace=\"backend\",outcome!=\"unscoped\"}[30m])) >= 20)",
           "duration": "600s",
           "evaluationInterval": "60s",
           "labels": {
@@ -182,7 +182,7 @@
     },
     "documentation": {
       "mimeType": "text/markdown",
-      "content": "Inspect backend/docs/runbooks/messaging-channels.md. Cloud Run metrics use the existing GMP sidecar. Missing data is not evidence of health."
+      "content": "Inspect backend/docs/runbooks/messaging-channels.md. Cloud Run metrics use the existing GMP sidecar. The numerator counts failed summary reads and summary_pending at the model mount; digest_degraded retains a successfully read summary and is excluded. Missing data is not evidence of health."
     }
   },
   {

@@ -22,8 +22,15 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
-from diarizer.batch_pipeline import PipelineWorker, SAMPLE_RATE, crop_model_vad_spans, validate_words
-from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from diarizer.batch_pipeline import (
+    PipelineWorker,
+    SAMPLE_RATE,
+    crop_model_vad_spans,
+    padded_retry_fits,
+    padded_retry_seconds,
+    validate_words,
+)
+from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
 
 
 def pin_parakeet_decoding(model):
@@ -95,12 +102,11 @@ class ParakeetWords:
         duration = len(samples) / SAMPLE_RATE
         left = 2 * SAMPLE_RATE
         right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
-        padded_seconds = (len(samples) + left + right) / SAMPLE_RATE
-        if padded_seconds > min(120, max_padded_seconds):
-            # The callback identifies enforced dispatch. Main's unflagged
-            # adapter still returns an empty hypothesis; policy holds must not
-            # spend a provider-failure attempt for audio never submitted.
-            return None if before_dispatch is not None else []
+        padded_seconds = padded_retry_seconds(samples)
+        if not padded_retry_fits(samples, max_padded_seconds):
+            # Never return an empty hypothesis for audio that exceeded the
+            # padded recovery bound and was never submitted to the model.
+            return None
         padded = np.pad(samples, (left, right))
         if before_dispatch is not None and not before_dispatch():
             return None  # Retain raw work without spending a provider-failure attempt.
@@ -129,16 +135,7 @@ class PyannoteDiarizer:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        activity = [
-            {'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in output.speaker_diarization
-        ]
-        exclusive = getattr(output, 'exclusive_speaker_diarization', None)
-        turns = (
-            [{'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in exclusive]
-            if exclusive is not None
-            else exclusive_from_activity(activity)
-        )
-        return {'turns': turns, 'overlaps': overlap_regions(activity), 'backend': 'pyannote'}
+        return diarization_payload(output)
 
 
 class PyannoteVAD:
@@ -193,6 +190,11 @@ def create_local_worker(
         )
     pin_parakeet_decoding(parakeet_model)
     words = ParakeetWords(parakeet_model, enforce_eager=True)
+    flight = (
+        FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
+        if config.flight_batching
+        else None
+    )
     return PipelineWorker(
         decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
         vad=PyannoteVAD(vad_model),
@@ -204,4 +206,5 @@ def create_local_worker(
         live_words=live_words,
         single_speaker=single_speaker,
         on_failure=on_failure,
+        flight_models=flight,
     )

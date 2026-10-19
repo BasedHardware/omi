@@ -277,3 +277,31 @@ def test_nullable_semantic_defaults_do_not_create_spurious_writes(provisioner, t
     api = FakeGrafana({'example': rule()})
     assert provisioner.reconcile(api, desired, backup=tmp_path / 'backup') == []
     assert api.writes == []
+
+
+def test_grafana13_readback_defaults_are_not_drift(provisioner):
+    desired = {
+        'uid': 'r',
+        'data': [{'refId': 'B', 'model': {'type': 'reduce'}}],
+        'notification_settings': {'receiver': 'x', 'repeat_interval': '24h', 'group_wait': '90s'},
+    }
+    live = {
+        'uid': 'r',
+        'data': [
+            {'refId': 'B', 'queryType': '', 'model': {'type': 'reduce', 'intervalMs': 1000, 'maxDataPoints': 43200}}
+        ],
+        'notification_settings': {'receiver': 'x', 'repeat_interval': '1d', 'group_wait': '1m30s'},
+    }
+    assert provisioner.comparable(desired) == provisioner.comparable(live)
+    assert 'queryType' not in desired['data'][0]
+    # The write payload keeps the committed strings; only comparison normalizes.
+    assert provisioner.definition(desired)['notification_settings']['repeat_interval'] == '24h'
+
+
+def test_readback_still_reports_semantic_changes(provisioner):
+    base = {'uid': 'r', 'execErrState': 'KeepLast', 'data': [{'refId': 'A', 'model': {'intervalMs': 30000}}]}
+    assert provisioner.comparable(base) != provisioner.comparable(dict(base, execErrState='Error'))
+    other = {'uid': 'r', 'execErrState': 'KeepLast', 'data': [{'refId': 'A', 'model': {'intervalMs': 1000}}]}
+    assert provisioner.comparable(base) != provisioner.comparable(other)
+    assert provisioner.duration_seconds('24h') == provisioner.duration_seconds('1d') == 86400
+    assert provisioner.duration_seconds('5ms') == 0.005

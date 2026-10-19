@@ -266,3 +266,18 @@ def test_cli_check_with_base_ref_reports_missing_price_id(monkeypatch, capsys):
     monkeypatch.setattr(generator, 'scan_embedded_stripe_ids', lambda catalog: [])
     assert generator.main() == 1
     assert 'nonempty price_id' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('price,plan', sorted(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()))
+def test_every_recognized_paid_legacy_price_retains_cloud_screen_vectors(price, plan):
+    resolved = resolve_price_entitlements(price, {})
+    assert resolved['entitlement_version'] == 'legacy'
+    assert resolved['capabilities']['cloud_screen_vectors'] is True
+    assert resolved['plan_id'] == plan.value
+
+
+@pytest.mark.parametrize('plan,allowed', [('basic', False), ('plus', False), ('operator', True), ('architect', True)])
+def test_ladder_cloud_screen_capability_is_price_versioned(plan, allowed):
+    assert get_entitlement_version(plan, 'ladder_v1')['capabilities']['cloud_screen_vectors'] is allowed
+    if plan != 'basic':
+        assert get_entitlement_version(plan, 'legacy')['capabilities']['cloud_screen_vectors'] is True

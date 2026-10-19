@@ -48,10 +48,10 @@ void main() {
     );
   });
 
-  test('the transcription outage says recording continues', () {
+  test('the transcription outage is named by the short heading, not the sentence', () {
     expect(
       captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable),
-      'Transcriptions are unavailable, recording continues on device and will process later',
+      'Not transcribing',
     );
   });
 
