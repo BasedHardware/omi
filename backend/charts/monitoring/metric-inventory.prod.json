@@ -1989,7 +1989,9 @@
     "omi_listen_lb_exporter_last_success_timestamp_seconds",
     "omi_listen_lb_neg_attached",
     "omi_listen_lb_neg_endpoints",
-    "omi_listen_lb_ready_pods"
+    "omi_listen_lb_ready_pods",
+    "omi_reason_total",
+    "omi_reason_unknown_total"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {
