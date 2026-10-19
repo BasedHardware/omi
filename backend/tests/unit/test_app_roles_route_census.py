@@ -14,6 +14,8 @@ from app_roles import AppRole
 
 BACKEND = Path(__file__).resolve().parents[2]
 MAIN = BACKEND / 'main.py'
+# Shrink-only: remove an entry when main.py mounts the router.
+STUB_ROUTERS_PENDING_MOUNT = frozenset({'enrichment', 'batch_provider_stt'})
 
 
 def _main_include_order() -> list[str]:
@@ -104,6 +106,12 @@ def _scheduler_backend_paths() -> set[str]:
 def test_every_task_and_scheduler_target_is_served_by_workers(path):
     owners = _module_for_path(path)
     assert owners, f'no router defines {path}'
+    mounted = {m.module for m in app_roles.ROUTER_MOUNTS}
+    if not owners & mounted:
+        # Lane 1's stub routers are mounted in main.py only after #22388 reaches integration;
+        # contract (a) then mounts them on every role, and the order test forces them into ROUTER_MOUNTS.
+        assert owners <= STUB_ROUTERS_PENDING_MOUNT, f'{path} is served by an unmounted router {sorted(owners)}'
+        pytest.skip(f'{path}: stub router not mounted yet')
     workers = {m.module for m in app_roles.mounts_for(AppRole.WORKERS)}
     assert owners & workers, f'{path} (in {sorted(owners)}) is not mounted by the workers role'
 
