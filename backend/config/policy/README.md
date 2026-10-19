@@ -70,8 +70,7 @@ remain with their existing owners in E1b. Privacy/deletion checks are data fence
 legacy cohort membership, nested retirement, rollback after admission, durable
 fallback and policy-window grading. Run it through the normal file-isolated
 `backend/test.sh` runner. Pipeline characterization keeps the original JSON files;
-its configurations explicitly retain their historical dispatch page size of 1,
-before #22321 changed the process default to 16. The policy-window golden adds the
+its configurations use current main's #22385 recovery-dispatch baseline. The policy-window golden adds the
 10-18 creation-percent-zero case. Emulator batch admission injects a serialized
 policy; serving/worker processes consume the recorded job snapshot.
 

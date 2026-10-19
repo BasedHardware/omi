@@ -56,8 +56,8 @@ an immutable `BatchUnitPolicy`; otherwise admission resolves each owner from `DE
 `SimConfig.flags`, without installing scoped flags in the environment. The recorded policy follows
 each upload through queueing, recovery and first-summary grading. Only excluded worker dispositions
 and process/provider settings retain isolated environment injection. Empty-ASR disposition stays off
-because it needs real WAV bytes. Characterization configs explicitly pin the historical recovery
-dispatch budget of 1 (before #22321 changed the process default to 16); production defaults are unchanged.
+because it needs real WAV bytes. Characterization uses the current recovery-dispatch default of 16
+and leaves current main's existing golden files unchanged.
 
 The revision-drain model mirrors the `request_scoped`/`fire_and_forget` vocabulary of
 `tests/unit/fixtures/revision_drain.py` from the unmerged `lane/opus-drain-harness` branch. That

@@ -54,9 +54,6 @@ def provider_exhaustion_window(
     """ASR fleet pinned at HPA max returning empty results for a window -> empty_asr quarantines -> paid recovery."""
     return SimConfig(
         name='provider_exhaustion_window',
-        # Reproduce the historical one-at-a-time dispatch tail (#22201),
-        # independent of #22321's newer process default of sixteen.
-        flags={'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'},
         seed=seed,
         workload=WorkloadSpec(owners=owners, uploads_per_owner_per_hour=2.0, arrival_seconds=3600.0),
         stt=STTProfile(

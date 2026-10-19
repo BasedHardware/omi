@@ -380,9 +380,6 @@ _SMALL = dict(owners=3, uploads_per_owner_per_hour=3.0, arrival_seconds=1200.0, 
 
 def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes: Any) -> SimConfig:
     spec = WorkloadSpec(**{**_SMALL, 'near_silence_fraction': 0.0, **(workload or {})})
-    # These goldens predate #22321's process dispatch default of 16. Pin the
-    # historical input (1), rather than silently changing their behavior.
-    changes['flags'] = {'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1', **changes.get('flags', {})}
     changes.setdefault('stt', STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=0.0))
     return replace(SimConfig(name=name, seed=seed, horizon_seconds=2 * 3600.0), workload=spec, **changes)
 
