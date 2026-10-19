@@ -121,7 +121,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       // An explicit retry on the URL the registration was made for reuses it.
       final authUrl = _authUrl;
       if (authUrl != null && !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
-        if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
+        if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
         return;
       }
       if (_owns(attempt)) _startPollingForCompletion(attempt);
@@ -141,7 +141,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       }
       final id = result['app_id'];
       if (id is! String || id.isEmpty || result['requires_oauth'] is! bool) {
-        if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
+        if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
         return;
       }
       // The server registered this URL for this account even if the attempt was
@@ -154,7 +154,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       if (!_owns(attempt)) return;
       if (result['requires_oauth'] == true) {
         if (authUrl is! String || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
-          if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
+          if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
           return;
         }
         if (_owns(attempt)) _startPollingForCompletion(attempt);
@@ -162,7 +162,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
         await _navigateToAppDetail(id, attempt);
       }
     } catch (_) {
-      if (_owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
+      if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
     } finally {
       // A retired attempt already released the button, and a newer one owns it now;
       // the current attempt releases it even when its account has changed.
@@ -200,8 +200,9 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     );
     _connectionWait = wait;
     unawaited(wait.start().then((outcome) {
-      if (!identical(_connectionWait, wait) || !_owns(attempt)) return;
+      if (!mounted || !identical(_connectionWait, wait)) return;
       setState(() => _isPolling = false);
+      if (!_owns(attempt)) return;
       if (outcome == ConnectionWaitOutcome.connected && _readyApp != null) {
         _showConnectedApp(_readyApp!);
       } else if (outcome != ConnectionWaitOutcome.cancelled) {
@@ -212,7 +213,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
 
   Future<void> _navigateToAppDetail(String id, _ConnectAttempt attempt) async {
     final data = await widget.appDetailsLoader(id).timeout(widget.probeTimeout);
-    if (!_owns(attempt)) return;
+    if (!mounted || !_owns(attempt)) return;
     if (data == null) {
       _showError(context.l10n.mcpConnectionFailed);
       return;
