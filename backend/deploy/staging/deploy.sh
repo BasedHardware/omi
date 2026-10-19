@@ -228,10 +228,11 @@ if status.get('latestCreatedRevisionName') != ready:
 if traffic.get(ready, 0) != 100:
     problems.append('serving traffic is not 100% on the latest ready revision')
 container = live['spec']['template']['spec']['containers'][0]
-have = {e['name']: e.get('value') for e in container.get('env', []) if 'value' in e}
-missing = sorted(set(want) - set(have))
-differ = sorted(k for k in want if k in have and have[k] != str(want[k]))
-extra = sorted(set(have) - set(want))
+have = {e['name']: e.get('value', '') for e in container.get('env', []) if 'valueFrom' not in e}
+# Cloud Run stores an empty value as a name without a value; an absent empty value is not drift.
+missing = sorted(k for k in set(want) - set(have) if str(want[k]) != '')
+differ = sorted(k for k in want if k in have and str(have[k]) != str(want[k]))
+extra = sorted(k for k in set(have) - set(want) if have[k] != '')
 if have.get('OMI_BACKEND_RELEASE_SHA') != sha:
     problems.append('OMI_BACKEND_RELEASE_SHA mismatch')
 for label, names in (('missing', missing), ('differs', differ), ('unexpected', extra)):
