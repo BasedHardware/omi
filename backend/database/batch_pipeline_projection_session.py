@@ -28,8 +28,10 @@ class ProjectionSession:
         *,
         part_index: int | None = None,
         part_count: int = 1,
+        policy=None,
     ):
         self.store, self.segment_id, self.binding, self.now = store, segment_id, binding, now
+        self.policy = policy or store.policy(segment_id)
         self.client = store.client
         self.result_ref = store.ref('results', segment_id)
         self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
@@ -236,4 +238,4 @@ class ProjectionSession:
             self.prepare(transaction)
             return self.persist(transaction, superseded=superseded)
 
-        return self.store.run(commit)
+        return self.store.run(commit, policy=self.policy)

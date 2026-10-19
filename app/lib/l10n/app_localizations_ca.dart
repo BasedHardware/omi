@@ -11138,6 +11138,33 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Àudio desat, es transcriurà més tard';
 
   @override
+  String get captureBannerTryReconnect => 'Prova de tornar a connectar';
+
+  @override
+  String get captureBannerRetrySync => 'Reintenta la sincronització';
+
+  @override
+  String get captureBannerWhatsWrong => 'Què està passant?';
+
+  @override
+  String get captureBannerDismiss => 'Descarta';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'L\'enllaç Bluetooth amb el vostre Omi s\'ha aturat, per tant l\'àudio no arriba a l\'aplicació. L\'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l\'enllaç es recuperi. Reintentar torna a connectar l\'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.';
+
+  @override
+  String get captureLinkStalledTranscribesLater =>
+      'L\'enllaç d\'àudio s\'ha aturat — la transcripció continua quan es recuperi';
+
+  @override
+  String get captureIngressNeedsReconnect => 'L\'àudio no arriba a l\'aplicació — torneu a connectar l\'Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'L\'aplicació ja no pot rebre àudio del dispositiu Omi i no ha pogut restaurar la connexió automàticament. Desconnecteu i torneu a connectar el dispositiu — des de la configuració del dispositiu o apagant-lo i engegant-lo. L\'àudio desat al dispositiu se sincronitzarà més tard.';
+
+  @override
   String get captureStillRecording => 'Encara s\'està gravant';
 
   @override

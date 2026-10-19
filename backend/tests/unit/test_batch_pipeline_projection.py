@@ -1,6 +1,7 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 import logging
 from unittest.mock import Mock
 
@@ -50,7 +51,7 @@ def test_read_contention_retry_uses_fresh_transactions_when_enabled(monkeypatch)
     client.transaction.side_effect = [object(), object()]
     operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
     store = ProjectionStore(Mock(client=client))
-    assert store.run(operation) == 'persisted'
+    assert store.run(operation, policy=resolve_stage_policy('synthetic-owner', 'projection')) == 'persisted'
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
@@ -137,7 +138,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
     session.receipt.return_value = {'state': 'persisted'}
     session.write_receipt.side_effect = lambda transaction, receipt: transaction.set(receipt_ref, receipt)
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
-    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs' if bound else '')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
@@ -151,7 +152,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
         enqueue(row)
 
     monkeypatch.setattr(reprocess, '_enqueue', after_commit)
-    store.mark_enrichment('segment', binding, 0, 'c', 'en')
+    store.mark_enrichment('segment', binding, 0, 'c', 'en', policy=ProjectionPolicy())
     transaction = client.transactions[0]
     assert [path for path, _ in transaction.sets] == [
         (reprocess.COLLECTION, reprocess.key(binding.owner_id, 'c')),
@@ -163,7 +164,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
     assert enqueue.call_count == int(bound)
     session.guard.assert_called_once_with(transaction, ['c'])
     session.receipt.return_value = {'state': 'ready'}
-    store.mark_enrichment('segment', binding, 1, 'c', 'en')
+    store.mark_enrichment('segment', binding, 1, 'c', 'en', policy=ProjectionPolicy())
     assert not client.transactions[1].sets
     assert enqueue.call_count == int(bound)
     assert (
@@ -187,7 +188,7 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
     session.job = {'priority': 1}
     session.receipt.return_value = {'state': 'persisted'}
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
-    monkeypatch.setattr(store, 'run', lambda operation: operation(client.transaction()))
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_TASKS_QUEUE', 'sync-backfill')
@@ -199,7 +200,7 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
         'https://sibling.invalid/v2/sync-jobs/run' if invalid_field == 'audience' else '',
     )
     with pytest.raises(ProjectionBlocked, match='complete backfill'):
-        store.mark_enrichment('segment', binding, 0, 'c', 'en')
+        store.mark_enrichment('segment', binding, 0, 'c', 'en', policy=ProjectionPolicy())
     assert not client.transactions[0].sets
     session.write_receipt.assert_not_called()
 
@@ -222,7 +223,12 @@ def test_batch_contention_control_retries_projection_transactions(monkeypatch, f
     client = Mock()
     client.transaction.side_effect = [object(), object()]
     operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
-    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert (
+        ProjectionStore(Mock(client=client)).run(
+            operation, policy=resolve_stage_policy('synthetic-owner', 'projection')
+        )
+        == 'persisted'
+    )
     assert operation.call_count == 2
 
 
@@ -282,7 +288,11 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     monkeypatch.setattr(projection, 'projection_claim', claim)
     projector = projection.Projector(Mock(), Mock())
     projector.store = Mock()
-    job, entry, binding = {}, {}, SimpleNamespace(owner_id='synthetic-owner')
+    job, entry, binding = (
+        {'policy_parts': {'projection': ProjectionPolicy().to_dict()}},
+        {},
+        SimpleNamespace(owner_id='synthetic-owner', policy=BatchUnitPolicy()),
+    )
     projector.store.read.return_value = (job, entry, binding)
     projector._project = Mock(return_value={'outcome': 'success'})
     assert projector.project('synthetic-segment') == {'outcome': 'success'}
@@ -303,7 +313,12 @@ def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding
     projector.store.session.return_value.persist_empty.side_effect = ProjectionReplay({'state': 'persisted'})
     item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
     with pytest.raises(ProjectionReplay):
-        projector._project('segment', asdict(item), {'result': {'outcome': 'silence'}}, binding)
+        projector._project(
+            'segment',
+            {**asdict(item), 'policy_parts': {'projection': ProjectionPolicy().to_dict()}},
+            {'result': {'outcome': 'silence'}},
+            binding,
+        )
     projector.store.complete.assert_not_called()
 
 
@@ -319,7 +334,12 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     operation = Mock(
         side_effect=[InvalidArgument('The referenced transaction has expired or is no longer valid'), 'persisted']
     )
-    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert (
+        ProjectionStore(Mock(client=client)).run(
+            operation, policy=resolve_stage_policy('synthetic-owner', 'projection')
+        )
+        == 'persisted'
+    )
     assert operation.call_count == client.transaction.call_count == 2
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
@@ -328,6 +348,7 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
 def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(binding, monkeypatch, caplog, enabled):
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
@@ -341,7 +362,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
     monkeypatch.setattr(projector.store, 'mark_enrichment', mark)
     with caplog.at_level(logging.INFO, logger=projection.__name__):
         with pytest.raises(ValueError, match='private-error'):
-            projector.finish_part(Mock(), binding, receipt, None)
+            projector.finish_part(Mock(), binding, receipt, None, policy=policy)
     mark.assert_not_called()  # Playback failure retains its durable retry obligation.
     text = caplog.text
     assert 'private-error-must-never-be-logged' not in text

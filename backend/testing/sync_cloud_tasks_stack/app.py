@@ -107,6 +107,16 @@ if ROLE == 'batch-serving':
 
 from main import app  # noqa: E402
 
+if ROLE == 'admission' and os.getenv('OMI_BATCH_STACK_POLICY_FILE'):
+    import json
+    from config.policy import BatchUnitPolicy
+    from routers import sync as _policy_sync_router
+
+    _recorded_policy = BatchUnitPolicy.from_dict(
+        json.loads(Path(os.environ['OMI_BATCH_STACK_POLICY_FILE']).read_text())
+    )
+    _policy_sync_router.resolve_batch_policy = lambda uid: _recorded_policy
+
 
 def _require_control(
     request: Request,

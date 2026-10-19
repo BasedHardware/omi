@@ -48,11 +48,8 @@ void main() {
     );
   });
 
-  test('the transcription outage says recording continues', () {
-    expect(
-      captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable),
-      'Transcriptions are unavailable, recording continues on device and will process later',
-    );
+  test('the transcription outage is named by the short heading, not the sentence', () {
+    expect(captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable), 'Not transcribing');
   });
 
   test('the Home card: a short status, the consequence, and an explanation for problems only', () {
@@ -89,7 +86,9 @@ void main() {
   test('interrupted: the OS holding the mic, capture recovering, or a reader pause that wins', () {
     expect(captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: true), CaptureInterruption.micTaken);
     expect(
-        captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false), CaptureInterruption.recovering);
+      captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false),
+      CaptureInterruption.recovering,
+    );
     expect(captureInterruption(interrupted: true, readerPaused: true, osHoldsMic: true), CaptureInterruption.none);
     expect(captureInterruption(interrupted: false, readerPaused: false, osHoldsMic: true), CaptureInterruption.none);
   });

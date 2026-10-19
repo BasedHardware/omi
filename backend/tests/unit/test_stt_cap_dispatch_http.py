@@ -85,7 +85,9 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, u
 
     held = {'held_audio': True, 'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
-    monkeypatch.setattr(router, 'batch_enabled_for', lambda _: False)
+    from config.policy import BatchUnitPolicy
+
+    monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
     monkeypatch.setattr(

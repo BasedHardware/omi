@@ -10,7 +10,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from config.batch_pipeline import enabled_for as batch_enabled_for
+from config.policy import resolve_batch_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
@@ -49,6 +49,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
+from utils.sync.admission_responses import sync_finalization_retrying
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
@@ -88,6 +89,7 @@ from utils.metrics import (
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
 from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
@@ -528,6 +530,8 @@ async def sync_local_files_v2(
         client_device_context.client_device_id,
         snapshot_out=record_snapshot,
     )
+    legacy_mode = legacy_dark.current_mode()
+    legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
@@ -672,6 +676,7 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
+        batch_policy = resolve_batch_policy(uid)
         record_response = await registered_record_response(
             uid=uid,
             conversation_id=conversation_id if isinstance(conversation_id, str) else None,
@@ -681,17 +686,20 @@ async def sync_local_files_v2(
             client_device_id=client_device_context.client_device_id,
             byok_enabled=byok_enabled,
             recording_session_id=recording_session_id,
+            policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
 
+        batch_attempted = False
         if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+            record_response is not RecordUploadRoute.LEGACY and batch_policy.batch_enabled
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
+            batch_attempted = True
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -717,6 +725,7 @@ async def sync_local_files_v2(
                     'raw_capture_paths': archive_paths,
                 },
                 record_router=registered_record_response,
+                policy=batch_policy,
             )
             if batch_response is not None:
                 return batch_response
@@ -756,14 +765,6 @@ async def sync_local_files_v2(
         )
     finally:
         _cleanup_files(paths)
-
-
-def _sync_finalization_retrying() -> HTTPException:
-    return HTTPException(
-        status_code=503,
-        detail='Sync recovery finalization is retrying; local audio remains available.',
-        headers={'Retry-After': '10'},
-    )
 
 
 def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
@@ -809,7 +810,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         completed = get_completed_legacy_status(job_id, uid, job)
     except Exception as error:
         logger.error('event=sync_status_reconciliation outcome=retrying exception_type=%s', type(error).__name__)
-        raise _sync_finalization_retrying()
+        raise sync_finalization_retrying()
     if completed is not None:
         record_fallback(
             component='sync_dispatch',
@@ -820,6 +821,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         )
         return with_poll_hint(completed, surface_open=surface_open)
     if not job:
+        retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
+        if retired is not None:
+            return with_poll_hint(retired, surface_open=surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -902,7 +906,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
@@ -912,7 +916,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             dead_letter = sync_dead_letters.get_dead_letter(job_id)
         except Exception as error:
             logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         if dead_letter is None:
             # Every current terminal publisher writes the pending record before
             # Redis turns terminal, so a missing record means the job failed
@@ -931,14 +935,14 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                     'event=sync_dead_letter_check outcome=legacy_record_failed exception_type=%s',
                     type(error).__name__,
                 )
-                raise _sync_finalization_retrying()
+                raise sync_finalization_retrying()
             logger.warning('event=sync_dead_letter_check outcome=legacy_recorded')
         if (
             dead_letter.get('job_id') != job_id
             or dead_letter.get('uid') != uid
             or dead_letter.get('status') not in ('pending', 'dead_letter')
         ):
-            raise _sync_finalization_retrying()
+            raise sync_finalization_retrying()
         try:
             release_backfill_slot(uid, job_id)
         except Exception as error:

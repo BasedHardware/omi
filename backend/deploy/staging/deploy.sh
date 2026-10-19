@@ -3,6 +3,11 @@
 #
 #   backend/deploy/staging/deploy.sh <sha> [--services backend,backend-sync,...] [--with-worker]
 #                                          [--skip-build] [--allow-non-integration] [--break-lock]
+#                                          [--set KEY=VALUE ...] [--warm backend,backend-sync]
+#     --set   operator override for a rehearsal window, applied to every deployed service after the
+#             overlay render (still fenced, logged by name in the deploy log). Not committed config:
+#             re-run without it to restore the overlay values.
+#     --warm  min-instances=1 on the named services for the window (default: overlay's 0).
 #   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services and the batch worker
 #
 # Tier: dev-operator only. Only lanes 1 and 2 deploy staging; other lanes ask on the board.
@@ -56,6 +61,12 @@ shape_flags() {
 # once, after the services exist) grants allUsers on backend-staging (Firebase-token auth like prod's
 # backend) and staging-tasks-invoker on every *-staging service. New services start private.
 
+die() {
+  echo "deploy.sh: $*" >&2
+  exit 1
+}
+log() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
+
 SHA=""
 SERVICES=("${ALL_SERVICES[@]}")
 WITH_WORKER=false
@@ -63,6 +74,8 @@ SKIP_BUILD=0
 ALLOW_NON_INTEGRATION=0
 BREAK_LOCK=0
 TEARDOWN=0
+OVERRIDES=()
+WARM=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --services)
@@ -70,6 +83,15 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --with-worker) WITH_WORKER=true ;;
+    --set)
+      [[ "$2" =~ ^[A-Z][A-Z0-9_]*=.*$ ]] || die "--set expects KEY=VALUE"
+      OVERRIDES+=("$2")
+      shift
+      ;;
+    --warm)
+      IFS=',' read -r -a WARM <<<"$2"
+      shift
+      ;;
     --skip-build) SKIP_BUILD=1 ;;
     --allow-non-integration) ALLOW_NON_INTEGRATION=1 ;;
     --break-lock) BREAK_LOCK=1 ;;
@@ -87,11 +109,6 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-die() {
-  echo "deploy.sh: $*" >&2
-  exit 1
-}
-log() { printf '[%s] %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 
 [[ "${GCP_AGENT_TIER:-}" == dev-operator ]] || die "run on the dev-operator tier (source ~/.local/bin/gcp-agent-env.sh dev-operator)"
 [[ "$(gcloud config get-value project 2>/dev/null)" == "$PROJECT" ]] || die "active project must be $PROJECT"
@@ -255,6 +272,25 @@ for svc in "${SERVICES[@]}"; do
     --release-sha "$SHA" --release-tree "$TREE" || die "render refused $svc"
   while IFS= read -r line; do [[ -n "$line" ]] && render_flags+=("$line"); done <"$flags_file"
   [[ "${#render_flags[@]}" -gt 0 ]] || die "render produced no flags for $svc"
+  if [[ "${#OVERRIDES[@]}" -gt 0 ]]; then
+    "$PY" - "$WORK/src/backend" "$env_file" "${OVERRIDES[@]}" <<'PYEOF' || die "override refused for $svc"
+import sys, yaml
+sys.path.insert(0, sys.argv.pop(1))
+from utils.staging_fence import staging_violations
+path = sys.argv[1]
+env = yaml.safe_load(open(path))
+for item in sys.argv[2:]:
+    key, value = item.split('=', 1)
+    env[key] = value
+bad = staging_violations({**env, 'OMI_DEPLOYMENT': 'staging'})
+if bad:
+    sys.exit('fence refuses override: ' + ', '.join(f'{r}:{n}' for r, n in bad))
+open(path, 'w').write(yaml.safe_dump(env, sort_keys=True))
+PYEOF
+  fi
+  for warm in "${WARM[@]}"; do
+    [[ "$warm" == "$svc" ]] && render_flags+=("--min-instances=1")
+  done
   # shellcheck disable=SC2207  # shape flags are fixed tokens without spaces
   shape=($(shape_flags "$svc"))
   log "deploy: $name @ $SHORT"
@@ -290,9 +326,15 @@ if [[ "$WITH_WORKER" == true ]]; then
 fi
 
 mkdir -p "$(dirname "$DEPLOY_LOG")"
-printf '%s sha=%s tree=%s services=%s worker=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
+printf '%s sha=%s tree=%s services=%s worker=%s overrides=%s warm=%s\n' "$(date -u +%FT%TZ)" "$SHA" "$TREE" \
   "$(
     IFS=,
     echo "${SERVICES[*]}"
-  )" "$WITH_WORKER" >>"$DEPLOY_LOG"
+  )" "$WITH_WORKER" "$(
+    IFS=,
+    echo "${OVERRIDES[*]%%=*}"
+  )" "$(
+    IFS=,
+    echo "${WARM[*]}"
+  )" >>"$DEPLOY_LOG"
 log "done: staging serves $SHORT (tree ${TREE:0:12})"

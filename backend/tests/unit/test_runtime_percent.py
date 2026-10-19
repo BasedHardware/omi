@@ -9,6 +9,7 @@ import pytest
 
 from config import batch_live_preview, summary_guarantee
 from config import rollout_cohorts as policy
+from config.policy import resolve_batch_policy
 from database import rollout_cohorts as store
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.rollout import runtime_percent as rp
@@ -173,10 +174,83 @@ def test_bound_config_modules_read_runtime_percent(monkeypatch):
     assert summary_guarantee.enabled('synthetic-owner')
     monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: default)
     assert not summary_guarantee.enabled('synthetic-owner')
+    # After E1 the batch and retire percents come from the policy resolver, which reads _ramp
+    # through the same seam (production only; explicit replay flags never read it).
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '10')
     monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '7')
-    assert batch_live_preview.rollout_percent() == 7.0
-    monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: math.nan)
-    assert batch_live_preview.rollout_percent() == 0
+    assert batch_live_preview.rollout_percent() == 7.0  # env default (no _ramp value)
+    ramped = {'batch-pipeline': 50.0, 'batch-live-stt-retire': 25.0}
+    monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: ramped.get(name, default))
+    assert batch_live_preview.rollout_percent() == 25.0
+    assert resolve_batch_policy('synthetic-owner').batch_percent == 50.0
+    ramped['batch-live-stt-retire'] = 80.0  # clamped to batch percent
+    assert batch_live_preview.rollout_percent() == 50.0
+    replay = resolve_batch_policy(
+        'synthetic-owner', flags={'BATCH_PIPELINE_ENABLED': 'true', 'BATCH_PIPELINE_PERCENT': '10'}
+    )
+    assert replay.batch_percent == 10.0  # hermetic flags never read _ramp
+
+
+def test_batch_policy_ramp_source_cases(monkeypatch):
+    """Lead ruling 10-19 (E1 sync): (a) a _ramp value wins and is recorded in the snapshot, (b) with no
+    _ramp value the env wins, (c) explicit flags (hermetic replay) never read _ramp."""
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '10')
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '7')
+    calls: list[str] = []
+
+    def resolver(values):
+        def read(name, default):
+            calls.append(name)
+            return values.get(name, default)
+
+        return read
+
+    # (a) flags=None with a _ramp document: the document wins and lands in the snapshot.
+    monkeypatch.setattr(policy, '_percent_resolver', resolver({'batch-pipeline': 50.0, 'batch-live-stt-retire': 25.0}))
+    snapshot = resolve_batch_policy('synthetic-owner')
+    assert (snapshot.batch_percent, snapshot.retire_percent) == (50.0, 25.0)
+    assert {'batch-pipeline', 'batch-live-stt-retire'} <= set(calls)
+    # (b) flags=None with no _ramp value: the env values win, exactly as before E1.
+    calls.clear()
+    monkeypatch.setattr(policy, '_percent_resolver', resolver({}))
+    snapshot = resolve_batch_policy('synthetic-owner')
+    assert (snapshot.batch_percent, snapshot.retire_percent) == (10.0, 7.0)
+    # (c) explicit flags: _ramp is never read, even when a document would say otherwise.
+    calls.clear()
+    monkeypatch.setattr(policy, '_percent_resolver', resolver({'batch-pipeline': 90.0, 'batch-live-stt-retire': 90.0}))
+    replay = resolve_batch_policy(
+        'synthetic-owner',
+        flags={'BATCH_PIPELINE_ENABLED': 'true', 'BATCH_PIPELINE_PERCENT': '10', 'BATCH_LIVE_STT_RETIRE_PERCENT': '7'},
+    )
+    assert (replay.batch_percent, replay.retire_percent) == (10.0, 7.0)
+    assert calls == []
+
+
+def test_batch_policy_runtime_retire_clamped_after_runtime_batch(monkeypatch):
+    """Sol 10-19: the nested-retire clamp runs after both runtime reads (retire <= ramped batch)."""
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '10')
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
+    ramped = {'batch-pipeline': 5.0, 'batch-live-stt-retire': 50.0}
+    monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: ramped.get(name, default))
+    snapshot = resolve_batch_policy('synthetic-owner')
+    assert (snapshot.batch_percent, snapshot.retire_percent) == (5.0, 5.0)
+
+
+def test_batch_policy_id_is_source_blind(monkeypatch):
+    """Sol 10-19: policy_id hashes resolved values only; env 5 and _ramp 5 yield the same policy_id."""
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '5')
+    monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: default)
+    from_env = resolve_batch_policy('synthetic-owner')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: {'batch-pipeline': 5.0}.get(name, default))
+    from_ramp = resolve_batch_policy('synthetic-owner')
+    assert from_env.batch_percent == from_ramp.batch_percent == 5.0
+    assert from_env.policy_id == from_ramp.policy_id
 
 
 def test_write_is_cas_with_history_row():

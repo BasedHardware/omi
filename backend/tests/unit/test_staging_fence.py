@@ -213,3 +213,41 @@ def test_client_runs_fence_before_building_a_client(monkeypatch):
     with pytest.raises(StagingFenceError):
         _client._firestore_database_id('based-hardware')
     staging_fence.reset_for_tests()
+
+
+# Regression (lane 4 m1p1, 11:29Z): every Firestore client seam must build on the staging DB under the
+# staging env. The data-plane seam resolved the named DB before falling back to the default client,
+# without a project, and every authenticated request failed closed (account_deletion_state_unavailable).
+@pytest.mark.parametrize('data_plane_project', [None, 'based-hardware-dev'])
+def test_every_client_seam_builds_on_the_staging_db(monkeypatch, data_plane_project):
+    built: list[dict] = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+    env = _clean_env()
+    if data_plane_project:
+        env['OMI_FIRESTORE_DATA_PLANE_PROJECT'] = data_plane_project
+    else:
+        monkeypatch.delenv('OMI_FIRESTORE_DATA_PLANE_PROJECT', raising=False)
+    _set_env(monkeypatch, env)
+    for name in (
+        'SERVICE_ACCOUNT_JSON',
+        'GOOGLE_APPLICATION_CREDENTIALS',
+        'FIREBASE_AUTH_CREDENTIALS_PATH',
+        'FIRESTORE_EMULATOR_HOST',
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(_client.firestore, 'Client', _FakeClient)
+    monkeypatch.setattr(_client, '_firestore_client', None)
+
+    _client._build_firestore_client()
+    _client._build_customer_firestore_client()
+    _client._build_data_plane_firestore_client()
+
+    assert built, 'no client was built'
+    for kwargs in built:
+        assert kwargs.get('database') == 'staging'
+        assert kwargs.get('project') == 'based-hardware-dev'
+    staging_fence.reset_for_tests()

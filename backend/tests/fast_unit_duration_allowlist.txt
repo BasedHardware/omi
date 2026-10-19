@@ -256,24 +256,11 @@ tests/unit/test_sync_fair_use_gate.py::TestHardRestrictionRetryAfter::test_retur
 tests/unit/test_sync_fair_use_gate.py::TestSpeechDurationComputation::test_duration_from_raw_vad_segments
 tests/unit/test_sync_silent_failure.py::TestProcessSegmentReal::test_success_adds_to_new_memories
 tests/unit/test_sync_transcription_prefs.py::TestProcessSegmentPreferences::test_private_cloud_sync_flag_passed_to_new_conversation
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_decode_generic_exception_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_decode_http_exception_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_dg_budget_exhausted_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_dg_budget_not_exhausted_continues
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_empty_decode_completes_zero_segments
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_partial_segment_failure_completes
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_target_conversation_id_forwarded
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_vad_errors_mark_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_after_vad_completes
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
 # Full-file isolation amortizes sync router/pipeline imports and Firestore fakes into these calls.
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_failed_includes_error
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_fresh_soft_caps_use_the_current_subscription_plan[unlimited]
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_inline_renew_errors_cancel_before_capacity_admission_without_releasing_retry_material
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_content_completion_failure_cannot_publish_completed_job
 tests/unit/test_tools_rest_memory_runtime_adapter.py::test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
 tests/unit/test_transcript_segment.py::test_forward_merge_on_short_incomplete_last_sentence
@@ -475,6 +462,7 @@ tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requi
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
 tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
+# Product search through the HTTP surface on a short-term/archive fixture; measured 0.37-0.47s CPU on m5 (unchanged test, 2026-10-19).
+tests/unit/test_product_memory_router.py::test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive
 # First test to import utils.sync.files / utils.sync.legacy_segment_core in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
 tests/unit/test_sync_input_limits.py::test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix
-tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects

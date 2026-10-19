@@ -11127,6 +11127,33 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది';
 
   @override
+  String get captureBannerTryReconnect => 'మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి';
+
+  @override
+  String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get captureBannerWhatsWrong => 'ఏమి జరుగుతోంది?';
+
+  @override
+  String get captureBannerDismiss => 'దాచు';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
+
+  @override
+  String get captureLinkStalledTranscribesLater =>
+      'ఆడియో లింక్ ఆగిపోయింది — కనెక్షన్ తిరిగి వచ్చాక ట్రాన్స్‌క్రిప్ట్ అవుతుంది';
+
+  @override
+  String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'యాప్ ఇక Omi పరికరం నుండి ఆడియోను స్వీకరించలేకపోతోంది మరియు కనెక్షన్‌ను స్వయంచాలకంగా పునరుద్ధరించలేకపోయింది. పరికరాన్ని డిస్‌కనెక్ట్ చేసి మళ్లీ కనెక్ట్ చేయండి — పరికర సెట్టింగ్‌ల నుండి లేదా ఆఫ్ చేసి ఆన్ చేసి. పరికరంలో సేవ్ చేసిన ఆడియో తర్వాత సింక్ అవుతుంది.';
+
+  @override
   String get captureStillRecording => 'ఇంకా రికార్డ్ అవుతోంది';
 
   @override
