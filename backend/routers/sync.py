@@ -36,7 +36,6 @@ from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import sync_dead_letters
-from database import sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
 from database.firestore_read_metrics import FirestoreReadSite
@@ -205,9 +204,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_dark, stage as sync_stage, uid_sequencer
-from config.sync_owner_concurrency import preparation_width
-from utils.sync.owner_prefetch import warm_owner
+from utils.sync import legacy_dark, stage as sync_stage
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 from utils.sync import cap_hold_redrive
@@ -1042,83 +1039,6 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return with_poll_hint(resp, surface_open=surface_open)
 
 
-async def _maintain_uid_sequencer_lease(
-    uid: str, job_id: str, epoch: int, stop: asyncio.Event, owner: asyncio.Task | None
-) -> None:
-    while not stop.is_set():
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=sync_backfill_sequencer.HEARTBEAT_SECONDS)
-            return
-        except asyncio.TimeoutError:
-            pass
-        try:
-            renewed = await run_blocking(db_executor, sync_backfill_sequencer.renew_job, uid, job_id, epoch)
-        except Exception as error:
-            logger.error(
-                'event=sync_uid_sequencer action=heartbeat outcome=error exception_type=%s', type(error).__name__
-            )
-            renewed = False
-        if not renewed:
-            logger.error('event=sync_uid_sequencer action=heartbeat outcome=lease_lost')
-            if owner is not None:
-                owner.cancel()
-            return
-
-
-@router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
-@read_origin('job:sync_backfill_sequencer')
-async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    # Legacy-dark: ``dark`` stops claiming/dispatching only. Enrichment repair and
-    # summary-debt repair below keep running until C4 moves them (lead ruling 10-19).
-    if legacy_dark.sequencer_dispatch_allowed():
-        outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
-    else:
-        legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_DARK)
-        outcomes = {'legacy_dark': 1}
-    from utils.sync import reprocess
-
-    if reprocess.owns_runtime():
-        try:
-            repair = await run_blocking(db_executor, reprocess.sweep)
-        except Exception as error:
-            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
-            repair = {'repaired': 0, 'error': 1}
-        outcomes['reprocess_repaired'] = repair['repaired']
-        outcomes['reprocess_repair_errors'] = repair['error']
-        if summary_repair_enabled():
-            # Only the scheduled two-minute owner scans conversation debt.
-            # Batch pumps replay the outbox without paying a per-pump cursor read.
-            try:
-                summary = await run_blocking(db_executor, summary_debt_repair.tick)
-            except Exception as error:
-                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
-            outcomes['summary_debt_scanned'] = summary['scanned']
-            outcomes['summary_debt_admitted'] = summary['admitted']
-            outcomes['summary_debt_errors'] = summary['errors']
-    return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
-
-
-@router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
-async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    payload = await request.json()
-    uid = payload.get('uid') if isinstance(payload, dict) else None
-    if not isinstance(uid, str) or not uid:
-        return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
-    if not legacy_dark.sequencer_dispatch_allowed():
-        return legacy_dark.sequencer_dark_response()
-    try:
-        dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
-    except Exception as error:
-        logger.error(
-            'event=sync_uid_sequencer action=wake outcome=error uid_hash=%s exception_type=%s',
-            backfill_cutover.uid_hash(uid),
-            type(error).__name__,
-        )
-        return JSONResponse(status_code=500, content={'status': 'retry'})
-    return JSONResponse(status_code=200, content={'status': 'dispatched' if dispatched else 'deferred'})
-
-
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
@@ -1141,7 +1061,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     route_deadline = entry_state['budget_deadline_monotonic']
     try:
         async with asyncio.timeout_at(route_deadline):
-            fence_mode = await run_blocking(db_executor, uid_sequencer.production_fence_mode)
+            fence_mode = (
+                await run_blocking(db_executor, get_sync_ledger_fence_mode) if sync_stage.production_stage() else None
+            )
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=fence_read')
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
@@ -1164,216 +1086,17 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
-    epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
-    if uid_sequencer.foreign_delivery(payload):
+    if (
+        sync_stage.nonproduction_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == SyncLane.BACKFILL.value)
+    ):
+        # Non-prod stages never run legacy backfill against shared state.
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
-    if epoch is None:
-        # Sequencer off: direct work runs at once, in parallel with the drain of
-        # already-sequenced entries, instead of queueing behind them.
-        if (
-            isinstance(payload, dict)
-            and payload.get('lane') == SyncLane.BACKFILL.value
-            and uid_sequencer.production_stage()
-            and uid_sequencer.enabled()
-            and legacy_dark.sequencer_registration_allowed()
-            and isinstance(payload.get('uid'), str)
-            and isinstance(payload.get('job_id'), str)
-        ):
-            legacy_job = None
-            active_owner: dict = {}
-            try:
-                async with asyncio.timeout_at(route_deadline):
-                    legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
-                    if legacy_job and legacy_job.get('status') == 'processing':
-                        active_owner = await run_blocking(
-                            db_executor, sync_backfill_sequencer.get_owner, payload['uid']
-                        )
-            except TimeoutError:
-                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_probe')
-                return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if legacy_job and legacy_job.get('status') == 'processing':
-                if active_owner.get('active_job_id'):
-                    logger.error(
-                        'event=sync_uid_sequencer action=cutover_overlap outcome=direct_and_sequenced '
-                        'job_id=%s sequenced_job_id=%s uid_hash=%s',
-                        payload['job_id'],
-                        active_owner['active_job_id'],
-                        backfill_cutover.uid_hash(payload['uid']),
-                    )
-                else:
-                    logger.info(
-                        'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
-                        'job_id=%s uid_hash=%s',
-                        payload['job_id'],
-                        backfill_cutover.uid_hash(payload['uid']),
-                    )
-            if legacy_job and legacy_job.get('status') == 'queued':
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        marked = await run_blocking(
-                            db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
-                        )
-                        if marked is None:
-                            return await _run_sync_job_body(request, task_retry_count, entry_state)
-                        enqueued_at = payload.get('enqueued_at')
-                        age = payload.get('recording_age_seconds')
-                        captured_at = (
-                            float(enqueued_at) - float(age)
-                            if isinstance(enqueued_at, (int, float)) and isinstance(age, (int, float))
-                            else None
-                        )
-                        await run_blocking(
-                            db_executor,
-                            sync_backfill_sequencer.register_job,
-                            payload['uid'],
-                            payload['job_id'],
-                            payload,
-                            captured_at,
-                        )
-                except TimeoutError:
-                    logger.warning(
-                        'event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_migration'
-                    )
-                    return _budget_deferral_fallback('preamble_timeout', 'degraded')
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
-                except TimeoutError:
-                    # Registration already committed: a 409 would redeliver a
-                    # payload that no longer needs the queue.
-                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_kick')
-                except Exception as error:
-                    logger.error(
-                        'event=sync_uid_sequencer action=legacy_migration outcome=deferred exception_type=%s',
-                        type(error).__name__,
-                    )
-                logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
-                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
-            if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        await run_blocking(
-                            db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id']
-                        )
-                except TimeoutError:
-                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=direct_refresh')
-                    return _budget_deferral_fallback('preamble_timeout', 'degraded')
-                except Exception as error:
-                    logger.error(
-                        'event=sync_transcription_job outcome=direct_refresh_failed exception_type=%s',
-                        type(error).__name__,
-                    )
-        return await _run_sync_job_body(request, task_retry_count, entry_state)
-    uid = payload.get('uid')
-    job_id = payload.get('job_id')
-    if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
-        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
-    # One absolute budget deadline for the whole sequenced request (entry_state,
-    # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job, and the prior-job read below each run inside a timeout_at
-    # against that deadline, so a stall in any of them ends the request through
-    # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
-    # deadline or the middleware cap this change exists to stay under.
-    sequenced_attempt_state: dict = entry_state
-    try:
-        async with asyncio.timeout_at(route_deadline):
-            began = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
-    except TimeoutError:
-        logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
-        return _budget_deferral_fallback('preamble_timeout', 'degraded')
-    if not began:
-        logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
-        return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
-    stop = asyncio.Event()
-    heartbeat = start_background_task(
-        _maintain_uid_sequencer_lease(uid, job_id, epoch, stop, asyncio.current_task()),
-        name=f'sync:uid-lease:{job_id}',
-    )
-    try:
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                prior_job = await run_blocking(db_executor, get_sync_job, job_id)
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=prior_read')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
-        prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
-        effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
-        # One state dict carries the post-budget deadline from the deferral
-        # into this finally block: the marker clear inside the deferral and
-        # this heartbeat drain must share one absolute cleanup deadline
-        # (post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS)
-        # instead of each spending a fresh margin-sized timeout whose sum
-        # reaches the attempt wall before the response is serialized.
-        response = await _run_sync_job_body(request, effective_retry_count, sequenced_attempt_state)
-    finally:
-        stop.set()
-        # Setting stop cannot interrupt a renewal already blocked inside its
-        # Firestore run_blocking, and this join sits between the attempt's
-        # response and its return: without a bound, a stuck renewal holds the
-        # request open past every wall the handler budget exists to stay
-        # under. wait_for cancels the heartbeat at the bound; the orphaned
-        # renewal finishing later only logs lease_lost or renews an epoch the
-        # response has already left behind.
-        post_budget_deadline = sequenced_attempt_state.get('post_budget_deadline')
-        shared_drain_bound = (
-            post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-            if isinstance(post_budget_deadline, float)
-            else None
-        )
-        if shared_drain_bound is not None:
-            # One absolute bound for both cleanup waits: the marker clear in
-            # the deferral already consumed up to this deadline, so the drain
-            # takes only what remains — never a fresh margin-sized timeout on
-            # top. The standalone bound stays the ceiling so a large explicit
-            # enqueue-timeout override cannot extend the drain past its own
-            # contract.
-            drain_timeout = min(
-                SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS,
-                max(0.0, shared_drain_bound - time.monotonic()),
-            )
-        else:
-            drain_timeout = SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-        try:
-            await asyncio.wait_for(heartbeat, drain_timeout)
-        except TimeoutError:
-            logger.warning('event=sync_uid_sequencer action=heartbeat_drain outcome=cancelled')
-    if response.status_code < 300 and not _is_handler_budget_deferral(response):
-        # A budget deferral is an ack, not a completion claim: the epoch still
-        # owns the job and the delayed replacement (or the sweep's lease-expiry
-        # redrive) re-enters it, so the owner must not be finished here — and
-        # the nonterminal check below must not turn it into a retry-burning 500.
-        # The completion drain is bounded by the same absolute request
-        # deadline plus the post-attempt cleanup headroom the heartbeat drain
-        # uses: a slow Redis/Firestore call here must not consume the
-        # remaining response margin and let the middleware or Cloud Tasks
-        # deadline terminate the request before its response is returned.
-        # Fencing stays intact — finish_job's transaction re-checks the lease
-        # — so an expired bound only skips the release; the next sweep's
-        # lease-expiry path releases the owner instead.
-        completion_bound = sequenced_attempt_state.get('budget_deadline_monotonic')
-        completion_timeout = (
-            max(
-                0.0,
-                (completion_bound + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS) - time.monotonic(),
-            )
-            if isinstance(completion_bound, float)
-            else SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-        )
-        try:
-            async with asyncio.timeout(completion_timeout):
-                job = await run_blocking(db_executor, get_sync_job, job_id)
-                if job is not None and job.get('status') not in TERMINAL_STATUSES:
-                    logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
-                    return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
-                outcome = job.get('status') if job else 'expired'
-                released = await run_blocking(
-                    db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome
-                )
-                if released:
-                    await run_blocking(db_executor, uid_sequencer.kick, uid)
-        except TimeoutError:
-            logger.warning('event=sync_uid_sequencer action=delivery outcome=completion_drain_cancelled')
-    return response
+    if isinstance(payload, dict) and payload.get('sequencer_epoch') is not None:
+        # C10: a task enqueued by the deleted backfill sequencer; its owner state no longer exists.
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'sequencer_retired'})
+    return await _run_sync_job_body(request, task_retry_count, entry_state)
 
 
 # The TimeoutMiddleware cap (HTTP_SYNC_JOBS_RUN_TIMEOUT, default 1500s) answers
@@ -1612,7 +1335,8 @@ async def _defer_sync_job_after_handler_budget_expiry(
     try:
         payload = dict(await request.json())
         job_id = payload['job_id']
-        uid = payload['uid']
+        if not isinstance(payload['uid'], str):
+            raise ValueError('budget deferral payload requires a uid')
         deferrals = payload.get(SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY, 0)
         if isinstance(deferrals, bool) or not isinstance(deferrals, int) or deferrals < 0:
             raise ValueError('budget deferral count must be a non-negative integer')
@@ -1651,82 +1375,6 @@ async def _defer_sync_job_after_handler_budget_expiry(
     )
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
-    if payload.get('sequencer_epoch') is not None:
-        # Sequenced deliveries only, and REQUIRED BEFORE anything schedules a
-        # replacement: the sweep's lease-expiry redrive re-dispatches the
-        # owner's original payload, which carries no chain count — the
-        # owner-side copy is the only bound on that path. The replacement is
-        # scheduled past the lease (RUN_LOCK_TTL + 60s), so a redrive can
-        # always arrive before it; without the count persisted first, that
-        # redrive restarts the chain at zero and invalidates the
-        # already-scheduled epoch. A write that fails or cannot settle inside
-        # the shared deadline therefore aborts the deferral BEFORE the marker
-        # or enqueue exists — the queue-owned 409 keeps the task, and no
-        # unbounded whole-budget sequence can be restored behind a lost
-        # count. Only an owner that has moved on (completed/released, or a
-        # newer epoch) makes the write inert: nothing left can redrive this
-        # job from the owner, so the deferral may proceed.
-        owner_count_write = asyncio.ensure_future(
-            run_blocking(
-                db_executor,
-                sync_backfill_sequencer.note_budget_deferral,
-                uid,
-                job_id,
-                int(payload['sequencer_epoch']),
-                deferrals + 1,
-            )
-        )
-        try:
-            async with asyncio.timeout_at(post_budget_deadline):
-                owner_count_written = await asyncio.shield(owner_count_write)
-        except Exception as error:
-            logger.warning(
-                'event=sync_transcription_job outcome=handler_budget_owner_deferral_write_failed exception_type=%s',
-                type(error).__name__,
-            )
-            # The timeout cancels only the await: the Firestore transaction
-            # can still be running in db_executor and commit later. An
-            # abandoned leaf that lands records active_budget_deferrals with
-            # no marker or replacement behind it — the sequencer sweep then
-            # reads the count plus absent marker as an exhausted chain and
-            # terminally fails the job a whole attempt short. Drain the
-            # retained write within the cleanup allowance: a settled True
-            # rescues the deferral (the count the sweep will see is exactly
-            # the one this chain carries), a settled False/exception is the
-            # plain failure below, and a write that cannot settle skips the
-            # rescue and keeps the queue-owned 409 — with the leaf's possible
-            # late commit fenced by the sweep's own lease-expiry recheck of
-            # the owner it would read.
-            rescued: Optional[bool] = None
-            try:
-                async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
-                    rescued = await asyncio.shield(owner_count_write)
-            except Exception:
-                _consume_detached_outcome(owner_count_write)
-                logger.warning('event=sync_transcription_job outcome=handler_budget_owner_deferral_drain_failed')
-            if rescued is None:
-                return _budget_deferral_fallback('owner_write_failed', 'degraded')
-            # A settled False is the inert owner (moved on, nothing written)
-            # — the same proceed-outcome as the settled path; only a write
-            # that cannot settle at all keeps the queue-owned 409.
-            owner_count_written = rescued
-            # The drain consumed the original enqueue window, so the rescued
-            # deferral's remaining work (acquire drain, marker, replacement
-            # enqueue) runs against the drain's absolute wall — the one
-            # cleanup allowance past the original deadline that the wrapper's
-            # heartbeat drain also bounds itself by — instead of the
-            # already-expired deadline, whose instant expiry would turn every
-            # rescue into a marker_timeout/enqueue_failed 409 and leave the
-            # late commit the drain just rescued with no replacement behind
-            # it. attempt_state carries the extended wall so the wrapper's
-            # post-response drains share it instead of stacking a fresh
-            # allowance on top.
-            post_budget_deadline += SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-            if attempt_state is not None:
-                attempt_state['post_budget_deadline'] = post_budget_deadline
-            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_late_commit_rescued')
-        if owner_count_written is False:
-            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_inert')
     # The expiry that reached here may have cancelled only the await of the run
     # lock acquire: its executor leaf can still land the TTL'd SET minutes
     # later, so a schedule computed from now can come due while that lock is
@@ -2253,20 +1901,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
-        sequencer_epoch = payload.get('sequencer_epoch')
-        if (
-            sync_lane == SyncLane.BACKFILL.value
-            and isinstance(sequencer_epoch, int)
-            and sequencer_epoch > 0
-            and preparation_width() > 1
-        ):
-            # Pure future downloads share this instance with a possible next
-            # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
-            # conversation authority. A cross-instance delivery simply misses.
-            start_background_task(
-                run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
-                name='sync:owner-prefetch',
-            )
         if sync_lane == SyncLane.BACKFILL.value:
             staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
         else:

@@ -153,45 +153,7 @@ def _storage_with(monkeypatch, blob, prepared=None):
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     client = type('C', (), {'bucket': lambda self, name: type('B', (), {'blob': lambda self, path: blob})()})()
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
-    monkeypatch.setattr(storage.staged_prefetch, 'take', lambda path: prepared)
     return storage
-
-
-def test_prefetch_hit_short_write_is_cleaned_up_and_mapped_to_capacity_pressure(tmp_path, monkeypatch):
-    import builtins
-    import errno
-
-    from utils.other import storage
-
-    blob = _Blob(size=4)
-    prepared = storage.StagedBytes(b'abcd', 'bucket', 7)
-    mod = _storage_with(monkeypatch, blob, prepared)
-    target = tmp_path / 'staged.bin'
-    real_open = builtins.open
-
-    class FullFile:
-        def __init__(self, path):
-            self._f = real_open(path, 'wb')
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            self._f.close()
-
-        def write(self, data):
-            self._f.write(data[:1])
-            raise OSError(errno.ENOSPC, 'synthetic full')
-
-    monkeypatch.setattr(
-        mod,
-        'open',
-        lambda path, mode='r': FullFile(path) if str(path) == str(target) else real_open(path, mode),
-        raising=False,
-    )
-    with pytest.raises(limits.BackfillStoragePressure):
-        mod.download_syncing_temporal_file(str(target), max_bytes=1024)
-    assert not target.exists()
 
 
 def test_unknown_blob_size_falls_through_to_the_capped_read(tmp_path, monkeypatch):

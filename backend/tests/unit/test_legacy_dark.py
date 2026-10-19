@@ -320,48 +320,6 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_dark_sweep_stops_claims_but_keeps_enrichment_repair(monkeypatch):
-    from unittest.mock import MagicMock
-
-    module, saved, jobs, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
-        module.uid_sequencer.sweep = MagicMock(return_value={'claimed': 1})
-        from utils.sync import reprocess
-
-        monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-        repair = MagicMock(return_value={'repaired': 2, 'error': 0})
-        monkeypatch.setattr(reprocess, 'sweep', repair)
-        module.summary_repair_enabled = lambda: False
-        response = await module.sweep_sync_backfill_sequencer(0)
-        assert response.status_code == 200
-        outcomes = json.loads(response.body)['outcomes']
-        assert outcomes['legacy_dark'] == 1 and outcomes['reprocess_repaired'] == 2
-        module.uid_sequencer.sweep.assert_not_called()
-        repair.assert_called_once()
-    finally:
-        _restore(saved)
-
-
-@pytest.mark.asyncio
-async def test_dark_wake_does_not_kick(monkeypatch):
-    from unittest.mock import AsyncMock, MagicMock
-
-    module, saved, jobs, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
-        module.uid_sequencer.kick = MagicMock()
-        request = MagicMock()
-        request.json = AsyncMock(return_value={'uid': 'test-uid'})
-        response = await module.wake_sync_backfill_uid(request, 0)
-        assert response.status_code == 200
-        assert json.loads(response.body)['status'] == 'legacy_dark'
-        module.uid_sequencer.kick.assert_not_called()
-    finally:
-        _restore(saved)
-
-
-@pytest.mark.asyncio
 async def test_v1_sync_local_files_is_gone():
     module, saved, jobs, BytesIO = _router()
     try:
@@ -371,18 +329,3 @@ async def test_v1_sync_local_files_is_gone():
         assert response.headers['deprecation'] == 'true'
     finally:
         _restore(saved)
-
-
-def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
-    from unittest.mock import MagicMock
-
-    from utils.sync import uid_sequencer
-
-    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
-    claim = MagicMock()
-    monkeypatch.setattr(uid_sequencer, '_claim_next', claim)
-    monkeypatch.setattr(uid_sequencer.registry, 'due_owners', claim)
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
-    assert uid_sequencer.kick('test-uid') is False
-    assert uid_sequencer.sweep() == {'legacy_dark': 1}
-    claim.assert_not_called()
