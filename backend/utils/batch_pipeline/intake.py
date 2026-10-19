@@ -135,6 +135,7 @@ async def accept_upload(
     record_router=None,
     decode=None,
     policy: BatchUnitPolicy | None = None,
+    usage_period: str | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -342,6 +343,9 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                # Funded period the owner's choice was made in (cap-hold re-entry); projection
+                # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
+                **({'usage_period': usage_period} if usage_period else {}),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

@@ -23,6 +23,12 @@ import pytest
 from utils import processing_backlog_worker as worker
 
 
+@pytest.fixture(autouse=True)
+def no_cap_hold_reservations(monkeypatch):
+    # Cap-hold batch reservations (lane 6) are covered by test_cap_hold_batch_debit.py; here none are open.
+    monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
+
+
 def snapshot(identity, **row):
     return SimpleNamespace(id=identity, to_dict=lambda: dict(row))
 
