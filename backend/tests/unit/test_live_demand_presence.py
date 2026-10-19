@@ -265,3 +265,51 @@ async def test_unknown_presence_response_requires_vendor(monkeypatch, reply):
     monkeypatch.setattr(demand_presence, '_client', AsyncMock(eval=AsyncMock(return_value=reply)))
     snapshot = await demand_presence.update_presence('user', 'phone', 'hidden')
     assert snapshot.visible and snapshot.unavailable
+
+
+@pytest.mark.asyncio
+async def test_failed_non_admitted_heartbeat_retries_next_loop(monkeypatch):
+    clock = [0.0]
+    demand, _ = _routing(monkeypatch, [HIDDEN, FAILED, HIDDEN], eligible=False, clock=clock)
+    assert demand._presence_due()  # never published
+    await demand.publish()
+    assert not demand._presence_due()
+    clock[0] += demand_routing.NON_ADMITTED_HEARTBEAT_SECONDS
+    assert demand._presence_due()
+    await demand.publish()  # times out: the slot is not consumed
+    clock[0] += 1
+    assert demand._presence_due()
+    await demand.publish()
+    assert not demand._presence_due()
+
+
+@pytest.mark.asyncio
+async def test_first_failed_heartbeat_is_retried_immediately(monkeypatch):
+    demand, _ = _routing(monkeypatch, [FAILED], eligible=False)
+    await demand.publish()
+    assert demand._presence_due()
+
+
+@pytest.mark.asyncio
+async def test_unavailable_found_by_concurrent_publish_forces_vendor_in_same_iteration(monkeypatch):
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
+    state = SimpleNamespace(active=True, stt_terminal_failure=False)
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='user'), state=state, wait=AsyncMock(return_value=True), stt_model='parakeet-window'
+    )
+    receiver = SimpleNamespace(
+        host=host, lane_meter=SimpleNamespace(flush=lambda **kw: None), _switch_live_demand=AsyncMock(return_value=True)
+    )
+    demand = demand_routing.LiveDemandRouting(receiver, eligible=True)
+    demand.policy.observe({'foreground': False, 'transcript_visible': False})
+    monkeypatch.setattr(demand, 'publish', AsyncMock(return_value=False))
+
+    async def consumer(uid):
+        demand._presence_unavailable = True  # observe() publish lands a second miss meanwhile
+        return False
+
+    monkeypatch.setattr(demand_routing, 'realtime_consumer_active', consumer)
+    await demand.run()
+    receiver._switch_live_demand.assert_awaited_with('vendor')
+    assert demand.policy.reason == 'visible'
