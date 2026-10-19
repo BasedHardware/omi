@@ -81,7 +81,7 @@ class ConversationSummarySelection {
 
   /// Omi's own summary: the compatibility overview or the section projection, else empty.
   static ConversationSummarySelection firstParty(ServerConversation conversation) {
-    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
+    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
     String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);

@@ -862,6 +862,42 @@ final class AgentRuntimeProcessTests: XCTestCase {
         authUrl: url))
   }
 
+  func testClaudeSignInMessagePointsAtClearChatNotAMissingNewChat() {
+    // The chat-first shell has no "new chat"; Clear Chat is what moves a pinned chat
+    // onto the selected provider, so the message must not send people looking for one.
+    let message = ChatProvider.providerAuthRequiredUserMessage(isUserClaudeMode: false)
+    XCTAssertFalse(message.contains("new chat"))
+    XCTAssertTrue(message.contains("Clear the chat"))
+  }
+
+  @MainActor
+  func testClearedChatProviderMoveMigratesOnlyOnMismatchAndKeepsProviderOnRefusal() async {
+    var calls = 0
+    let same = await ChatProvider.moveSessionToSelectedProvider(pinnedAdapterId: "acp", selectedAdapterId: "acp") {
+      calls += 1
+      return "acp"
+    }
+    guard case .unchanged = same else { return XCTFail("same adapter must not migrate, got \(same)") }
+    XCTAssertEqual(calls, 0)
+
+    let moved = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) {
+      calls += 1
+      return "acp"
+    }
+    guard case .moved(let from, let to) = moved else { return XCTFail("mismatch must migrate, got \(moved)") }
+    XCTAssertEqual([from, to], ["pi-mono", "acp"])
+    XCTAssertEqual(calls, 1)
+
+    struct RunActive: Error {}
+    let refused = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) { throw RunActive() }
+    guard case .refused(let error) = refused else { return XCTFail("refusal must be kept, got \(refused)") }
+    XCTAssertTrue(error is RunActive)
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
     let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",

@@ -40,7 +40,28 @@ class DeveloperModeProvider extends BaseProvider {
   Map<String, String> _savedWebhookText = const {};
   String _savedCustomBackendUrl = '';
 
-  DeveloperModeProvider() {
+  /// Each webhook type and its fields (keys of [_webhookText]).
+  static const Map<String, List<String>> _webhookFields = {
+    'audio_bytes': ['audio', 'audioDelay'],
+    'realtime_transcript': ['transcript'],
+    'memory_created': ['conversation'],
+    'day_summary': ['daySummary'],
+  };
+
+  /// Webhook types whose URL could not be read. Their fields show the cached URL instead.
+  final Set<String> _unreadWebhooks = {};
+
+  /// Reads a webhook URL, null when the read failed. Injectable for tests.
+  final Future<String?> Function({required String type}) _fetchWebhookUrl;
+
+  /// Saves a webhook URL; an empty URL turns the webhook off. Injectable for tests.
+  final Future<bool> Function({required String type, required String url}) _saveWebhookUrl;
+
+  DeveloperModeProvider({
+    Future<String?> Function({required String type})? fetchWebhookUrl,
+    Future<bool> Function({required String type, required String url})? saveWebhookUrl,
+  })  : _fetchWebhookUrl = fetchWebhookUrl ?? getUserWebhookUrl,
+        _saveWebhookUrl = saveWebhookUrl ?? setUserWebhookUrl {
     for (final controller in _webhookControllers) {
       controller.addListener(_onWebhookTextChanged);
     }
@@ -83,44 +104,41 @@ class DeveloperModeProvider extends BaseProvider {
         current.keys.any((k) => current[k] != (_savedWebhookText[k] ?? ''));
   }
 
-  void onConversationEventsToggled(bool value) {
-    conversationEventsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'memory_created');
-    } else {
-      enableWebhook(type: 'memory_created');
-    }
-    notifyListeners();
-  }
+  /// Webhook types with an on/off request still running. Another tap on that switch is ignored until
+  /// the answer arrives, like a second Save, so two requests for one webhook cannot cross.
+  final Set<String> _switchingWebhooks = {};
 
-  void onTranscriptsToggled(bool value) {
-    transcriptsToggled = value;
-    if (!value) {
-      disableWebhook(type: 'realtime_transcript');
-    } else {
-      enableWebhook(type: 'realtime_transcript');
-    }
-    notifyListeners();
-  }
+  Future<void> onConversationEventsToggled(bool value) =>
+      _switchWebhook('memory_created', value, (enabled) => conversationEventsToggled = enabled);
 
-  void onAudioBytesToggled(bool value) {
-    audioBytesToggled = value;
-    if (!value) {
-      disableWebhook(type: 'audio_bytes');
-    } else {
-      enableWebhook(type: 'audio_bytes');
-    }
-    notifyListeners();
-  }
+  Future<void> onTranscriptsToggled(bool value) =>
+      _switchWebhook('realtime_transcript', value, (enabled) => transcriptsToggled = enabled);
 
-  void onDaySummaryToggled(bool value) {
-    daySummaryToggled = value;
-    if (!value) {
-      disableWebhook(type: 'day_summary');
-    } else {
-      enableWebhook(type: 'day_summary');
-    }
+  Future<void> onAudioBytesToggled(bool value) =>
+      _switchWebhook('audio_bytes', value, (enabled) => audioBytesToggled = enabled);
+
+  Future<void> onDaySummaryToggled(bool value) =>
+      _switchWebhook('day_summary', value, (enabled) => daySummaryToggled = enabled);
+
+  /// Shows the [type] webhook's switch at [enabled] and asks the server to turn that webhook on or off.
+  /// If the server does not confirm it, the webhook did not change, so the switch goes back and an
+  /// error is shown.
+  Future<void> _switchWebhook(String type, bool enabled, void Function(bool enabled) showSwitch) async {
+    if (!_switchingWebhooks.add(type)) return;
+    showSwitch(enabled);
     notifyListeners();
+    try {
+      final saved = enabled ? await enableWebhook(type: type) : await disableWebhook(type: type);
+      if (saved) return;
+    } finally {
+      _switchingWebhooks.remove(type);
+    }
+    showSwitch(!enabled);
+    notifyListeners();
+    AppSnackbar.showSnackbarError(
+      globalNavigatorKey.currentContext?.l10n.failedToSaveCheckConnection ??
+          'Failed to save. Please check your connection.',
+    );
   }
 
   Future getWebhooksStatus() async {
@@ -157,7 +175,7 @@ class DeveloperModeProvider extends BaseProvider {
 
     await Future.wait([
       getWebhooksStatus(),
-      getUserWebhookUrl(type: 'audio_bytes').then((url) {
+      _loadWebhookUrl('audio_bytes', (url) {
         List<dynamic> parts = url.split(',');
         if (parts.length == 2) {
           webhookAudioBytes.text = parts[0].toString();
@@ -169,15 +187,15 @@ class DeveloperModeProvider extends BaseProvider {
         SharedPreferencesUtil().webhookAudioBytes = webhookAudioBytes.text;
         SharedPreferencesUtil().webhookAudioBytesDelay = webhookAudioBytesDelay.text;
       }),
-      getUserWebhookUrl(type: 'realtime_transcript').then((url) {
+      _loadWebhookUrl('realtime_transcript', (url) {
         webhookOnTranscriptReceived.text = url;
         SharedPreferencesUtil().webhookOnTranscriptReceived = url;
       }),
-      getUserWebhookUrl(type: 'memory_created').then((url) {
+      _loadWebhookUrl('memory_created', (url) {
         webhookOnConversationCreated.text = url;
         SharedPreferencesUtil().webhookOnConversationCreated = url;
       }),
-      getUserWebhookUrl(type: 'day_summary').then((url) {
+      _loadWebhookUrl('day_summary', (url) {
         webhookDaySummary.text = url;
         SharedPreferencesUtil().webhookDaySummary = url;
       }),
@@ -189,12 +207,33 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Hands the [type] webhook's URL to [apply]. A failed read is not an empty URL: the fields keep
+  /// their cached text, the cache is left alone, and the webhook is marked unread for Save.
+  Future<void> _loadWebhookUrl(String type, void Function(String url) apply) async {
+    final url = await _fetchWebhookUrl(type: type);
+    if (url == null) {
+      _unreadWebhooks.add(type);
+      return;
+    }
+    apply(url);
+  }
+
+  /// Whether Save writes the [type] webhook. One whose URL could not be read is written only once one
+  /// of its fields is edited: its cached text may be stale or empty, and an empty URL turns it off.
+  bool _savesWebhook(String type) {
+    if (!_unreadWebhooks.contains(type)) return true;
+    final current = _webhookText();
+    return _webhookFields[type]!.any((field) => current[field] != (_savedWebhookText[field] ?? ''));
+  }
+
   /// Saves webhook URLs and, outside release builds, the custom backend URL. Resolves whether
   /// they were saved.
   Future<bool> saveSettings() async {
     if (savingSettingsLoading) return false;
     setIsLoading(true);
     final prefs = SharedPreferencesUtil();
+    // Decided before the audio interval default below, which is not an edit.
+    final webhooksToSave = _webhookFields.keys.where(_savesWebhook).toSet();
 
     if (!kReleaseMode) {
       try {
@@ -251,13 +290,12 @@ class DeveloperModeProvider extends BaseProvider {
     //   notifyListeners();
     //   return;
     // }
-    var w1 = setUserWebhookUrl(
-      type: 'audio_bytes',
-      url: '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}',
-    );
-    var w2 = setUserWebhookUrl(type: 'realtime_transcript', url: webhookOnTranscriptReceived.text.trim());
-    var w3 = setUserWebhookUrl(type: 'memory_created', url: webhookOnConversationCreated.text.trim());
-    var w4 = setUserWebhookUrl(type: 'day_summary', url: webhookDaySummary.text.trim());
+    Future<bool> saveWebhook(String type, String url) =>
+        webhooksToSave.contains(type) ? _saveWebhookUrl(type: type, url: url) : Future.value(true);
+    var w1 = saveWebhook('audio_bytes', '${webhookAudioBytes.text.trim()},${webhookAudioBytesDelay.text.trim()}');
+    var w2 = saveWebhook('realtime_transcript', webhookOnTranscriptReceived.text.trim());
+    var w3 = saveWebhook('memory_created', webhookOnConversationCreated.text.trim());
+    var w4 = saveWebhook('day_summary', webhookDaySummary.text.trim());
     // var w4 = setUserWebhookUrl(type: 'audio_bytes_websocket', url: webhookWsAudioBytes.text.trim());
     var webhooksSaved = false;
     try {
@@ -318,8 +356,19 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Developer Settings disposes this provider when the page closes, which can happen while a load or a
+  /// save is still waiting on the server. When that request finishes there is nothing left to update,
+  /// and notifying a disposed notifier is an error.
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     for (final controller in _webhookControllers) {
       controller.removeListener(_onWebhookTextChanged);
     }

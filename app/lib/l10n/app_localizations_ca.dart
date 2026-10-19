@@ -9372,9 +9372,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count més';
-  }
+  String get quoteShowSources => 'Mostra les fonts';
 
   @override
   String get jumpToLatestMessage => 'Vés a l\'últim missatge';
@@ -11125,7 +11123,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openCall => 'Obre la trucada';
 
   @override
-  String get captureRecoveryBanner => 'Omi no envia àudio — toca per tornar a connectar';
+  String get captureRecoveryBannerTitle => 'Omi no envia àudio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11144,18 +11142,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureBannerRetrySync => 'Reintenta la sincronització';
 
   @override
-  String get captureBannerWhatsWrong => 'Què està passant?';
-
-  @override
-  String get captureBannerDismiss => 'Descarta';
-
-  @override
   String get captureWedgeBleExplanation =>
       'L\'enllaç Bluetooth amb el vostre Omi s\'ha aturat, per tant l\'àudio no arriba a l\'aplicació. L\'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l\'enllaç es recuperi. Reintentar torna a connectar l\'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'L\'enllaç d\'àudio s\'ha aturat — la transcripció continua quan es recuperi';
 
   @override
   String get captureIngressNeedsReconnect => 'L\'àudio no arriba a l\'aplicació — torneu a connectar l\'Omi';
@@ -13754,7 +13742,30 @@ class AppLocalizationsCa extends AppLocalizations {
   String get activityRetryAll => 'Torna-ho a provar tot';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'No es pot comprovar l\'emmagatzematge';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Enregistraments en pausa';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'La pujada s\'ha aturat';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments en espera',
+      one: '1 enregistrament en espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
+
+  @override
+  String get activityAttentionSemantics => 'Activitat, requereix atenció';
 
   @override
   String get connectAgentHeadline => 'Fes servir la memòria d\'Omi a ChatGPT i als teus agents d\'IA';
@@ -14441,4 +14452,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'S\'han desat $saved de $total d\'àudio';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi continua enregistrant';
 }
