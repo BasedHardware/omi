@@ -219,12 +219,14 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
             deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
         } }
+        val history = dropUnmeasuredAudioRecoveries(array("disconnect_history_$addr"))
+        val marker = DeviceHealthPersistence.sessions(context).openSince(addr)
         callback(Result.success(JSONObject()
             .put("observed_at", System.currentTimeMillis())
             .put("identity_epoch", DeviceHealthPersistence.epoch(context))
-            .put("audio_outage_started_at", DeviceHealthPersistence.sessions(context).openSince(addr) ?: JSONObject.NULL)
+            .put("audio_outage_started_at", if (marker != null && audioOutageMatchesDisconnect(history, marker)) marker else JSONObject.NULL)
             .put("audio_packet_days", array("packet_days_$addr"))
-            .put("disconnect_history_v2", array("disconnect_history_$addr"))
+            .put("disconnect_history_v2", history)
             .put("battery_history_v2", batteryHistory)
             .put("rssi_samples", samples)
             .put("firmware_diagnostics", array("firmware_$addr"))
