@@ -298,13 +298,16 @@ def test_clean_page_pays_one_pass(monkeypatch):
     rows = [_memory_row(f'm{i}', created_at=_at_hour(10 - i), updated_at=_at_hour(10 - i)) for i in range(10)]
     calls = []
 
-    def counting_window(_memories_ref, order_field, candidate_limit, *, budget=None):
+    def counting_window(_memories_ref, order_field, candidate_limit, *, budget=None, cursor_snapshot=None):
         calls.append((order_field, candidate_limit))
         ordered = sorted(
             (row for row in rows if row.get(order_field) is not None),
             key=lambda row: (row[order_field], row['id']),
             reverse=True,
         )
+        if cursor_snapshot is not None:
+            index = next(i for i, row in enumerate(ordered) if row['id'] == cursor_snapshot.id)
+            ordered = ordered[index + 1 :]
         return [_FakeDoc(row) for row in ordered[:candidate_limit]]
 
     monkeypatch.setattr(memories_db, '_stream_memory_list_index_window', counting_window)
