@@ -694,7 +694,7 @@ def main(
     parity_cmd = shlex.split(args.parity_cmd) if args.parity_cmd else None
     state_path = Path(args.state_file)
     effects = Effects(
-        read_document=lambda: store.read_ramp(firestore_client=client),
+        read_document=lambda: store.read_ramp(firestore_client=client, timeout=store.OPERATOR_READ_TIMEOUT_SECONDS),
         read_history=lambda revisions: store.read_ramp_history(revisions, firestore_client=client),
         write=lambda env, change, **kw: write_ramp(env, change, firestore_client=client, **kw),
         gate=lambda since, percent: run_fleet_gate(
