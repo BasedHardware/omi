@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Request-local evidence and ordering for mixed canonical/historical reads."""
 
 from datetime import timezone

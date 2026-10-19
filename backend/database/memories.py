@@ -37,8 +37,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from database.memory_list_index import (
     MemoryListIndexState,
-    _memory_passes_list_visibility,
-    _memory_list_sort_key,
+    memory_passes_list_visibility as _memory_passes_list_visibility,
     merge_memory_list_index_docs,
 )
 from database.legal_holds import external_write_fence

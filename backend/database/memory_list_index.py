@@ -19,7 +19,7 @@ class MemoryListIndexState:
         self.exhausted: set[str] = set()
 
 
-def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
+def memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
     """Return whether a historical memory row should appear in list/read results.
 
     Product rule: exclude user-rejected rows (``user_review is False``) and, unless
@@ -68,7 +68,7 @@ def merge_memory_list_index_docs(
         (
             memory
             for memory in by_id.values()
-            if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
+            if memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
         ),
         key=_memory_list_sort_key,
     )
