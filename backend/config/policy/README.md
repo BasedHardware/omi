@@ -111,8 +111,8 @@ benches, privacy and capacity remain live operational inputs.
 The TTL is 24 hours, renewed on reconnect: six times the four-hour desktop
 recording rotation and the maximum conversation continuation timeout. The server
 has no hard socket lifetime limit; a socket retains its in-memory policy even
-past Redis expiry. Conversation creation/rollover writes an additive alias with
-SET NX. Legacy clients reuse the existing authoritative in-progress lookup before
+past Redis expiry. Conversation creation/rollover writes additive aliases for both conversation
+and recording UUIDs with SET NX; they are distinct after a rollover. Legacy clients reuse the existing authoritative in-progress lookup before
 selection; `prepare()` consumes that same row rather than issuing another lookup.
 The legacy ownership, source, device and continuation fences still apply.
 

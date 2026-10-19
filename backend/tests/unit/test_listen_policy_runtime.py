@@ -83,7 +83,8 @@ def test_session_end_metric_uses_state_outside_context_after_env_flip(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_alias_persists_once_without_overwriting_existing(monkeypatch):
+@pytest.mark.parametrize('reconnect_identity', ['conversation', 'rotated-recording'])
+async def test_alias_persists_once_without_overwriting_existing(monkeypatch, reconnect_identity):
     policy = resolve_listen_policy('owner', flags={'PARAKEET_WINDOW_ALLOCATION_PERCENT': '100'})
     data = {}
 
@@ -97,16 +98,20 @@ async def test_alias_persists_once_without_overwriting_existing(monkeypatch):
         yield injected if injected is not None else Redis()
 
     monkeypatch.setattr(store, '_client', client)
-    host = SimpleNamespace(request=SimpleNamespace(uid='owner'), state=ListenSessionState(listen_policy=policy))
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='owner'),
+        state=ListenSessionState(listen_policy=policy),
+        recording_session_id='rotated-recording',
+    )
     await store.persist_conversation_policy(host, 'conversation')
     host.state.listen_policy = resolve_listen_policy('owner', flags={})
     await store.persist_conversation_policy(host, 'conversation')
     result, source = await store.load_listen_policy(
         'owner',
-        'conversation',
+        reconnect_identity,
         resolver=lambda: None,
         redis_client=SimpleNamespace(
-            get=AsyncMock(return_value=data[store.policy_key('owner', 'conversation')]),
+            get=AsyncMock(return_value=data[store.policy_key('owner', reconnect_identity)]),
             expire=AsyncMock(),
         ),
     )

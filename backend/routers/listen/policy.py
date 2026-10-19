@@ -116,13 +116,16 @@ async def persist_conversation_policy(host, conversation_id):
         return
     try:
         async with asyncio.timeout(REDIS_TIMEOUT_SECONDS):
+            payload = json.dumps(policy.to_dict(), sort_keys=True, separators=(',', ':'))
+            # A rollover creates distinct recording and conversation UUIDs.
+            # Clients may reconnect using either ID; both must name the stamp.
+            identities = dict.fromkeys((conversation_id, getattr(host, 'recording_session_id', None)))
             async with _client() as client:
-                await client.set(
-                    policy_key(host.request.uid, conversation_id),
-                    json.dumps(policy.to_dict(), sort_keys=True, separators=(',', ':')),
-                    nx=True,
-                    ex=POLICY_TTL_SECONDS,
-                )
+                for identity in identities:
+                    if identity:
+                        await client.set(
+                            policy_key(host.request.uid, identity), payload, nx=True, ex=POLICY_TTL_SECONDS
+                        )
     except Exception:
         record_fallback(
             component='stt_live_session', from_mode='none', to_mode='none', reason='other', outcome='degraded'
