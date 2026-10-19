@@ -11120,7 +11120,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBannerTitle => 'Omi ఆడియో పంపడం లేదు';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11131,9 +11131,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది';
-
-  @override
-  String get captureBannerTryReconnect => 'మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి';
 
   @override
   String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
@@ -13624,34 +13621,26 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
 
   @override
-  String get activityAttentionStorageTitle => 'నిల్వ నిండింది — రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము — రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+  String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము';
 
   @override
   String get activityAttentionManage => 'నిర్వహించండి';
 
   @override
-  String get activityAttentionStorageSubtitle => 'స్థలాన్ని ఖాళీ చేయండి లేదా ఆటో-సింక్ సర్దుబాటు చేయండి';
+  String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'ఈ ఫోన్‌లో $duration ఆడియో సేవ్ చేయబడింది';
-  }
+  String get activityAttentionUploadStalledTitle => 'అప్‌లోడ్ ఆగిపోయింది';
 
   @override
-  String get activityAttentionUploadWaiting => 'రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, వీలైనప్పుడు అప్‌లోడ్ అవుతాయి';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
       one: '1 రికార్డింగ్ వేచి ఉంది',
     );
-    return 'అప్‌లోడ్ ఆగిపోయింది — $_temp0';
+    return '$_temp0';
   }
 
   @override

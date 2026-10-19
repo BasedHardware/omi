@@ -11091,7 +11091,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openCall => 'Atidaryti skambutį';
 
   @override
-  String get captureRecoveryBanner => 'Omi nesiunčia garso — palieskite, kad prisijungtumėte iš naujo';
+  String get captureRecoveryBannerTitle => 'Omi nesiunčia garso';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11102,9 +11102,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Garsas išsaugotas, bus perrašytas vėliau';
-
-  @override
-  String get captureBannerTryReconnect => 'Pabandyti prisijungti iš naujo';
 
   @override
   String get captureBannerRetrySync => 'Pakartoti sinchronizavimą';
@@ -13595,34 +13592,26 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityRetryAll => 'Bandyti visus iš naujo';
 
   @override
-  String get activityAttentionStorageTitle => 'Atmintis pilna — įrašai pristabdyti';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Nepavyko patikrinti atminties — įrašai pristabdyti';
+  String get activityAttentionStorageUnknownTitle => 'Nepavyko patikrinti atminties';
 
   @override
   String get activityAttentionManage => 'Tvarkyti';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Atlaisvinkite vietos arba pakoreguokite automatinį sinchronizavimą';
+  String get activityAttentionStorageSubtitle => 'Įrašai pristabdyti';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration garso įrašyta šiame telefone';
-  }
+  String get activityAttentionUploadStalledTitle => 'Įkėlimas sustojo';
 
   @override
-  String get activityAttentionUploadWaiting => 'Įrašai saugūs ir bus įkelti, kai tik bus galima';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'laukia $count įrašų',
-      one: 'laukia 1 įrašas',
+      other: 'Laukia $count įrašų',
+      one: 'Laukia 1 įrašas',
     );
-    return 'Įkėlimas sustojo — $_temp0';
+    return '$_temp0';
   }
 
   @override

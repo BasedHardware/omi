@@ -11059,7 +11059,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
-  String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
+  String get captureRecoveryBannerTitle => 'Omi isn\'t sending audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11070,9 +11070,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio saved, transcribes later';
-
-  @override
-  String get captureBannerTryReconnect => 'Try reconnect';
 
   @override
   String get captureBannerRetrySync => 'Retry sync';
@@ -13556,34 +13553,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityRetryAll => 'Retry all';
 
   @override
-  String get activityAttentionStorageTitle => 'Storage full — recordings paused';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Can\'t check storage — recordings paused';
+  String get activityAttentionStorageUnknownTitle => 'Can\'t check storage';
 
   @override
   String get activityAttentionManage => 'Manage';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Free space or adjust auto-sync';
+  String get activityAttentionStorageSubtitle => 'Recordings paused';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration of audio saved on this phone';
-  }
+  String get activityAttentionUploadStalledTitle => 'Upload stalled';
 
   @override
-  String get activityAttentionUploadWaiting => 'Recordings are safe and will upload when possible';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count recordings waiting',
       one: '1 recording waiting',
     );
-    return 'Upload stalled — $_temp0';
+    return '$_temp0';
   }
 
   @override

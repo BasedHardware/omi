@@ -11076,7 +11076,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openCall => 'Öppna samtal';
 
   @override
-  String get captureRecoveryBanner => 'Omi skickar inget ljud — tryck för att ansluta igen';
+  String get captureRecoveryBannerTitle => 'Omi skickar inget ljud';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11087,9 +11087,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ljud sparat, transkriberas senare';
-
-  @override
-  String get captureBannerTryReconnect => 'Försök ansluta igen';
 
   @override
   String get captureBannerRetrySync => 'Försök synka igen';
@@ -13577,34 +13574,26 @@ class AppLocalizationsSv extends AppLocalizations {
   String get activityRetryAll => 'Försök igen med alla';
 
   @override
-  String get activityAttentionStorageTitle => 'Lagringen är full — inspelningar pausade';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Lagringen kunde inte kontrolleras — inspelningar pausade';
+  String get activityAttentionStorageUnknownTitle => 'Lagringen kunde inte kontrolleras';
 
   @override
   String get activityAttentionManage => 'Hantera';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Frigör utrymme eller justera autosynkronisering';
+  String get activityAttentionStorageSubtitle => 'Inspelningar pausade';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration ljud sparat på den här telefonen';
-  }
+  String get activityAttentionUploadStalledTitle => 'Uppladdningen har stannat';
 
   @override
-  String get activityAttentionUploadWaiting => 'Inspelningarna är säkra och laddas upp när det är möjligt';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count inspelningar väntar',
       one: '1 inspelning väntar',
     );
-    return 'Uppladdningen har stannat — $_temp0';
+    return '$_temp0';
   }
 
   @override

@@ -11112,7 +11112,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get openCall => 'Отвори обаждането';
 
   @override
-  String get captureRecoveryBanner => 'Omi не изпраща аудио — докоснете, за да се свържете отново';
+  String get captureRecoveryBannerTitle => 'Omi не изпраща аудио';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11123,9 +11123,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудиото е запазено, транскрипция по-късно';
-
-  @override
-  String get captureBannerTryReconnect => 'Опитайте отново връзката';
 
   @override
   String get captureBannerRetrySync => 'Повтори синхронизацията';
@@ -13620,34 +13617,26 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityRetryAll => 'Опитай всички отново';
 
   @override
-  String get activityAttentionStorageTitle => 'Хранилището е пълно — записите са спрени';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Хранилището не може да се провери — записите са спрени';
+  String get activityAttentionStorageUnknownTitle => 'Хранилището не може да се провери';
 
   @override
   String get activityAttentionManage => 'Управление';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Освободете място или променете автосинхронизацията';
+  String get activityAttentionStorageSubtitle => 'Записите са спрени';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration аудио, запазено на този телефон';
-  }
+  String get activityAttentionUploadStalledTitle => 'Качването е спряно';
 
   @override
-  String get activityAttentionUploadWaiting => 'Записите са в безопасност и ще се качат, щом стане възможно';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'чакат $count записа',
-      one: 'чака 1 запис',
+      other: 'Чакат $count записа',
+      one: 'Чака 1 запис',
     );
-    return 'Качването е спряно — $_temp0';
+    return '$_temp0';
   }
 
   @override

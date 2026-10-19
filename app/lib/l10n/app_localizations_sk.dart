@@ -11063,7 +11063,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openCall => 'Otvoriť hovor';
 
   @override
-  String get captureRecoveryBanner => 'Omi neposiela zvuk — klepnutím sa znova pripojte';
+  String get captureRecoveryBannerTitle => 'Omi neposiela zvuk';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.';
@@ -11073,9 +11073,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Zvuk uložený, prepíše sa neskôr';
-
-  @override
-  String get captureBannerTryReconnect => 'Skúsiť znova pripojiť';
 
   @override
   String get captureBannerRetrySync => 'Zopakovať synchronizáciu';
@@ -13567,34 +13564,26 @@ class AppLocalizationsSk extends AppLocalizations {
   String get activityRetryAll => 'Skúsiť všetko znova';
 
   @override
-  String get activityAttentionStorageTitle => 'Úložisko je plné — nahrávky pozastavené';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Úložisko sa nepodarilo skontrolovať — nahrávky pozastavené';
+  String get activityAttentionStorageUnknownTitle => 'Úložisko sa nepodarilo skontrolovať';
 
   @override
   String get activityAttentionManage => 'Spravovať';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Uvoľnite miesto alebo upravte automatickú synchronizáciu';
+  String get activityAttentionStorageSubtitle => 'Nahrávky pozastavené';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration zvuku uloženého v tomto telefóne';
-  }
+  String get activityAttentionUploadStalledTitle => 'Odosielanie zastavené';
 
   @override
-  String get activityAttentionUploadWaiting => 'Nahrávky sú v bezpečí a odoselia sa, hneď ako to bude možné';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'čaká $count nahrávok',
-      one: 'čaká 1 nahrávka',
+      other: 'Čaká $count nahrávok',
+      one: 'Čaká 1 nahrávka',
     );
-    return 'Odosielanie zastavené — $_temp0';
+    return '$_temp0';
   }
 
   @override

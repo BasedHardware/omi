@@ -11083,7 +11083,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openCall => 'کال کھولیں';
 
   @override
-  String get captureRecoveryBanner => 'Omi آڈیو نہیں بھیج رہا — دوبارہ منسلک ہونے کے لیے ٹیپ کریں';
+  String get captureRecoveryBannerTitle => 'Omi آڈیو نہیں بھیج رہا';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11094,9 +11094,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی';
-
-  @override
-  String get captureBannerTryReconnect => 'دوبارہ کنیکٹ کرنے کی کوشش کریں';
 
   @override
   String get captureBannerRetrySync => 'ہم وقت کرنے کی دوبارہ کوشش کریں';
@@ -13585,34 +13582,26 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityRetryAll => 'سب دوبارہ کوشش کریں';
 
   @override
-  String get activityAttentionStorageTitle => 'اسٹوریج بھر چکا ہے — ریکارڈنگز روک دی گئی ہیں';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'اسٹوریج کی جانچ ممکن نہیں — ریکارڈنگز روک دی گئی ہیں';
+  String get activityAttentionStorageUnknownTitle => 'اسٹوریج کی جانچ ممکن نہیں';
 
   @override
   String get activityAttentionManage => 'منظم کریں';
 
   @override
-  String get activityAttentionStorageSubtitle => 'جگہ خالی کریں یا آٹو-سنک تبدیل کریں';
+  String get activityAttentionStorageSubtitle => 'ریکارڈنگز روک دی گئی ہیں';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'اس فون پر $duration آڈیو محفوظ ہے';
-  }
+  String get activityAttentionUploadStalledTitle => 'اپ لوڈ رک گیا ہے';
 
   @override
-  String get activityAttentionUploadWaiting => 'ریکارڈنگز محفوظ ہیں اور جیسے ہی ممکن ہوگا اپ لوڈ ہو جائیں گی';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count ریکارڈنگز انتظار میں ہیں',
       one: '1 ریکارڈنگ انتظار میں ہے',
     );
-    return 'اپ لوڈ رک گیا ہے — $_temp0';
+    return '$_temp0';
   }
 
   @override

@@ -11144,7 +11144,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
-  String get captureRecoveryBanner => 'Το Omi δεν στέλνει ήχο — πατήστε για επανασύνδεση';
+  String get captureRecoveryBannerTitle => 'Το Omi δεν στέλνει ήχο';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11155,9 +11155,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ο ήχος αποθηκεύτηκε, μεταγραφή αργότερα';
-
-  @override
-  String get captureBannerTryReconnect => 'Δοκιμή επανασύνδεσης';
 
   @override
   String get captureBannerRetrySync => 'Επανάληψη συγχρονισμού';
@@ -13656,35 +13653,26 @@ class AppLocalizationsEl extends AppLocalizations {
   String get activityRetryAll => 'Επανάληψη όλων';
 
   @override
-  String get activityAttentionStorageTitle => 'Ο αποθηκευτικός χώρος γέμισε — οι ηχογραφήσεις τέθηκαν σε παύση';
-
-  @override
-  String get activityAttentionStorageUnknownTitle =>
-      'Δεν είναι δυνατός ο έλεγχος του αποθηκευτικού χώρου — οι ηχογραφήσεις τέθηκαν σε παύση';
+  String get activityAttentionStorageUnknownTitle => 'Δεν είναι δυνατός ο έλεγχος του αποθηκευτικού χώρου';
 
   @override
   String get activityAttentionManage => 'Διαχείριση';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Απελευθερώστε χώρο ή προσαρμόστε τον αυτόματο συγχρονισμό';
+  String get activityAttentionStorageSubtitle => 'Οι ηχογραφήσεις τέθηκαν σε παύση';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration ήχου αποθηκεύτηκαν σε αυτό το τηλέφωνο';
-  }
+  String get activityAttentionUploadStalledTitle => 'Η αποστολή σταμάτησε';
 
   @override
-  String get activityAttentionUploadWaiting => 'Οι ηχογραφήσεις είναι ασφαλείς και θα αποσταλούν μόλις είναι δυνατόν';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'αναμένουν $count ηχογραφήσεις',
-      one: 'αναμένει 1 ηχογράφηση',
+      other: 'Αναμένουν $count ηχογραφήσεις',
+      one: 'Αναμένει 1 ηχογράφηση',
     );
-    return 'Η αποστολή σταμάτησε — $_temp0';
+    return '$_temp0';
   }
 
   @override

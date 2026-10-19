@@ -11116,7 +11116,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
-  String get captureRecoveryBanner => 'Az Omi nem küld hangot — koppintson az újracsatlakozáshoz';
+  String get captureRecoveryBannerTitle => 'Az Omi nem küld hangot';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11127,9 +11127,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
-
-  @override
-  String get captureBannerTryReconnect => 'Próbálja újra a csatlakozást';
 
   @override
   String get captureBannerRetrySync => 'Szinkronizálás újrapróbálása';
@@ -13624,36 +13621,26 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityRetryAll => 'Összes újrapróbálása';
 
   @override
-  String get activityAttentionStorageTitle => 'A tárhely megtelt — a felvételek szünetelnek';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült — a felvételek szünetelnek';
+  String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült';
 
   @override
   String get activityAttentionManage => 'Kezelés';
 
   @override
-  String get activityAttentionStorageSubtitle =>
-      'Szabadítson fel helyet, vagy módosítsa az automatikus szinkronizálást';
+  String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration hang mentve ezen a telefonon';
-  }
+  String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
 
   @override
-  String get activityAttentionUploadWaiting =>
-      'A felvételek biztonságban vannak, és feltöltésre kerülnek, amint lehetséges';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count felvétel várakozik',
       one: '1 felvétel várakozik',
     );
-    return 'A feltöltés elakadt — $_temp0';
+    return '$_temp0';
   }
 
   @override

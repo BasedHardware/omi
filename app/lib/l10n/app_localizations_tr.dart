@@ -11081,7 +11081,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openCall => 'Aramayı aç';
 
   @override
-  String get captureRecoveryBanner => 'Omi ses göndermiyor — yeniden bağlanmak için dokunun';
+  String get captureRecoveryBannerTitle => 'Omi ses göndermiyor';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11092,9 +11092,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
-
-  @override
-  String get captureBannerTryReconnect => 'Yeniden bağlanmayı dene';
 
   @override
   String get captureBannerRetrySync => 'Senkronizasyonu yeniden dene';
@@ -13585,34 +13582,26 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityRetryAll => 'Tümünü yeniden dene';
 
   @override
-  String get activityAttentionStorageTitle => 'Depolama alanı dolu — kayıtlar duraklatıldı';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Depolama alanı kontrol edilemedi — kayıtlar duraklatıldı';
+  String get activityAttentionStorageUnknownTitle => 'Depolama alanı kontrol edilemedi';
 
   @override
   String get activityAttentionManage => 'Yönet';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Yer açın veya otomatik eşitlemeyi ayarlayın';
+  String get activityAttentionStorageSubtitle => 'Kayıtlar duraklatıldı';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'Bu telefona kaydedilmiş $duration ses';
-  }
+  String get activityAttentionUploadStalledTitle => 'Yükleme durdu';
 
   @override
-  String get activityAttentionUploadWaiting => 'Kayıtlar güvende ve olduğunda yüklenecek';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count kayıt bekliyor',
       one: '1 kayıt bekliyor',
     );
-    return 'Yükleme durdu — $_temp0';
+    return '$_temp0';
   }
 
   @override

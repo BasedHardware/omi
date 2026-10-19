@@ -11165,7 +11165,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
+  String get captureRecoveryBannerTitle => 'Hindi nagpapadala ng audio ang Omi';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11176,9 +11176,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
-
-  @override
-  String get captureBannerTryReconnect => 'Subukang ikonekta muli';
 
   @override
   String get captureBannerRetrySync => 'Subukang i-sync muli';
@@ -13677,34 +13674,26 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityRetryAll => 'Subukan muli lahat';
 
   @override
-  String get activityAttentionStorageTitle => 'Puno ang storage — naka-pause ang mga recording';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Hindi masuri ang storage — naka-pause ang mga recording';
+  String get activityAttentionStorageUnknownTitle => 'Hindi masuri ang storage';
 
   @override
   String get activityAttentionManage => 'Pamahalaan';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Mag-free ng space o i-adjust ang auto-sync';
+  String get activityAttentionStorageSubtitle => 'Naka-pause ang mga recording';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration ng audio naka-save sa phone na ito';
-  }
+  String get activityAttentionUploadStalledTitle => 'Naka-stall ang upload';
 
   @override
-  String get activityAttentionUploadWaiting => 'Ligtas ang mga recording at ia-upload kapag nagawa';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count na recording ang naghihintay',
       one: '1 recording ang naghihintay',
     );
-    return 'Naka-stall ang upload — $_temp0';
+    return '$_temp0';
   }
 
   @override

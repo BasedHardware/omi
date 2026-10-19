@@ -11080,7 +11080,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get openCall => 'कॉल उघडा';
 
   @override
-  String get captureRecoveryBanner => 'Omi ऑडिओ पाठवत नाही — पुन्हा जोडण्यासाठी टॅप करा';
+  String get captureRecoveryBannerTitle => 'Omi ऑडिओ पाठवत नाही';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11091,9 +11091,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ऑडिओ जतन केला, नंतर लिप्यंतरण होईल';
-
-  @override
-  String get captureBannerTryReconnect => 'पुन्हा कनेक्ट करण्याचा प्रयत्न करा';
 
   @override
   String get captureBannerRetrySync => 'सिंक पुन्हा प्रयत्न करा';
@@ -13577,34 +13574,26 @@ class AppLocalizationsMr extends AppLocalizations {
   String get activityRetryAll => 'सर्व पुन्हा प्रयत्न करा';
 
   @override
-  String get activityAttentionStorageTitle => 'स्टोरेज भरले — रेकॉर्डिंग थांबवल्या';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'स्टोरेज तपासता येत नाही — रेकॉर्डिंग थांबवल्या';
+  String get activityAttentionStorageUnknownTitle => 'स्टोरेज तपासता येत नाही';
 
   @override
   String get activityAttentionManage => 'व्यवस्थापित करा';
 
   @override
-  String get activityAttentionStorageSubtitle => 'जागा रिकामी करा किंवा ऑटो-सिंक बदला';
+  String get activityAttentionStorageSubtitle => 'रेकॉर्डिंग थांबवल्या';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'या फोनवर $duration ऑडिओ जतन केले';
-  }
+  String get activityAttentionUploadStalledTitle => 'अपलोड थांबले';
 
   @override
-  String get activityAttentionUploadWaiting => 'रेकॉर्डिंग सुरक्षित आहेत आणि शक्य होताच अपलोड होतील';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count रेकॉर्डिंग प्रतीक्षेत',
       one: '1 रेकॉर्डिंग प्रतीक्षेत',
     );
-    return 'अपलोड थांबले — $_temp0';
+    return '$_temp0';
   }
 
   @override

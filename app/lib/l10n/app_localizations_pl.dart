@@ -11106,7 +11106,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openCall => 'Otwórz połączenie';
 
   @override
-  String get captureRecoveryBanner => 'Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie';
+  String get captureRecoveryBannerTitle => 'Omi nie wysyła dźwięku';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11117,9 +11117,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Dźwięk zapisany, transkrypcja później';
-
-  @override
-  String get captureBannerTryReconnect => 'Spróbuj ponownie połączyć';
 
   @override
   String get captureBannerRetrySync => 'Ponów synchronizację';
@@ -13611,34 +13608,26 @@ class AppLocalizationsPl extends AppLocalizations {
   String get activityRetryAll => 'Ponów wszystkie';
 
   @override
-  String get activityAttentionStorageTitle => 'Pamięć pełna — nagrania wstrzymane';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Nie można sprawdzić pamięci — nagrania wstrzymane';
+  String get activityAttentionStorageUnknownTitle => 'Nie można sprawdzić pamięci';
 
   @override
   String get activityAttentionManage => 'Zarządzaj';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Zwolnij miejsce lub dostosuj autosynchronizację';
+  String get activityAttentionStorageSubtitle => 'Nagrania wstrzymane';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration dźwięku zapisanego na tym telefonie';
-  }
+  String get activityAttentionUploadStalledTitle => 'Przesyłanie wstrzymane';
 
   @override
-  String get activityAttentionUploadWaiting => 'Nagrania są bezpieczne i zostaną przesłane, gdy będzie to możliwe';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'czekają $count nagrania',
-      one: 'czeka 1 nagranie',
+      other: 'Czekają $count nagrania',
+      one: 'Czeka 1 nagranie',
     );
-    return 'Przesyłanie wstrzymane — $_temp0';
+    return '$_temp0';
   }
 
   @override

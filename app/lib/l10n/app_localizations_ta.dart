@@ -11151,7 +11151,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openCall => 'அழைப்பைத் திறக்கவும்';
 
   @override
-  String get captureRecoveryBanner => 'Omi ஆடியோவை அனுப்பவில்லை — மீண்டும் இணைக்கத் தட்டவும்';
+  String get captureRecoveryBannerTitle => 'Omi ஆடியோவை அனுப்பவில்லை';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11162,9 +11162,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்';
-
-  @override
-  String get captureBannerTryReconnect => 'மீண்டும் இணைக்க முயற்சிக்கவும்';
 
   @override
   String get captureBannerRetrySync => 'ஒத்திசைவை மீண்டும் முயற்சிக்கவும்';
@@ -13664,34 +13661,26 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
 
   @override
-  String get activityAttentionStorageTitle => 'சேமிப்பு நிரம்பியது — பதிவுகள் இடைநிறுத்தப்பட்டன';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'சேமிப்பைச் சரிபார்க்க முடியவில்லை — பதிவுகள் இடைநிறுத்தப்பட்டன';
+  String get activityAttentionStorageUnknownTitle => 'சேமிப்பைச் சரிபார்க்க முடியவில்லை';
 
   @override
   String get activityAttentionManage => 'நிர்வகிக்கவும்';
 
   @override
-  String get activityAttentionStorageSubtitle => 'இடத்தை காலியாக்கவும் அல்லது ஆட்டோ-சிங்கை மாற்றவும்';
+  String get activityAttentionStorageSubtitle => 'பதிவுகள் இடைநிறுத்தப்பட்டன';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'இந்த ஃபோனில் $duration ஆடியோ சேமிக்கப்பட்டது';
-  }
+  String get activityAttentionUploadStalledTitle => 'பதிவேற்றம் நின்றுவிட்டது';
 
   @override
-  String get activityAttentionUploadWaiting => 'பதிவுகள் பாதுகாப்பாக உள்ளன, சாத்தியமானதும் பதிவேற்றப்படும்';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count பதிவுகள் காத்திருக்கின்றன',
       one: '1 பதிவு காத்திருக்கிறது',
     );
-    return 'பதிவேற்றம் நின்றுவிட்டது — $_temp0';
+    return '$_temp0';
   }
 
   @override

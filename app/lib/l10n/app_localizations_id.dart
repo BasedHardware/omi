@@ -11075,7 +11075,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
+  String get captureRecoveryBannerTitle => 'Omi tidak mengirim audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11086,9 +11086,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
-
-  @override
-  String get captureBannerTryReconnect => 'Coba sambungkan kembali';
 
   @override
   String get captureBannerRetrySync => 'Coba sinkronkan lagi';
@@ -13581,34 +13578,26 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityRetryAll => 'Coba lagi semua';
 
   @override
-  String get activityAttentionStorageTitle => 'Penyimpanan penuh — rekaman dijeda';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa — rekaman dijeda';
+  String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa';
 
   @override
   String get activityAttentionManage => 'Kelola';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau sesuaikan sinkronisasi otomatis';
+  String get activityAttentionStorageSubtitle => 'Rekaman dijeda';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration audio tersimpan di telepon ini';
-  }
+  String get activityAttentionUploadStalledTitle => 'Unggahan terhenti';
 
   @override
-  String get activityAttentionUploadWaiting => 'Rekaman aman dan akan diunggah saat memungkinkan';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count rekaman menunggu',
       one: '1 rekaman menunggu',
     );
-    return 'Unggahan terhenti — $_temp0';
+    return '$_temp0';
   }
 
   @override

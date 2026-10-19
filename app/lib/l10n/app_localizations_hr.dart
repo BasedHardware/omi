@@ -11106,7 +11106,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get openCall => 'Otvori poziv';
 
   @override
-  String get captureRecoveryBanner => 'Omi ne šalje zvuk — dodirnite za ponovno povezivanje';
+  String get captureRecoveryBannerTitle => 'Omi ne šalje zvuk';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11117,9 +11117,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Zvuk je spremljen, transkripcija kasnije';
-
-  @override
-  String get captureBannerTryReconnect => 'Pokušaj ponovno povezati';
 
   @override
   String get captureBannerRetrySync => 'Pokušaj ponovno sinkronizirati';
@@ -13606,34 +13603,26 @@ class AppLocalizationsHr extends AppLocalizations {
   String get activityRetryAll => 'Pokušaj sve ponovno';
 
   @override
-  String get activityAttentionStorageTitle => 'Pohrana je puna — snimke su pauzirane';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Pohranu nije moguće provjeriti — snimke su pauzirane';
+  String get activityAttentionStorageUnknownTitle => 'Pohranu nije moguće provjeriti';
 
   @override
   String get activityAttentionManage => 'Upravljaj';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Oslobodite prostor ili prilagodite automatsku sinkronizaciju';
+  String get activityAttentionStorageSubtitle => 'Snimke su pauzirane';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration zvuka spremljeno na ovom telefonu';
-  }
+  String get activityAttentionUploadStalledTitle => 'Prijenos je zastao';
 
   @override
-  String get activityAttentionUploadWaiting => 'Snimke su sigurne i poslat će se čim bude moguće';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'čeka $count snimki',
-      one: 'čeka 1 snimka',
+      other: 'Čeka $count snimki',
+      one: 'Čeka 1 snimka',
     );
-    return 'Prijenos je zastao — $_temp0';
+    return '$_temp0';
   }
 
   @override

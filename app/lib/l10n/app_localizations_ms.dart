@@ -11093,7 +11093,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Omi tidak menghantar audio — ketik untuk menyambung semula';
+  String get captureRecoveryBannerTitle => 'Omi tidak menghantar audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11104,9 +11104,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi kemudian';
-
-  @override
-  String get captureBannerTryReconnect => 'Cuba sambung semula';
 
   @override
   String get captureBannerRetrySync => 'Cuba segerak semula';
@@ -13602,34 +13599,26 @@ class AppLocalizationsMs extends AppLocalizations {
   String get activityRetryAll => 'Cuba semua semula';
 
   @override
-  String get activityAttentionStorageTitle => 'Storan penuh — rakaman dijedakan';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Storan tidak dapat disemak — rakaman dijedakan';
+  String get activityAttentionStorageUnknownTitle => 'Storan tidak dapat disemak';
 
   @override
   String get activityAttentionManage => 'Urus';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau laraskan segerak automatik';
+  String get activityAttentionStorageSubtitle => 'Rakaman dijedakan';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration audio disimpan pada telefon ini';
-  }
+  String get activityAttentionUploadStalledTitle => 'Muat naik terhenti';
 
   @override
-  String get activityAttentionUploadWaiting => 'Rakaman selamat dan akan dimuat naik apabila boleh';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count rakaman menunggu',
       one: '1 rakaman menunggu',
     );
-    return 'Muat naik terhenti — $_temp0';
+    return '$_temp0';
   }
 
   @override

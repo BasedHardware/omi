@@ -11103,7 +11103,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get openCall => 'Abrir llamada';
 
   @override
-  String get captureRecoveryBanner => 'Omi no está enviando audio — toca para volver a conectar';
+  String get captureRecoveryBannerTitle => 'Omi no está enviando audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11114,9 +11114,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio guardado, se transcribirá después';
-
-  @override
-  String get captureBannerTryReconnect => 'Intentar reconectar';
 
   @override
   String get captureBannerRetrySync => 'Reintentar sincronización';
@@ -13611,34 +13608,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityRetryAll => 'Reintentar todo';
 
   @override
-  String get activityAttentionStorageTitle => 'Almacenamiento lleno — grabaciones en pausa';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'No se puede comprobar el almacenamiento — grabaciones en pausa';
+  String get activityAttentionStorageUnknownTitle => 'No se puede comprobar el almacenamiento';
 
   @override
   String get activityAttentionManage => 'Gestionar';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Libera espacio o ajusta la sincronización automática';
+  String get activityAttentionStorageSubtitle => 'Grabaciones en pausa';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration de audio guardado en este teléfono';
-  }
+  String get activityAttentionUploadStalledTitle => 'Subida detenida';
 
   @override
-  String get activityAttentionUploadWaiting => 'Las grabaciones están a salvo y se subirán cuando sea posible';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count grabaciones en espera',
       one: '1 grabación en espera',
     );
-    return 'Subida detenida — $_temp0';
+    return '$_temp0';
   }
 
   @override

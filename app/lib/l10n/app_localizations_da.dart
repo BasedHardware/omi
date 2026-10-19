@@ -11058,7 +11058,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get openCall => 'Åbn opkald';
 
   @override
-  String get captureRecoveryBanner => 'Omi sender ikke lyd — tryk for at oprette forbindelse igen';
+  String get captureRecoveryBannerTitle => 'Omi sender ikke lyd';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11069,9 +11069,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Lyd gemt, transskriberes senere';
-
-  @override
-  String get captureBannerTryReconnect => 'Prøv at forbinde igen';
 
   @override
   String get captureBannerRetrySync => 'Prøv synkronisering igen';
@@ -13559,34 +13556,26 @@ class AppLocalizationsDa extends AppLocalizations {
   String get activityRetryAll => 'Prøv alle igen';
 
   @override
-  String get activityAttentionStorageTitle => 'Lageret er fuldt — optagelser sat på pause';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres — optagelser sat på pause';
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
 
   @override
   String get activityAttentionManage => 'Administrer';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Frigør plads eller juster autosynkronisering';
+  String get activityAttentionStorageSubtitle => 'Optagelser sat på pause';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration lyd gemt på denne telefon';
-  }
+  String get activityAttentionUploadStalledTitle => 'Upload er gået i stå';
 
   @override
-  String get activityAttentionUploadWaiting => 'Optagelserne er i sikkerhed og uploades, så snart det er muligt';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count optagelser venter',
       one: '1 optagelse venter',
     );
-    return 'Upload er gået i stå — $_temp0';
+    return '$_temp0';
   }
 
   @override

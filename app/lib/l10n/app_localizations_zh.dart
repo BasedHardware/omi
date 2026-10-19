@@ -10888,7 +10888,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+  String get captureRecoveryBannerTitle => 'Omi 未发送音频';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -10898,9 +10898,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
-
-  @override
-  String get captureBannerTryReconnect => '尝试重新连接';
 
   @override
   String get captureBannerRetrySync => '重试同步';
@@ -13364,34 +13361,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityRetryAll => '全部重试';
 
   @override
-  String get activityAttentionStorageTitle => '存储空间已满 — 录音已暂停';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => '无法检查存储空间 — 录音已暂停';
+  String get activityAttentionStorageUnknownTitle => '无法检查存储空间';
 
   @override
   String get activityAttentionManage => '管理';
 
   @override
-  String get activityAttentionStorageSubtitle => '请释放空间或调整自动同步设置';
+  String get activityAttentionStorageSubtitle => '录音已暂停';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '已在此手机上保存 $duration 的音频';
-  }
+  String get activityAttentionUploadStalledTitle => '上传停滞';
 
   @override
-  String get activityAttentionUploadWaiting => '录音是安全的，将在条件允许时上传';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count 条录音等待中',
       one: '1 条录音等待中',
     );
-    return '上传停滞 — $_temp0';
+    return '$_temp0';
   }
 
   @override

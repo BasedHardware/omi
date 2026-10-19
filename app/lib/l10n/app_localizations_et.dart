@@ -11063,7 +11063,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
+  String get captureRecoveryBannerTitle => 'Omi ei saada heli';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11074,9 +11074,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Heli salvestatud, transkribeeritakse hiljem';
-
-  @override
-  String get captureBannerTryReconnect => 'Proovi uuesti ühendada';
 
   @override
   String get captureBannerRetrySync => 'Proovi sünkroonimist uuesti';
@@ -13565,34 +13562,26 @@ class AppLocalizationsEt extends AppLocalizations {
   String get activityRetryAll => 'Proovi kõiki uuesti';
 
   @override
-  String get activityAttentionStorageTitle => 'Salvestusruum on täis — salvestised peatatud';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Salvestusruumi ei õnnestunud kontrollida — salvestised peatatud';
+  String get activityAttentionStorageUnknownTitle => 'Salvestusruumi ei õnnestunud kontrollida';
 
   @override
   String get activityAttentionManage => 'Halda';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Vabastage ruumi või kohandage automaatset sünkroonimist';
+  String get activityAttentionStorageSubtitle => 'Salvestised peatatud';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration heli on sellesse telefoni salvestatud';
-  }
+  String get activityAttentionUploadStalledTitle => 'Üleslaadimine on seiskunud';
 
   @override
-  String get activityAttentionUploadWaiting => 'Salvestised on turvalised ja laaditakse üles niipea kui võimalik';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'ootab $count salvestist',
-      one: 'ootab 1 salvestis',
+      other: 'Ootab $count salvestist',
+      one: 'Ootab 1 salvestis',
     );
-    return 'Üleslaadimine on seiskunud — $_temp0';
+    return '$_temp0';
   }
 
   @override

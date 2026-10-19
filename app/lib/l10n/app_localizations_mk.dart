@@ -11127,7 +11127,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get openCall => 'Отвори го повикот';
 
   @override
-  String get captureRecoveryBanner => 'Omi не испраќа звук — допрете за повторно поврзување';
+  String get captureRecoveryBannerTitle => 'Omi не испраќа звук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11138,9 +11138,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудиото е зачувано, транскрипција подоцна';
-
-  @override
-  String get captureBannerTryReconnect => 'Обиди се да поврзеш повторно';
 
   @override
   String get captureBannerRetrySync => 'Повтори ја синхронизацијата';
@@ -13633,34 +13630,26 @@ class AppLocalizationsMk extends AppLocalizations {
   String get activityRetryAll => 'Обиди ги сите повторно';
 
   @override
-  String get activityAttentionStorageTitle => 'Складиштето е полно — снимките се паузирани';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Складиштето не може да се провери — снимките се паузирани';
+  String get activityAttentionStorageUnknownTitle => 'Складиштето не може да се провери';
 
   @override
   String get activityAttentionManage => 'Управувај';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Ослободете простор или прилагодете автосинхронизација';
+  String get activityAttentionStorageSubtitle => 'Снимките се паузирани';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration звук зачуван на овој телефон';
-  }
+  String get activityAttentionUploadStalledTitle => 'Преносот е запрен';
 
   @override
-  String get activityAttentionUploadWaiting => 'Снимките се безбедни и ќе бидат пренесени штом е можно';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'чекаат $count снимки',
-      one: 'чека 1 снимка',
+      other: 'Чекаат $count снимки',
+      one: 'Чека 1 снимка',
     );
-    return 'Преносот е запрен — $_temp0';
+    return '$_temp0';
   }
 
   @override

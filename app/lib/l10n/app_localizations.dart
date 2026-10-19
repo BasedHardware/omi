@@ -20127,11 +20127,11 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
+  /// Capture banner title: the pendant's audio stopped reaching the app; the Reconnect button sits below
   ///
   /// In en, this message translates to:
-  /// **'Omi isn\'t sending audio — tap to reconnect'**
-  String get captureRecoveryBanner;
+  /// **'Omi isn\'t sending audio'**
+  String get captureRecoveryBannerTitle;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.
   ///
@@ -20150,12 +20150,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio saved, transcribes later'**
   String get captureAudioSavedTranscribesLater;
-
-  /// Banner button that retries the capture recovery in place (BLE/link episodes)
-  ///
-  /// In en, this message translates to:
-  /// **'Try reconnect'**
-  String get captureBannerTryReconnect;
 
   /// Banner button that retries the pending transfer (phone-storage episodes)
   ///
@@ -24111,16 +24105,10 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get activityRetryAll;
 
-  /// Needs attention row: phone disk is full, so recordings cannot be written
-  ///
-  /// In en, this message translates to:
-  /// **'Storage full — recordings paused'**
-  String get activityAttentionStorageTitle;
-
   /// Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full.
   ///
   /// In en, this message translates to:
-  /// **'Can\'t check storage — recordings paused'**
+  /// **'Can\'t check storage'**
   String get activityAttentionStorageUnknownTitle;
 
   /// Action pill on the Activity storage-full row; opens Offline Sync
@@ -24129,29 +24117,23 @@ abstract class AppLocalizations {
   /// **'Manage'**
   String get activityAttentionManage;
 
-  /// Needs attention row subtitle: how to fix a full phone disk
+  /// Needs attention row subtitle under the storage title: new recordings cannot be saved
   ///
   /// In en, this message translates to:
-  /// **'Free space or adjust auto-sync'**
+  /// **'Recordings paused'**
   String get activityAttentionStorageSubtitle;
 
-  /// Needs attention row subtitle: kept-audio length behind a stalled upload
+  /// Needs attention row title: uploads made no progress long enough to need attention
   ///
   /// In en, this message translates to:
-  /// **'{duration} of audio saved on this phone'**
-  String activityAttentionUploadKept(String duration);
+  /// **'Upload stalled'**
+  String get activityAttentionUploadStalledTitle;
 
-  /// Needs attention row subtitle for a stalled upload when the kept-audio length is unknown
+  /// Needs attention row subtitle: how many recordings are waiting to upload
   ///
   /// In en, this message translates to:
-  /// **'Recordings are safe and will upload when possible'**
-  String get activityAttentionUploadWaiting;
-
-  /// Needs attention row: uploads made no progress long enough to need attention
-  ///
-  /// In en, this message translates to:
-  /// **'Upload stalled — {count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
-  String activityAttentionUploadStalled(int count);
+  /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
+  String activityAttentionUploadRecordings(int count);
 
   /// Needs attention row: the server gave up summarizing a conversation
   ///

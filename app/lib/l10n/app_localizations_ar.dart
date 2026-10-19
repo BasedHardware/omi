@@ -11005,7 +11005,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openCall => 'فتح المكالمة';
 
   @override
-  String get captureRecoveryBanner => 'أومي لا يرسل الصوت — انقر لإعادة الاتصال';
+  String get captureRecoveryBannerTitle => 'أومي لا يرسل الصوت';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';
@@ -11015,9 +11015,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
-
-  @override
-  String get captureBannerTryReconnect => 'حاول إعادة الاتصال';
 
   @override
   String get captureBannerRetrySync => 'أعد محاولة المزامنة';
@@ -13498,34 +13495,26 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityRetryAll => 'إعادة محاولة الكل';
 
   @override
-  String get activityAttentionStorageTitle => 'مساحة التخزين ممتلئة — تم إيقاف التسجيلات مؤقتًا';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'تعذّر التحقق من مساحة التخزين — تم إيقاف التسجيلات مؤقتًا';
+  String get activityAttentionStorageUnknownTitle => 'تعذّر التحقق من مساحة التخزين';
 
   @override
   String get activityAttentionManage => 'إدارة';
 
   @override
-  String get activityAttentionStorageSubtitle => 'حرّر مساحة أو عدّل المزامنة التلقائية';
+  String get activityAttentionStorageSubtitle => 'تم إيقاف التسجيلات مؤقتًا';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration من الصوت محفوظة على هذا الهاتف';
-  }
+  String get activityAttentionUploadStalledTitle => 'توقف الرفع';
 
   @override
-  String get activityAttentionUploadWaiting => 'التسجيلات آمنة وسيتم رفعها عندما يصبح ذلك ممكنًا';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count تسجيلًا في الانتظار',
       one: 'تسجيل واحد في الانتظار',
     );
-    return 'توقف الرفع — $_temp0';
+    return '$_temp0';
   }
 
   @override

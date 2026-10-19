@@ -11073,7 +11073,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openCall => 'Avaa puhelu';
 
   @override
-  String get captureRecoveryBanner => 'Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla';
+  String get captureRecoveryBannerTitle => 'Omi ei lähetä ääntä';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11084,9 +11084,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
-
-  @override
-  String get captureBannerTryReconnect => 'Yritä yhdistää uudelleen';
 
   @override
   String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
@@ -13576,34 +13573,26 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityRetryAll => 'Yritä kaikkia uudelleen';
 
   @override
-  String get activityAttentionStorageTitle => 'Tallennustila täynnä — tallenteet keskeytetty';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa — tallenteet keskeytetty';
+  String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa';
 
   @override
   String get activityAttentionManage => 'Hallitse';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Vapauta tilaa tai muuta automaattista synkronointia';
+  String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration ääntä tallennettu tähän puhelimeen';
-  }
+  String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';
 
   @override
-  String get activityAttentionUploadWaiting => 'Tallenteet ovat turvassa ja ladataan, kun se on mahdollista';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count tallennetta odottaa',
       one: '1 tallenne odottaa',
     );
-    return 'Lataus on pysähtynyt — $_temp0';
+    return '$_temp0';
   }
 
   @override

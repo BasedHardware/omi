@@ -11101,7 +11101,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get openCall => 'Odpri klic';
 
   @override
-  String get captureRecoveryBanner => 'Omi ne pošilja zvoka — tapnite za ponovno povezavo';
+  String get captureRecoveryBannerTitle => 'Omi ne pošilja zvoka';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pred snemanjem s telefonom ustavite Transcribe Later na obesku.';
@@ -11111,9 +11111,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Zvok shranjen, prepis pozneje';
-
-  @override
-  String get captureBannerTryReconnect => 'Poskusi znova povezati';
 
   @override
   String get captureBannerRetrySync => 'Ponovi sinhronizacijo';
@@ -13602,34 +13599,26 @@ class AppLocalizationsSl extends AppLocalizations {
   String get activityRetryAll => 'Poskusi vse znova';
 
   @override
-  String get activityAttentionStorageTitle => 'Shramba je polna — posnetki so pavzirani';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Shrambe ni mogoče preveriti — posnetki so pavzirani';
+  String get activityAttentionStorageUnknownTitle => 'Shrambe ni mogoče preveriti';
 
   @override
   String get activityAttentionManage => 'Upravljaj';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Sprostite prostor ali prilagodite samodejno sinhronizacijo';
+  String get activityAttentionStorageSubtitle => 'Posnetki so pavzirani';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration zvoka shranjenega na tem telefonu';
-  }
+  String get activityAttentionUploadStalledTitle => 'Nalaganje se je ustavilo';
 
   @override
-  String get activityAttentionUploadWaiting => 'Posnetki so varni in se bodo naložili, ko bo to mogoče';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'čaka $count posnetkov',
-      one: 'čaka 1 posnetek',
+      other: 'Čaka $count posnetkov',
+      one: 'Čaka 1 posnetek',
     );
-    return 'Nalaganje se je ustavilo — $_temp0';
+    return '$_temp0';
   }
 
   @override

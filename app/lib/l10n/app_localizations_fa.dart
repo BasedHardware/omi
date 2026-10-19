@@ -11065,7 +11065,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openCall => 'باز کردن تماس';
 
   @override
-  String get captureRecoveryBanner => 'Omi صدا ارسال نمی‌کند — برای اتصال دوباره ضربه بزنید';
+  String get captureRecoveryBannerTitle => 'Omi صدا ارسال نمی‌کند';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.';
@@ -11075,9 +11075,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'صدا ذخیره شد، بعداً رونویسی می‌شود';
-
-  @override
-  String get captureBannerTryReconnect => 'تلاش برای اتصال مجدد';
 
   @override
   String get captureBannerRetrySync => 'تلاش برای همگام‌سازی مجدد';
@@ -13566,34 +13563,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityRetryAll => 'تلاش دوباره برای همه';
 
   @override
-  String get activityAttentionStorageTitle => 'حافظه پر شده — ضبط‌ها متوقف شده‌اند';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'امکان بررسی حافظه نیست — ضبط‌ها متوقف شده‌اند';
+  String get activityAttentionStorageUnknownTitle => 'امکان بررسی حافظه نیست';
 
   @override
   String get activityAttentionManage => 'مدیریت';
 
   @override
-  String get activityAttentionStorageSubtitle => 'فضا آزاد کنید یا همگام‌سازی خودکار را تنظیم کنید';
+  String get activityAttentionStorageSubtitle => 'ضبط‌ها متوقف شده‌اند';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration صدا در این گوشی ذخیره شده';
-  }
+  String get activityAttentionUploadStalledTitle => 'بارگذاری متوقف شده';
 
   @override
-  String get activityAttentionUploadWaiting => 'ضبط‌ها در امان هستند و به محض امکان بارگذاری می‌شوند';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count ضبط در انتظار',
       one: '1 ضبط در انتظار',
     );
-    return 'بارگذاری متوقف شده — $_temp0';
+    return '$_temp0';
   }
 
   @override

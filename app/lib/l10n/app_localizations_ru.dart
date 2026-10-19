@@ -11111,7 +11111,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openCall => 'Открыть звонок';
 
   @override
-  String get captureRecoveryBanner => 'Omi не передаёт звук — нажмите, чтобы подключиться снова';
+  String get captureRecoveryBannerTitle => 'Omi не передаёт звук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11122,9 +11122,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
-
-  @override
-  String get captureBannerTryReconnect => 'Попробовать подключить снова';
 
   @override
   String get captureBannerRetrySync => 'Повторить синхронизацию';
@@ -13618,34 +13615,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get activityRetryAll => 'Повторить все';
 
   @override
-  String get activityAttentionStorageTitle => 'Память заполнена — записи приостановлены';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Не удалось проверить память — записи приостановлены';
+  String get activityAttentionStorageUnknownTitle => 'Не удалось проверить память';
 
   @override
   String get activityAttentionManage => 'Управлять';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Освободите место или настройте автосинхронизацию';
+  String get activityAttentionStorageSubtitle => 'Записи приостановлены';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration аудио сохранено на этом телефоне';
-  }
+  String get activityAttentionUploadStalledTitle => 'Загрузка остановлена';
 
   @override
-  String get activityAttentionUploadWaiting => 'Записи в безопасности и будут загружены при первой возможности';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'ждут $count записи',
-      one: 'ждёт 1 запись',
+      other: 'Ждут $count записи',
+      one: 'Ждёт 1 запись',
     );
-    return 'Загрузка остановлена — $_temp0';
+    return '$_temp0';
   }
 
   @override

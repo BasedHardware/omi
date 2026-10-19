@@ -11106,7 +11106,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 
   @override
-  String get captureRecoveryBanner => 'Omi ಆಡಿಯೊ ಕಳುಹಿಸುತ್ತಿಲ್ಲ — ಮರುಸಂಪರ್ಕಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+  String get captureRecoveryBannerTitle => 'Omi ಆಡಿಯೊ ಕಳುಹಿಸುತ್ತಿಲ್ಲ';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11117,9 +11117,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ';
-
-  @override
-  String get captureBannerTryReconnect => 'ಮರುಸಂಪರ್ಕಿಸಲು ಪ್ರಯತ್ನಿಸಿ';
 
   @override
   String get captureBannerRetrySync => 'ಸಿಂಕ್ ಅನ್ನು ಮರುಪ್ರಯತ್ನಿಸಿ';
@@ -13610,34 +13607,26 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityRetryAll => 'ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
 
   @override
-  String get activityAttentionStorageTitle => 'ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'ಸಂಗ್ರಹಣೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿಲ್ಲ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
+  String get activityAttentionStorageUnknownTitle => 'ಸಂಗ್ರಹಣೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿಲ್ಲ';
 
   @override
   String get activityAttentionManage => 'ನಿರ್ವಹಿಸಿ';
 
   @override
-  String get activityAttentionStorageSubtitle => 'ಸ್ಥಳಾವಕಾಶ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ಸ್ವಯಂ-ಸಿಂಕ್ ಬದಲಾಯಿಸಿ';
+  String get activityAttentionStorageSubtitle => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'ಈ ಫೋನ್‌ನಲ್ಲಿ $duration ಆಡಿಯೊ ಉಳಿಸಲಾಗಿದೆ';
-  }
+  String get activityAttentionUploadStalledTitle => 'ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ';
 
   @override
-  String get activityAttentionUploadWaiting => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ ಮತ್ತು ಸಾಧ್ಯವಾದ ತಕ್ಷಣ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತವೆ';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತಿವೆ',
       one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಕಾಯುತ್ತಿದೆ',
     );
-    return 'ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ — $_temp0';
+    return '$_temp0';
   }
 
   @override

@@ -11051,7 +11051,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get openCall => 'कॉल खोलें';
 
   @override
-  String get captureRecoveryBanner => 'Omi ऑडियो नहीं भेज रहा है — फिर से कनेक्ट करने के लिए टैप करें';
+  String get captureRecoveryBannerTitle => 'Omi ऑडियो नहीं भेज रहा है';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11062,9 +11062,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ऑडियो सहेजा गया, बाद में ट्रांसक्राइब होगा';
-
-  @override
-  String get captureBannerTryReconnect => 'पुनः कनेक्ट करने का प्रयास करें';
 
   @override
   String get captureBannerRetrySync => 'सिंक पुनः प्रयास करें';
@@ -13552,34 +13549,26 @@ class AppLocalizationsHi extends AppLocalizations {
   String get activityRetryAll => 'सभी को फिर से आज़माएँ';
 
   @override
-  String get activityAttentionStorageTitle => 'स्टोरेज भर गया है — रिकॉर्डिंग रोक दी गई हैं';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'स्टोरेज की जाँच संभव नहीं — रिकॉर्डिंग रोक दी गई हैं';
+  String get activityAttentionStorageUnknownTitle => 'स्टोरेज की जाँच संभव नहीं';
 
   @override
   String get activityAttentionManage => 'प्रबंधित करें';
 
   @override
-  String get activityAttentionStorageSubtitle => 'जगह खाली करें या ऑटो-सिंक बदलें';
+  String get activityAttentionStorageSubtitle => 'रिकॉर्डिंग रोक दी गई हैं';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'इस फ़ोन पर $duration का ऑडियो सहेजा गया है';
-  }
+  String get activityAttentionUploadStalledTitle => 'अपलोड रुक गया है';
 
   @override
-  String get activityAttentionUploadWaiting => 'रिकॉर्डिंग सुरक्षित हैं और संभव होते ही अपलोड हो जाएँगी';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count रिकॉर्डिंग प्रतीक्षारत',
       one: '1 रिकॉर्डिंग प्रतीक्षारत',
     );
-    return 'अपलोड रुक गया है — $_temp0';
+    return '$_temp0';
   }
 
   @override

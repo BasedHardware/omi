@@ -11131,7 +11131,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openCall => 'Apri chiamata';
 
   @override
-  String get captureRecoveryBanner => 'Omi non invia audio — tocca per riconnetterti';
+  String get captureRecoveryBannerTitle => 'Omi non invia audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11142,9 +11142,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio salvato, trascritto più tardi';
-
-  @override
-  String get captureBannerTryReconnect => 'Prova a riconnettere';
 
   @override
   String get captureBannerRetrySync => 'Riprova sincronizzazione';
@@ -13643,34 +13640,26 @@ class AppLocalizationsIt extends AppLocalizations {
   String get activityRetryAll => 'Riprova tutto';
 
   @override
-  String get activityAttentionStorageTitle => 'Spazio esaurito — registrazioni in pausa';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Impossibile verificare lo spazio — registrazioni in pausa';
+  String get activityAttentionStorageUnknownTitle => 'Impossibile verificare lo spazio';
 
   @override
   String get activityAttentionManage => 'Gestisci';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Libera spazio o modifica la sincronizzazione automatica';
+  String get activityAttentionStorageSubtitle => 'Registrazioni in pausa';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration di audio salvato su questo telefono';
-  }
+  String get activityAttentionUploadStalledTitle => 'Caricamento bloccato';
 
   @override
-  String get activityAttentionUploadWaiting => 'Le registrazioni sono al sicuro e verranno caricate appena possibile';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count registrazioni in attesa',
       one: '1 registrazione in attesa',
     );
-    return 'Caricamento bloccato — $_temp0';
+    return '$_temp0';
   }
 
   @override

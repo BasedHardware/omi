@@ -11099,7 +11099,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
-  String get captureRecoveryBanner => 'Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu';
+  String get captureRecoveryBannerTitle => 'Omi nesūta audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
@@ -11109,9 +11109,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
-
-  @override
-  String get captureBannerTryReconnect => 'Mēģināt savienot vēlreiz';
 
   @override
   String get captureBannerRetrySync => 'Atkārtot sinhronizāciju';
@@ -13601,34 +13598,26 @@ class AppLocalizationsLv extends AppLocalizations {
   String get activityRetryAll => 'Mēģināt visu vēlreiz';
 
   @override
-  String get activityAttentionStorageTitle => 'Atmiņa pilna — ieraksti apturēti';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Atmiņu neizdevās pārbaudīt — ieraksti apturēti';
+  String get activityAttentionStorageUnknownTitle => 'Atmiņu neizdevās pārbaudīt';
 
   @override
   String get activityAttentionManage => 'Pārvaldīt';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Atbrīvojiet vietu vai pielāgojiet automātisko sinhronizāciju';
+  String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration audio saglabāts šajā tālrunī';
-  }
+  String get activityAttentionUploadStalledTitle => 'Augšupielāde apstājusies';
 
   @override
-  String get activityAttentionUploadWaiting => 'Ieraksti ir drošībā un tiks augšupielādēti, tiklīdz tas būs iespējams';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'gaida $count ieraksti',
-      one: 'gaida 1 ieraksts',
+      other: 'Gaida $count ieraksti',
+      one: 'Gaida 1 ieraksts',
     );
-    return 'Augšupielāde apstājusies — $_temp0';
+    return '$_temp0';
   }
 
   @override

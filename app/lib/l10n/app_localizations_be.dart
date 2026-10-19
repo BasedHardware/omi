@@ -11101,7 +11101,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openCall => 'Адкрыць званок';
 
   @override
-  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
+  String get captureRecoveryBannerTitle => 'Omi не перадае гук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
@@ -11111,9 +11111,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
-
-  @override
-  String get captureBannerTryReconnect => 'Спробаваць падключыць зноў';
 
   @override
   String get captureBannerRetrySync => 'Паўтарыць сінхранізацыю';
@@ -13606,34 +13603,26 @@ class AppLocalizationsBe extends AppLocalizations {
   String get activityRetryAll => 'Паўтарыць усё';
 
   @override
-  String get activityAttentionStorageTitle => 'Памяць запоўнена — запісы прыпынены';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Немагчыма праверыць памяць — запісы прыпынены';
+  String get activityAttentionStorageUnknownTitle => 'Немагчыма праверыць памяць';
 
   @override
   String get activityAttentionManage => 'Кіраваць';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Вызваліце месца або наладзьце аўтасінхранізацыю';
+  String get activityAttentionStorageSubtitle => 'Запісы прыпынены';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration аўдыё захавана на гэтым тэлефоне';
-  }
+  String get activityAttentionUploadStalledTitle => 'Загрузка спынілася';
 
   @override
-  String get activityAttentionUploadWaiting => 'Запісы ў бяспецы і будуць загружаны, як толькі з\'явіцца магчымасць';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'чакаюць $count запісы',
-      one: 'чакае 1 запіс',
+      other: 'Чакаюць $count запісы',
+      one: 'Чакае 1 запіс',
     );
-    return 'Загрузка спынілася — $_temp0';
+    return '$_temp0';
   }
 
   @override

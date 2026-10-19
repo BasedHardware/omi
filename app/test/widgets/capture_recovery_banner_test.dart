@@ -81,10 +81,10 @@ void main() {
       await pumpBanner(tester, monitor);
 
       final context = tester.element(find.byType(CaptureRecoveryBanner));
-      expect(find.text(AppLocalizations.of(context).captureRecoveryBanner), findsOneWidget);
+      expect(find.text(AppLocalizations.of(context).captureRecoveryBannerTitle), findsOneWidget);
       expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
       expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
-      expect(find.text(AppLocalizations.of(context).captureBannerTryReconnect), findsOneWidget);
+      expect(find.text(AppLocalizations.of(context).reconnect), findsOneWidget);
       expect(forEvent('Capture Recovery Prompt Shown'), hasLength(1));
     });
 
@@ -138,7 +138,7 @@ void main() {
       expect(find.byIcon(Icons.chevron_right), findsNothing);
     });
 
-    testWidgets('the Try reconnect button retries once, without the card gesture double-firing', (tester) async {
+    testWidgets('the Reconnect button retries once, without the card gesture double-firing', (tester) async {
       var bleRetries = 0;
       final monitor = makeMonitor(bleRetry: (_) async => bleRetries++);
       wedge(monitor);
@@ -166,7 +166,7 @@ void main() {
       await tester.tap(find.byKey(const Key('capture_recovery_banner_info')));
       await tester.pumpAndSettle();
 
-      expect(find.text(l10n.captureRecoveryBanner), findsNWidgets(2),
+      expect(find.text(l10n.captureRecoveryBannerTitle), findsNWidgets(2),
           reason: 'the banner and the sheet title both name the episode');
       expect(find.text(l10n.captureWedgeBleExplanation), findsOneWidget);
 
@@ -208,8 +208,8 @@ void main() {
       final l10n = AppLocalizations.of(context);
       expect(find.text(l10n.captureIngressNeedsReconnect), findsOneWidget,
           reason: 'the title names the required manual action, not a wait or a retry');
-      expect(find.text(l10n.captureRecoveryBanner), findsNothing,
-          reason: '"tap to reconnect" would promise an action this trigger cannot perform');
+      expect(find.text(l10n.captureRecoveryBannerTitle), findsNothing,
+          reason: 'the stall title would promise a reconnect this trigger cannot perform');
       expect(find.text(l10n.captureAudioSavedTranscribesLater), findsNothing,
           reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)');
       expect(find.byKey(const Key('capture_recovery_banner_retry')), findsNothing,
@@ -244,7 +244,7 @@ void main() {
       final l10n = AppLocalizations.of(context);
       expect(find.text(l10n.captureBannerRetrySync), findsOneWidget,
           reason: 'the storage primary action names what its retry does');
-      expect(find.text(l10n.captureBannerTryReconnect), findsNothing);
+      expect(find.text(l10n.reconnect), findsNothing);
 
       await tester.tap(find.byKey(const Key('capture_recovery_banner_retry')));
       await tester.pump();
@@ -299,8 +299,22 @@ void main() {
 
       final context = tester.element(find.byType(CaptureRecoveryBanner));
       final l10n = AppLocalizations.of(context);
-      expect(find.text('${l10n.phoneStorage}: ${l10n.recordingsNotSynced}'), findsOneWidget);
+      expect(find.text(l10n.capturePhoneStorageFull), findsOneWidget);
+      expect(find.text(l10n.recordingsNotSynced), findsOneWidget);
       expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+    });
+
+    testWidgets('a storage episode whose probe failed does not claim the disk is full', (tester) async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_space_unknown');
+
+      await pumpBanner(tester, monitor);
+
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      final l10n = AppLocalizations.of(context);
+      expect(find.text(l10n.activityAttentionStorageUnknownTitle), findsOneWidget);
+      expect(find.text(l10n.capturePhoneStorageFull), findsNothing);
     });
 
     testWidgets('disappears when a positive-byte session resolves the wedge', (tester) async {

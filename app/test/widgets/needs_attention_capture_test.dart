@@ -133,10 +133,10 @@ void main() {
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
       // blockedCount counts admission attempts, not recordings, so the row never
       // renders it as a count of paused recordings.
-      expect(find.text('Storage full — recordings paused'), findsOneWidget);
-      expect(find.text('Storage full — 3 recordings paused'), findsNothing);
-      expect(find.text('Free space or adjust auto-sync'), findsOneWidget);
-      expect(find.text('Manage'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
+      expect(find.text('Phone storage full'), findsOneWidget);
+      expect(find.textContaining('3'), findsNothing);
+      expect(find.text('Recordings paused'), findsOneWidget);
+      expect(find.text('Manage'), findsOneWidget, reason: 'the row carries its action button, not a bare chevron');
       expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
     });
@@ -148,9 +148,9 @@ void main() {
 
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
-      expect(find.text('Upload stalled — 5 recordings waiting'), findsOneWidget);
-      expect(find.text('47m of audio saved on this phone'), findsOneWidget);
-      expect(find.text('Try Again'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
+      expect(find.text('Upload stalled'), findsOneWidget);
+      expect(find.text('5 recordings waiting · 47m'), findsOneWidget);
+      expect(find.text('Try Again'), findsOneWidget, reason: 'the row carries its action button, not a bare chevron');
       expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
     });
@@ -169,12 +169,11 @@ void main() {
 
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
-      expect(find.text("Can't check storage — recordings paused"), findsOneWidget);
-      expect(find.text('Storage full — recordings paused'), findsNothing,
-          reason: 'an unavailable probe is not a proven full disk');
+      expect(find.text("Can't check storage"), findsOneWidget);
+      expect(find.text('Phone storage full'), findsNothing, reason: 'an unavailable probe is not a proven full disk');
     });
 
-    testWidgets('the Manage pill opens Offline Sync once, without the row gesture double-firing', (tester) async {
+    testWidgets('the Manage button opens Offline Sync once, without the row gesture double-firing', (tester) async {
       final monitor = _monitor();
       addTearDown(monitor.dispose);
       _seedStorage(monitor);
@@ -184,23 +183,23 @@ void main() {
       final baseline = pushes.count; // the MaterialApp's own initial route
 
       await tester.tap(find.text('Manage'));
-      expect(pushes.count - baseline, 1, reason: 'the pill opens the Offline Sync entry exactly once');
+      expect(pushes.count - baseline, 1, reason: 'the button opens the Offline Sync entry exactly once');
 
-      // Pop back so the row body is hittable again, then tap it away from the pill.
+      // Pop back so the row body is hittable again, then tap it away from the button.
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pump();
-      await tester.tap(find.text('Storage full — recordings paused'));
+      await tester.tap(find.text('Phone storage full'));
       expect(pushes.count - baseline, 2, reason: 'the row body still opens the same Offline Sync entry');
     });
 
-    testWidgets('an upload stall without known seconds falls back to the safe copy', (tester) async {
+    testWidgets('an upload stall without known seconds shows only the count', (tester) async {
       final monitor = _monitor();
       addTearDown(monitor.dispose);
       _seedUploadStall(monitor, pendingCount: 2, pendingSeconds: 0);
 
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
-      expect(find.text('Upload stalled — 2 recordings waiting'), findsOneWidget);
-      expect(find.text('Recordings are safe and will upload when possible'), findsOneWidget);
+      expect(find.text('Upload stalled'), findsOneWidget);
+      expect(find.text('2 recordings waiting'), findsOneWidget);
     });
 
     testWidgets('both rows together, ordered storage first with one divider each', (tester) async {

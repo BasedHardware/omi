@@ -11100,7 +11100,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
+  String get captureRecoveryBannerTitle => 'Omi verzendt geen audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11111,9 +11111,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
-
-  @override
-  String get captureBannerTryReconnect => 'Opnieuw proberen te verbinden';
 
   @override
   String get captureBannerRetrySync => 'Synchronisatie opnieuw proberen';
@@ -13608,34 +13605,26 @@ class AppLocalizationsNl extends AppLocalizations {
   String get activityRetryAll => 'Alles opnieuw proberen';
 
   @override
-  String get activityAttentionStorageTitle => 'Opslag vol — opnames gepauzeerd';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Opslag kon niet worden gecontroleerd — opnames gepauzeerd';
+  String get activityAttentionStorageUnknownTitle => 'Opslag kon niet worden gecontroleerd';
 
   @override
   String get activityAttentionManage => 'Beheren';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Maak ruimte vrij of pas autosync aan';
+  String get activityAttentionStorageSubtitle => 'Opnames gepauzeerd';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration audio opgeslagen op deze telefoon';
-  }
+  String get activityAttentionUploadStalledTitle => 'Upload vastgelopen';
 
   @override
-  String get activityAttentionUploadWaiting => 'Opnames zijn veilig en worden geüpload zodra dat kan';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count opnames wachten',
       one: '1 opname wacht',
     );
-    return 'Upload vastgelopen — $_temp0';
+    return '$_temp0';
   }
 
   @override

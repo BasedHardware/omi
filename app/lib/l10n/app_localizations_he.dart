@@ -10986,7 +10986,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get openCall => 'פתיחת השיחה';
 
   @override
-  String get captureRecoveryBanner => 'Omi לא שולח שמע — הקישו כדי להתחבר מחדש';
+  String get captureRecoveryBannerTitle => 'Omi לא שולח שמע';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
@@ -10996,9 +10996,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
-
-  @override
-  String get captureBannerTryReconnect => 'נסה להתחבר מחדש';
 
   @override
   String get captureBannerRetrySync => 'נסה שוב לסנכרן';
@@ -13478,34 +13475,26 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityRetryAll => 'נסה הכול שוב';
 
   @override
-  String get activityAttentionStorageTitle => 'האחסון מלא — ההקלטות מושהות';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'לא ניתן לבדוק את האחסון — ההקלטות מושהות';
+  String get activityAttentionStorageUnknownTitle => 'לא ניתן לבדוק את האחסון';
 
   @override
   String get activityAttentionManage => 'נהל';
 
   @override
-  String get activityAttentionStorageSubtitle => 'פנו מקום או שנו את הסנכרון האוטומטי';
+  String get activityAttentionStorageSubtitle => 'ההקלטות מושהות';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration של אודיו נשמרו בטלפון הזה';
-  }
+  String get activityAttentionUploadStalledTitle => 'ההעלאה נתקעה';
 
   @override
-  String get activityAttentionUploadWaiting => 'ההקלטות בטוחות ויועלו ברגע שיהיה אפשרי';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count הקלטות ממתינות',
       one: 'הקלטה אחת ממתינה',
     );
-    return 'ההעלאה נתקעה — $_temp0';
+    return '$_temp0';
   }
 
   @override

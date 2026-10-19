@@ -11123,7 +11123,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
+  String get captureRecoveryBannerTitle => 'Omi nu trimite audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11134,9 +11134,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio salvat, transcris mai târziu';
-
-  @override
-  String get captureBannerTryReconnect => 'Încearcă reconectarea';
 
   @override
   String get captureBannerRetrySync => 'Reîncearcă sincronizarea';
@@ -13626,35 +13623,26 @@ class AppLocalizationsRo extends AppLocalizations {
   String get activityRetryAll => 'Reîncearcă tot';
 
   @override
-  String get activityAttentionStorageTitle => 'Stocarea este plină — înregistrările sunt pauzate';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Stocarea nu poate fi verificată — înregistrările sunt pauzate';
+  String get activityAttentionStorageUnknownTitle => 'Stocarea nu poate fi verificată';
 
   @override
   String get activityAttentionManage => 'Gestionează';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Eliberează spațiu sau ajustează sincronizarea automată';
+  String get activityAttentionStorageSubtitle => 'Înregistrările sunt pauzate';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration de audio salvat pe acest telefon';
-  }
+  String get activityAttentionUploadStalledTitle => 'Încărcarea s-a oprit';
 
   @override
-  String get activityAttentionUploadWaiting =>
-      'Înregistrările sunt în siguranță și vor fi încărcate când va fi posibil';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count înregistrări așteaptă',
       one: '1 înregistrare așteaptă',
     );
-    return 'Încărcarea s-a oprit — $_temp0';
+    return '$_temp0';
   }
 
   @override

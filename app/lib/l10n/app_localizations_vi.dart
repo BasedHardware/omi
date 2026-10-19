@@ -11071,7 +11071,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
+  String get captureRecoveryBannerTitle => 'Omi không gửi âm thanh';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11082,9 +11082,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Đã lưu âm thanh, phiên âm sau';
-
-  @override
-  String get captureBannerTryReconnect => 'Thử kết nối lại';
 
   @override
   String get captureBannerRetrySync => 'Thử đồng bộ lại';
@@ -13569,34 +13566,26 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityRetryAll => 'Thử lại tất cả';
 
   @override
-  String get activityAttentionStorageTitle => 'Bộ nhớ đầy — bản ghi đã tạm dừng';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ — bản ghi đã tạm dừng';
+  String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ';
 
   @override
   String get activityAttentionManage => 'Quản lý';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Giải phóng dung lượng hoặc điều chỉnh tự động đồng bộ';
+  String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration âm thanh đã lưu trên điện thoại này';
-  }
+  String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';
 
   @override
-  String get activityAttentionUploadWaiting => 'Các bản ghi đang an toàn và sẽ được tải lên khi có thể';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count bản ghi đang chờ',
       one: '1 bản ghi đang chờ',
     );
-    return 'Tải lên bị đình trệ — $_temp0';
+    return '$_temp0';
   }
 
   @override

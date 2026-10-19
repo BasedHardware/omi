@@ -462,6 +462,20 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(
+    id: 'home-capture-recovery-banner',
+    title: 'Pendant recording, acute recovery banner',
+    page: _home,
+    state: 'The pendant streams, but the BLE link stalled: Home keeps the acute banner under the '
+        'capture card (title, one detail line, Reconnect, What\'s going on?, corner dismiss)',
+    run: (a) {
+      _seedVisibleWedgeEpisode();
+      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
+        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
+      });
+    },
+  ),
+  AuditScenario(
     id: 'home-capture-pendant-paused',
     title: 'Pendant paused',
     page: _home,

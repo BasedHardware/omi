@@ -11010,7 +11010,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get openCall => 'เปิดการโทร';
 
   @override
-  String get captureRecoveryBanner => 'Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่';
+  String get captureRecoveryBannerTitle => 'Omi ไม่ส่งเสียง';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์';
@@ -11020,9 +11020,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'บันทึกเสียงแล้ว จะถอดความภายหลัง';
-
-  @override
-  String get captureBannerTryReconnect => 'ลองเชื่อมต่อใหม่';
 
   @override
   String get captureBannerRetrySync => 'ลองซิงค์อีกครั้ง';
@@ -13505,34 +13502,26 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityRetryAll => 'ลองใหม่ทั้งหมด';
 
   @override
-  String get activityAttentionStorageTitle => 'พื้นที่เก็บข้อมูลเต็ม — การบันทึกหยุดชั่วคราว';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'ตรวจสอบพื้นที่เก็บข้อมูลไม่ได้ — การบันทึกหยุดชั่วคราว';
+  String get activityAttentionStorageUnknownTitle => 'ตรวจสอบพื้นที่เก็บข้อมูลไม่ได้';
 
   @override
   String get activityAttentionManage => 'จัดการ';
 
   @override
-  String get activityAttentionStorageSubtitle => 'ล้างพื้นที่หรือปรับการซิงก์อัตโนมัติ';
+  String get activityAttentionStorageSubtitle => 'การบันทึกหยุดชั่วคราว';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'บันทึกเสียงไว้ $duration บนเครื่องนี้';
-  }
+  String get activityAttentionUploadStalledTitle => 'การอัปโหลดหยุดชะงัก';
 
   @override
-  String get activityAttentionUploadWaiting => 'การบันทึกปลอดภัยและจะอัปโหลดเมื่อทำได้';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count รายการกำลังรอ',
       one: '1 รายการกำลังรอ',
     );
-    return 'การอัปโหลดหยุดชะงัก — $_temp0';
+    return '$_temp0';
   }
 
   @override

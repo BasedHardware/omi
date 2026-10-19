@@ -11072,7 +11072,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
-  String get captureRecoveryBanner => 'Omi sender ikke lyd — trykk for å koble til igjen';
+  String get captureRecoveryBannerTitle => 'Omi sender ikke lyd';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11083,9 +11083,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
-
-  @override
-  String get captureBannerTryReconnect => 'Prøv å koble til på nytt';
 
   @override
   String get captureBannerRetrySync => 'Prøv synkronisering igjen';
@@ -13574,34 +13571,26 @@ class AppLocalizationsNo extends AppLocalizations {
   String get activityRetryAll => 'Prøv alle på nytt';
 
   @override
-  String get activityAttentionStorageTitle => 'Lageret er fullt — opptak satt på pause';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres — opptak satt på pause';
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
 
   @override
   String get activityAttentionManage => 'Administrer';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Frigjør plass eller juster autosynkronisering';
+  String get activityAttentionStorageSubtitle => 'Opptak satt på pause';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration lyd lagret på denne telefonen';
-  }
+  String get activityAttentionUploadStalledTitle => 'Opplastingen har stoppet';
 
   @override
-  String get activityAttentionUploadWaiting => 'Opptakene er trygge og lastes opp så snart det er mulig';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count opptak venter',
       one: '1 opptak venter',
     );
-    return 'Opplastingen har stoppet — $_temp0';
+    return '$_temp0';
   }
 
   @override

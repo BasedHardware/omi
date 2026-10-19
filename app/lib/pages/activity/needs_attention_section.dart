@@ -128,14 +128,15 @@ class NeedsAttentionSection extends StatelessWidget {
                       Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _CaptureAttentionRow(
                       key: const Key('activity_attention_storage'),
+                      icon: Icons.sd_storage_outlined,
                       // blockedCount counts admission attempts, not recordings:
                       // one recording's repeated retries must not read as many
-                      // paused recordings. The uncounted title stays truthful,
-                      // and names the condition the retention risk proved: a
-                      // failed free-space probe is not a full disk.
+                      // paused recordings, so the row names no count. The title
+                      // names the condition the retention risk proved: a failed
+                      // free-space probe is not a full disk.
                       title: storage.reason == 'disk_space_unknown'
                           ? l.activityAttentionStorageUnknownTitle
-                          : l.activityAttentionStorageTitle,
+                          : l.capturePhoneStorageFull,
                       subtitle: l.activityAttentionStorageSubtitle,
                       actionLabel: l.activityAttentionManage,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
@@ -146,11 +147,14 @@ class NeedsAttentionSection extends StatelessWidget {
                       Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _CaptureAttentionRow(
                       key: const Key('activity_attention_upload_stalled'),
-                      title: l.activityAttentionUploadStalled(upload.pendingCount),
-                      subtitle: upload.pendingSeconds > 0
-                          ? l.activityAttentionUploadKept(OmiDuration.compact(upload.pendingSeconds, l))
-                          : l.activityAttentionUploadWaiting,
-                      actionLabel: l.tryAgain,
+                      icon: Icons.cloud_upload_outlined,
+                      title: l.activityAttentionUploadStalledTitle,
+                      subtitle: [
+                        l.activityAttentionUploadRecordings(upload.pendingCount),
+                        // The kept-audio length, compact: "5 recordings waiting · 47m".
+                        if (upload.pendingSeconds > 0) OmiDuration.compact(upload.pendingSeconds, l),
+                      ].join(' · '),
+                      actionLabel: l.retry,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
                     ),
                   ],
@@ -233,25 +237,28 @@ class _AttentionRow extends StatelessWidget {
 }
 
 /// A slow-burn capture problem (full phone disk, stalled upload). Unlike the server's summary
-/// failures above, these carry a warning tint and a named action — the reader should not have
-/// to guess that tapping anywhere manages storage or retries the upload, and both the pill and
-/// the row open the same Offline Sync entry that owns those jobs.
+/// failures above, these carry a named action — the reader should not have to guess that tapping
+/// anywhere manages storage or retries the upload — and both the button and the row open the same
+/// Offline Sync entry that owns those jobs. The badge names the problem (a disk, an upload); its
+/// amber wash says it needs attention, so the action stays a neutral secondary button.
 class _CaptureAttentionRow extends StatelessWidget {
   const _CaptureAttentionRow({
     super.key,
+    required this.icon,
     required this.title,
     required this.subtitle,
     required this.actionLabel,
     required this.onTap,
   });
 
+  final IconData icon;
   final String title;
   final String subtitle;
 
-  /// Label of the trailing action pill ("Manage", "Retry").
+  /// Label of the trailing action ("Manage", "Try Again").
   final String actionLabel;
 
-  /// Where both the row and its pill go: Offline Sync.
+  /// Where both the row and its button go: Offline Sync.
   final VoidCallback? onTap;
 
   @override
@@ -265,44 +272,29 @@ class _CaptureAttentionRow extends StatelessWidget {
             Container(
               width: 36,
               height: 36,
-              // The diagnostics badge idiom: warning wash over the tile so it reads as a
-              // warning, not a neutral gray square.
               decoration: BoxDecoration(
                 color: Color.alphaBlend(OmiColors.warning.withValues(alpha: 0.15), OmiColors.surface2),
                 borderRadius: OmiRadius.mdAll,
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning),
+              child: ExcludeSemantics(child: Icon(icon, size: 18, color: OmiColors.warning)),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+                  Text(title, style: OmiType.body, maxLines: 2, overflow: TextOverflow.ellipsis),
                   if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                    const SizedBox(height: 3),
+                    Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
                   ],
                 ],
               ),
             ),
             if (onTap != null) ...[
               const SizedBox(width: OmiSpacing.xs),
-              OmiButton(
-                label: actionLabel,
-                onPressed: onTap,
-                size: OmiButtonSize.compact,
-                // The badge idiom: amber label on the same warning wash the diagnostics
-                // pills use, so the pill names the row's action without shouting.
-                colors: OmiButtonColors(
-                  background: OmiColors.warning.withValues(alpha: 0.15),
-                  foreground: OmiColors.warning,
-                ),
-              ),
+              OmiButton.secondary(label: actionLabel, onPressed: onTap, size: OmiButtonSize.compact),
             ],
           ],
         ),

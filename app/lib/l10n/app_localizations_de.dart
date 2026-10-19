@@ -11160,7 +11160,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get openCall => 'Anruf öffnen';
 
   @override
-  String get captureRecoveryBanner => 'Omi sendet keinen Ton — zum erneuten Verbinden tippen';
+  String get captureRecoveryBannerTitle => 'Omi sendet keinen Ton';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11171,9 +11171,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio gespeichert, wird später transkribiert';
-
-  @override
-  String get captureBannerTryReconnect => 'Erneut verbinden versuchen';
 
   @override
   String get captureBannerRetrySync => 'Synchronisierung erneut versuchen';
@@ -13671,34 +13668,26 @@ class AppLocalizationsDe extends AppLocalizations {
   String get activityRetryAll => 'Alle erneut versuchen';
 
   @override
-  String get activityAttentionStorageTitle => 'Speicher voll — Aufnahmen pausiert';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Speicher konnte nicht geprüft werden — Aufnahmen pausiert';
+  String get activityAttentionStorageUnknownTitle => 'Speicher konnte nicht geprüft werden';
 
   @override
   String get activityAttentionManage => 'Verwalten';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Speicherplatz freigeben oder Auto-Sync anpassen';
+  String get activityAttentionStorageSubtitle => 'Aufnahmen pausiert';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration Audio auf diesem Telefon gespeichert';
-  }
+  String get activityAttentionUploadStalledTitle => 'Upload stockt';
 
   @override
-  String get activityAttentionUploadWaiting => 'Aufnahmen sind sicher und werden hochgeladen, sobald möglich';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count Aufnahmen warten',
       one: '1 Aufnahme wartet',
     );
-    return 'Upload stockt — $_temp0';
+    return '$_temp0';
   }
 
   @override

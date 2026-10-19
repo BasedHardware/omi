@@ -11087,7 +11087,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openCall => 'Abrir chamada';
 
   @override
-  String get captureRecoveryBanner => 'Omi não está enviando áudio — toque para reconectar';
+  String get captureRecoveryBannerTitle => 'Omi não está enviando áudio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11098,9 +11098,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Áudio salvo, transcrição depois';
-
-  @override
-  String get captureBannerTryReconnect => 'Tentar reconectar';
 
   @override
   String get captureBannerRetrySync => 'Repetir sincronização';
@@ -13596,34 +13593,26 @@ class AppLocalizationsPt extends AppLocalizations {
   String get activityRetryAll => 'Tentar tudo novamente';
 
   @override
-  String get activityAttentionStorageTitle => 'Armazenamento cheio — gravações pausadas';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Não é possível verificar o armazenamento — gravações pausadas';
+  String get activityAttentionStorageUnknownTitle => 'Não é possível verificar o armazenamento';
 
   @override
   String get activityAttentionManage => 'Gerenciar';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Libere espaço ou ajuste a sincronização automática';
+  String get activityAttentionStorageSubtitle => 'Gravações pausadas';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration de áudio salvo neste telefone';
-  }
+  String get activityAttentionUploadStalledTitle => 'Envio parado';
 
   @override
-  String get activityAttentionUploadWaiting => 'As gravações estão seguras e serão enviadas quando possível';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count gravações aguardando',
       one: '1 gravação aguardando',
     );
-    return 'Envio parado — $_temp0';
+    return '$_temp0';
   }
 
   @override

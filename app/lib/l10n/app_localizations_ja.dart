@@ -10904,7 +10904,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
-  String get captureRecoveryBanner => 'Omiが音声を送信していません — タップして再接続';
+  String get captureRecoveryBannerTitle => 'Omiが音声を送信していません';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
@@ -10914,9 +10914,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
-
-  @override
-  String get captureBannerTryReconnect => '再接続を試す';
 
   @override
   String get captureBannerRetrySync => '同期を再試行';
@@ -13383,34 +13380,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityRetryAll => 'すべて再試行';
 
   @override
-  String get activityAttentionStorageTitle => 'ストレージがいっぱいです — 録音を一時停止中';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'ストレージを確認できません — 録音を一時停止中';
+  String get activityAttentionStorageUnknownTitle => 'ストレージを確認できません';
 
   @override
   String get activityAttentionManage => '管理';
 
   @override
-  String get activityAttentionStorageSubtitle => '空き容量を確保するか、自動同期を調整してください';
+  String get activityAttentionStorageSubtitle => '録音を一時停止中';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return 'このスマホに $duration の音声を保存済み';
-  }
+  String get activityAttentionUploadStalledTitle => 'アップロードが停止しています';
 
   @override
-  String get activityAttentionUploadWaiting => '録音は安全に保たれ、可能になり次第アップロードされます';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count 件の録音が待機中',
       one: '1 件の録音が待機中',
     );
-    return 'アップロードが停止しています — $_temp0';
+    return '$_temp0';
   }
 
   @override

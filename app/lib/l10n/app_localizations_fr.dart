@@ -11163,7 +11163,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get openCall => 'Ouvrir l\'appel';
 
   @override
-  String get captureRecoveryBanner => 'Omi n’envoie pas de son — touchez pour vous reconnecter';
+  String get captureRecoveryBannerTitle => 'Omi n’envoie pas de son';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11174,9 +11174,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Audio enregistré, transcrit plus tard';
-
-  @override
-  String get captureBannerTryReconnect => 'Essayer de reconnecter';
 
   @override
   String get captureBannerRetrySync => 'Réessayer la synchronisation';
@@ -13678,35 +13675,26 @@ class AppLocalizationsFr extends AppLocalizations {
   String get activityRetryAll => 'Tout réessayer';
 
   @override
-  String get activityAttentionStorageTitle => 'Stockage plein — enregistrements en pause';
-
-  @override
-  String get activityAttentionStorageUnknownTitle => 'Impossible de vérifier le stockage — enregistrements en pause';
+  String get activityAttentionStorageUnknownTitle => 'Impossible de vérifier le stockage';
 
   @override
   String get activityAttentionManage => 'Gérer';
 
   @override
-  String get activityAttentionStorageSubtitle => 'Libérez de l\'espace ou ajustez la synchro auto';
+  String get activityAttentionStorageSubtitle => 'Enregistrements en pause';
 
   @override
-  String activityAttentionUploadKept(String duration) {
-    return '$duration d\'audio enregistré sur ce téléphone';
-  }
+  String get activityAttentionUploadStalledTitle => 'Envoi bloqué';
 
   @override
-  String get activityAttentionUploadWaiting =>
-      'Les enregistrements sont en sécurité et seront envoyés dès que possible';
-
-  @override
-  String activityAttentionUploadStalled(int count) {
+  String activityAttentionUploadRecordings(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: '$count enregistrements en attente',
       one: '1 enregistrement en attente',
     );
-    return 'Envoi bloqué — $_temp0';
+    return '$_temp0';
   }
 
   @override
