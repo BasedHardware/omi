@@ -9,6 +9,19 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
+            covered_by=('database.batch_pipeline_store.ready_predecessor',),
+            reason='thin adapter forwards the transaction-bound predecessor query unchanged',
+            expect_observed=False,
+            body_digest='345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_predecessor',
+            base={'owner_key': 'owner-hash', 'segment_id': 'segment-head'},
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'transaction': (None, 'transaction binding only')},
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the transaction-bound frontier query unchanged',
@@ -43,6 +56,18 @@ def entries():
             'database.batch_pipeline_store.projection_page',
             domains={'namespace': namespaces, 'after': [None, (2.0, 'result-100')]},
             neutrals={'limit': (100, 'bounded page size only')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_successor',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'previous': [None, 'segment-head']},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_successor',
+            covered_by=('database.batch_pipeline_store.projection_successor',),
+            reason='store adapter forwards namespace, owner and predecessor unchanged',
+            expect_observed=False,
+            body_digest='96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.projection_pending',

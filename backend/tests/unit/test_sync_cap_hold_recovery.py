@@ -4,6 +4,8 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from utils.sync import cap_hold_recovery as recovery
@@ -53,9 +55,12 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, 'finalize_recovered_sync_segment', Mock())
     monkeypatch.setattr(recovery, 'record_usage', Mock())
     monkeypatch.setattr(recovery, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
+    row = {'lease_token': 'owner-token', 'state': 'held'}
+    reference = Mock()
+    reference.get.return_value.to_dict.side_effect = lambda: dict(row)
     return SimpleNamespace(
-        snapshot=SimpleNamespace(id='hold', reference=Mock()),
-        row={'lease_token': 'owner-token', 'state': 'held'},
+        snapshot=SimpleNamespace(id='hold', reference=reference),
+        row=row,
         checkpoint=checkpoint,
         renew=renew,
     )
@@ -483,8 +488,82 @@ async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt
 
 
 async def test_legacy_wake_only_resumes_an_explicit_backlog_runner(monkeypatch):
-    monkeypatch.setattr(recovery, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     runner = AsyncMock()
     monkeypatch.setattr(recovery, '_backlog_runner', runner)
     await recovery.recover('synthetic')
     runner.assert_awaited_once_with('synthetic')
+
+
+async def test_owner_budget_stops_before_second_frozen_piece_and_resumes(state, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(recovery.cap_work_budget.time, 'monotonic', lambda: now[0])
+    state.row['piece_plan'] = {
+        'a.wav': {'audio_path': 'source-a', 'seconds': 20},
+        'b.wav': {'audio_path': 'source-b', 'seconds': 20},
+    }
+    original = recovery.process_segment.side_effect
+
+    def slow(*args, **kwargs):
+        result = original(*args, **kwargs)
+        now[0] += 901
+        return result
+
+    recovery.process_segment.side_effect = slow
+    with recovery.cap_work_budget.visit(900):
+        assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 1
+    assert state.row['processed_paths'] == ['a.wav'] and not state.row.get('finalized')
+    with recovery.cap_work_budget.visit(900):
+        assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert recovery.process_segment.call_count == 2 and state.row['finalized']
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'origin,lanes,selected',
+    [
+        ('live', 'live', True),
+        ('live', 'sync,batch', False),
+        ('sync', 'live', False),
+        ('sync', 'sync', True),
+        ('batch', 'batch', True),
+        ('unknown', 'live,sync,batch', False),
+        (None, 'live,sync,batch', False),
+        ('legacy', 'live', False),
+        ('legacy', 'sync', True),
+    ],
+)
+async def test_recovery_keeps_original_origin_through_real_dispatch(
+    state, monkeypatch, ladder, origin, lanes, selected
+):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    meta = {'timestamp': 1792152000, 'source': 'omi', 'sync_lane': 'fresh'}
+    if origin != 'legacy':
+        meta['origin'] = origin
+    recovery.cap_hold.metadata.return_value = meta
+    # The plan/codec/storage contract has separate coverage; retain a frozen
+    # piece here to isolate original-lane dispatch through the real coordinator.
+    state.row['piece_plan'] = {'1792152000.wav': {'seconds': 20}}
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row) is selected
+    if selected:
+        lane = 'sync' if origin == 'legacy' else origin
+        assert recovery.process_segment.call_args.kwargs['cap_dispatch_lane'] == lane
+        recovery.sync_allowed.assert_called_with('synthetic', lane=lane)
+        assert meta.get('origin') == (None if origin == 'legacy' else origin)
+    else:
+        recovery.cap_hold.read_audio.assert_not_called()
+        recovery.process_segment.assert_not_called()
+        recovery.record_usage.assert_not_called()
+
+
+async def test_excluded_owner_does_not_read_hold_metadata_or_claim(state, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:other')
+    state.snapshot.to_dict = lambda: state.row
+    claim = Mock(side_effect=AssertionError('excluded recovery claim'))
+    monkeypatch.setattr(recovery.cap_hold, 'claim', claim)
+    assert not await recovery.recover_selected('synthetic', state.snapshot)
+    recovery.cap_hold.metadata.assert_not_called()
+    claim.assert_not_called()

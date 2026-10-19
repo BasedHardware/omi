@@ -1,4 +1,4 @@
-progressDeadlineSeconds: 1800
+progressDeadlineSeconds: 4200
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -91,6 +91,12 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED
@@ -557,14 +563,12 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
-  - name: SONIOX_IDLE_CLOSE_SECONDS
-    value: "45"
   - name: STT_ROUTING_MODE
     value: "on"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
-    value: "100"
+    value: "90"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE
@@ -813,7 +817,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 12
+  minReplicas: 40
   maxReplicas: 60
   behavior:
     scaleDown:

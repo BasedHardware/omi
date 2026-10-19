@@ -658,6 +658,43 @@ async def test_live_created_row_honors_active_calendar_window(monkeypatch, meeti
 
 
 @pytest.mark.anyio
+async def test_meeting_that_runs_over_its_scheduled_end_keeps_the_silence_boundary(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    end = harness.now + timedelta(minutes=1)
+    harness.meetings = [
+        {
+            'id': 'meeting-doc',
+            'calendar_event_id': 'event-1',
+            'calendar_source': 'system_calendar',
+            'start_time': end - timedelta(minutes=30),
+            'end_time': end,
+            'duration_minutes': 30,
+        }
+    ]
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    assert row['external_data']['calendar_meeting_context']['end_time'] == end
+    # The meeting runs over: its latest speech lands 110 seconds after the scheduled end.
+    last_speech = end + timedelta(seconds=110)
+    row.update(has_content=True, transcript_segments=[{'text': 'kept'}], finished_at=last_speech)
+    controller.process_conversation = AsyncMock(return_value=True)
+    harness.now = last_speech + timedelta(seconds=15)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+    controller.process_conversation.assert_not_awaited()
+    # The ordinary 120-second silence boundary still ends it.
+    harness.now = last_speech + timedelta(seconds=120)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    controller.process_conversation.assert_awaited_once_with(cid)
+
+
+@pytest.mark.anyio
 async def test_lifecycle_polls_read_an_id_only_meeting_once_per_window(monkeypatch):
     from database.document_ids import calendar_meeting_doc_id
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument

@@ -1,4 +1,4 @@
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
 from database.fsr_read_cache import fresh_reader
@@ -1640,7 +1640,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
-    if stt_cap_dispatch_enabled() and not subscription_launch_date_str:
+    if stt_cap_dispatch_enabled(uid) and not subscription_launch_date_str:
         CONFIG_ERRORS.labels(reason='missing').inc()
         logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
         raise ValueError('missing subscription launch date')
@@ -1652,7 +1652,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
-        if stt_cap_dispatch_enabled():
+        if stt_cap_dispatch_enabled(uid):
             CONFIG_ERRORS.labels(reason='invalid').inc()
             logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
             raise
@@ -2004,34 +2004,47 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         return subscription
 
     try:
-        if subscription.stripe_subscription_id and subscription.current_period_end:
-            period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-            if period_end_dt >= datetime.now(timezone.utc):
+        if subscription.stripe_subscription_id:
+            try:
                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
-                if stripe_sub_dict:
-                    items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
-                    price_id: Optional[str] = None
-                    if items and items[0].get('price'):
-                        price_id = items[0]['price'].get('id')
+            except Exception as e:
+                logger.warning(
+                    f"[reconcile_basic_plan_with_stripe] Could not retrieve sub {subscription.stripe_subscription_id}: {e}"
+                )
+                stripe_sub = None
+            stripe_sub_dict: Optional[Dict[str, Any]] = (
+                stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+            )
+            if stripe_sub_dict:
+                items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+                price_id: Optional[str] = None
+                if items and items[0].get('price'):
+                    price_id = items[0]['price'].get('id')
 
-                    stripe_status = stripe_sub_dict.get('status')
-                    if stripe_status in ('active', 'trialing') and price_id:
-                        try:
-                            plan_type = get_plan_type_from_price_id(price_id)
-                        except ValueError:
-                            plan_type = None
+                stripe_status = stripe_sub_dict.get('status')
+                if stripe_status in ('active', 'trialing') and price_id:
+                    try:
+                        plan_type = get_plan_type_from_price_id(price_id)
+                    except ValueError:
+                        plan_type = None
 
-                        if plan_type and is_paid_plan(plan_type):
-                            subscription.plan = plan_type
-                            subscription.status = SubscriptionStatus.active
-                            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-                            subscription.current_period_start = stripe_sub_dict.get('current_period_start')
-                            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-                            subscription.current_price_id = price_id
-                            subscription.limits = get_plan_limits(plan_type)
-                            users_db.update_user_subscription(uid, subscription.model_dump())
-                            return subscription
+                    if plan_type and is_paid_plan(plan_type):
+                        sub_period_end = stripe_sub_dict.get('current_period_end')
+                        if sub_period_end:
+                            period_end_dt = datetime.fromtimestamp(sub_period_end, tz=timezone.utc)
+                            if period_end_dt >= datetime.now(timezone.utc):
+                                subscription.plan = plan_type
+                                subscription.status = SubscriptionStatus.active
+                                subscription.current_period_end = sub_period_end
+                                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                                subscription.current_price_id = price_id
+                                subscription.limits = get_plan_limits(plan_type)
+                                customer_id = stripe_sub_dict.get('customer')
+                                if customer_id and isinstance(customer_id, str):
+                                    users_db.set_stripe_customer_id(uid, customer_id)
+                                users_db.update_user_subscription(uid, subscription.model_dump())
+                                return subscription
 
         active = find_active_paid_subscription_for_user(uid)
         if active:

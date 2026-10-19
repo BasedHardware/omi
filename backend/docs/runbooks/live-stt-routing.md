@@ -28,6 +28,11 @@ connect cost/latency risk; inspect its reason counter and transcript/latency SLI
 and withdraw the endpoint manually if the aggregate shows an outage.
 Local VAD and other explicitly censored input/configuration failures also release
 circuit admission without accumulating provider failures.
+A Parakeet window whose own pump task listen cancelled (owner close, recovery
+switch, teardown) reports the censored reason `cancelled`, not `connection_lost`,
+so listen-side cancellation cannot bench Parakeet through the disruption gate.
+A pump that ends on its own, or a POST/transport error, still reports a provider
+reason (`connection_lost`, `provider_5xx`, `timeout`).
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its
@@ -395,8 +400,8 @@ through dev: dev shares production Redis/Firestore.
 ## Static-routing cohort ramp (stage 1)
 
 This sequence supersedes the historical router-on expansion above. Production
-listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=95`: the
-complementary approximately 5% of managed accounts use static selection. Keep
+listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=90`: the
+complementary approximately 10% of managed accounts use static selection. Keep
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=100`, `PARAKEET_WINDOW_MAX_SESSIONS=16`,
 `STT_FAILOVER_RECOVERY_ENABLED=true`, and `STT_NO_TEXT_RESCUE_ENABLED=true`.
 There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
@@ -413,15 +418,15 @@ complete scrapes. Hold for an unobserved Ready pod or missing telemetry.
 
 | Stage | `STT_ROUTING_ON_PERCENT` | Approximate static share | Minimum qualified observation |
 |---|---:|---:|---|
-| 1 | 95 | 5% | 2 hours, 150 classified static outcomes, 50 first-text observations per arm |
-| 2 | 90 | 10% | Same floors, measured again at this stage |
-| 3 | 75 | 25% | Same floors, measured again at this stage |
-| 4 | 50 | 50% | Full 24-hour cycle and the same sample floors |
-| 5 | 0 | 100% | 2 hours and the static sample floors; retain the qualified 50/50 control receipt as a historical reference |
+| 1 | 90 | 10% | 2 hours, 150 classified static outcomes, 50 first-text observations per arm |
+| 2 | 75 | 25% | Same floors, measured again at this stage |
+| 3 | 50 | 50% | Full 24-hour cycle and the same sample floors |
+| 4 | 0 | 100% | 2 hours and the static sample floors; retain the qualified 50/50 control receipt as a historical reference |
 
-At the observed fleet pace, stage 1 may need about five hours to reach 150
-classified static outcomes. Extend dwell instead of waiving sample floors.
-Stages 1–4 use concurrent on control; stage 5 has no concurrent on cohort, so do
+At the observed fleet pace, the 10% static cohort may need about 2.5 hours to
+reach 150 classified static outcomes. Extend dwell instead of waiving sample
+floors.
+Stages 1–3 use concurrent on control; stage 4 has no concurrent on cohort, so do
 not call its historical reference a concurrent comparison. The release operator
 owns each expansion after reviewing its receipt, starting with a review within
 24 hours of stage-1 activation. No automatic promotion. Each receipt records

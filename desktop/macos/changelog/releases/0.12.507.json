@@ -1,0 +1,8 @@
+{
+  "version": "0.12.507",
+  "date": "2026-10-19",
+  "changes": [
+    "Omi tools work again when Hermes is the agent",
+    "Summary sections drop the timestamp row under each section; a quiet icon beside the section opens the supporting transcript"
+  ]
+}

@@ -7,6 +7,7 @@ import os
 import time
 from concurrent.futures import Future
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from threading import BoundedSemaphore
 from typing import Any
 
@@ -20,7 +21,7 @@ from utils.encryption import derive_key
 from utils.executors import db_executor, submit_with_context
 from utils.mcp_server.cursors import decode_cursor
 from utils.mcp_server.errors import ToolExecutionError
-from utils.observability.external_lists import EXTERNAL_LIST_CACHE_TOTAL
+from utils.observability.external_lists import EXTERNAL_LIST_CACHE_TOTAL, observe_action_items_rows
 from utils.other.list_budget import ListReadBudget, list_read_budget_for_request
 from utils.observability.fallback import record_fallback
 
@@ -73,24 +74,34 @@ class _Entry:
     ttl: int = TTL_SECONDS
     version: str | None = None
 
+    def event(self, outcome: str) -> None:
+        EXTERNAL_LIST_CACHE_TOTAL.labels(route=self.route, outcome=outcome).inc()
+
     def eligible(self, response: Response) -> bool:
-        return (
-            response.status_code == 200
-            and not any(
-                response.headers.get(header, '').lower() == 'true'
-                for header in ('x-omi-list-truncated', 'x-scan-truncated')
-            )
-            and len(response.body) <= MAX_BODY_BYTES
-            and time.monotonic() - self.started < self.ttl
-            and time.time() < self.expires_at
-            and lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
-        )
+        reason = None
+        if response.status_code != 200:
+            reason = 'skip_status'
+        elif any(
+            response.headers.get(header, '').lower() == 'true'
+            for header in ('x-omi-list-truncated', 'x-scan-truncated')
+        ):
+            reason = 'skip_truncated'
+        elif len(response.body) > MAX_BODY_BYTES:
+            reason = 'skip_body_size'
+        elif time.monotonic() - self.started >= self.ttl or time.time() >= self.expires_at:
+            reason = 'skip_expired'
+        elif not lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED'):
+            reason = 'skip_disabled'
+        if reason:
+            self.event(reason)
+        return reason is None
 
     def store(self, response: Response) -> None:
         # Recheck after queue delay; the deadline still belongs to query start.
         if not self.eligible(response):
             return
         if self.version is not None and action_item_versions.version(self.uid) != self.version:
+            self.event('skip_version_changed')
             return
         body = bytes(response.body)
         try:
@@ -262,6 +273,14 @@ def cached_external_list(
     if fields is None:
         return None
     query = {key: parameters[key] for key in fields}
+    if request.url.path == '/v1/dev/user/action-items' and lever_enabled(
+        'OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED'
+    ):
+        for key in ('start_date', 'end_date'):
+            value = query[key]
+            if isinstance(value, datetime):
+                # Firestore treats naive datetimes as UTC. Only the key changes.
+                query[key] = value.replace(tzinfo=value.tzinfo or timezone.utc).astimezone(timezone.utc)
     if 'categories' in query:
         query['categories'] = sorted(category.value for category in parameters['category_list'])
     if 'parsed_updated_after' in parameters:
@@ -319,13 +338,16 @@ def validate_developer_action_items(action_items: list[Any], response_model: Any
     valid_action_items = []
     for item in action_items:
         if not isinstance(item, dict) or not item.get('id'):
+            observe_action_items_rows('invalid')
             log.warning('Skipping malformed action item in Developer API action-item list')
             continue
         if item.get('is_locked', False):
+            observe_action_items_rows('locked')
             continue
         try:
             valid_action_items.append(response_model.model_validate(item))
         except ValidationError as e:
+            observe_action_items_rows('invalid')
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             log.warning(
                 f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "

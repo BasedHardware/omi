@@ -57,6 +57,33 @@ def test_memory_policy_core_change_selects_inv_mem_guard(selector_and_all_tests)
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tests):
+    """Any module the ratchet can scan (utils/routers/services top-level dirs)
+    selects the background-task ratchet and drain harness (#22198); modules
+    outside those directories do not."""
+    selector, all_tests = selector_and_all_tests
+    ratchet = "tests/unit/test_background_task_ratchet.py"
+    harness = "tests/unit/test_revision_drain_harness.py"
+
+    for path in (
+        "backend/routers/sync.py",
+        "backend/services/users/account_deletion.py",
+        "backend/utils/stt/soniox_runway.py",  # transitive closure member, not an AREA seed
+        "backend/utils/retrieval/agentic.py",
+    ):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert ratchet in selected and harness in selected, path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+    # Negatives: narrow-area paths outside the ratchet's scanned directories.
+    # (backend/database/_client.py is not a valid negative: database/ changes
+    # fall back to the full suite, which includes the ratchet.)
+    for path in ("backend/models/users.py", "backend/database/csat.py"):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert ratchet not in selected, path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
@@ -1446,8 +1473,8 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA' not in listen
     # Rollback replays the operator's requested Helm revision verbatim; there is
     # no resolver step and no source-sha derivation on that lane.
-    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m' in listen
-    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 70m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 70m' in listen
     assert 'TARGET_REVISION: ${{ github.event.inputs.helm_revision }}' in listen
     assert 'BACKEND_LISTEN_ROLLBACK_REVISION' not in listen
     # A listen rollback must not roll back or uninstall the NEG coverage

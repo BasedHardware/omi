@@ -42,6 +42,18 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def ready_predecessor(self, owner_key, priority, segment_id):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['priority'] == priority
+            and v['state'] == 'ready'
+            and v.get('next') == segment_id
+        ]
+        return deepcopy(jobs[0]) if len(jobs) == 1 else None
+
 
 class MemoryStore:
     def __init__(self):
@@ -343,6 +355,9 @@ def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeyp
     monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
     assert queue.pull(10, capacity=capacity) == []
     monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    assert queue.pull(10, capacity=capacity) == []  # admitted policy remains off
+    queue = Scheduler(MemoryStore(), pool='live')
+    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
     assert [v.item.segment_id for v in queue.pull(10, 32, capacity=capacity)] == ['short']
     assert queue.pull(10, capacity=capacity) == []
     from dataclasses import replace
@@ -527,7 +542,7 @@ def test_head_priority_splices_tail_and_leaves_priority_capacity_and_fairness_in
     assert [v.item.segment_id for v in queue.pull(4, 2)] == ['newer', 'after']
 
 
-def test_head_search_is_bounded_and_default_off_adds_no_pending_query(monkeypatch):
+def test_head_owner_budget_is_bounded_and_default_off_adds_no_pending_query(monkeypatch):
     from utils.batch_pipeline import scheduler
 
     store = MemoryStore()
@@ -535,7 +550,7 @@ def test_head_search_is_bounded_and_default_off_adds_no_pending_query(monkeypatc
     for sid, capture in [('new', 20), ('middle', 30), ('head', 10)]:
         queue.enqueue(item(sid, capture=capture), 0)
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
-    monkeypatch.setattr(scheduler, 'HEAD_LOOKAHEAD', 1)
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 0)
     assert queue.pull(1)[0].item.segment_id == 'new'
     monkeypatch.delenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED')
     monkeypatch.setattr(MemoryTransaction, 'first_pending', lambda *_: pytest.fail('dark priority queried head'))
@@ -565,11 +580,11 @@ def test_head_promotion_never_buffers_link_writes_for_privacy_fenced_job(monkeyp
     assert queue.pull(2) == []
 
 
-def test_head_lookahead_budget_is_shared_by_all_visited_owners(monkeypatch):
+def test_head_lookup_budget_is_shared_by_all_visited_owners(monkeypatch):
     from utils.batch_pipeline import scheduler
 
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
-    monkeypatch.setattr(scheduler, 'HEAD_LOOKAHEAD', 1)
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 1)
     store = MemoryStore()
     queue = Scheduler(store)
     other = colliding_owner('heavy')
@@ -621,3 +636,72 @@ def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch,
     assert OrderedMerge(store).commit_next('heavy', 3) is None
     # The ordinary batch pool can still lease the skipped ordered head.
     assert Scheduler(store).pull(3)[0].item.segment_id == 'head'
+
+
+@pytest.fixture
+def reverse_capture_run(monkeypatch):
+    # Execute the snapshot-store workload in setup, as the virtual-clock suite
+    # does; the fast-unit call-phase budget measures the ordering assertions.
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    for n in reversed(range(160)):
+        queue.enqueue(item(f's{n:03}', capture=n), 0)
+    merge = OrderedMerge(store)
+    receipts = []
+    for n in range(160):
+        lease = queue.pull(10 + n)[0]
+        accepted = queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 10 + n)
+        entry = merge.commit_next('heavy', 10 + n)
+        receipts.append((lease.item.segment_id, accepted, entry))
+    return receipts, queue.pull(1000)
+
+
+def test_indexed_head_beyond_64_preserves_all_links_and_order(reverse_capture_run):
+    receipts, remaining = reverse_capture_run
+    assert len(receipts) == 160
+    for n, (segment_id, accepted, entry) in enumerate(receipts):
+        assert segment_id == f's{n:03}'
+        assert accepted
+        assert entry['segment_id'] == segment_id
+        assert entry['previous_segment_id'] == (f's{n-1:03}' if n else None)
+    assert remaining == []
+
+
+def test_head_metrics_and_missing_predecessor_fail_closed(monkeypatch):
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+    from utils.batch_pipeline import scheduler
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    queue.enqueue(item('later', capture=20), 0)
+    queue.enqueue(item('head', capture=10), 0)
+    monkeypatch.setattr(MemoryTransaction, 'ready_predecessor', lambda *_: None)
+    assert queue.pull(20)[0].item.segment_id == 'later'
+    labels = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert registry.get_sample_value('omi_batch_pipeline_head_not_found_total', labels) == 1
+    assert registry.get_sample_value('omi_batch_pipeline_predecessor_ready_age_seconds_sum', labels) == 20
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 0)
+    assert queue.pull(21)[0].item.segment_id == 'head'
+    assert registry.get_sample_value('omi_batch_pipeline_head_budget_exhausted_total', labels) == 1
+
+
+def test_ready_predecessor_ignores_stale_leased_links(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('leased', capture=0), 0)
+    queue.enqueue(item('fifo', capture=20), 0)
+    slow = queue.pull(1)[0]
+    queue.enqueue(item('head', capture=10), 2)
+    # A prior lease can retain the same next link; it must never be rewritten.
+    store.rows['jobs', 'leased']['next'] = 'head'
+    assert queue.complete(WorkResult('leased', 'gs://synthetic/result'), slow.token, 3)
+    assert OrderedMerge(store).commit_next('heavy', 3)
+    assert queue.pull(4)[0].item.segment_id == 'head'
+    assert store.rows['jobs', 'leased']['next'] == 'head'
+    assert queue.pull(4)[0].item.segment_id == 'fifo'

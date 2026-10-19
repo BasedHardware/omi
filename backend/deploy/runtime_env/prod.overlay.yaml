@@ -72,7 +72,7 @@ overlay:
         STT_ROUTING_MODE:
           value: 'on'
         STT_ROUTING_ON_PERCENT:
-          value: '100'
+          value: '90'
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
@@ -150,9 +150,6 @@ overlay:
           category: rollout
         MOBILE_STANDARD_BATCH_UIDS:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        SONIOX_IDLE_CLOSE_SECONDS:
-          value: '45'
           category: rollout
         STT_NO_TEXT_RESCUE_ENABLED:
           value: 'true'
@@ -1046,7 +1043,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_BACKFILL_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
@@ -1077,7 +1074,7 @@ overlay:
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           VAD_CACHE_TTL_SECONDS:
             value: '7200'
@@ -1357,7 +1354,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_BACKFILL_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
@@ -1388,7 +1385,7 @@ overlay:
             default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-backfill'
+            value: 'sync-backfill-fresh'
             category: reliability
           VAD_CACHE_TTL_SECONDS:
             value: '7200'
@@ -1410,6 +1407,11 @@ overlay:
           # Recovery must not wait behind legacy transcription retries.
           BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
             value: batch-quarantine-recovery
+            category: reliability
+          # 64 (the code maximum) per serving pass, set live during the 10-19 record-lane ramp so
+          # recovery keeps pace with quarantines; the code default 16 would return on every train.
+          BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+            value: '64'
             category: reliability
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -1488,7 +1490,7 @@ overlay:
             default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_QUEUE:
-            value: 'sync-jobs'
+            value: 'sync-jobs-fresh'
             category: reliability
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL

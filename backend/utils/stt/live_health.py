@@ -15,6 +15,7 @@ from typing import Any, Callable
 import redis.asyncio as aioredis
 
 from config.live_stt_registry import registry
+from config.policy.listen import routing_mode, routing_timeout
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config import live_stt_state
 from utils.executors import start_background_task
@@ -86,9 +87,7 @@ return 1
 """
 
 
-def mode() -> str:
-    value = os.getenv('STT_ROUTING_MODE', 'off').strip().lower()
-    return value if value in {'off', 'shadow', 'on'} else 'off'
+mode = routing_mode
 
 
 def bounded_language(language: str | None) -> str:
@@ -127,11 +126,7 @@ def _selection_score_keys(identity: str, language: str, bucket: int) -> tuple[st
     return stem + ':text', stem + ':no_text'
 
 
-def _timeout() -> float:
-    try:
-        return min(0.1, max(0.01, float(os.getenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.075'))))
-    except ValueError:
-        return REDIS_DEADLINE_SECONDS
+_timeout = routing_timeout
 
 
 @dataclass(frozen=True)

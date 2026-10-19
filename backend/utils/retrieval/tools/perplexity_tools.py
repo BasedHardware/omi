@@ -2,7 +2,7 @@
 Tools for performing web searches using Perplexity AI.
 """
 
-from utils.generated_compute import require_current_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
 
 import logging
 import re
@@ -143,12 +143,12 @@ async def _perplexity_gateway_search(query: str) -> str:
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"
     except Exception as e:
-        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
-        return f"Error: An unexpected error occurred while searching: {str(e)}"
+        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}", exc_info=True)
+        return "Error: An unexpected error occurred while searching. Please try again later."
 
 
 async def _post_gateway_chat_completion(content: str) -> httpx.Response:
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_current_generated_compute, 'web_search', allow_byok=False)
     return await get_webhook_client().post(
         f'{get_llm_gateway_base_url()}/v1/chat/completions',

@@ -115,6 +115,7 @@ from utils.memory.knowledge_ledger import (
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.memory.category_reads import read_category_window
+from utils.memory.compatibility_reads import CompatibilityReadState, memory_sort_key, next_historical_scan_limit
 from utils.memory.read_resilience import (
     MemoryBackingStoreStream,
     MemoryBackingStoreUnavailable,
@@ -335,9 +336,11 @@ class LedgerHistoryPage:
     memories: Tuple[MemoryDB, ...]
     truncated: bool
     scanned_count: int
-    # Raw provider keyset after the bounded window.  The router signs this
-    # value into its continuation token; it is deliberately separate from the
-    # filtered row offset so rejected/non-history rows cannot stall paging.
+    # Raw provider keyset to resume after: the last row before the sentinel,
+    # or the last returned row when ``limit`` stopped the page inside the
+    # window.  The router signs this value into its continuation token; it is
+    # deliberately separate from the filtered row offset so rejected/non-history
+    # rows cannot stall paging.
     next_start_after: Optional[Tuple[datetime, str]] = None
 
 
@@ -993,6 +996,7 @@ class HistoricalMemoryAdapter:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         hydrate: bool = True,
         budget: Optional[ListReadBudget] = None,
+        index_state: Optional[memories_db.MemoryListIndexState] = None,
     ) -> List[HistoricalMemoryRecord]:
         bounded_limit = max(1, min(int(limit or 100), self.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -1020,6 +1024,7 @@ class HistoricalMemoryAdapter:
                     index_limit,
                     0,
                     budget=budget,
+                    **({"index_state": index_state} if index_state is not None else {}),
                     **self._firestore_kwargs(),
                 )
                 records = []
@@ -2576,16 +2581,7 @@ class MemoryService:
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
-    @staticmethod
-    def _memory_sort_key(memory: MemoryDB) -> tuple[float, str]:
-        value = getattr(memory, "updated_at", None) or getattr(memory, "created_at", None)
-        if value is None:
-            timestamp = float("-inf")
-        else:
-            if value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
-            timestamp = value.timestamp()
-        return (-timestamp, memory.id)
+    _memory_sort_key = staticmethod(memory_sort_key)
 
     @classmethod
     def _sort_memories(cls, memories: List[MemoryDB]) -> None:
@@ -2593,17 +2589,11 @@ class MemoryService:
 
     @staticmethod
     def _next_historical_scan_limit(current: int, *, step: int) -> int:
-        """Grow the adaptive historical scan at least geometrically.
-
-        Every expansion round re-reads the whole newest-first prefix from the
-        start, so a linear step makes one page cost O(rounds x prefix): a fully
-        suppressed account at window=500 stepped 500, 1000, ... 5000 and read
-        27,500 documents over 55 queries for a single page. Doubling keeps the
-        light case identical (the first expansion is still ``current + step``)
-        and bounds the heavy case to a logarithmic number of rescans.
-        """
-        grown = max(current + max(1, int(step)), current * 2)
-        return min(HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW, grown)
+        return next_historical_scan_limit(
+            current,
+            step=step,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+        )
 
     @resilient_memory_read
     def read(
@@ -2621,6 +2611,7 @@ class MemoryService:
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
         category_filter: Optional[Set[str]] = None,
+        reuse_compatibility_reads: bool = False,
     ) -> List[MemoryDB]:
         kwargs: Dict[str, Any] = dict(
             device_scope_request=device_scope_request,
@@ -2632,6 +2623,10 @@ class MemoryService:
             as_of=as_of,
             authoritative=authoritative,
         )
+        if reuse_compatibility_reads:
+            # Allocated inside the resilience attempt: a whole-operation retry
+            # gets fresh evidence and every call drops it on return.
+            kwargs["read_state"] = CompatibilityReadState(uid)
         if category_filter is None:
             return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
         # One admission owns all internal windows and their shared budget.
@@ -2659,6 +2654,7 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
+        read_state: Optional[CompatibilityReadState] = None,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
@@ -2724,8 +2720,8 @@ class MemoryService:
         # batch gets over 55,000 documents for one page and took the request
         # past the 30s edge timeout. Canonical status is a stable read within
         # one request, so ask for each memory id exactly once.
-        statuses: Dict[str, MemoryItemStatus] = {}
-        status_ids_read: Set[str] = set()
+        statuses: Dict[str, MemoryItemStatus] = read_state.statuses if read_state is not None else {}
+        status_ids_read: Set[str] = read_state.status_ids_read if read_state is not None else set()
         kept_stub_ids: Set[str] = set()
         try:
             while True:
@@ -2736,6 +2732,7 @@ class MemoryService:
                     device_scope_request=device_scope_request,
                     hydrate=False,
                     budget=budget,
+                    **({"index_state": read_state.index} if read_state is not None else {}),
                 )
                 merged = list(canonical)
                 identity_suppressed = 0
@@ -3397,11 +3394,20 @@ class MemoryService:
         # partial even when it happens to contain exactly 501 rows.
         truncated = truncated or scanned_count >= scan_limit
         projected_items.sort(key=lambda pair: (-pair[0].updated_at.timestamp(), pair[0].memory_id))
+        page_items = projected_items[bounded_offset:window]
+        next_start_after = last_scanned if truncated else None
+        if len(projected_items) > window:
+            # ``limit`` stopped this page inside the provider window, so more
+            # history follows it. Resume after the last returned row; resuming
+            # after the window would skip the window's remaining history rows.
+            last_item = page_items[-1][0]
+            next_start_after = (last_item.updated_at, last_item.memory_id)
+            truncated = True
         return LedgerHistoryPage(
-            memories=tuple(row for _, row in projected_items[bounded_offset : bounded_offset + bounded_limit]),
+            memories=tuple(row for _, row in page_items),
             truncated=truncated,
             scanned_count=scanned_count,
-            next_start_after=last_scanned if truncated else None,
+            next_start_after=next_start_after,
         )
 
     def read_ledger_history(
@@ -3550,9 +3556,9 @@ class MemoryService:
         # path that must not stream ``memory_items``.
         rows = self.read(uid, authoritative=True, **read_kwargs)
 
-        query_tokens = {
-            token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2
-        }
+        query_words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+        # Words of two characters or fewer drop only beside a longer word; a non-blank query always filters.
+        query_tokens = {token for token in query_words if len(token) > 2} or query_words
         items: List[Dict[str, Any]] = []
         for memory in rows:
             # archive_requires_explicit_query: this default product search never
@@ -3565,7 +3571,7 @@ class MemoryService:
                 continue
             content = memory.content or ""
             content_lower = content.lower()
-            if query_tokens and not any(token in content_lower for token in query_tokens):
+            if (query or "").strip() and not any(token in content_lower for token in query_tokens):
                 continue
             tier = memory.memory_tier or MemoryTier.long_term
             source = memory.evidence[0].source_id if memory.evidence else None

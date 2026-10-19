@@ -33,6 +33,15 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_predecessor',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
@@ -2063,6 +2072,9 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
+    FieldIndexRequirement('cap_redrive_staging_cleanup', 'stt_cap_holds', 'staging_cleanup', ('ASCENDING',)),
     FieldIndexRequirement(
         'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
     ),

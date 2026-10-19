@@ -157,6 +157,7 @@ class PendingLiveFailover:
         self._settled = False
         self._settlement_timer: asyncio.TimerHandle | None = None
         self.source_outcome = source_outcome
+        self.connection_cause: str | None = None
         pinned = getattr(source_outcome, 'recovery_enabled', None)
         self.recovery_enabled = pinned if type(pinned) is bool else recovery_enabled()
         if source_outcome is not None:
@@ -187,14 +188,20 @@ class PendingLiveFailover:
     @classmethod
     def from_socket(cls, source: object, from_mode: str, to_mode: str) -> 'PendingLiveFailover':
         """Capture the source cause before a successor can change the hop."""
-        return cls(
+        hop = cls(
             from_mode=from_mode,
             to_mode=to_mode,
             reason=live_stt_terminal_reason(source, 'connection_lost'),
             source_outcome=getattr(source, 'leg_outcome', None),
         )
+        hop.connection_cause = socket_connection_cause(source)
+        return hop
 
     def _emit(self, **kwargs: Any) -> None:
+        if kwargs.get('reason') == 'connection_lost':
+            cause = self.connection_cause or getattr(self.source_outcome, 'connection_cause', None)
+            if cause is not None:
+                kwargs['connection_cause'] = cause
         if self.source_outcome is None:
             record_fallback(**kwargs)
         else:
@@ -284,6 +291,7 @@ def settle_terminal_socket(stt_socket: Any, provider: str | None, reason: str, *
         reason=live_stt_terminal_reason(stt_socket, reason),
         source_outcome=outcome,
     )
+    hop.connection_cause = socket_connection_cause(stt_socket)
     hop.note_failure(None, continuing=departing)
 
 
@@ -363,6 +371,15 @@ def live_stt_socket_is_dead(stt_socket: Any) -> bool:
         return bool(stt_socket.is_connection_dead)
     except Exception:
         return True
+
+
+def socket_connection_cause(stt_socket: Any) -> str | None:
+    """Read a socket's bounded transport cause; observers never fail on it."""
+    try:
+        cause = getattr(stt_socket, 'connection_cause', None)
+    except Exception:
+        return None
+    return cause if isinstance(cause, str) else None
 
 
 def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:

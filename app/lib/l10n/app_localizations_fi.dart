@@ -9322,9 +9322,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lisää';
-  }
+  String get quoteShowSources => 'Näytä lähteet';
 
   @override
   String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
@@ -11067,7 +11065,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openCall => 'Avaa puhelu';
 
   @override
-  String get captureRecoveryBanner => 'Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla';
+  String get captureRecoveryBannerTitle => 'Omi ei lähetä ääntä';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11078,6 +11076,23 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
+
+  @override
+  String get captureBannerTryReconnect => 'Yritä yhdistää uudelleen';
+
+  @override
+  String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Sovellus ei enää saa ääntä Omi-laitteesta eikä onnistunut palauttamaan yhteyttä automaattisesti. Irrota ja yhdistä laite uudelleen — laiteasetuksista tai sammuttamalla ja käynnistämällä se. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.';
 
   @override
   String get captureStillRecording => 'Tallennus jatkuu';
@@ -13108,6 +13123,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewProposalSuggested => 'Ehdotettu';
 
   @override
+  String get reviewQuestionOutOfDate => 'Tämä kysymys on vanhentunut, joten mitään ei muutettu.';
+
+  @override
   String get reviewProposalConflict => 'Tämä on muuttunut Dreamin ehdotuksen jälkeen, joten mitään ei otettu käyttöön.';
 
   @override
@@ -13662,7 +13680,30 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityRetryAll => 'Yritä kaikkia uudelleen';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta odottaa',
+      one: '1 tallenne odottaa',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
+
+  @override
+  String get activityAttentionSemantics => 'Aktiviteetti, vaatii huomiota';
 
   @override
   String get connectAgentHeadline => 'Käytä Omi-muistiasi ChatGPT:ssä ja tekoälyagenteissasi';
@@ -14345,4 +14386,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Ääntä tallennettu $saved / $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi tallentaa edelleen';
 }

@@ -14,7 +14,8 @@ SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integra
 
 
 @pytest.fixture
-def rollout(tmp_path):
+def rollout(tmp_path, monkeypatch):
+    monkeypatch.setenv('GITHUB_OUTPUT', str(tmp_path / 'github-output'))
     chart = tmp_path / 'listen.yaml'
     chart.write_text(yaml.safe_dump({'env': []}))
     config = {

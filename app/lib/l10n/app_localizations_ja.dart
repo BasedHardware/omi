@@ -9183,9 +9183,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+他$count件';
-  }
+  String get quoteShowSources => '出典を表示';
 
   @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
@@ -10898,7 +10896,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
-  String get captureRecoveryBanner => 'Omiが音声を送信していません — タップして再接続';
+  String get captureRecoveryBannerTitle => 'Omiが音声を送信していません';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
@@ -10908,6 +10906,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
+
+  @override
+  String get captureBannerTryReconnect => '再接続を試す';
+
+  @override
+  String get captureBannerRetrySync => '同期を再試行';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。';
+
+  @override
+  String get captureIngressNeedsReconnect => 'オーディオがアプリに届いていません — Omiを再接続してください';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'アプリはOmiデバイスからのオーディオを受信できず、接続を自動的に復元できませんでした。デバイスの接続を解除して再接続してください — デバイス設定から、または電源を切って入れ直してください。デバイスに保存されたオーディオは後で同期されます。';
 
   @override
   String get captureStillRecording => '録音は継続中';
@@ -12917,6 +12932,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reviewProposalSuggested => '提案';
 
   @override
+  String get reviewQuestionOutOfDate => 'この質問は古くなっているため、何も変更されませんでした。';
+
+  @override
   String get reviewProposalConflict => 'Dreamが提案した後に内容が変わったため、何も適用されませんでした。';
 
   @override
@@ -13468,7 +13486,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityRetryAll => 'すべて再試行';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'ストレージを確認できません';
+
+  @override
+  String get activityAttentionStorageSubtitle => '録音を一時停止中';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'アップロードが停止しています';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音が待機中',
+      one: '1 件の録音が待機中',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';
+
+  @override
+  String get activityAttentionSemantics => 'アクティビティ、要対応';
 
   @override
   String get connectAgentHeadline => 'OmiのメモリをChatGPTやAIエージェントで使う';
@@ -14136,4 +14177,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '音声を $saved 保存済み（全体 $total）';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi で録音を続けています';
 }

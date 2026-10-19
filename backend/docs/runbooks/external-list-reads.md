@@ -1,5 +1,7 @@
 # Developer API and MCP list reads
 
+Remaining action-item reads: [filtered compatibility scans and telemetry](dev-action-items-read-cost.md).
+
 Round 2 changes and the current savings model: [Developer API / promote read cuts](devapi-reads-r2.md).
 
 The three Developer API GET lists (`/v1/dev/user/conversations`, `/v1/dev/user/memories`,
@@ -100,6 +102,33 @@ overshoot by up to one current bounded RPC window, which can contain 7000 histor
 (the 5000 candidate maximum plus 2000 hidden-row scan slack). This list budget is not an exact
 billing ceiling.
 Auth/grants, fixed policy reads, and auxiliary render reads are outside this list-document allowance.
+
+## Developer memory tail: reuse read windows
+
+`OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED` defaults on; `false` restores the
+previous repeated-prefix implementation. This affects Developer memory reads only.
+No stored marker, migration, index, entitlement change, or serving-path write is needed.
+
+One admitted `MemoryService.read` attempt retains both historical metadata windows
+and their snapshot cursors across adapter, mixed-view, and sparse-category expansions.
+Only the suffix of a larger prefix is fetched; smaller rounds use the exact original
+prefix slice. Both timestamp streams remain: legacy rows missing `updated_at` still
+enter through `created_at`. Visibility, canonical precedence, final ordering,
+hydration of returned rows, and the 5000-row compatibility window are unchanged.
+Status lookups (including absent canonical/override results) are reused across category
+windows in that same attempt. Canonical queries and hydration retain their existing paths.
+
+State belongs to one user/client and is dropped on return, failure, or whole-operation
+retry. There is no cross-request negative cache or assumption that history was migrated.
+Retained snapshots contain the existing metadata projection, never content; each of the
+two windows is bounded by the existing 5000 candidates plus 2000 hidden-row slack.
+The existing incremental-window kill switch still disables seeking when set to `false`.
+The existing shared list budget charges every actual suffix/status/hydration fetch.
+Exhaustion keeps the truncated 200, `X-Omi-Has-More`, and in-window next offset rules.
+
+Physical-read parity and savings fixtures: `tests/unit/test_dev_memory_read_windows.py`.
+They cover mixed canonical/legacy rows, missing timestamps, tied timestamps, suppression,
+sparse categories, deep offsets, request isolation, and budget exhaustion.
 
 ## One injectable API document-limit resolver
 
