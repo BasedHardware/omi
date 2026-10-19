@@ -6081,7 +6081,3 @@ The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt b
 retained uncertainty, kill switches, three new group indexes, deployment order,
 15-second SIGKILL residual window and measured cost increase. Enforcement flags
 remain off; this source change does not activate the cap cohort.
-
-The local-file segment processor shares its cap-denial hold path between initial
-admission and the provider retry boundary. The helper preserves the same lazy
-metadata construction, durable hold call, and `cap_held` signal at both checks.
