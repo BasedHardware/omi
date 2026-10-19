@@ -371,6 +371,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_MODEL_BATCH_SIZE` | GPU chain maximum model window batch size; default 8; hard ceiling 32 | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_PADDED_SECONDS` | GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_POOL_KIND` | Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_PUBLISH_CONCURRENCY` | GPU worker post-flight publication concurrency: bounded fenced transitions and one ordered drain per owner per flight; default 4, 1 = legacy serial kill switch, max 16 | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_REUSE_LIVE_ENABLED` | Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_UNIT_SECONDS` | Per-pool compute-unit ceiling; dedicated batch default 7200, shared live default and hard maximum 120 seconds | backend | env | closed | 3600 | 3600 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | 3600 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WINDOW_SECONDS` | GPU chain internal ASR core window seconds; default 30; queue units remain conversations | backend | env | closed | — | — | — | — | keep | — | dazheng |
@@ -475,6 +476,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_MODEL_BATCH_SIZE` — GPU chain maximum model window batch size; default 8; hard ceiling 32 (fail: closed)
 - `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 (fail: closed)
 - `BATCH_PIPELINE_POOL_KIND` — Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter (fail: closed)
+- `BATCH_PIPELINE_PUBLISH_CONCURRENCY` — GPU worker post-flight publication concurrency: bounded fenced transitions and one ordered drain per owner per flight; default 4, 1 = legacy serial kill switch, max 16 (fail: closed)
 - `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` — Request-backed paid quarantine recovery survives ordinary revision draining (fail: closed)
 - `BATCH_PIPELINE_REUSE_LIVE_ENABLED` — Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof (fail: closed)
 - `BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` — Default off; a batch unit whose speech and words form one region of at most 2 s (pauses up to 0.5 s inclusive) takes the existing skipped_single result without diarization (fail: closed)

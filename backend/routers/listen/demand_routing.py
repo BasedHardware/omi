@@ -134,8 +134,10 @@ class LiveDemandRouting:
                 self.receiver.host.request.uid, self.socket_id, 'close' if self.closed else self.policy.state
             )
             now = time.monotonic()
-            self._presence_published = now
             if not snapshot.unavailable:
+                # Only a landed write consumes the heartbeat slot; a failed one
+                # retries on the next loop so the 30s lease cannot age out.
+                self._presence_published = now
                 self._presence_misses = 0
                 self._presence_good = (now, snapshot.visible)
                 self._presence_unavailable = False
@@ -229,8 +231,12 @@ class LiveDemandRouting:
                     self.policy.fallback = True
                 self._served_window = current == 'parakeet'
                 await warm_rollout_cohorts(host.request.uid)
+                # A concurrent observe() publish may have found the gate unavailable
+                # after this iteration's read; vendor wins without waiting a loop.
                 desired = self.policy.decide(
-                    enabled=resolve_live_demand().admits(host.request.uid), visible=visible, consumer=self.consumer
+                    enabled=resolve_live_demand().admits(host.request.uid),
+                    visible=visible or self._presence_unavailable,
+                    consumer=self.consumer,
                 )
                 self.meter()
                 current = 'parakeet' if host.stt_model == 'parakeet-window' else 'vendor'
