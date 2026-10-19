@@ -106,7 +106,7 @@ def test_idle_close_uses_code_default_in_every_environment(runtime_source):
             for index, value in enumerate(node):
                 yield from declarations(value, (*path, index))
 
-    # The code default (20 s, on) governs every environment; a declaration
+    # The code default (45 s, on) governs every environment; a declaration
     # would only be needed for a value that differs from it.
     assert dict(declarations(manifest)) == {}
     prod_values = yaml.load(
@@ -123,7 +123,7 @@ def test_idle_close_uses_code_default_in_every_environment(runtime_source):
 
 @pytest.mark.parametrize(
     'value,expected',
-    [(None, 20.0), ('nope', 20.0), ('0', 0.0), ('-1', 0.0), ('off', 0.0)],
+    [(None, 45.0), ('nope', 45.0), ('0', 0.0), ('-1', 0.0), ('off', 0.0)],
     ids=['unset', 'invalid', 'zero', 'negative', 'off'],
 )
 def test_idle_close_code_default_is_on_with_kill_switch(monkeypatch, value, expected):

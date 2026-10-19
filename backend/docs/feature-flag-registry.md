@@ -336,7 +336,7 @@ and an explicit empty literal renders as `''`.
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | — | dazheng |
-| `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 20 s; close paid Soniox transports after continuous active-VAD silence or when the client sends no frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | — | backend |
+| `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | — | backend |
 | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | — | unowned |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED` | Default on; bounded read-only downloads for future backfill jobs; off restores ordinary downloads and serial execution remains unchanged | backend | env | closed | {value: 'on', category: ops_kill} | {value: 'on', category: ops_kill} | {value: 'on', category: ops_kill} | — | keep | — | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | true | — | keep | — | unowned |
@@ -540,7 +540,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SCREEN_TASK_STOP` — Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease (fail: inverted)
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
-- `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 20 s; close paid Soniox transports after continuous active-VAD silence or when the client sends no frames; 0 or off is the kill switch (fail: open)
+- `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch (fail: open)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_DISPATCH_ENFORCEMENT` — Default-off funded STT dispatch admission for live, sync and queued batch; preserves audio before cloud STT at cap; no deployment activation (fail: closed)

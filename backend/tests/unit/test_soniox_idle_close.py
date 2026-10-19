@@ -220,7 +220,7 @@ def test_unset_or_unreadable_threshold_keeps_the_default_on(monkeypatch, value):
         monkeypatch.delenv('SONIOX_IDLE_CLOSE_SECONDS', raising=False)
     else:
         monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', value)
-    assert idle_close_seconds() == idle_config.DEFAULT_IDLE_CLOSE_SECONDS == 20
+    assert idle_close_seconds() == idle_config.DEFAULT_IDLE_CLOSE_SECONDS == 45
 
 
 def test_threshold_floor_logs_once_and_reads_current_env(monkeypatch, caplog):
@@ -239,7 +239,7 @@ def test_threshold_floor_logs_once_and_reads_current_env(monkeypatch, caplog):
 
 @pytest.mark.parametrize(
     'value,expected',
-    [(None, 10), ('1', 5), ('0', 5), ('-1', 5), ('7', 7), ('120', 120), ('nan', 10), ('inf', 10), ('bad', 10)],
+    [(None, 60), ('1', 5), ('0', 5), ('-1', 5), ('7', 7), ('120', 120), ('nan', 60), ('inf', 60), ('bad', 60)],
 )
 def test_rearm_config_has_a_safe_floor(monkeypatch, value, expected):
     if value is None:
@@ -252,7 +252,7 @@ def test_rearm_config_has_a_safe_floor(monkeypatch, value, expected):
 
 @pytest.mark.parametrize(
     'value,expected',
-    [(None, 120), ('3', 3), ('240', 240), ('0', 120), ('-1', 120), ('1.5', 120), ('nan', 120), ('bad', 120)],
+    [(None, 12), ('3', 3), ('240', 240), ('0', 12), ('-1', 12), ('1.5', 12), ('nan', 12), ('bad', 12)],
 )
 def test_hourly_close_cap_config(monkeypatch, value, expected):
     if value is None:
@@ -272,9 +272,9 @@ def test_threshold_flapping_bounds_paid_dials(monkeypatch, recovery, cap):
         monkeypatch.delenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', raising=False)
     else:
         monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', str(cap))
-    limit = cap or 120
+    limit = cap or 12
     rearm = idle_rearm_seconds()
-    assert rearm == 10
+    assert rearm == 60
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=idle_close_seconds())
@@ -784,15 +784,20 @@ def test_code_defaults_are_on_and_aggressive(monkeypatch):
         'SONIOX_IDLE_MAX_CLOSES_PER_HOUR',
     ):
         monkeypatch.delenv(name, raising=False)
-    assert idle_close_seconds() == 20
-    assert idle_config.idle_no_frames_seconds() == 20
-    assert idle_rearm_seconds() == 10
-    assert idle_max_closes_per_hour() == 120
+    # VAD policy stays at the prod values; only the no-frames trigger is new.
+    assert idle_close_seconds() == 45
+    assert idle_config.idle_no_frames_seconds() == 60
+    assert idle_rearm_seconds() == 60
+    assert idle_max_closes_per_hour() == 12
+
+
+def test_hangover_mirror_matches_the_gate():
+    assert idle_config.VAD_HANGOVER_SECONDS * 1000 == vad_gate.VAD_GATE_HANGOVER_MS
 
 
 @pytest.mark.parametrize(
     'value,expected',
-    [(None, 20), ('', 20), ('bad', 20), ('0', 0), ('off', 0), ('-5', 0), ('3', 10), ('45', 45)],
+    [(None, 60), ('', 60), ('bad', 60), ('0', 0), ('off', 0), ('-5', 0), ('3', 10), ('45', 45)],
 )
 def test_no_frames_config(monkeypatch, value, expected):
     if value is None:
@@ -814,7 +819,7 @@ def test_default_on_wraps_the_serving_adapter(monkeypatch):
     async def run():
         socket = await soniox.process_audio_soniox(lambda _: None, 16000, 'en')
         assert type(socket) is IdleSonioxSocket
-        assert socket._seconds == 20
+        assert socket._seconds == 45
         assert socket._watchdog is not None and not socket._watchdog.done()
         await socket.drain_and_close()
         assert socket._watchdog.done()
@@ -837,13 +842,19 @@ def test_no_frames_close_then_resume_delivers_every_byte_once(monkeypatch):
         await settle()
         idle._transport._handle_tokens([{'text': 'before ', 'is_final': True, 'start_ms': 0, 'end_ms': 100}])
         # Frames stop. VAD sees nothing, so only the wall-clock watchdog can act.
-        tick[0] += 19.999
+        # The last frame was speech, so the VAD hangover elapses first.
+        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'no_frames'}) or 0
+        tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)
+        tick[0] += 3.999
         assert idle.check_no_frames() == pytest.approx(0.001)
         assert idle._close_task is None
         tick[0] += 0.001
         assert idle.check_no_frames() is None
         assert idle._idle_since == tick[0]
         await idle._close_task
+        after = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'no_frames'})
+        assert after == before + 1
         assert peers[0].closed
         assert peers[0].sent[-2:] == ['{"type": "finalize"}', '']
         assert not socket.is_connection_dead and socket.death_reason is None
@@ -909,7 +920,7 @@ def test_frames_without_speech_do_not_trigger_the_no_frames_close(monkeypatch):
         for _ in range(40):
             tick[0] += 1
             socket.send(silence, wall_time=tick[0])
-            assert idle.check_no_frames() == pytest.approx(20)
+            assert idle.check_no_frames() == pytest.approx(60)
         assert idle._close_task is None
         await idle.drain_and_close()
 
@@ -934,36 +945,57 @@ def test_no_frames_disabled_leaves_vad_close_and_no_watchdog(monkeypatch):
     asyncio.run(run())
 
 
-def test_no_frames_close_honors_rearm_but_not_the_hourly_cap(monkeypatch):
+def test_no_frames_close_shares_the_hourly_cap_and_rearm(monkeypatch):
     monkeypatch.setenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', '1')
     monkeypatch.setenv('SONIOX_IDLE_REARM_SECONDS', '30')
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
         silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
         idle.observe_vad(silence, 'active')
-        tick[0] += 20
+        first_close = tick[0] + 20
+        tick[0] = first_close
         idle.observe_vad(silence, 'active')
-        await idle._close_task  # spends the only hourly VAD slot
+        await idle._close_task  # spends the only hourly slot
         assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
         assert await socket.complete_send()
         reopened = tick[0]
         idle._close_task = None
-        # The VAD trigger is capped for the rest of the hour.
-        idle.observe_vad(silence, 'active')
-        tick[0] = reopened + 40
-        idle.observe_vad(silence, 'active')
-        assert idle._close_task is None
-        # Frames stop for 20 s while the 30 s re-arm floor still has 10 s to run.
+        # Frames stop well past the no-frames interval, but the slot is spent:
+        # the watchdog waits for the rolling hour instead of churning a scope.
         idle._last_frame_at = reopened
+        idle._last_speech_at = reopened - 10  # hangover already settled
         tick[0] = reopened + 20
+        assert idle.check_no_frames() == pytest.approx(first_close + 3600 - tick[0])  # cap binds
+        # With the slot free again, only the re-arm floor can hold a close.
+        idle._idle_budget.close_times.clear()
         assert idle.check_no_frames() == pytest.approx(10)
+        idle._idle_budget.close_times.append(first_close)
         assert idle._close_task is None
-        tick[0] = reopened + 30
+        tick[0] = first_close + 3600
         assert idle.check_no_frames() is None
         await idle._close_task
-        assert len(idle._idle_budget.close_times) == 1  # no-frames close spent no hourly slot
+        assert len(idle._idle_budget.close_times) == 1
         assert len(peers) == 2 and peers[1].closed
+        await idle.drain_and_close()
+
+    asyncio.run(run())
+
+
+def test_no_frames_close_waits_out_the_hangover_after_speech(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
+
+    async def run():
+        _, idle, _, _, _, tick = build(monkeypatch, seconds=45)
+        # The gate is mid-hangover (audio still flowing) when the client stalls.
+        idle.observe_vad(SimpleNamespace(is_speech=False, audio_to_send=b'\x00\x00' * 160), 'active')
+        tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)
+        assert idle._close_task is None
+        tick[0] += 4
+        assert idle.check_no_frames() is None
+        await idle._close_task
         await idle.drain_and_close()
 
     asyncio.run(run())
@@ -971,6 +1003,7 @@ def test_no_frames_close_honors_rearm_but_not_the_hourly_cap(monkeypatch):
 
 def test_no_frames_close_in_passthrough_mode_resumes_exact_bytes(monkeypatch):
     """Without an active gate every frame goes through send(); nothing is lost or repeated."""
+    monkeypatch.setenv('SONIOX_IDLE_NO_FRAMES_SECONDS', '20')
 
     async def run():
         _, idle, _, peers, _, tick = build(monkeypatch)
@@ -978,6 +1011,8 @@ def test_no_frames_close_in_passthrough_mode_resumes_exact_bytes(monkeypatch):
         assert idle.send(first)
         await settle()
         tick[0] += 20
+        assert idle.check_no_frames() == pytest.approx(4)  # ungated audio waits out the hangover
+        tick[0] += 4
         assert idle.check_no_frames() is None
         await idle._close_task
         assert idle.send(second)
@@ -1025,7 +1060,7 @@ def test_vad_close_waits_for_hangover_audio_to_drain(monkeypatch):
     asyncio.run(run())
 
 
-def test_lower_rearm_floor_allows_a_close_ten_seconds_after_reopen(monkeypatch):
+def test_default_rearm_holds_a_reopened_socket_for_sixty_seconds(monkeypatch):
     monkeypatch.delenv('SONIOX_IDLE_REARM_SECONDS', raising=False)
 
     async def run():
@@ -1033,18 +1068,20 @@ def test_lower_rearm_floor_allows_a_close_ten_seconds_after_reopen(monkeypatch):
         silence = SimpleNamespace(is_speech=False, audio_to_send=b'')
         idle.observe_vad(silence, 'active')
         tick[0] += 20
+        before = REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'vad'}) or 0
         idle.observe_vad(silence, 'active')
         await idle._close_task
+        assert REGISTRY.get_sample_value('omi_soniox_idle_closes_by_trigger_total', {'trigger': 'vad'}) == before + 1
         assert socket.send(b'\x01\x00' * 1600, wall_time=tick[0])
         assert await socket.complete_send()
         reopened = tick[0]
         idle._close_task = None
         # Silence began before the reopen; only the re-arm floor holds the close.
         idle._silent_since = reopened - 30
-        tick[0] = reopened + 9.999
+        tick[0] = reopened + 59.999
         idle.observe_vad(silence, 'active')
         assert idle._close_task is None
-        tick[0] = reopened + 10
+        tick[0] = reopened + 60
         idle.observe_vad(silence, 'active')
         assert idle._close_task is not None
         await idle._close_task

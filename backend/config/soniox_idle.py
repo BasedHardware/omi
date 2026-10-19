@@ -4,6 +4,10 @@ Soniox bills real-time streams for every connected second, keepalive silence
 included, so the idle close is on by default. ``SONIOX_IDLE_CLOSE_SECONDS=0``
 (or ``off``/``false``) is the kill switch and restores the always-connected
 adapter. Every knob reads the current environment at call time.
+
+The VAD-silence policy keeps the values prod ran since 2026-10-06 (45 s close,
+60 s re-arm, 12 closes per session-hour). Each reopen starts a new provider
+speaker scope, so lowering these waits for speaker scope to survive a reopen.
 """
 
 import logging
@@ -11,15 +15,16 @@ import math
 import os
 from functools import lru_cache
 
-DEFAULT_IDLE_CLOSE_SECONDS = 20.0
+DEFAULT_IDLE_CLOSE_SECONDS = 45.0
 MIN_IDLE_CLOSE_SECONDS = 20.0
-DEFAULT_NO_FRAMES_CLOSE_SECONDS = 20.0
-# Must stay above the VAD hangover (4 s) so a client that pauses mid-word is not
-# closed before the gate would have released its silence tail.
+DEFAULT_NO_FRAMES_CLOSE_SECONDS = 60.0
 MIN_NO_FRAMES_CLOSE_SECONDS = 10.0
-DEFAULT_REARM_SECONDS = 10.0
+# Mirrors utils.stt.vad_gate.VAD_GATE_HANGOVER_MS (pinned by a unit test). A
+# no-frames close never finalizes inside this tail after the last speech frame.
+VAD_HANGOVER_SECONDS = 4.0
+DEFAULT_REARM_SECONDS = 60.0
 MIN_REARM_SECONDS = 5.0
-DEFAULT_MAX_CLOSES_PER_HOUR = 120
+DEFAULT_MAX_CLOSES_PER_HOUR = 12
 _OFF_VALUES = frozenset({'off', 'false', 'no', 'disabled'})
 logger = logging.getLogger(__name__)
 
@@ -81,7 +86,7 @@ def idle_rearm_seconds() -> float:
 
 
 def idle_max_closes_per_hour() -> int:
-    """Rolling-hour cap on VAD-silence closes per logical session."""
+    """Rolling-hour cap on planned closes (VAD silence and no frames) per logical session."""
     try:
         value = int(os.getenv('SONIOX_IDLE_MAX_CLOSES_PER_HOUR', str(DEFAULT_MAX_CLOSES_PER_HOUR)))
     except ValueError:

@@ -14,7 +14,12 @@ from collections import deque
 from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
-from config.soniox_idle import idle_max_closes_per_hour, idle_no_frames_seconds, idle_rearm_seconds
+from config.soniox_idle import (
+    VAD_HANGOVER_SECONDS,
+    idle_max_closes_per_hour,
+    idle_no_frames_seconds,
+    idle_rearm_seconds,
+)
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
@@ -37,16 +42,14 @@ class SonioxIdleBudget:
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
 
-    def reserve_close(self, now: float, *, capped: bool = True) -> bool:
-        """Spend a close slot. ``capped=False`` (no client frames) honors only the re-arm floor:
-        each such close already needs a full no-frames interval, which bounds its churn."""
+    def reserve_close(self, now: float) -> bool:
+        """Spend one rolling-hour slot shared by every planned-close trigger.
+
+        Each reopen starts a new provider speaker scope, so the cap bounds that
+        churn for the whole session whatever caused the close."""
         while self.close_times and now - self.close_times[0] >= 3600.0:
             self.close_times.popleft()
-        if now < self.rearm_at:
-            return False
-        if not capped:
-            return True
-        if len(self.close_times) >= self.max_closes_per_hour:
+        if now < self.rearm_at or len(self.close_times) >= self.max_closes_per_hour:
             return False
         self.close_times.append(now)
         return True
@@ -97,6 +100,8 @@ class IdleSonioxSocket(STTSocket):
         self._capture_axis_ledger: Callable[[], int | None] | None = None
         self._no_frames_seconds = idle_no_frames_seconds()
         self._last_frame_at = time.monotonic()
+        self._last_speech_at = float('-inf')  # No speech seen yet on this leg.
+        self._close_trigger = 'vad'
         self._watchdog: asyncio.Task[None] | None = None
         transport._stream_transcript = self._socket_callback(0.0, 0)
         self._start_watchdog()
@@ -135,6 +140,9 @@ class IdleSonioxSocket(STTSocket):
         # proves the client is still producing audio, whatever the VAD mode.
         now = time.monotonic()
         self._last_frame_at = now
+        if output.is_speech or output.audio_to_send:
+            # Speech or its hangover tail: the word boundary is not settled yet.
+            self._last_speech_at = now
         if mode != 'active' or self._finishing or self.is_connection_dead:
             return
         if output.is_speech:
@@ -149,11 +157,12 @@ class IdleSonioxSocket(STTSocket):
             # Reserve before scheduling so repeated VAD callbacks cannot spend
             # the same rolling-hour slot. These limits belong to the logical
             # session and survive each replacement transport.
-            self._begin_idle_close(now)
+            self._begin_idle_close(now, 'vad')
 
-    def _begin_idle_close(self, now: float) -> None:
+    def _begin_idle_close(self, now: float, trigger: str) -> None:
         # Fence death publication before any await. The logical leg stays
         # alive while the paid transport finishes its last committed text.
+        self._close_trigger = trigger
         self._transport._planned_close = True
         self._idle_since = now
         self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
@@ -175,13 +184,22 @@ class IdleSonioxSocket(STTSocket):
         if self._idle_since is not None:
             # Already closed; the successful reopen restarts this watchdog.
             return None
-        due = self._last_frame_at + self._no_frames_seconds
+        # A stall right after speech first lets the VAD hangover elapse, so the
+        # close never finalizes inside the tail that protects the word boundary.
+        due = max(
+            self._last_frame_at + self._no_frames_seconds,
+            self._last_speech_at + VAD_HANGOVER_SECONDS + self._no_frames_seconds,
+        )
         if now < due:
             return due - now
-        if not self._idle_budget.reserve_close(now, capped=False):
-            return max(0.5, self._idle_budget.rearm_at - now)
-        self._metrics.no_frames_closes.inc()
-        self._begin_idle_close(now)
+        if not self._idle_budget.reserve_close(now):
+            # Re-arm floor or the shared hourly cap: retry when a slot can open.
+            budget = self._idle_budget
+            retry = budget.rearm_at - now
+            if budget.close_times and len(budget.close_times) >= budget.max_closes_per_hour:
+                retry = max(retry, budget.close_times[0] + 3600.0 - now)
+            return max(0.5, retry)
+        self._begin_idle_close(now, 'no_frames')
         return None
 
     def _start_watchdog(self) -> None:
@@ -220,9 +238,14 @@ class IdleSonioxSocket(STTSocket):
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
+            self._metrics.closes_by_trigger.labels(trigger=self._close_trigger).inc()
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         self._last_frame_at = time.monotonic()
+        if data:
+            # Gated sends carry only speech, hangover or pre-roll; ungated sends
+            # cannot be classified, so both count as unsettled audio.
+            self._last_speech_at = self._last_frame_at
         if self._finishing or self.is_connection_dead:
             return False
         if self._idle_since is not None:
