@@ -436,8 +436,11 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
         _clearGraph();
         await _loadGraph();
       } else if (_hasContent) {
-        OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
-            actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+        // A resume refresh runs while another tab may be showing; it keeps the map and says nothing.
+        if (!silent) {
+          OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
+              actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+        }
       } else {
         setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       }
