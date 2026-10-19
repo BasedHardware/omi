@@ -195,8 +195,15 @@ if [[ "$SKIP_BUILD" != 1 ]]; then
     --service-account="$BUILDER_SA" \
     --suppress-logs >/dev/null
 fi
-IMAGE="${IMAGE_REPO}/backend:${SHA}"
-gcloud artifacts docker images describe "$IMAGE" --project="$PROJECT" >/dev/null || die "image $IMAGE not found"
+# Digest of <repo>/<image>:<sha> from the tag listing (images describe needs containeranalysis rights).
+image_digest() {
+  gcloud artifacts docker images list "${IMAGE_REPO}/$1" --project="$PROJECT" --include-tags \
+    --format='value(tags,version)' 2>/dev/null |
+    awk -v sha="$SHA" '{ n = split($1, t, ","); for (i = 1; i <= n; i++) if (t[i] == sha) { print $2; exit } }'
+}
+BACKEND_DIGEST="$(image_digest backend)"
+[[ "$BACKEND_DIGEST" == sha256:* ]] || die "image ${IMAGE_REPO}/backend:${SHA} not found"
+IMAGE="${IMAGE_REPO}/backend@${BACKEND_DIGEST}"
 
 verify_service() { # svc deploy_name env_file
   local svc="$1" name="$2" env_file="$3" state
@@ -259,7 +266,7 @@ if [[ "$WITH_WORKER" == true ]]; then
   kubectl_staging get secret staging-batch-worker >/dev/null 2>&1 ||
     die "k8s secret staging/staging-batch-worker missing (bootstrap_iam.sh --apply creates it)"
   WORKER_IMAGE="${IMAGE_REPO}/batch-pipeline-worker:${SHA}"
-  WORKER_DIGEST="$(gcloud artifacts docker images describe "$WORKER_IMAGE" --project="$PROJECT" --format='value(image_summary.digest)')"
+  WORKER_DIGEST="$(image_digest batch-pipeline-worker)"
   [[ "$WORKER_DIGEST" == sha256:* ]] || die "worker image $WORKER_IMAGE not found (build with --with-worker)"
   log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19}"
   helm template staging-batch-pipeline-worker "$WORK/src/backend/charts/batch-pipeline-worker" \
