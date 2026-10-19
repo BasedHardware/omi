@@ -1982,7 +1982,7 @@ class ChatToolExecutor {
         lines.joined(separator: "\n"), references: references)
     } catch {
       logError("Tool semantic_search failed", error: error)
-      return "Failed to search: \(error.localizedDescription). "
+      return "Error: Failed to search: \(error.localizedDescription). "
         + "For recent-work or document/page/file location, call get_work_context instead of querying screenshots.ocrText."
     }
   }
