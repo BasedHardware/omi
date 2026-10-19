@@ -4370,5 +4370,7 @@
     "processingProgress": "Je wachtende opnamen worden verwerkt…",
     "processingDeferred": "Wacht op verwerking",
     "processingCount": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}",
-    "playbackPartialAudioSaved": "{saved} van {total} audio opgeslagen"
+    "playbackPartialAudioSaved": "{saved} van {total} audio opgeslagen",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

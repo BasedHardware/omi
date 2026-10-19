@@ -4370,5 +4370,7 @@
     "processingProgress": "Behandler ventende opptak…",
     "processingDeferred": "Venter på behandling",
     "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
-    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret"
+    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -4370,5 +4370,7 @@
     "processingProgress": "جارٍ معالجة تسجيلاتك المنتظرة…",
     "processingDeferred": "في انتظار المعالجة",
     "processingCount": "{count, plural, =1{محادثة واحدة قيد الانتظار} other{{count} محادثات قيد الانتظار}}",
-    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت"
+    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

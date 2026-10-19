@@ -4370,5 +4370,7 @@
     "processingProgress": "Γίνεται επεξεργασία των εγγραφών σε αναμονή…",
     "processingDeferred": "Σε αναμονή επεξεργασίας",
     "processingCount": "{count, plural, =1{1 συνομιλία σε αναμονή} other{{count} συνομιλίες σε αναμονή}}",
-    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου"
+    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

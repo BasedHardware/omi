@@ -4370,5 +4370,7 @@
     "processingProgress": "Memproses rakaman anda yang menunggu…",
     "processingDeferred": "Menunggu pemprosesan",
     "processingCount": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}",
-    "playbackPartialAudioSaved": "{saved} daripada {total} audio disimpan"
+    "playbackPartialAudioSaved": "{saved} daripada {total} audio disimpan",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

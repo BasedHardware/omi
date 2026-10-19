@@ -4370,5 +4370,7 @@
     "processingProgress": "Notiek gaidošo ierakstu apstrāde…",
     "processingDeferred": "Gaida apstrādi",
     "processingCount": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}",
-    "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio"
+    "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

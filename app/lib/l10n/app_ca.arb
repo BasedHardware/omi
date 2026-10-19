@@ -4370,5 +4370,7 @@
     "processingProgress": "S'estan processant les gravacions pendents…",
     "processingDeferred": "En espera de processament",
     "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}",
-    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio"
+    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -4466,5 +4466,7 @@
     "processingProgress": "A várakozó felvételeid feldolgozása…",
     "processingDeferred": "Feldolgozásra vár",
     "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
-    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve"
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

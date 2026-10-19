@@ -4370,5 +4370,7 @@
     "processingProgress": "正在处理等待中的录音…",
     "processingDeferred": "等待处理",
     "processingCount": "{count, plural, =1{1段对话等待中} other{{count}段对话等待中}}",
-    "playbackPartialAudioSaved": "已保存 {saved} / {total} 的音频"
+    "playbackPartialAudioSaved": "已保存 {saved} / {total} 的音频",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

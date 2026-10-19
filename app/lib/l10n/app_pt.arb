@@ -4405,5 +4405,7 @@
     "processingProgress": "A processar as suas gravações pendentes…",
     "processingDeferred": "À espera de processamento",
     "processingCount": "{count, plural, =1{1 conversa em espera} other{{count} conversas em espera}}",
-    "playbackPartialAudioSaved": "{saved} de {total} de áudio guardado"
+    "playbackPartialAudioSaved": "{saved} de {total} de áudio guardado",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

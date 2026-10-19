@@ -4370,5 +4370,7 @@
     "processingProgress": "Se procesează înregistrările în așteptare…",
     "processingDeferred": "În așteptarea procesării",
     "processingCount": "{count, plural, =1{1 conversație în așteptare} other{{count} conversații în așteptare}}",
-    "playbackPartialAudioSaved": "{saved} din {total} audio salvat"
+    "playbackPartialAudioSaved": "{saved} din {total} audio salvat",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

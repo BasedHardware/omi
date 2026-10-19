@@ -4370,5 +4370,7 @@
     "processingProgress": "Đang xử lý các bản ghi đang chờ của bạn…",
     "processingDeferred": "Đang chờ xử lý",
     "processingCount": "{count, plural, =1{1 cuộc trò chuyện đang chờ} other{{count} cuộc trò chuyện đang chờ}}",
-    "playbackPartialAudioSaved": "Đã lưu {saved} trên {total} âm thanh"
+    "playbackPartialAudioSaved": "Đã lưu {saved} trên {total} âm thanh",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

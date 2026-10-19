@@ -11796,5 +11796,7 @@
     "processingProgress": "ההקלטות הממתינות שלך בעיבוד…",
     "processingDeferred": "ממתין לעיבוד",
     "processingCount": "{count, plural, =1{שיחה אחת בהמתנה} other{{count} שיחות בהמתנה}}",
-    "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו"
+    "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

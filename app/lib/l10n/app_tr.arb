@@ -4405,5 +4405,7 @@
     "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
     "processingDeferred": "İşlenmeyi bekliyor",
     "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
-    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})"
+    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

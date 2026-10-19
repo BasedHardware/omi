@@ -4370,5 +4370,7 @@
     "processingProgress": "Sinu ootel salvestiste töötlemine…",
     "processingDeferred": "Ootab töötlemist",
     "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}",
-    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist"
+    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

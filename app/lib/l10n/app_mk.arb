@@ -11796,5 +11796,7 @@
     "processingProgress": "Обработка на вашите снимки на чекање…",
     "processingDeferred": "Чека обработка",
     "processingCount": "{count, plural, =1{1 разговор на чекање} other{{count} разговори на чекање}}",
-    "playbackPartialAudioSaved": "Зачувано {saved} од {total} аудио"
+    "playbackPartialAudioSaved": "Зачувано {saved} од {total} аудио",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

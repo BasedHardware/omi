@@ -4370,5 +4370,7 @@
     "processingProgress": "대기 중인 녹음을 처리하는 중…",
     "processingDeferred": "처리 대기 중",
     "processingCount": "{count, plural, =1{대기 중인 대화 1개} other{대기 중인 대화 {count}개}}",
-    "playbackPartialAudioSaved": "오디오 {saved} 저장됨 (전체 {total})"
+    "playbackPartialAudioSaved": "오디오 {saved} 저장됨 (전체 {total})",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

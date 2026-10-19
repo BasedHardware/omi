@@ -11796,5 +11796,7 @@
     "processingProgress": "మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…",
     "processingDeferred": "ప్రాసెసింగ్ కోసం వేచి ఉంది",
     "processingCount": "{count, plural, =1{1 సంభాషణ వేచి ఉంది} other{{count} సంభాషణలు వేచి ఉన్నాయి}}",
-    "playbackPartialAudioSaved": "{saved} ఆడియో సేవ్ చేయబడింది, మొత్తం {total}"
+    "playbackPartialAudioSaved": "{saved} ఆడియో సేవ్ చేయబడింది, మొత్తం {total}",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }
