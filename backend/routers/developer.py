@@ -1579,6 +1579,7 @@ def get_conversations(
         budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None
+        hidden_rows = 0
         if not include_transcript and folder_id is None and starred is None:
             try:
                 conversations, next_cursor = conversation_cards_page_core(
@@ -1601,6 +1602,7 @@ def get_conversations(
                 raise HTTPException(
                     status_code=400, detail="cursor requires include_transcript=false and no folder/starred filter"
                 )
+            scan_stats: dict[str, int] = {}
             conversations = conversations_db.get_conversations_without_photos(
                 uid,
                 limit + 1,
@@ -1612,8 +1614,11 @@ def get_conversations(
                 categories=[c.value for c in category_list],
                 folder_id=folder_id,
                 starred=starred,
+                scan_stats=scan_stats,
                 **budget_kwargs,
             )
+            # The server offset counts stored rows, so the next page must also skip the hidden rows this read dropped.
+            hidden_rows = scan_stats.get('rows_read', len(conversations)) - len(conversations)
             has_more = len(conversations) > limit
             conversations = conversations[:limit]
         if budget is not None:
@@ -1623,7 +1628,7 @@ def get_conversations(
             response,
             limit=limit,
             has_more=has_more,
-            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
+            next_offset=offset + len(conversations) + hidden_rows if next_cursor is None and conversations else None,
             next_cursor=next_cursor,
         )
 
