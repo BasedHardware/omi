@@ -760,6 +760,12 @@ def test_live_stt_gate_sentinel_is_excluded_from_provider_health_and_alerted_sep
         assert 'to_mode!="vendor"' in provider["data"][0]["model"]["expr"], export_name
         assert 'to_mode!="vendor"' in provider["data"][1]["model"]["expr"], export_name
         assert 'to_mode="vendor"' in gate["data"][0]["model"]["expr"], export_name
+        # Ratio over live sessions with a volume floor; the chronic presence-gate
+        # level (p50 ~24%, p90 ~50%) must not page.
+        assert "omi_live_session_transcript_outcome_total" in gate["data"][0]["model"]["expr"], export_name
+        assert ">= 100" in gate["data"][0]["model"]["expr"], export_name
+        assert gate["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0.6], "type": "gt"}, export_name
+        assert gate["for"] == "15m", export_name
         assert 'reason="gate_unavailable"' in gate["data"][0]["model"]["expr"], export_name
         assert gate["folderUID"] == provider["folderUID"], export_name
         assert gate["notification_settings"]["receiver"] == provider["notification_settings"]["receiver"]

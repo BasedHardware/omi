@@ -1278,11 +1278,12 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+      "expression": "(sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])), 1)) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])) >= 100)",
       "file": "alerts/transcription-services.json",
       "issues": [],
       "metrics": [
-        "omi_fallback_total"
+        "omi_fallback_total",
+        "omi_live_session_transcript_outcome_total"
       ],
       "owner_title": "Live STT - demand gate unavailable",
       "owner_uid": "omi-stt-gate-unavailable",
