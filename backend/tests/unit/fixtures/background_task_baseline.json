@@ -2,7 +2,7 @@
   "entries": [
     {
       "path": "routers/sync.py",
-      "function": "_run_sync_job_body",
+      "function": "_run_sync_job_attempt",
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed safe (#22184): best-effort owner prefetch into a local cache; holds no task slot, job lock, ledger claim or conversation authority, so losing it only costs a cache miss"

@@ -22,6 +22,7 @@ from google.cloud import firestore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
+from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS  # noqa: E402
 from utils.rollout.runtime_percent import write_ramp  # noqa: E402
 
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
@@ -53,6 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--expected-revision', type=int)
     parser.add_argument('--actor', help='Who is writing, e.g. lead or david (never ramp-controller)')
     parser.add_argument('--reason', help='lower_snake reason token (RampReason / LegacyDarkReason member)')
+    parser.add_argument(
+        '--precondition-met',
+        action='append',
+        default=[],
+        metavar='ID',
+        help='Confirm a draining precondition (repeat for each): ' + ', '.join(sorted(DRAINING_PRECONDITIONS)),
+    )
     parser.add_argument('--apply', action='store_true', help='Perform the write (default is a dry run)')
     return parser
 
@@ -64,6 +72,10 @@ def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple
             return 'percent_write_requires_operator_lock'
         return {'percents': dict(args.percent)}, args.reason or 'unknown'
     if args.legacy_sync:
+        leaving_on = args.legacy_sync != 'on' and (entry is None or entry['legacy_sync'] == 'on')
+        missing = sorted(set(DRAINING_PRECONDITIONS) - set(args.precondition_met or ()))
+        if leaving_on and missing:
+            return 'draining_precondition_unmet:' + ','.join(missing)
         return {'legacy_sync': args.legacy_sync}, args.reason or 'unknown'
     if args.lock:
         return {'locked_by': args.lock}, args.reason or 'locked_by_operator'

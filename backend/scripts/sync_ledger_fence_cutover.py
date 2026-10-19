@@ -37,6 +37,17 @@ from typing import Any, Callable, Mapping, Protocol, Sequence, cast
 
 SERVICES = ("backend", "backend-sync", "backend-sync-backfill")
 QUEUES = ("sync-jobs", "sync-backfill")
+# Production re-pointed live dispatch to fresh queues after the 10-18 18:59Z and 10-19 04:52Z
+# Cloud Tasks stalls (prod overlay SYNC_TASKS_QUEUE / SYNC_BACKFILL_TASKS_QUEUE). The cutover
+# barrier must pause every queue that can still dispatch sync work, so prod covers both sets.
+PRODUCTION_PROJECT = "based-hardware"
+PRODUCTION_QUEUES = QUEUES + ("sync-jobs-fresh", "sync-backfill-fresh")
+
+
+def queues_for(project: str) -> tuple[str, ...]:
+    return PRODUCTION_QUEUES if project == PRODUCTION_PROJECT else QUEUES
+
+
 FENCE_MODE_ENV = "SYNC_LEDGER_FENCE_MODE"
 STATE_SCHEMA_VERSION = 1
 
@@ -675,7 +686,7 @@ class CutoverOrchestrator:
 
     def _record_and_pause_queues(self, state: dict[str, Any]) -> None:
         queues_state = _mapping(state.setdefault("queues", {}))
-        for queue in QUEUES:
+        for queue in queues_for(self.config.project):
             state_before_pause = _queue_state(self._describe_queue(queue))
             if state_before_pause not in {"RUNNING", "PAUSED"}:
                 raise CutoverError(f"Cloud Tasks queue {queue} is in unsupported state {state_before_pause}")
@@ -689,7 +700,7 @@ class CutoverOrchestrator:
 
         # There is deliberately no except/finally resume.  Once this starts,
         # every failure leaves queues paused (or as paused as Cloud Tasks allowed).
-        for queue in QUEUES:
+        for queue in queues_for(self.config.project):
             queue_state = _mapping(queues_state[queue])
             if queue_state["recorded_state"] == "RUNNING":
                 self.runner.run(
@@ -704,9 +715,9 @@ class CutoverOrchestrator:
 
     def _verify_recorded_queues_are_paused(self, state: Mapping[str, Any]) -> None:
         queues_state = _mapping(state.get("queues"))
-        if set(queues_state) != set(QUEUES):
-            raise CutoverError("cutover state does not contain both sync queues")
-        for queue in QUEUES:
+        if set(queues_state) != set(queues_for(self.config.project)):
+            raise CutoverError("cutover state does not contain every sync queue")
+        for queue in queues_for(self.config.project):
             recorded = _mapping(queues_state.get(queue))
             if recorded.get("recorded_state") not in {"RUNNING", "PAUSED"}:
                 raise CutoverError(f"cutover state has no safe original state for {queue}")
@@ -875,7 +886,7 @@ class CutoverOrchestrator:
 
     def _resume_only_originally_running_queues(self, state: dict[str, Any]) -> None:
         queues_state = _mapping(state.get("queues"))
-        for queue in QUEUES:
+        for queue in queues_for(self.config.project):
             queue_state = _mapping(queues_state.get(queue))
             original_state = queue_state.get("recorded_state")
             if original_state == "RUNNING":

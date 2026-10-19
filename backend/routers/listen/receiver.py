@@ -157,6 +157,7 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
     emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
@@ -2394,8 +2395,10 @@ class ListenReceiver(ReplayFilterMixin):
             if getattr(self, 'live_hold', None) is not None
             else None
         )
+        frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
         try:
             while self.host.state.active:
+                frame_timer.stop()
                 try:
                     message = await asyncio.wait_for(
                         request.websocket.receive(), timeout=self.host.limits.ws_receive_timeout
@@ -2420,6 +2423,7 @@ class ListenReceiver(ReplayFilterMixin):
                                 bytes(data), self.host.state.current_conversation_id, time.time(), 0
                             )
                         continue
+                    frame_timer.start()
                     now = time.time()
                     prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
@@ -2523,6 +2527,7 @@ class ListenReceiver(ReplayFilterMixin):
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            frame_timer.stop()
             self.client_closing = True
             self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:

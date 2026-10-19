@@ -98,10 +98,6 @@
       "why": "Contract (d) audit-only target (account-deletion wipe). Ratchet: no new keys; fix by answering 409 retry_response for expected retries."
     },
     {
-      "key": "task-target-retry-semantics|code|batch-quarantine-recovery/routers/batch_pipeline.py:recover_quarantine/503",
-      "why": "Contract (d): 503 recovery-disabled; lane 9 changes it to 409 kill_switch_off after #22371. Delete then."
-    },
-    {
       "key": "task-target-retry-semantics|code|listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/500",
       "why": "Contract (d) audit-only target (listen slot). Ratchet: no new keys."
     },
@@ -110,11 +106,15 @@
       "why": "Contract (d) audit-only target (listen slot). Ratchet: no new keys."
     },
     {
-      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_body/500",
-      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_attempt/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
     },
     {
-      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_body/503",
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_attempt/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_body/500",
       "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
     },
     {
@@ -126,11 +126,15 @@
       "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
     },
     {
-      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_body/500",
-      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_attempt/500",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
     },
     {
-      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_body/503",
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_attempt/503",
+      "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
+    },
+    {
+      "key": "task-target-retry-semantics|code|sync-jobs/routers/sync.py:_run_sync_job_body/500",
       "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11)."
     },
     {
