@@ -215,6 +215,32 @@ async def test_duplicate_publication_is_idempotent():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('concurrency, expected_reads', [(DEFAULT_PUBLISH_CONCURRENCY, 2), (1, 6)])
+async def test_maintenance_does_not_reread_blocked_result_ready_jobs_every_sweep(concurrency, expected_reads):
+    store, queue, pump = build(concurrency, MIXED)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(time.time(), 8)}
+    # a1 stays leased (the blocked ordered head); its successors wait result_ready.
+    for segment in ('a2', 'a3'):
+        queue.complete(WorkResult(segment, 'gs://r'), leases[segment].token, time.time())
+    owner_reads = []
+    original = store.run
+
+    def run(body):
+        if 'owner_of' in getattr(body, '__qualname__', ''):
+            owner_reads.append(body)
+        return original(body)
+
+    store.run = run
+    calls = count_commit_calls(pump)
+    for _ in range(3):
+        pump._last_recovery = float('-inf')
+        assert await pump.run_once() == 0
+    assert len(owner_reads) == expected_reads  # memo: read once, not once per sweep
+    assert calls['alice'] == 3  # one fenced probe per sweep; nothing commits past the head
+    assert all(store.rows['jobs', s]['state'] == 'result_ready' for s in ('a2', 'a3'))
+
+
+@pytest.mark.asyncio
 async def test_maintenance_drains_each_ready_owner_once():
     store, queue, pump = build(DEFAULT_PUBLISH_CONCURRENCY, MIXED)
     for lease in queue.pull(time.time(), 8):

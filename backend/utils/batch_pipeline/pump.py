@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
@@ -26,6 +27,11 @@ from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
+
+# Maintenance re-reads every result_ready job each sweep to find its owner;
+# jobs blocked behind an ordered predecessor would otherwise cost one read
+# per sweep. Bounded well above the 100-row sweep page.
+SEGMENT_OWNER_MEMO = 4096
 
 
 class Pump:
@@ -66,6 +72,7 @@ class Pump:
         self._last_metrics = float('-inf')
         self.publish_concurrency = publish_concurrency
         self._owner_locks: dict[str, list] = {}
+        self._segment_owners: OrderedDict[str, str] = OrderedDict()
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """SIGTERM sets stop_event; the current chain drains with heartbeats intact."""
@@ -254,8 +261,13 @@ class Pump:
         """Maintenance: discover owners with result_ready work, drain each once."""
 
         async def owner_of(segment: str) -> str | None:
+            if self.publish_concurrency > 1 and segment in self._segment_owners:
+                return self._segment_owners[segment]
             job = await run_blocking(db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment))
-            return job.get('owner_id') if job else None
+            owner_id = job.get('owner_id') if job else None
+            if owner_id:
+                self._remember_owner(segment, owner_id)
+            return owner_id
 
         if self.publish_concurrency <= 1:
             owners: list[str] = []
@@ -268,6 +280,14 @@ class Pump:
         found = await self._bounded_map(owner_of, ready)
         # First-seen order; one drain per owner, owners drained concurrently.
         await self._bounded_map(self.drain_owner, list(dict.fromkeys(v for v in found if v)))
+
+    def _remember_owner(self, segment_id: str, owner_id: str) -> None:
+        """Bounded segment -> owner memo. A segment's owner is immutable after
+        admission, so a stale entry can only cause a harmless fenced drain probe."""
+        self._segment_owners[segment_id] = owner_id
+        self._segment_owners.move_to_end(segment_id)
+        while len(self._segment_owners) > SEGMENT_OWNER_MEMO:
+            self._segment_owners.popitem(last=False)
 
     async def _publish(self, lease: LeasedWork, result_map: dict, lost: set[str]) -> bool:
         """One fenced transition. True only when the owner's ordered merge may advance."""
@@ -350,6 +370,7 @@ class Pump:
         gate = asyncio.Semaphore(self.publish_concurrency)
         by_owner: dict[str, list[LeasedWork]] = {}
         for lease in leases:
+            self._remember_owner(lease.item.segment_id, lease.item.owner_id)
             by_owner.setdefault(lease.item.owner_id, []).append(lease)
 
         async def publish_one(lease: LeasedWork) -> bool:
