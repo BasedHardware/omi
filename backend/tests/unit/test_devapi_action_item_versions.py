@@ -8,11 +8,12 @@ import pytest
 from fastapi import Request, Response
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1.document import DocumentReference
 from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.bulk_batch import BulkWriteBatch
 from google.cloud.firestore_v1.types import CommitResponse, BatchWriteResponse, WriteResult
 
-from database import _client, action_item_versions as versions
+from database import _client, action_items, action_item_versions as versions
 from utils import external_list_reads as cache
 from tests.unit.test_external_list_cache import FakeRedis
 
@@ -234,3 +235,28 @@ async def test_async_document_delete_uses_direct_commit_fence(redis):
     client._firestore_api_internal = SimpleNamespace(commit=AsyncMock(side_effect=commit))
     await client.document('users/owner/action_items/task').delete()
     assert versions.version('owner') not in (before, None)
+
+
+def test_identical_patch_keeps_cached_page_but_real_sdk_write_invalidates(redis, monkeypatch):
+    reads = []
+    bumps = []
+    client = sdk_client()
+    monkeypatch.setattr(action_items, 'db', client)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: bumps.append(uid))
+
+    def get(ref, **kwargs):
+        reads.append(ref.path)
+        return SimpleNamespace(exists=True, to_dict=lambda: {'description': 'Task'})
+
+    monkeypatch.setattr(DocumentReference, 'get', get)
+    request, _ = lookup()
+    fill(request)
+    before = versions.version('owner')
+    assert action_items.update_action_item('owner', 'task', {'description': 'Task'}) is True
+    assert reads == ['users/owner/action_items/task']
+    assert versions.version('owner') == before and lookup()[1].body == b'[]'
+    assert bumps == []
+    assert action_items.update_action_item('owner', 'task', {'description': 'Changed'}) is True
+    assert len(reads) == 2  # one already-required read per update; no extra lookup
+    assert versions.version('owner') != before and lookup()[1] is None
+    assert bumps == ['owner']
