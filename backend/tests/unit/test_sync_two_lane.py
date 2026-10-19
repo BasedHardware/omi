@@ -378,7 +378,15 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
-    assert 'gcloud tasks queues create sync-backfill' in action
+    assert 'gcloud tasks queues create "$BACKFILL_QUEUE"' in action
+    # The reconcile step manages the manifest-selected queue (prod: sync-backfill-fresh).
+    reconcile = next(
+        step
+        for step in yaml.safe_load(action)['runs']['steps']
+        if step.get('name') == 'Reconcile bounded sync backfill queue'
+    )
+    assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
