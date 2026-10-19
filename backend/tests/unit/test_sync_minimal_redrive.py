@@ -444,3 +444,14 @@ async def test_coordinator_normal_path_is_unchanged(coordinator):
     coordinator.minimal_redrive.finalize.assert_not_called()
     coordinator._reprocess_merged_conversations.assert_called_once()
     assert 'redrive_mode' not in result
+
+
+def test_explicit_or_lineage_bound_targets_are_never_replaced(monkeypatch):
+    attach = Mock(return_value='near')
+    monkeypatch.setattr(minimal_redrive, 'attach_target', attach)
+    args = ('uid-1', 1000, 1060, 'omi', 'dev-1', False)
+    assert minimal_redrive.segment_target('minimal', 'given', None, *args) == 'given'
+    assert minimal_redrive.segment_target('minimal', None, 'stamp_fallback', *args) is None
+    assert minimal_redrive.segment_target(None, None, None, *args) is None
+    attach.assert_not_called()
+    assert minimal_redrive.segment_target('minimal', None, None, *args) == 'near'

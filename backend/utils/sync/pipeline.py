@@ -1324,7 +1324,7 @@ def _recover_empty_segment(
     return transcript_segments, recovered_language
 
 
-def process_segment(
+def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pipeline sits at Pyright's analyzer complexity ceiling
     path: str,
     uid: str,
     response: dict,
@@ -1356,7 +1356,6 @@ def process_segment(
     redrive_mode: str | None = None,
 ):
     conversation_id = None
-    minimal = redrive_mode == minimal_redrive.MINIMAL
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
@@ -1414,12 +1413,10 @@ def process_segment(
             # actual serving too, rather than reselecting after the checkpoint.
             provider, _, model = cap_recovery_service
             recovery_dispatch['selected_service'] = cap_recovery_service
-        elif minimal:
-            # Parakeet only: pinned serving, no vendor fallback (raises retryably).
-            recovery_dispatch['selected_service'] = minimal_redrive.parakeet_service(req_language)
-            provider, _, model = recovery_dispatch['selected_service']
         else:
-            provider, _, model = get_prerecorded_service(req_language)
+            provider, _, model = minimal_redrive.select_service(
+                redrive_mode, req_language, recovery_dispatch, get_prerecorded_service
+            )
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
@@ -1519,7 +1516,7 @@ def process_segment(
                 return False
             if empty_retried:
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
-                if empty_recovery.enabled() and not minimal:
+                if minimal_redrive.paid_recovery_enabled(redrive_mode):
                     phase = 'provider_call'
                     recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
                     if recovered is not None:
@@ -1555,26 +1552,24 @@ def process_segment(
         segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
         # Target eligibility (including live stubs and tombstones) is resolved
         # inside the same transaction as temporal assignment.
-        attach_id = (
-            minimal_redrive.attach_target(
-                uid,
-                timestamp,
-                segment_end_timestamp,
-                {
-                    'source': getattr(source, 'value', source),
-                    'client_device_id': client_device_id,
-                    'is_locked': is_locked,
-                },
-            )
-            if minimal and not target_conversation_id
-            else None
+        # Minimal redrive attaches first; lineage-bound segments keep their plan.
+        target_conversation_id = minimal_redrive.segment_target(
+            redrive_mode,
+            target_conversation_id,
+            lineage_binding,
+            uid,
+            timestamp,
+            segment_end_timestamp,
+            source,
+            client_device_id,
+            is_locked,
         )
         closest_memory = (
             None
-            if target_conversation_id or attach_id
+            if target_conversation_id
             else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         )
-        candidate_id = target_conversation_id or attach_id or (closest_memory['id'] if closest_memory else None)
+        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
         owner_reserved = False
         if candidate_id:
             try:
@@ -1678,7 +1673,7 @@ def process_segment(
             uid,
             incoming,
             candidate_id=closest_memory['id'] if closest_memory else None,
-            target_id=target_conversation_id or attach_id,
+            target_id=target_conversation_id,
             **(
                 {'recovery_checkpoint': cap_recovery_checkpoint}
                 if stt_cap_dispatch_enabled() and cap_recovery and cap_recovery_checkpoint is not None

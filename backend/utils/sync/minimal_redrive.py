@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from config.prerecorded_stt import PrerecordedSTTService, TranscriptionOutcome
 from config.stt_provider_policy import (
@@ -26,6 +26,7 @@ from database import conversations as conversations_db
 from utils.conversations import lifecycle as lifecycle_service
 from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionFailure, is_destructive_operation_in_progress
+from utils.sync import empty_recovery
 from utils.sync.live_overlap import compatible_capture
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,39 @@ def parakeet_service(req_language: str) -> tuple[str, str, str]:
     failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet', retryable=True)
     failure.error_code = PROVIDER_UNAVAILABLE
     raise failure
+
+
+def select_service(
+    redrive_mode: Optional[str], req_language: str, dispatch: dict, select: Callable[[str], tuple]
+) -> tuple:
+    """Minimal pins Parakeet into ``dispatch['selected_service']``; otherwise the normal selection."""
+    if redrive_mode != MINIMAL:
+        return select(req_language)
+    dispatch['selected_service'] = parakeet_service(req_language)
+    return dispatch['selected_service']
+
+
+def paid_recovery_enabled(redrive_mode: Optional[str]) -> bool:
+    """Minimal never buys empty-segment recovery: a double empty is silence."""
+    return redrive_mode != MINIMAL and empty_recovery.enabled()
+
+
+def segment_target(
+    redrive_mode: Optional[str],
+    target_id: Optional[str],
+    lineage_binding: Optional[str],
+    uid: str,
+    start: float,
+    end: float,
+    source: Any,
+    client_device_id: Optional[str],
+    is_locked: bool,
+) -> Optional[str]:
+    """The caller's explicit target wins; minimal mode adds an attach-first target."""
+    if target_id or lineage_binding is not None or redrive_mode != MINIMAL:
+        return target_id
+    capture = {'source': getattr(source, 'value', source), 'client_device_id': client_device_id, 'is_locked': is_locked}
+    return attach_target(uid, start, end, capture)
 
 
 def attach_target(uid: str, start: float, end: float, capture: dict) -> Optional[str]:
