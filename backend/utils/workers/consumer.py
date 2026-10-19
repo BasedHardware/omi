@@ -60,7 +60,8 @@ class Role(StrEnum):
 class Result:
     outcome: Outcome
     reason: ConsumerReason | RetryReason  # RETRY requires a RetryReason; every other outcome a ConsumerReason
-    available_at: float | None = None  # required for DEFERRED and RETRY
+    available_at: float | None = None  # required for RETRY and for DEFERRED returned by process(); None when
+    # claim_key answered DEFERRED (the outbox already re-armed the row and created its wake)
 
     def __post_init__(self) -> None:
         outcome = Outcome(self.outcome)
@@ -69,8 +70,8 @@ class Result:
                 raise TypeError('RETRY requires a RetryReason')
         elif not isinstance(self.reason, ConsumerReason):
             raise TypeError(f'{outcome.value} requires a ConsumerReason')
-        if outcome in (Outcome.DEFERRED, Outcome.RETRY) and self.available_at is None:
-            raise ValueError(f'{outcome.value} requires available_at')
+        if outcome is Outcome.RETRY and self.available_at is None:
+            raise ValueError('retry requires available_at')
 
 
 class QueueConsumer(Protocol):
@@ -93,7 +94,10 @@ def _settle(consumer: QueueConsumer, outbox: Outbox, claim: Claim, result: Resul
     if result.outcome in (Outcome.DONE, Outcome.DISCARDED):
         settled = outbox.ack(claim, reason, now=now)
     elif result.outcome is Outcome.DEFERRED:
-        settled = outbox.defer(claim, float(result.available_at), reason, now=now) is not None  # type: ignore[arg-type]
+        if result.available_at is None:
+            raise ValueError('a consumer that defers must return available_at')
+        # The outbox re-arms the row and creates the new wake itself (contract (b)).
+        settled = outbox.defer(claim, result.available_at, reason, now=now) is not None
     elif result.outcome is Outcome.RETRY:
         settled = outbox.release(claim, reason, now=now)
     else:  # STALE / BUSY: the consumer found it no longer owns the work; nothing to write
@@ -129,6 +133,8 @@ def run_push(consumer: QueueConsumer, outbox: Outbox, row_id: str, wake_token: s
             return _count(consumer, Result(Outcome.BUSY, ConsumerReason.LEASE_HELD))
         if outcome is Outcome.STALE:
             return _count(consumer, Result(Outcome.STALE, ConsumerReason.STALE_TOKEN))
+        if outcome is Outcome.DEFERRED:  # not due: the outbox re-armed the row and created its wake
+            return _count(consumer, Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE))
         if outcome is Outcome.DISCARDED:
             return _count(consumer, Result(Outcome.DISCARDED, ConsumerReason.SUPERSEDED))
         raise ValueError(f'claim_key returned unsupported outcome {outcome.value!r}')
