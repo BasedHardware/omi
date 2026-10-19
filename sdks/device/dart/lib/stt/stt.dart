@@ -37,7 +37,8 @@ class DeepgramTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
+    _channel =
+        channel ??
         IOWebSocketChannel.connect(
           Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
           headers: {'Authorization': 'Token $apiKey'},
@@ -105,8 +106,7 @@ class ParakeetTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
-        WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
+    _channel = channel ?? WebSocketChannel.connect(Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate)));
     _sub = _channel.stream.listen(
       (event) {
         if (event is! String) return;
@@ -173,6 +173,9 @@ class ParakeetTranscriber implements StreamingTranscriber {
 }
 
 /// Feature-gated Whisper via injected runner.
+///
+/// Batches are transcribed one at a time, in input order. [stop] transcribes the buffered tail after any batch that
+/// is still being transcribed, and completes once every transcript has been delivered.
 class WhisperTranscriber implements StreamingTranscriber {
   WhisperTranscriber({required this.runner, required this.onTranscript, this.batchSeconds = 5});
 
@@ -181,6 +184,7 @@ class WhisperTranscriber implements StreamingTranscriber {
   final int batchSeconds;
   final BytesBuilder _buf = BytesBuilder(copy: false);
   bool _stopped = false;
+  Future<void> _previousBatch = Future<void>.value();
 
   @override
   void appendPcm(Uint8List chunk) {
@@ -192,17 +196,26 @@ class WhisperTranscriber implements StreamingTranscriber {
     }
   }
 
-  Future<void> _flush({bool deliverWhenStopped = false}) async {
+  Future<void> _flush() async {
     final pcm = Uint8List.fromList(_buf.takeBytes());
-    if (pcm.isEmpty) return;
-    final text = await runner(pcm);
-    if ((!_stopped || deliverWhenStopped) && text.isNotEmpty) onTranscript(text);
+    // Wait for the batch ahead, even if it failed, so batches finish in input order and stop() waits for them all.
+    final previous = _previousBatch;
+    final done = Completer<void>();
+    _previousBatch = done.future;
+    try {
+      await previous;
+      if (pcm.isEmpty) return;
+      final text = await runner(pcm);
+      if (text.isNotEmpty) onTranscript(text);
+    } finally {
+      done.complete();
+    }
   }
 
   @override
   Future<void> stop() async {
     _stopped = true;
-    await _flush(deliverWhenStopped: true);
+    await _flush();
   }
 }
 
