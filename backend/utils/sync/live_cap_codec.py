@@ -22,7 +22,7 @@ def _ffmpeg(args: list[str], *, pcm: bytes | None = None) -> bytes:
     return result.stdout
 
 
-def encode(path: str, pcm: bytes, rate: int) -> None:
+def encode(path: str, pcm: bytes, rate: int, *, max_bytes: int = MAX_OBJECT_BYTES) -> None:
     args = [
         '-f',
         's16le',
@@ -45,9 +45,9 @@ def encode(path: str, pcm: bytes, rate: int) -> None:
     _ffmpeg([*args, '-vbr', 'constrained', '-f', 'opus', path], pcm=pcm)
     # Constrained VBR saves silence without assuming a speech detector's recall.
     # A hard CBR fallback bounds unusual/noisy input, including container framing.
-    if Path(path).stat().st_size > MAX_OBJECT_BYTES:
+    if Path(path).stat().st_size > max_bytes:
         _ffmpeg([*args, '-vbr', 'off', '-f', 'opus', path], pcm=pcm)
-    if Path(path).stat().st_size > MAX_OBJECT_BYTES:
+    if Path(path).stat().st_size > max_bytes:
         raise ValueError('held Opus object exceeds minute bound')
 
 

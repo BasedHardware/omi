@@ -70,7 +70,7 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 |---|---|
 | `burst_owner_serial_sequencer` | 365-upload burst drains one job at a time per UID and fails the 15-min obligation; `per_owner_concurrency=32` clears it |
 | `mixed_fleet_steady` | Healthy baseline passes every gate |
-| `provider_exhaustion_window` | Empty ASR at HPA max causes `empty_asr` quarantines, then one paid recovery each; bounded recovery dispatch keeps the quarantine-to-projection p95 under 300 s, and the one terminal paid failure fails the gate as `unrecovered_quarantine` |
+| `provider_exhaustion_window` | Empty ASR at HPA max causes `empty_asr` quarantines and one paid recovery each; shipping bounded dispatch clears the 300 s tail, while a labeled former-rate counterfactual reproduces it. Unrecovered audio still fails the gate |
 | `revision_replacement_mid_run` | Background first summaries are lost; request-scoped (`summary_dispatch='task'`) and lease-durable work survive |
 | `stale_finalize_targets` | Merged targets complete, deleted targets are excluded, and no paid call lands after the fence; duplicates never double-spend |
 | `privacy_blocked_users` | 409 at admission or purge mid-flight; no paid calls after the fence; reported under `sim.upload_status`/`excluded_uploads` |
@@ -146,3 +146,33 @@ E1's `role_policy` case uses separate sync and integration environments through
 source roles and stable hashes; changing either projection or recovery to the
 sync role must break the golden. Historical goldens keep their existing trace
 format. Projection's model uses the real stage-part CAS before projecting.
+### Bounded recovery dispatch golden review (#22321)
+
+The shipping default dispatches up to 16 candidates per pass, including held or
+error rows, instead of stopping after the first dispatched recovery. The three
+updated traces describe that default, without a legacy-rate flag override:
+
+- `empty_asr_terminal`: preparation/recovery/completion buckets move earlier and
+  result arrival changes `log_sequence`, `previous_segment_id` and `late_capture`.
+- `provider_failure_quarantine`: only those result-log arrival fields change.
+- `privacy_fence_midflight`: earlier preparation also changes queued task/held
+  responses and request completion/horizon counts. Model task enqueues rise from
+  18 to 27 and held responses from 4 to 8; those are not additional paid calls.
+
+Reviewed paired traces retain identical upload projections/exclusions, content,
+result artifacts (including word digests), paid outcomes and paid calls: 5, 6 and
+7 respectively. Every segment still pays at most once, and each surviving
+owner's result sequence is contiguous with an unbroken predecessor chain.
+Privacy-fenced jobs remain purged; the scenario assertions still reject paid
+calls after the privacy fence. Golden trace normalization and golden scenario
+configurations are unchanged. These are scheduling observations of the existing main change,
+not a change to transcript, payment or privacy expectations.
+
+The exhaustion scenario also keeps its shipping-default baseline: dispatch batch
+16 reduces quarantine-to-projection p95 to 89.7 seconds for seed 1, versus 1512.5
+seconds in the explicitly labeled former-rate counterfactual. Both spend 132
+modeled paid calls (at most one per segment), recover 131 pieces and retain one
+`failed_held` piece. The shipping baseline therefore still reports
+`GATE_FAIL unrecovered_quarantine`; clearing the scheduling tail does not turn
+unrecovered audio into a successful gate. No shipping flag is pinned to the old
+rate to preserve a stale expectation.

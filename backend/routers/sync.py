@@ -203,17 +203,7 @@ from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
-# Only the API process importing this router owns held-audio STT recovery.
-# Pusher/auth-only images retain the lightweight locked-content recovery path.
-if cap_dispatch_enabled():
-    from utils.locked_content_recovery import register_cap_audio_recovery
-
-    def _kick_cap_hold_recovery(uid: str) -> None:
-        from utils.sync.cap_hold_recovery import kick
-
-        kick(uid)
-
-    register_cap_audio_recovery(_kick_cap_hold_recovery)
+from utils.sync import cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
@@ -2950,3 +2940,9 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+@router.post('/v2/cap-hold-recovery/sweep', include_in_schema=False)
+@read_origin('job:cap_hold_recovery')
+async def sweep_cap_hold_recovery(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    return await cap_hold_redrive.sweep()
