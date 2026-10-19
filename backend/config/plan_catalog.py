@@ -20,6 +20,7 @@ from config.rate_card import budget_units as entitlement_budget_units
 
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
     ENTITLEMENT_VERSIONS,
+    LADDER_V1_PRICE_BINDINGS,
     LADDER_V1_STRIPE_PRICES,
     RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS,
     BILLING_ENV_VAR_PLAN_TYPES,
@@ -147,6 +148,57 @@ def plan_uses_overage(plan: PlanType | str, allocation: str = 'chat') -> bool:
     )
 
 
+def configured_ladder_prices(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, Any]]:
+    """Explicit lookup-key bindings; no Stripe I/O and no legacy price reclassification."""
+    values = os.environ if environ is None else environ
+    rows: dict[str, dict[str, Any]] = {}
+    for lookup_key, binding in LADDER_V1_PRICE_BINDINGS.items():
+        price_id = values.get(binding['env_var'], '').strip()
+        if not price_id:
+            continue
+        if not price_id.startswith('price_'):
+            raise ValueError(f'{binding["env_var"]}: expected Stripe price ID')
+        if price_id in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES:
+            if RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS.get(price_id) != 'ladder_v1':
+                raise ValueError('Cannot reclassify a legacy price as ladder_v1')
+            if (
+                RECOGNIZED_STRIPE_PRICE_PLAN_TYPES[price_id].value != binding['plan_id']
+                or RECOGNIZED_STRIPE_PRICE_INTERVALS[price_id] != binding['interval']
+            ):
+                raise ValueError('Retained ladder binding conflicts with configuration')
+        if price_id in rows:
+            raise ValueError('Each ladder lookup key requires a distinct price')
+        # A legacy billing env must never resolve to new entitlements.
+        if any(values.get(env) == price_id for env in BILLING_ENV_VAR_PLAN_TYPES):
+            raise ValueError('Ladder prices cannot replace legacy billing env bindings')
+        rows[price_id] = dict(binding, price_id=price_id, lookup_key=lookup_key, entitlement_version='ladder_v1')
+    return rows
+
+
+def validate_ladder_price(price_id: str, row: Mapping[str, Any], *, allow_archived: bool = False) -> None:
+    binding = configured_ladder_prices().get(price_id)
+    if not binding:
+        return
+    recurring = row.get('recurring') or {}
+    product = row.get('product')
+    product_id = product.get('id') if isinstance(product, Mapping) else product
+    if not isinstance(product_id, str) or RECOGNIZED_STRIPE_PRODUCT_PLAN_TYPES.get(product_id) != PlanType(
+        binding['plan_id']
+    ):
+        raise ValueError('Ladder price product does not match plan')
+    if (
+        row.get('id') != price_id
+        or row.get('lookup_key') != binding['lookup_key']
+        or (not allow_archived and row.get('active') is not True)
+        or row.get('currency') != 'usd'
+        or recurring.get('interval') != binding['interval']
+        or recurring.get('interval_count') != 1
+        or type(row.get('unit_amount')) is not int
+        or row['unit_amount'] <= 0
+    ):
+        raise ValueError('Ladder Stripe price does not match lookup-key contract')
+
+
 def configured_billing_price_plans(environ: Mapping[str, str] | None = None) -> dict[str, PlanType]:
     """Return effective env-configured price bindings and reject ambiguity.
 
@@ -166,6 +218,8 @@ def configured_billing_price_plans(environ: Mapping[str, str] | None = None) -> 
         if prior is not None and prior != plan:
             raise ValueError(f'Stripe price {price_id} is configured for both {prior.value} and {plan.value}')
         resolved[price_id] = plan
+    for price_id, binding in configured_ladder_prices(values).items():
+        resolved[price_id] = PlanType(binding['plan_id'])
     return resolved
 
 
@@ -175,6 +229,9 @@ def resolve_stripe_price_plan(
 ) -> PlanType:
     """Resolve every retained or currently configured subscription price ID."""
 
+    ladder = configured_ladder_prices(environ).get(price_id)
+    if ladder:
+        return PlanType(ladder['plan_id'])
     retained = RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.get(price_id)
     configured = configured_billing_price_plans(environ).get(price_id)
     if retained is not None and configured is not None and retained != configured:
@@ -196,6 +253,7 @@ def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> di
             'entitlement_version': version,
             'policy': deepcopy(get_plan_definition(plan)),
             'budget': None,
+            'capabilities': deepcopy(ENTITLEMENT_VERSIONS[version]['capabilities'][plan.value]),
         }
     if version != 'ladder_v1':
         raise ValueError(f'Unknown entitlement version: {version}')
@@ -208,6 +266,7 @@ def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> di
         'budget': deepcopy(ladder['monthly_budgets'][plan.value]),
         'rate_card_version': ladder['rate_card_version'],
         'unit_usd_micros': ladder['unit_usd_micros'],
+        'capabilities': deepcopy(ladder['capabilities'][plan.value]),
     }
 
 
@@ -235,8 +294,12 @@ def architect_ladder_v1_budget_units() -> int:
 
 def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
     plan = resolve_stripe_price_plan(price_id, environ)
-    # Unretained env-configured prices preserve legacy semantics; env cannot activate ladder v1.
-    version = RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS.get(price_id, 'legacy')
+    # Legacy billing envs preserve legacy semantics; only explicit ladder bindings select ladder v1.
+    version = (
+        'ladder_v1'
+        if price_id in configured_ladder_prices(environ)
+        else RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS.get(price_id, 'legacy')
+    )
     return get_entitlement_version(plan, version)
 
 
@@ -248,9 +311,9 @@ def _paid_period_still_open(period_end: Any, now: datetime) -> bool:
 
 
 def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """Resolve shadow metadata without remote reads; never use for live admission.
+    """Resolve versioned subscription policy without remote reads.
 
-    Ladder v1 budgets remain dormant until its policy shape is complete.
+    Runtime admission consumes ladder budgets only behind default-off cutover switches.
     Paid rows follow get_user_valid_subscription: a missing, zero, or past
     current_period_end resolves to basic even when status is active or trialing.
     """
@@ -274,7 +337,11 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
         return get_entitlement_version(PlanType.basic)
     price = field('current_price_id')
     if price:
-        if price in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES or price in configured_billing_price_plans(environ):
+        if (
+            price in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+            or price in configured_billing_price_plans(environ)
+            or price in configured_ladder_prices(environ)
+        ):
             # Recognized/configured conflicts remain errors; only unknown identity falls back.
             return resolve_price_entitlements(price, environ)
         logging.getLogger(__name__).warning(
@@ -286,6 +353,9 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
 
 __all__ = [
     "entitlement_budget_units",
+    "configured_ladder_prices",
+    "validate_ladder_price",
+    "LADDER_V1_PRICE_BINDINGS",
     'ENTITLEMENT_VERSIONS',
     'LADDER_V1_STRIPE_PRICES',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',

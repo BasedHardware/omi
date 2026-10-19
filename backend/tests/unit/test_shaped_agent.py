@@ -346,7 +346,6 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', lambda *a, **k: 'Original prompt bytes')
-    monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False))
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *a: [])
     captured = []
 

@@ -25,6 +25,7 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 @pytest.fixture
 def routes(monkeypatch):
     storage = FakeRedis()
+    monkeypatch.setattr(cache.action_item_versions, 'version', lambda uid: 'stable-' + uid)
     monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
     monkeypatch.setattr(cache, '_client', storage)
     app = FastAPI()

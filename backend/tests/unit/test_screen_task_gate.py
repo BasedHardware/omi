@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 
+from config.jev_decisions import SCREEN_TASK_JEV_AUTO_LANE_ID, SCREEN_TASK_JEV_MODEL
 from routers import desktop_task_gate as route
 from utils.llm import screen_task_gate as gate
 from utils.llm.jev_client import JevAnswers
@@ -65,7 +66,20 @@ def test_gateway_deadline_and_lane_are_bounded(monkeypatch):
     seen = []
     monkeypatch.setattr(gate, 'ask_jev', lambda *a, **k: seen.append(k) or _answers(0.5))
     gate.decide_screen_task('screen')
-    assert seen == [{'lane': 'screen_task', 'timeout_seconds': 2.0, 'max_attempts': 1}]
+    assert seen == [
+        {
+            'lane': 'screen_task',
+            'model': SCREEN_TASK_JEV_AUTO_LANE_ID,
+            'expected_model': SCREEN_TASK_JEV_MODEL,
+            'timeout_seconds': 2.0,
+            'max_attempts': 1,
+        }
+    ]
+
+
+def test_screen_task_jev_114_model_is_independent_of_other_jev_callers():
+    assert SCREEN_TASK_JEV_MODEL == 'typesafe/jev-1.14'
+    assert SCREEN_TASK_JEV_AUTO_LANE_ID == 'omi:auto:jev-screen-task'
 
 
 @pytest.mark.asyncio

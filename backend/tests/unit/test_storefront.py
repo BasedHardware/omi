@@ -15,6 +15,12 @@ from utils.storefront import _valid_price_rows, build_storefront, load_ladder
 from utils.storefront_copy import months_free
 
 
+@pytest.fixture(autouse=True)
+def offline_usage_projection(monkeypatch):
+    # The new facade exists in cutover; presentation tests must not reach the ledger.
+    monkeypatch.setattr(route.subscription_utils, 'get_usage_units', lambda uid: {})
+
+
 def price(identifier, amount, interval='month', **overrides):
     return {
         'id': identifier,
@@ -467,3 +473,25 @@ def test_shared_budget_projection_is_only_for_free_or_ladder_subscribers(monkeyp
     result = route._usage('fixture', Subscription(plan=PlanType(plan), current_price_id='price_new'))
     assert result.kind == 'usage_budget' and result.percent == 80
     projection.assert_called_once_with('fixture')
+
+
+@pytest.mark.parametrize('enabled,expected', [(False, []), (True, ['proactive_agent', 'screen_context'])])
+def test_endpoint_contextual_gates_require_backend_flag(client, monkeypatch, enabled, expected):
+    monkeypatch.setenv('LADDER_V1_PRO_GATES_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(route, '_usage', lambda *args: StorefrontUsage(pro_gates=['proactive_agent', 'screen_context']))
+    response = client.get('/v2/payments/plans?trigger=proactive_agent')
+    assert response.status_code == 200
+    assert response.json()['usage']['pro_gates'] == expected
+
+
+@pytest.mark.parametrize('enabled,reached', [(False, True), (True, False), (True, True)])
+def test_endpoint_daily_cap_entry_is_observed_not_inferred(client, monkeypatch, enabled, reached):
+    from database import ladder_v1
+
+    monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', str(enabled).lower())
+    reads = []
+    monkeypatch.setattr(ladder_v1, 'daily_cap_reached', lambda uid, cap: reads.append((uid, cap)) or reached)
+    response = client.get('/v2/payments/plans?trigger=mcp_daily_cap')
+    assert response.status_code == 200
+    assert response.json()['usage'].get('mcp_cap_reached', False) is (enabled and reached)
+    assert len(reads) == int(enabled)

@@ -1986,12 +1986,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistory => 'History';
 
   @override
-  String get memoryAllowUse => 'Allow Use';
-
-  @override
-  String get memoryDontUse => 'Don\'t Use';
-
-  @override
   String get undo => 'Undo';
 
   @override
@@ -13154,6 +13148,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Connect your Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Pair your Omi and it captures your conversations hands-free, all day.';
+
+  @override
+  String get firstCaptureConnect => 'Connect my Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'I don\'t have an Omi yet';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13260,6 +13266,112 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Never miss a word again.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Here\'s how your free trial works.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited summaries, kept forever';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Every conversation becomes a clean summary with next steps, so nothing slips.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Best-in-class transcription';
+
+  @override
+  String get paywallTrialChipDetails => 'Catches more details';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Tells speakers apart';
+
+  @override
+  String get paywallTrialChipNoise => 'Works in noisy rooms';
+
+  @override
+  String get paywallTrialChipAccents => 'Handles accents';
+
+  @override
+  String get paywallTrialChipJargon => 'Knows your jargon and names';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Speaker names, detected automatically';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited questions, across every conversation';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Draft a follow-up email from this meeting.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Any conflicts with what John said on Tuesday?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Find anything that could slow us down.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Works with your favorite apps';
+
+  @override
+  String get paywallTrialTodayTitle => 'Today';
+
+  @override
+  String get paywallTrialTodayBody => 'Everything in Pro is unlocked.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days days free';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days days of Omi Pro, on us.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'In $days days';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Trial ends. You\'ll be charged unless you cancel.';
+
+  @override
+  String get paywallTrialFeatureModels => 'The latest AI models';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Billed monthly';
+
+  @override
+  String get paywallTrialBilledYearly => 'Billed yearly';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Save $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Start for $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Continue with the free plan';
+
+  @override
+  String get paywallTrialCancelNote => 'Cancel anytime. No fees, no penalties.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Your $days-day free trial of Omi Pro has started.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Cancel anytime.';
@@ -13807,6 +13919,407 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Something went wrong while summarizing this conversation.';
+
+  @override
+  String get noContentToDisplay => 'No content to display';
+
+  @override
+  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+
+  @override
+  String get onDeviceAtCapTitle => 'You\'ve reached this month\'s limit';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi is still recording. Choose how the rest of this month gets transcribed.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Your usage resets $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transcribe on this phone';
+
+  @override
+  String get onDeviceIncluded => 'Included';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Runs while your phone charges.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Upgrade to Pro for speaker separation and higher accuracy';
+
+  @override
+  String get onDeviceAtCapFooter => 'Nothing is lost either way. You can change this in Settings › Transcription.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Step $step of $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi downloads a speech model once. After that, your recordings are turned into text right here, without counting toward your usage.';
+
+  @override
+  String get onDeviceSpeechModel => 'Speech model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Downloading on Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Downloading · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'About $time left';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Waiting for Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Download didn\'t finish';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Not downloaded';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Installed · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Not available on this phone yet';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Keep recording while it downloads. Nothing waits on this.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Audio stays on your phone until it\'s transcribed.';
+
+  @override
+  String get onDeviceWifiOnly => 'Download on Wi-Fi only';
+
+  @override
+  String get onDeviceDownloadModel => 'Download Speech Model';
+
+  @override
+  String get onDeviceScheduleTitle => 'When to Transcribe';
+
+  @override
+  String get onDeviceScheduleHeadline => 'When should Omi transcribe?';
+
+  @override
+  String get onDeviceScheduleBody => 'You can change this anytime.';
+
+  @override
+  String get onDeviceScheduleCharging => 'While charging';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Transcripts appear after you plug in, usually overnight.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Battery: almost none';
+
+  @override
+  String get onDeviceScheduleHours => 'Every few hours';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Catches up in short bursts on battery, so transcripts are rarely more than a few hours behind.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Battery: about $percent% a day';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'As you talk';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Transcribes regularly while Omi is open.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Battery: about $percent% an hour of conversation';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration waiting to transcribe';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'They\'ll be ready after you plug in your phone. Recording continues as normal.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi catches up every few hours. Recording continues as normal.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Waiting for a charger because the battery is low. Recording continues as normal.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transcribe Now';
+
+  @override
+  String get onDeviceUsesBattery => 'Uses battery';
+
+  @override
+  String get onDeviceTranscribing => 'Transcribing…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Waiting for charger';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Waiting to transcribe';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Saved, waiting for setup';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transcribed on this iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transcribed on this phone';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transcribed and summarized on this iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Summarized by Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Why this was done on your phone';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'You reached this month\'s limit, so Omi transcribed this on your phone.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'You chose to transcribe on this phone to save your usage.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'The summary was written on this iPhone too.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'You keep everything on this phone, so there\'s no summary.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Why Omi Cloud wrote this summary';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'This iPhone can\'t summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t count toward your usage.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'This phone can\'t summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t count toward your usage.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Redo with Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Upgrade to Pro for speaker separation and higher accuracy';
+
+  @override
+  String get onDeviceKeepEverything => 'Keep everything on this phone';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Transcripts only, no summaries';
+
+  @override
+  String get onDeviceAfterLiveHours => 'When you reach your limit';
+
+  @override
+  String get onDeviceWhen => 'When';
+
+  @override
+  String get onDeviceSummaries => 'Summaries';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'On this iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'By Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Always transcribe on this phone';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Saves your usage. No speaker labels.';
+
+  @override
+  String get onDeviceOnThisPhone => 'On this phone';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio waiting on phone';
+
+  @override
+  String get onDeviceRemoveModel => 'Remove Speech Model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Remove Speech Model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Recordings will wait on this phone until you download it again or your usage resets.';
+
+  @override
+  String get onDeviceRemove => 'Remove';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Finish setup to see your transcripts';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'You\'ve reached this month\'s limit. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size download';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'This phone can\'t run the speech model yet. Audio stays saved until your usage resets or you upgrade.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'When you reach your limit, transcribe on this phone';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% used · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% used · about $hours hours of recording left · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Get more usage';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Getting speech ready · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'You\'ve reached this month\'s limit. Your recordings are saved and will be transcribed after your limit resets on $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'New recordings will transcribe on this phone. Waiting recordings will be transcribed after your limit resets on $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Recording, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Waiting to transcribe';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Cloud transcription paused';
+
+  @override
+  String get heldAudioLiveBody => 'You\'ve reached this month\'s limit. Omi keeps recording.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min recorded since the limit';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transcribes after your limit resets on $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration waiting';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transcribed after your limit resets on $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration waiting to transcribe';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'and $count more',
+      one: 'and 1 more',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Transcribing your waiting recordings';
+
+  @override
+  String get processingPaused => 'Processing paused. You\'ve reached this month\'s limit.';
+
+  @override
+  String get processingStored =>
+      'Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration waiting · Process now uses about $percent% of this month';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'About $hours hours of processing · $percent% of this month\'s allowance.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'We\'ll process the newest recordings first, up to what fits. The rest will stay waiting.';
+
+  @override
+  String get processingAction => 'Process waiting recordings';
+
+  @override
+  String get processingProgress => 'Processing your waiting recordings…';
+
+  @override
+  String get processingDeferred => 'Waiting for processing';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
 
   @override
   String playbackPartialAudioSaved(String saved, String total) {

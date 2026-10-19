@@ -1567,9 +1567,12 @@ def get_default_payment_method(uid: str):
 
 
 def get_stripe_customer_id(uid: str) -> Optional[str]:
-    """Get the Stripe customer ID for a user."""
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
+    """Get the Stripe customer ID for a user.
+
+    Reads through the request-scoped entitlement projection, so a request that already read the
+    subscription or BYOK state does not pay for a second user-document read.
+    """
+    user_doc = user_snapshot(uid, db, ['stripe_customer_id'])
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('stripe_customer_id')

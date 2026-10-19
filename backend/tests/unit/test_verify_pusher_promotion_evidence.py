@@ -917,7 +917,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
     """Helm renders `value: ""` (unset repo variable) but the API server stores
     the env entry without the value key (omitempty marshalling). The rendered
     projection must normalize to the API form before hashing (2026-09-22 prod
-    canary: FREE_TIER_LOCAL_PROCESSING_COHORT)."""
+    canary: OPTIONAL_EMPTY_FIXTURE)."""
     expected = {
         "spec": {
             "serviceAccountName": "prod-omi-pusher",
@@ -927,7 +927,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE", "value": ""},
                     ],
                 }
             ],
@@ -942,7 +942,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT"},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE"},
                     ],
                 }
             ],

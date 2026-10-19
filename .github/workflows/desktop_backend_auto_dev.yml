@@ -234,7 +234,13 @@ jobs:
       - name: Render desktop backend expected env state
         id: desktop-expected-env
         env:
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
+          SCREEN_VECTOR_STRIPE_READ_SECRET: ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 backend/scripts/render_backend_runtime_env.py \
@@ -279,6 +285,7 @@ jobs:
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
@@ -289,14 +296,11 @@ jobs:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
-            MEMORY_BELIEF_MODEL_ENABLED=true
-            FREE_TIER_LOCAL_PROCESSING=true
-            FREE_TIER_EMERGENCY_STOP=false
-            FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}
-            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
-            MEMORY_BELIEF_AUTOMATION_PAUSED=false
+            CLIENT_SUMMARIES_AT_CAP_ENABLED=true
+            CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED=true
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
+            ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

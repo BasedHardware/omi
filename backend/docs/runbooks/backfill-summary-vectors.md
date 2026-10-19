@@ -2,7 +2,7 @@
 
 Use this per-user operator tool after deploying the chat vector freshness repair,
 when completed conversations missed their Pinecone `ns1` summary upserts under
-the JIT/finalization fence. It regenerates embeddings and overwrites deterministic
+the finalization fence. It regenerates embeddings and overwrites deterministic
 `{uid}-{conversation_id}` IDs; reruns are safe. This is a one-time repair, not a
 scheduled job. Oct 9's `backfill_transcript_chunk_vectors.py` is the transcript-chunk
 analog; this tool repairs summary vectors only.

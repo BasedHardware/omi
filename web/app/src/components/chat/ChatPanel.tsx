@@ -1,5 +1,6 @@
 'use client';
 
+import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
 import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
@@ -52,6 +53,7 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
+  const budget = useChatBudgetPause();
   const { isOpen, closeChat, currentContext, selectedAppId, chat, clearAppContext } =
     useChatContext();
   const {
@@ -185,7 +187,8 @@ export function ChatPanel() {
     if (
       (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
       isLoading ||
-      isStreaming
+      isStreaming ||
+      budget.state !== null
     )
       return;
 
@@ -226,6 +229,7 @@ export function ChatPanel() {
     (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
     !isLoading &&
     !isStreaming &&
+    budget.state === null &&
     !isUploading;
 
   return (
@@ -322,7 +326,7 @@ export function ChatPanel() {
                       <button
                         key={i}
                         onClick={() => handleSend(prompt)}
-                        disabled={isLoading || isStreaming}
+                        disabled={isLoading || isStreaming || budget.state !== null}
                         className={cn(
                           'rounded-full px-3 py-1.5 text-sm',
                           'bg-bg-tertiary hover:bg-bg-quaternary',
@@ -454,6 +458,7 @@ export function ChatPanel() {
                 <div ref={messagesEndRef} />
               </div>
 
+              <ChatBudgetPause budget={budget} />
               {/* Input area */}
               <div className="border-t border-bg-tertiary">
                 {/* File preview bar */}
@@ -461,7 +466,7 @@ export function ChatPanel() {
                   <FilePreview
                     files={selectedFiles}
                     onRemove={handleRemoveFile}
-                    disabled={isLoading || isStreaming}
+                    disabled={isLoading || isStreaming || budget.state !== null}
                   />
                 )}
 
@@ -471,7 +476,10 @@ export function ChatPanel() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={
-                        isLoading || isStreaming || selectedFiles.length >= MAX_FILES
+                        isLoading ||
+                        isStreaming ||
+                        budget.state !== null ||
+                        selectedFiles.length >= MAX_FILES
                       }
                       className={cn(
                         'flex-shrink-0 rounded-lg p-2',
@@ -504,7 +512,7 @@ export function ChatPanel() {
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Ask anything..."
-                      disabled={isLoading || isStreaming}
+                      disabled={isLoading || isStreaming || budget.state !== null}
                       className={cn(
                         'flex-1 rounded-xl px-4 py-3',
                         'border border-bg-quaternary bg-bg-tertiary',
@@ -518,7 +526,7 @@ export function ChatPanel() {
                     {/* Inline voice recorder */}
                     <InlineVoiceRecorder
                       onTranscript={handleVoiceTranscript}
-                      disabled={isLoading || isStreaming}
+                      disabled={isLoading || isStreaming || budget.state !== null}
                     />
 
                     {/* Send button */}

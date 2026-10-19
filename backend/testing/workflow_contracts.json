@@ -740,23 +740,6 @@
       ]
     },
     {
-      "id": "jit_qa_vertex_gateway",
-      "risk": "high",
-      "sources": [
-        "scripts/dev-harness/dev_harness/jit_vertex_gateway.py"
-      ],
-      "tests": [
-        "tests/unit/test_jit_qa_vertex_gateway.py"
-      ],
-      "checks": [],
-      "invariants": [
-        "only the local backend service identity can call the development Vertex broker",
-        "BYOK headers, tool calls, multimodal content, oversized requests, and excess concurrency fail closed",
-        "output tokens and response bytes remain bounded for streaming and non-streaming responses",
-        "the broker accepts only development ADC with the development quota project"
-      ]
-    },
-    {
       "id": "ci_changed_path_selection",
       "risk": "high",
       "sources": [
@@ -781,28 +764,6 @@
         "deletions and both sides of renames select the checks owned by the old and new paths",
         "unmapped backend production paths cannot be hidden by adding one direct test",
         "desktop-only pushes do not require a backend virtual environment"
-      ]
-    },
-    {
-      "id": "daily_memory_sweep_admission",
-      "risk": "high",
-      "sources": [
-        "backend/utils/memory/daily_memory_sweep.py",
-        "backend/modal/daily_memory_sweep_job.py",
-        "backend/scripts/jit_qa_sweep_repair.py"
-      ],
-      "tests": [
-        "tests/unit/test_daily_memory_sweep.py",
-        "tests/unit/test_daily_memory_sweep_job.py",
-        "tests/unit/test_daily_sweep_summary_agent.py",
-        "tests/unit/test_jit_qa_sweep_repair.py"
-      ],
-      "checks": [
-        "no_large_tuple_results"
-      ],
-      "invariants": [
-        "FC-daily-memory-sweep-fence: common admission binds one invocation per owner/window/generation before dispatch",
-        "claim-bound skip consumes the existing attestation without authorizing another dispatch"
       ]
     },
     {
@@ -967,6 +928,34 @@
       "invariants": [
         "the externally visible batch-pipeline trace (durable transitions, intake and recovery-task responses, paid calls, projected results) of each seeded golden configuration is unchanged unless the PR regenerates and reviews its golden",
         "the trace is deterministic for a seed and changes when real pipeline behavior changes"
+      ]
+    },
+    {
+      "id": "cross_service_deploy_wiring",
+      "risk": "high",
+      "sources": [
+        "backend/deploy/runtime_env.yaml",
+        "backend/deploy/cross_service_known_gaps.json",
+        "backend/scripts/cross_service_contract.py",
+        "backend/scripts/render_backend_runtime_env.py",
+        "backend/scripts/render_gke_backend_config.py",
+        "backend/main.py",
+        "backend/utils/cloud_tasks.py",
+        "backend/diarizer/batch_pipeline_runtime.py",
+        "backend/utils/batch_pipeline/**",
+        "backend/routers/batch_pipeline.py",
+        "backend/config/batch_pipeline.py",
+        "backend/charts/batch-pipeline-worker/**"
+      ],
+      "tests": [
+        "tests/unit/test_cross_service_deploy_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every gke.config_map entry has a supported source and the deploy-time ConfigMap renders",
+        "every Cloud Tasks dispatcher targets a same-env service whose handler mode is on, whose audience matches, and whose timeout covers the dispatch deadline",
+        "a flag read by a process is set on that process's deployment when its coupled flag is on elsewhere",
+        "the public manifest gains no UID-shaped literal and no cross-environment service URL"
       ]
     }
   ]

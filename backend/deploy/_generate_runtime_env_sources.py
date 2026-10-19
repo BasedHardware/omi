@@ -56,21 +56,12 @@ STT_LITERALS = {
 }
 
 OVERLAY_ENV_KEYS = {
-    'CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE',
     'OMI_SHAPED_AGENT_MODE',
     'TRANSCRIPTION_SHADOW_ENABLED',
     'TRANSCRIPTION_SHADOW_KILL_SWITCH',
     'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
     'TRANSCRIPTION_SHADOW_PERCENT',
     'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS',
-}
-WALLCLOCK_SHADOW_HOSTS = {
-    ('cloud_run', 'backend'),
-    ('cloud_run', 'backend-sync'),
-    ('cloud_run', 'backend-sync-backfill'),
-    ('cloud_run', 'backend-integration'),
-    ('gke', 'backend-listen'),
-    ('gke', 'pusher'),
 }
 
 
@@ -211,20 +202,6 @@ def _seed_recovery_defaults(shared: ConfigDict, dev: ConfigDict) -> None:
                 shared_host.setdefault('env', {})[key] = deepcopy(dev_host['env'][key])
 
 
-def _seed_wallclock_defaults(shared: ConfigDict) -> None:
-    """Keep wallclock smart-merge dark in base and let overlays opt into shadow."""
-    for section, name in WALLCLOCK_SHADOW_HOSTS:
-        if section == 'cloud_run':
-            host = shared.get('cloud_run', {}).get('services', {}).get(name)
-        else:
-            host = shared.get('gke', {}).get(name)
-        if host is not None:
-            host.setdefault('env', {})['CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE'] = {
-                'value': 'off',
-                'category': 'rollout',
-            }
-
-
 def _seed_stt_service_models_default(shared: ConfigDict) -> None:
     """Keep the safe route in base while each environment overlays its canary order."""
     listen_env = shared.get('gke', {}).get('backend-listen', {}).get('env', {})
@@ -302,10 +279,6 @@ def main() -> int:
     # Ensure config_map sections live in overlays (env-specific names).
     dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev', dev)}})
     prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod', prod)}})
-
-    # Keep wallclock mode fully explicit in each overlay while retaining the
-    # safe `off` value in base for consumers that do not apply an environment overlay.
-    _seed_wallclock_defaults(shared)
 
     base = {
         'schema_version': monolith['schema_version'],

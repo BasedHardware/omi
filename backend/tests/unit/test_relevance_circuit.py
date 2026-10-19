@@ -53,7 +53,6 @@ def test_primary_latch_skips_nano_and_reprobes_once_then_closes(monkeypatch):
     for text, verdict in [(NOISE, 'discard'), (['Call mom before five.'], 'keep')]:
         blocked = decide(jev=jev, model=nano, texts=text)
         assert (blocked.verdict, blocked.decided_by, blocked.reason) == (verdict, 'deterministic', 'circuit_open')
-    assert not blocked.model_tier_reached
     assert jev.call_count == 2 and nano.call_count == 1
     assert decide(jev=jev, model=nano, calendar=True).reason == 'calendar_overlap'
 

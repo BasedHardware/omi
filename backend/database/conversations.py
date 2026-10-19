@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts
+from database import conversation_visibility_counts, processing_backlog
 from utils.conversations import summary_delivery
 import copy
 import hashlib
@@ -77,19 +77,6 @@ from config.repeat_work import playback_on_demand
 from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
-from .first_open_obligations import (
-    FIRST_OPEN_EFFECTS,
-    claim_authorized_first_open_work,
-    claim_first_open_work,
-    commit_first_open_app_result,
-    commit_first_open_app_usage,
-    commit_first_open_conversation_patch,
-    commit_first_open_folder_count,
-    complete_first_open_effect,
-    finish_first_open_work,
-    first_open_effect_is_authorized,
-    initialize_first_open_work,
-)
 from config.translation import resolve_ondemand_config
 from database.translation_admission import TranslationReservation, reservation_is_current
 from utils.llm.model_constants import LUNA_MODEL
@@ -937,6 +924,17 @@ def _collect_visible_conversation_page(
     return conversations
 
 
+def _drop_summary_memo(uid: str) -> None:
+    """Forget a request-scoped summary read after its transaction commits.
+
+    Importing the memo cache registers Prometheus series. Conversation imports
+    stay free of that until a summary write has actually committed.
+    """
+    from database.fsr_read_cache import forget_request_reads
+
+    forget_request_reads(uid)
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 @after_write('conversations')
@@ -952,11 +950,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = None
+    summary_changed = False
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt
+        nonlocal summary_receipt, summary_changed
         summary_receipt = None
+        summary_changed = False
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
@@ -1008,15 +1008,23 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            summary_changed = processing_backlog.stage_transition(
+                transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
+            )
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
         write_data.setdefault('has_photos', False)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        summary_changed = processing_backlog.stage_transition(
+            transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
+        )
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
+    if summary_changed:
+        _drop_summary_memo(uid)
 
     summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
@@ -1059,10 +1067,12 @@ def persist_processing_result_with_lifecycle(
     stale_sync_revision = False
     first_completed = False
     summary_receipt = None
+    summary_changed = False
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed
+        summary_changed = False
         summary_receipt = None
         stale_sync_revision = False
         first_completed = False
@@ -1193,6 +1203,9 @@ def persist_processing_result_with_lifecycle(
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        summary_changed = processing_backlog.stage_transition(
+            transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
+        )
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1203,6 +1216,8 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    if summary_changed:
+        _drop_summary_memo(uid)
     if persisted:
 
         summary_delivery.emit(summary_receipt)
@@ -1242,8 +1257,26 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
+    summary_changed = False
     try:
-        conversation_ref.create(conversation_data)
+        if conversation_data.get('processing_deferred'):
+
+            @firestore.transactional
+            def create_waiting(transaction):
+                nonlocal summary_changed
+                summary_changed = False
+                if conversation_ref.get(transaction=transaction).exists:
+                    raise AlreadyExists('conversation exists')
+                summary_changed = processing_backlog.stage_transition(
+                    transaction, uid, conversation_data['id'], {}, conversation_data, firestore_client=db
+                )
+                transaction.create(conversation_ref, conversation_data)
+
+            run_transactional(db, create_waiting)
+            if summary_changed:
+                _drop_summary_memo(uid)
+        else:
+            conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):
         # The conversation exists but may be new to the search index (writer
         # lag, backfill gap); the read-back sync converges it either way.
@@ -1316,11 +1349,23 @@ def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_ho
     seen: set[str] = set()
     current_id = conversation_id
     for _ in range(max_hops):
-        if current_id in seen:
+        if current_id in seen or not current_id or '/' in current_id or len(current_id.encode()) > 256:
             return None
         seen.add(current_id)
+        if (
+            get_firestore_client()
+            .collection('users')
+            .document(uid)
+            .collection('deleted_conversations')
+            .document(current_id)
+            .get()
+            .exists
+        ):
+            return None
         row = get_conversation_raw_snapshot(uid, current_id)
         if not row:
+            return None
+        if row.get('owner_uid', uid) != uid or row.get('id', current_id) != current_id:
             return None
         if not row.get('deleted'):
             return current_id
@@ -2186,6 +2231,10 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    from config.stt_cap_dispatch import execution_admission_enabled
+
+    if execution_admission_enabled():
+        processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
     invalidate_people_stats_cache(uid)

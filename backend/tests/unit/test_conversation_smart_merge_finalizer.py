@@ -6,7 +6,11 @@ here applies that production admission rule; it must never answer ``claimed``
 for a row production would fence, or the donor retry path is hidden again.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
+
+from utils import rollout_cohorts
 
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
@@ -240,3 +244,37 @@ async def test_donor_resume_failure_stays_retryable_and_never_claims(harness, re
     assert str(raised.value) == 'processing_failed'
     assert calls == [finalizer.conversations_db.get_conversation, finalizer.finalization_jobs_db.get_finalization_job]
     assert any('stage=smart_merge exception_type=SmartMergeIncomplete' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_pusher_finalizer_refreshes_expired_shadow_cohort_before_admission(harness, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    conversation = _Conversation()
+    conversation.status = ConversationStatus.processing
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _data: conversation)
+    membership = [True]
+    reads = []
+    seen = []
+
+    def read(uid):
+        reads.append(uid)
+        return {'prod': {'transcription-shadow': membership[0]}}
+
+    def admit(uid, _conversation):
+        seen.append(rollout_cohorts.in_rollout_cohort(uid, 'transcription-shadow'))
+        raise RuntimeError('stop after real shadow admission boundary')
+
+    monkeypatch.setattr(finalizer, '_maybe_start_shadow', admit)
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for value in (True, False):
+            membership[0] = value
+            if 'u' in cache.entries:
+                cache.entries['u'].expires = 0
+            with pytest.raises(finalizer.ConversationFinalizationError):
+                await _finalize()
+    assert seen == [True, False]
+    assert reads == ['u', 'u']

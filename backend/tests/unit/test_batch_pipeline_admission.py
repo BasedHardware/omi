@@ -132,3 +132,26 @@ def test_flag_off_never_parses_new_dispatch_duration(monkeypatch, enforce, durat
         {'allowed': [], 'retry_after': {'segment': 30}} if enforce else {'allowed': ['segment'], 'retry_after': {}}
     )
     gate.assert_not_called()
+
+
+@pytest.mark.parametrize('dispatch', [False, True])
+def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispatch):
+    from utils import ladder_v1
+
+    store, queue, lease, reserve = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    # A valid queued lease is not spend authority after the shared budget moves.
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': 100})
+    if dispatch:
+        from utils import subscription
+
+        monkeypatch.setattr(
+            subscription,
+            'resolve_transcription_allowance',
+            lambda *a, **k: SimpleNamespace(managed=False, reason='usage_budget_exhausted'),
+        )
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    assert receipt == {'allowed': [], 'retry_after': {'segment': 60}}
+    assert 'compute_admission_token' not in store.rows['jobs', 'segment']
+    reserve.assert_not_called()

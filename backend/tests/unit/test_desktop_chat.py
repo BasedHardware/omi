@@ -665,7 +665,6 @@ def test_request_reports_web_search_capability_fallback(monkeypatch):
     assert fallbacks == []
 
 
-@pytest.mark.asyncio
 async def test_record_usage_charges_web_search_requests(monkeypatch):
     calls = []
 
@@ -685,7 +684,6 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
     assert calls[0][1][-1] == 0.03
 
 
-@pytest.mark.asyncio
 async def test_record_usage_skips_byok_requests(monkeypatch):
     calls = []
     exclusions = []
@@ -2883,22 +2881,3 @@ async def test_desktop_chat_metric_failure_does_not_break_stream(monkeypatch):
         x_omi_request_id='request-4',
     )
     assert 'still delivered' in await _drain(response)
-
-
-@pytest.mark.asyncio
-async def test_retired_jit_request_returns_410_before_subscription_or_provider(monkeypatch):
-    def unexpected(*args, **kwargs):
-        raise AssertionError('retired request reached paid work')
-
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', unexpected)
-    with pytest.raises(desktop_chat.HTTPException) as exc:
-        await desktop_chat.chat_completions(
-            {'messages': []},
-            uid='fixture',
-            x_omi_chat_contract_version=None,
-            x_app_platform=None,
-            x_omi_request_id=None,
-            x_omi_jit_run_id='retired-run',
-        )
-    assert exc.value.status_code == 410
-    assert exc.value.detail == {'error': 'feature_retired'}

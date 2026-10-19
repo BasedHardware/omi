@@ -58,14 +58,11 @@ def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=F
     return decision, model, calendar
 
 
-def test_flags_default_off(monkeypatch):
-    monkeypatch.delenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(jev_decisions.MEMORY_OWNER_JEV_FLIP_ENABLED_ENV, raising=False)
-    assert jev_decisions.conversation_relevance_jev_enabled() is False
-    assert jev_decisions.memory_owner_jev_flip_enabled() is False
-
-    monkeypatch.setenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, 'true')
-    assert jev_decisions.conversation_relevance_jev_enabled() is True
+def test_percentage_cohort_defaults_off(monkeypatch):
+    monkeypatch.delenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_PERCENT_ENV, raising=False)
+    assert jev_decisions.relevance_arm('conversation') == 'nano'
+    monkeypatch.setenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_PERCENT_ENV, '100')
+    assert jev_decisions.relevance_arm('conversation') == 'jev'
 
 
 def test_without_a_jev_thunk_the_model_tier_and_record_are_unchanged():
@@ -311,14 +308,14 @@ def test_failed_model_advances_to_deterministic(with_jev, raises, monkeypatch):
 
 
 @pytest.mark.parametrize('discard', [False, True])
-def test_model_fallback_preserves_counterfactual_and_transition(discard, monkeypatch):
+def test_model_fallback_preserves_transition(discard, monkeypatch):
     from utils.conversations import relevance
 
     transitions = MagicMock()
     monkeypatch.setattr(relevance, 'record_fallback', transitions)
     decision, _, _ = _decide(jev=lambda: None, model=MagicMock(return_value=discard))
     assert decision.reason == 'jev_fallback_model'
-    assert decision.nano_verdict == ('discard' if discard else 'keep')
+    assert decision.verdict == ('discard' if discard else 'keep')
     transitions.assert_called_once_with(
         component='conversation_relevance',
         from_mode='jev',
@@ -388,7 +385,6 @@ def test_withheld_models_keep_ambiguous_band_without_paid_calls(monkeypatch):
         jev_discard_probability=jev,
     )
     assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
-    assert not decision.model_tier_reached
     jev.assert_not_called()
     transitions.assert_not_called()
 
