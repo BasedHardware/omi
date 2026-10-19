@@ -186,6 +186,8 @@ export function useConversations(
         setOffset(cached.offset);
         setHasMore(cached.hasMore);
         setLoading(false);
+        // A fresh cache starts no fetch, so clear the error left by the old filters
+        setError(null);
 
         // If cache is stale, do background refresh
         if (isCacheStale(key)) {

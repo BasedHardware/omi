@@ -29,6 +29,25 @@ beforeEach(() => {
 });
 
 describe('useConversations', () => {
+  it('clears an earlier fetch error when a cached filter is shown', async () => {
+    const { result, rerender } = renderHook(
+      ({ folderId }: { folderId: string }) => useConversations({ limit: 50, folderId }),
+      { initialProps: { folderId: 'home' } },
+    );
+    await waitFor(() => expect(result.current.conversations).toHaveLength(50));
+
+    // The next folder's first page fails, which shows the error banner.
+    vi.mocked(getConversations).mockRejectedValueOnce(new Error('Network error'));
+    rerender({ folderId: 'work' });
+    await waitFor(() => expect(result.current.error).toBe('Network error'));
+
+    // The first folder is still cached and fresh, so it comes back without a request.
+    rerender({ folderId: 'home' });
+    expect(result.current.conversations).toHaveLength(50);
+    expect(getConversations).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+  });
+
   it('does not skip a page after the list is reloaded from the top', async () => {
     const { result } = renderHook(() => useConversations({ limit: 50 }));
     await waitFor(() => expect(result.current.conversations).toHaveLength(50));
