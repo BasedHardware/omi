@@ -1169,15 +1169,7 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
-            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
-            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              category: reliability
-              value: '60'
-            SYNC_LEGACY_FRESH_BURST_TOKENS:
-              category: reliability
-              value: '10'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1447,15 +1439,7 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
-            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
-            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              category: reliability
-              value: '60'
-            SYNC_LEGACY_FRESH_BURST_TOKENS:
-              category: reliability
-              value: '10'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -3421,15 +3405,7 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
-            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
-            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              category: reliability
-              value: '120'
-            SYNC_LEGACY_FRESH_BURST_TOKENS:
-              category: reliability
-              value: '60'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -3781,15 +3757,7 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
-            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
-            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              category: reliability
-              value: '120'
-            SYNC_LEGACY_FRESH_BURST_TOKENS:
-              category: reliability
-              value: '60'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'

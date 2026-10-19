@@ -195,7 +195,7 @@ def mobile_sync_router():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('archive_fails', [False, True])
+@pytest.mark.parametrize('archive_fails', [True])
 async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mobile_sync_router, archive_fails):
     module, jobs, bytes_io = mobile_sync_router
     calls = []

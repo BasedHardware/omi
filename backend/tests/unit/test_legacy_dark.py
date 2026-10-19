@@ -292,13 +292,11 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
-        module.legacy_fresh.enabled_for = MagicMock(return_value=True)
         module.create_sync_job = MagicMock()
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_retry_later'
         module.create_sync_job.assert_not_called()
-        module.legacy_fresh.enabled_for.assert_not_called()
     finally:
         _restore(saved)
 
@@ -317,20 +315,6 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
         assert response.status_code == 202
         assert json.loads(response.body)['status'] == 'completed'
         module.create_sync_job.assert_not_called()
-    finally:
-        _restore(saved)
-
-
-@pytest.mark.asyncio
-async def test_router_is_unchanged_at_on(monkeypatch):
-    module, saved, jobs, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: ON)
-        counter = legacy_dark.OMI_LEGACY_SYNC_ADMISSIONS_TOTAL.labels(reason='batch_not_enabled')
-        before = counter._value.get()
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        assert counter._value.get() == before + 1
     finally:
         _restore(saved)
 
