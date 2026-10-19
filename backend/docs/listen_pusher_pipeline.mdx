@@ -5791,8 +5791,8 @@ serving reconciliation loop prepares the existing fenced recovery intent and
 queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
 to `SYNC_TASKS_QUEUE` when unset), using `SYNC_TASKS_INVOKER_SA`. Production
 integration declares `batch-quarantine-recovery`; the existing backend deploy
-action provisions it before the integration revision, with four concurrent
-dispatches, four dispatches/second and five attempts. This keeps accepted-work
+action provisions it before the integration revision, with 16 concurrent
+dispatches, eight dispatches/second and five attempts. This keeps accepted-work
 recovery independent of legacy sync queue saturation without changing the paid
 intent or provider budget. Dev retains its existing queue. To roll back queue
 isolation, clear `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` on integration; keep
@@ -5952,3 +5952,44 @@ include `superseded_segments` with zero failures, rather than reporting silence.
 A fresh transaction rechecks privacy/deletion fences, immutable binding and
 ledger ownership before settlement; a concurrently committed assignment receipt
 wins. Account/protection revocation still follows the existing erasure path.
+
+
+## Cap-held live audio and durable redrive
+
+Listen owns denied PCM before provider replay. Its sink accepts at most 15 seconds
+of volatile PCM, persists short encrypted fragments and composes each continuous
+minute into one immutable held source. It freezes staging before composition;
+expired staging and post-publication fragment cleanup resume from server sweeps.
+Pusher receives admitted audio/transcripts and has no duplicate cap-held PCM sink.
+Both lifespans await the lightweight sink registry before background drain/HTTP
+teardown; socket close flushes tails. GKE grace is 120 seconds with a 15-second
+preStop and a 60-second uvicorn session-drain bound, leaving 45 seconds for the
+30-second custody flush plus existing 10-second drain. The flush coordinator
+returns after its wait bound without gathering cancellation-resistant closes;
+storage-executor publication leaves retain scratch/PCM until actual IO finishes,
+even if event-loop shutdown cancels the async publication task. Process hard
+termination can still lose the at-most-15-second undurable tail.
+
+`POST /v2/cap-hold-recovery/sweep` uses sync Tasks OIDC and awaits bounded work.
+Production Scheduler calls it every two minutes; independent persisted discovery
+cursors visit processing choices, abandoned staging and cleanup. Five owners run
+concurrently on existing executors, each considering up to 100 items over bounded
+ten-row pages with a monotonic 900-second next-item/next-piece budget. Durable
+intent remains processing after a budget stop; a pre-cutoff unsealed source keeps
+that choice open until sealing preserves its original creation/listing times. Only existing
+same-month user/upgrade consent may process audio. Existing UID/hold/text leases,
+cutoffs, reserved estimates, abuse and allowance checks still own admission.
+Process death cannot erase the choice or require a client wakeup. The fixed
+60-second memory wakeup and processing self-respawn are retired.
+
+Held STT uses one provider POST per persisted dispatch attempt and encrypts
+nonempty provider results before ingestion; restart reuses those results and the
+original provider/model. The whole proposed document cache budget is 768 KiB;
+a usable oversized or aggregate-budget-miss response proceeds directly to ordinary
+ingestion without caching, preserving earlier caches. Its crash uncertainty lasts
+through atomic ingest proof. No size-only failure forces another vendor call. A kill
+between vendor acceptance and the result checkpoint can still repeat a paid call.
+The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt bound,
+retained uncertainty, kill switches, three new group indexes, deployment order,
+15-second SIGKILL residual window and measured cost increase. Enforcement flags
+remain off; this source change does not activate the cap cohort.

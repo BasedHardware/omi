@@ -573,7 +573,11 @@ def _assert_recovery_pending(stack: BatchStack, upload: Upload, phase: str) -> d
         or status.get('status') != 'processing'
         or not isinstance(hint, int)
         or hint <= 0
-        or status.get('failed_segments')
+        or status.get('failed_segments') != 0
+        or status.get('processed_segments') != 0
+        or status.get('successful_segments') != 0
+        or status.get('result') is not None
+        or status.get('error') is not None
     ):
         raise StackFailure(
             f'quarantined job {phase} polled HTTP {code} status={status.get("status")!r} '

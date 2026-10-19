@@ -70,6 +70,7 @@ async def ensure_plan(
                 'audio_codec': row['audio_codec'],
                 'sample_rate': rate,
                 'source_frames': row['source_frames'],
+                **({'opus_fragments': row['opus_fragments']} if row.get('opus_fragments') else {}),
                 'metadata': encoded_context,
                 'seconds': frames / rate,
                 'source_slice': {'start': position[1], 'frames': frames, 'sha256': digest},
