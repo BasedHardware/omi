@@ -2,9 +2,10 @@
 
 from datetime import datetime
 import logging
+import re
 from typing import Any, Dict, List, Mapping, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
@@ -12,12 +13,16 @@ from models.screen_activity import ScreenActivityCoverage
 from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
 import database.screen_activity as screen_activity_db
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.request_validation import validate_calendar_date
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_RESERVED_DOC_ID_RE = re.compile(r'^__.*__$')
+_MAX_DOC_ID_BYTES = 1500
 
 
 # ============================================================================
@@ -34,6 +39,30 @@ class CreateFocusSessionRequest(BaseModel):
 
 
 # ============================================================================
+# HELPERS
+# ============================================================================
+
+
+def _require_session_id(session_id: str) -> str:
+    """Validate and normalize a focus-session path coordinate before touching Firestore."""
+    stripped = session_id.strip() if isinstance(session_id, str) else ''
+    if (
+        not stripped
+        or stripped in ('.', '..')
+        or '/' in stripped
+        or _RESERVED_DOC_ID_RE.match(stripped)
+        or len(stripped.encode('utf-8')) > _MAX_DOC_ID_BYTES
+    ):
+        raise HTTPException(status_code=400, detail='Valid session_id is required')
+    return stripped
+
+
+def _log_database_failure(action: str, uid: str, error: Exception) -> None:
+    """Log a data-layer failure server-side with token/PII masking."""
+    logger.error(f'focus_sessions {action} failed uid={uid}: {sanitize(str(error))}', exc_info=True)
+
+
+# ============================================================================
 # ENDPOINTS
 # ============================================================================
 
@@ -43,14 +72,27 @@ def create_focus_session(
     request: CreateFocusSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return focus_sessions_db.create_focus_session(
-        uid,
-        status=request.status,
-        app_or_site=request.app_or_site,
-        description=request.description,
-        message=request.message,
-        duration_seconds=request.duration_seconds,
-    )
+    app_or_site = request.app_or_site.strip()
+    if not app_or_site:
+        raise HTTPException(status_code=400, detail='app_or_site cannot be empty or whitespace only')
+    description = request.description.strip()
+    if not description:
+        raise HTTPException(status_code=400, detail='description cannot be empty or whitespace only')
+    message = request.message.strip() or None if isinstance(request.message, str) else None
+    try:
+        return focus_sessions_db.create_focus_session(
+            uid,
+            status=request.status,
+            app_or_site=app_or_site,
+            description=description,
+            message=message,
+            duration_seconds=request.duration_seconds,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('create', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to create focus session')
 
 
 @router.get('/v1/focus-sessions', tags=['focus-sessions'], response_model=list[FocusSession])
@@ -61,23 +103,13 @@ def get_focus_sessions(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    raw_sessions = focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
-
-    def _log_skipped_session(record: Any, exc: Exception) -> None:
-        doc_id = 'unknown'
-        try:
-            if isinstance(record, (dict, Mapping)):
-                raw_id = record.get('id')
-                if raw_id is not None:
-                    doc_id = str(raw_id)
-        except Exception:
-            doc_id = 'unknown'
-        try:
-            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
-        except Exception:
-            pass
-
-    return FocusSession.deserialize_many_safe(raw_sessions, on_error=_log_skipped_session)
+    try:
+        return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('list', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to load focus sessions')
 
 
 @router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
@@ -85,7 +117,16 @@ def delete_focus_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    focus_sessions_db.delete_focus_session(uid, session_id)
+    session_id = _require_session_id(session_id)
+    try:
+        deleted = focus_sessions_db.delete_focus_session(uid, session_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('delete', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to delete focus session')
+    if not deleted:
+        raise HTTPException(status_code=404, detail='Focus session not found')
     return {'status': 'ok'}
 
 
@@ -95,7 +136,13 @@ def get_focus_stats(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     date = validate_calendar_date(date)
-    return focus_sessions_db.get_focus_stats(uid, date=date)
+    try:
+        return focus_sessions_db.get_focus_stats(uid, date=date)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('stats', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to load focus stats')
 
 
 class ScreenActivityRow(BaseModel):
@@ -136,6 +183,7 @@ def list_screen_activity(
     exposes them to the user's own first-party client. A bad date is rejected with 422.
     """
     date = validate_calendar_date(date)
+    normalized_app_filter = app_filter.strip() or None if isinstance(app_filter, str) else None
     start = end = None
     if date:
         start = datetime.strptime(date, '%Y-%m-%d')
@@ -143,9 +191,15 @@ def list_screen_activity(
         # timestamp <= 'YYYY-MM-DD HH:MM:SS.999', so a next-day midnight end would leak the
         # following day's first second into this privacy-sensitive single-day result.
         end = start.replace(hour=23, minute=59, second=59)
-    return screen_activity_db.get_screen_activity(
-        uid, start_date=start, end_date=end, app_filter=app_filter, limit=limit
-    )
+    try:
+        return screen_activity_db.get_screen_activity(
+            uid, start_date=start, end_date=end, app_filter=normalized_app_filter, limit=limit
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('list_screen_activity', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to load screen activity')
 
 
 @router.get('/v1/screen-activity/summary', tags=['screen-activity'], response_model=ScreenActivitySummaryResponse)
@@ -166,4 +220,10 @@ def screen_activity_summary(
         # timestamp <= 'YYYY-MM-DD HH:MM:SS.999', so a next-day midnight end would leak the
         # following day's first second into this privacy-sensitive single-day summary.
         end = start.replace(hour=23, minute=59, second=59)
-    return screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
+    try:
+        return screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_database_failure('screen_activity_summary', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to load screen activity summary')
