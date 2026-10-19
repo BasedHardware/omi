@@ -78,9 +78,9 @@ near-miss 0.70, AHC 0.70 with 0.60 absorb distance).
 - `SYNC_WAL_AUDIO_COVERAGE_ENABLED` and `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED` act
   only for uids admitted by `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`
   (`config/sync_audio_coverage.py:19`, `config/sync_live_dedupe.py:29`).
-- `postprocess_words` builds segment text with `.capitalize()`
-  (`utils/stt/pre_recorded.py:1266`), which lowercases every character after
-  the first.
+- `postprocess_words` capitalizes only the first character of segment text
+  (`_capitalize_first` in `utils/stt/pre_recorded.py`) and keeps the provider's
+  casing for the rest, so names, acronyms and "I" survive.
 
 ## Target shape
 

@@ -749,7 +749,10 @@ already longer than 30 seconds is split into contiguous equal-duration slices
 before merging — each slice is at most 30 seconds — and its text is distributed
 evenly across those slices, so timestamps stay proportional to the text they
 carry. A slice is never emitted without text: an entry with fewer words than
-slices is split into as many slices as it has words.
+slices is split into as many slices as it has words. Normalization capitalizes
+only a segment's first character and keeps the provider's casing for the rest,
+so names, acronyms and "I" survive and sync's text-based speaker naming can
+match an introduction such as "my name is Sarah".
 
 Post-processing stores the normalized result under the `prerecorded` transcript
 model and exposes that key through the transcript comparison API. The former

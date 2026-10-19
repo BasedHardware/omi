@@ -1266,13 +1266,18 @@ def _merge_segments(
     return segments
 
 
+def _capitalize_first(text: str) -> str:
+    """Capitalize only the first character; providers already return cased names, acronyms and "I"."""
+    return text[:1].capitalize() + text[1:]
+
+
 def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
     return [
         TranscriptSegment(
-            text=normalize_brand_terms(str(segment['text']).strip().capitalize()),
+            text=normalize_brand_terms(_capitalize_first(str(segment['text']).strip())),
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,
