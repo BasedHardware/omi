@@ -41,7 +41,12 @@ binarization) and diarization, and the WeSpeaker trunk runs once per 10s chunk
 instead of once per (chunk, local speaker), pooled with the same masks. Forwards
 pack chunks across the flight's units at the pinned model batch size, so a
 forward is never larger than the serial one. Clustering, labels and turns stay
-pyannote's own per-unit `apply`. Units above the budget, unsupported model
+pyannote's own per-unit `apply`. With speech-only diarization
+(`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`, #22358) the diarizer sees a
+compacted waveform, so cross-unit packed embeddings and the cached full-unit
+segmentation are not used for it; that call keeps its serial pyannote `apply`,
+and only the per-file shared trunk applies inside it. Packed segmentation then
+serves VAD alone. Units above the budget, unsupported model
 layouts, non-fatal packed failures, cached-feature shape mismatches and CUDA
 out-of-memory inside the packed path take the unchanged serial calls; other
 fatal CUDA errors still quarantine the chain. `tests/unit/test_batch_pipeline_flight.py`

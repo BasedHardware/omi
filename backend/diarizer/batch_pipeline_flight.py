@@ -207,7 +207,11 @@ class FlightPyannote:
         def get_embeddings(file, binary_segmentations, exclude_overlap=False, hook=None):
             cached = file.get(EMBEDDINGS_KEY) if isinstance(file, Mapping) else None
             if cached is None:
-                return original_embeddings(file, binary_segmentations, exclude_overlap=exclude_overlap, hook=hook)
+                # Uncached calls (e.g. speech-only compacted waveforms) still
+                # get the shared trunk for this one file.
+                return self._shared_or_serial(
+                    original_embeddings, file, binary_segmentations, exclude_overlap=exclude_overlap, hook=hook
+                )
             chunks, _, speakers = binary_segmentations.data.shape
             if cached.shape[:2] != (chunks, speakers):
                 # Never cluster mismatched rows: recompute serially instead.
@@ -219,6 +223,15 @@ class FlightPyannote:
         # that preserve the original behavior whenever no feature is supplied.
         object.__setattr__(self.diarizer, 'get_segmentations', get_segmentations)
         object.__setattr__(self.diarizer, 'get_embeddings', get_embeddings)
+
+    def _shared_or_serial(self, original, file, binarized, *, exclude_overlap, hook):
+        if self.shared_trunk and isinstance(file, Mapping):
+            try:
+                return self.embed_group([file], [binarized], exclude_overlap=exclude_overlap)[0]
+            except Exception as exc:
+                if not self._recoverable(exc, 'embedding'):
+                    raise
+        return original(file, binarized, exclude_overlap=exclude_overlap, hook=hook)
 
     # ---- segmentation -------------------------------------------------
 
@@ -327,10 +340,11 @@ class FlightPyannote:
             ]
             yield waveform, np.stack(used)
 
-    def embed_group(self, files, binarized_list):
+    def embed_group(self, files, binarized_list, *, exclude_overlap=None):
         embedding = self.diarizer._embedding
         model = embedding.model_
-        exclude_overlap = self.diarizer.embedding_exclude_overlap
+        if exclude_overlap is None:
+            exclude_overlap = self.diarizer.embedding_exclude_overlap
         rows = [self._embedding_rows(f, b, exclude_overlap) for f, b in zip(files, binarized_list)]
         counts = [b.data.shape[0] for b in binarized_list]
         outputs = [[] for _ in rows]

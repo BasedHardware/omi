@@ -5668,6 +5668,25 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Batch worker GPU skips (speech-only diarization, short single speaker)
+
+Two switches decide whether the batch worker runs diarization on the whole
+unit. They never change ASR input, words or speech accounting.
+`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` (on) diarizes the union of
+unpadded VAD speech and every emitted word clock, each padded by 1 s, with
+nearby regions joined and 0.5 s of zeros between retained pieces; turns map
+back to capture clocks. Units that would keep over 80% of their audio
+(`reason="kept_over_80pct"`), empty compacted output for a unit with words, and
+any compaction or mapping error (`reason="other"`) diarize the full unit and
+record `omi_fallback_total{component="vad",from="batch_speech_only_diarization"}`.
+`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED` is **off** by default: when on,
+all speech and words forming one region of at most 2 s (pauses up to 0.5 s
+inclusive) take the existing `skipped_single` `SPEAKER_00` result. Enable it
+only after a paired prod-revision run qualifies it. Silence units (no VAD
+speech) already skip ASR and diarization. Set
+`worker.diarizeSpeechOnlyEnabled=false` to restore full-unit diarization.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,

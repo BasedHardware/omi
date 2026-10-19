@@ -111,6 +111,13 @@ def test_model_doubles_disable_packing_instead_of_failing_startup():
 # ---- worker contract ----------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def full_unit_diarization(monkeypatch):
+    # Packed diarization applies to full-unit diarization; speech-only
+    # compaction is covered separately below.
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
+
+
 class Words:
     def transcribe_batch(self, samples):
         return [[{'word': 'hello', 'timestamp': [0.1, 0.2]}] for _ in samples]
@@ -228,6 +235,17 @@ def test_per_unit_diarization_failure_only_fails_that_unit():
     failing = int(DURATIONS['b'] * RATE)
     results, saved, _ = run(FakeFlight(item_error_for=failing), DURATIONS)
     assert {r.segment_id for r in results} == {'a', 'c'} and set(saved) == {'a', 'c'}
+
+
+def test_speech_only_diarization_keeps_its_serial_compacted_call(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'true')
+    packed = FakeFlight()
+    results, saved, serial_calls = run(packed, DURATIONS)
+    assert {r.segment_id for r in results} == set(DURATIONS)
+    # Packed segmentation still feeds VAD; diarization never uses full-unit
+    # packed embeddings for a compacted waveform.
+    assert [c[0] for c in packed.calls if c[0] == 'diarize_many'] == []
+    assert [c[0] for c in serial_calls] == ['diarize'] * len(DURATIONS)
 
 
 def test_silence_skips_packed_diarization():
@@ -357,4 +375,6 @@ def test_packed_out_of_memory_falls_back_to_serial_pyannote(pyannote_pair, monke
     assert packed.diarize_many(list(zip(clips, features))) == serial
     monkeypatch.setattr(packed, '_segment_group', exhausted)
     assert packed.segment(clips) == [None, None]
-    assert packed.counts['oom_fallbacks'] == 2
+    # Packed group, then each unit's per-file shared trunk, then segmentation:
+    # every OOM lands on pyannote's own serial calls.
+    assert packed.counts['oom_fallbacks'] == 4
