@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 import XCTest
 
@@ -39,7 +40,10 @@ final class ConversationSectionSourcesTests: XCTestCase {
         ],
         transcriptSegments: segments,
         onOpenSources: { opened.append($0) }
-      ).frame(width: 560, alignment: .leading))
+      )
+      // ConversationSummaryBody's side margin, which the control sits in.
+      .padding(.horizontal, OmiSpacing.lg)
+      .frame(width: 560, alignment: .leading))
     let window = mount(host)
     defer {
       window.orderOut(nil)

@@ -168,7 +168,8 @@ struct ConversationSummarySections: View {
                 sourceIDs: ConversationSectionSources.resolve(section.sourceSegmentIDs, segments: transcriptSegments),
                 onOpenSources: onOpenSources
               )
-              // Into the page's side margin, so it never covers a long heading's last words.
+              // Into the side margin ConversationSummaryBody pads this view with, so it never covers
+              // a long heading's last words.
               .offset(x: OmiSpacing.lg - 2)
             }
           }
