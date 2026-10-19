@@ -53,7 +53,8 @@ class Claim:
 class EnqueueResult:
     row_id: str
     coalesced: bool  # True when dedupe_key already had an open row (version bumped)
-    wake_token: str | None  # token of the task to create after commit; None when no wake is needed
+    wake_token: str | None  # wake for this row; with tx= the caller calls Outbox.wake(row_id, wake_token) after
+    # commit; without tx the outbox already created it. None when no wake is needed.
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,8 @@ class Outbox(Protocol):
         tx: 'Transaction | None' = None,
         now: float,
     ) -> EnqueueResult:
-        """Durable before wake: the caller creates the task named by ``wake_token`` only after commit.
+        """Durable before wake. Without ``tx`` the outbox commits the row, then creates its wake. With ``tx`` the
+        row is written in the caller's transaction and the caller calls ``wake(row_id, wake_token)`` after commit.
 
         ``policy_id`` is copied onto the row and surfaces as ``Claim.policy_id``. ``coalesce`` picks the
         ``available_at`` rule when ``dedupe_key`` already has an open row: 'min' for first-summary deadlines,
@@ -90,7 +92,9 @@ class Outbox(Protocol):
     def claim(self, n: int, lease_seconds: float, *, now: float) -> list[Claim]: ...
 
     def claim_key(self, row_id: str, wake_token: str, lease_seconds: float, *, now: float) -> Claim | Outcome:
-        """A wrong wake token returns ``Outcome.STALE``; a live foreign lease returns ``Outcome.BUSY``."""
+        """A wrong wake token returns ``Outcome.STALE``; a live foreign lease returns ``Outcome.BUSY``; a row that is
+        not yet due is re-armed (new wake created by the outbox) and returns ``Outcome.DEFERRED``; a privacy-fenced
+        or deleted row is closed and returns ``Outcome.DISCARDED``."""
         ...
 
     def heartbeat(self, claim: Claim, lease_seconds: float, *, now: float) -> bool: ...
@@ -98,11 +102,18 @@ class Outbox(Protocol):
     def ack(self, claim: Claim, reason: str, *, now: float) -> bool: ...
 
     def defer(self, claim: Claim, available_at: float, reason: str, *, now: float) -> str | None:
-        """Re-arm the row; returns the new wake token (old deliveries become STALE)."""
+        """Re-arm the row and create its new wake; returns the new wake token (old deliveries become STALE)."""
         ...
 
     def release(self, claim: Claim, reason: str, *, now: float) -> bool:
         """RETRY: lease_until=0, keep the wake token."""
+        ...
+
+    def wake(self, row_id: str, wake_token: str) -> None:
+        """Create the wake task for ``(row_id, wake_token)``; idempotent on that pair (named-task 409 = success).
+
+        Called by transactional enqueuers after commit. A failed create leaves the row for ``sweep``.
+        """
         ...
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts: ...

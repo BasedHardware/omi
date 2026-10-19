@@ -1,0 +1,65 @@
+{
+ "schema_version": 1,
+ "name": "f6-parity-subset",
+ "purpose": "Contract (j) rows 1 and 2: WER and word-speaker attribution, batch vs legacy, plus no-hallucination on silence. Public audio only.",
+ "pinning": "Sources are fetched by checksum. `corpus.py fetch --pin` records sha256 and resolved selections in manifest.lock.json; every later fetch refuses a mismatch. The parity gate refuses corpus scores built from an unpinned lock.",
+ "sources": {
+  "ami_audio": {
+   "url_template": "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus/{meeting}/audio/{meeting}.Mix-Headset.wav",
+   "license": "CC BY 4.0"
+  },
+  "ami_words": {
+   "url": "https://groups.inf.ed.ac.uk/ami/AMICorpusAnnotations/ami_public_manual_1.6.2.zip",
+   "member_template": "words/{meeting}.{speaker}.words.xml",
+   "license": "CC BY 4.0"
+  },
+  "librispeech_test_clean": {
+   "url": "https://www.openslr.org/resources/12/test-clean.tar.gz",
+   "license": "CC BY 4.0"
+  },
+  "voxconverse_test_wav": {
+   "url": "https://www.robots.ox.ac.uk/~vgg/data/voxconverse/data/voxconverse_test_wav.zip",
+   "license": "CC BY 4.0"
+  },
+  "voxconverse_rttm": {
+   "url": "https://github.com/joonson/voxconverse/archive/refs/heads/master.zip",
+   "member_template": "voxconverse-master/test/{file_id}.rttm",
+   "license": "CC BY 4.0"
+  }
+ },
+ "groups": [
+  {
+   "id": "ami",
+   "use": ["wer", "speaker"],
+   "meetings": ["EN2002a", "ES2004a", "IS1009a", "TS3003a"],
+   "speakers": ["A", "B", "C", "D", "E"],
+   "crop_seconds": [0, 600],
+   "minutes": 40
+  },
+  {
+   "id": "librispeech",
+   "use": ["wer"],
+   "select": "first chapters of test-clean in sorted order until max_seconds",
+   "join_pause_seconds": 0.5,
+   "max_seconds": 1200,
+   "minutes": 20
+  },
+  {
+   "id": "voxconverse",
+   "use": ["speaker"],
+   "select": "first files of the test split in sorted order",
+   "files": 4,
+   "crop_seconds": [0, 300],
+   "minutes": 20
+  },
+  {
+   "id": "silence",
+   "use": ["silence"],
+   "generator": "seeded -55 dBFS noise bed (quiet_bed); stands in for the MUSAN silence subset until an 11 GB MUSAN fetch is justified",
+   "clips": 10,
+   "seconds": 60,
+   "seed": 6000,
+   "minutes": 10
+  }
+ ]
+}
