@@ -13,7 +13,18 @@ class _UnreachableApiEnv implements EnvFields {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
+/// Skips the webhook on/off read, which these tests do not cover, so the injected URL read and
+/// write are the only API calls.
+class _NoStatusReadProvider extends DeveloperModeProvider {
+  _NoStatusReadProvider({super.fetchWebhookUrl, super.saveWebhookUrl});
+
+  @override
+  Future getWebhooksStatus() async {}
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() => Env.init(_UnreachableApiEnv()));
 
   setUp(() async {
@@ -47,7 +58,7 @@ void main() {
 
   test('Save does not send a webhook whose URL could not be read', () async {
     final sent = <String, String>{};
-    final provider = DeveloperModeProvider(
+    final provider = _NoStatusReadProvider(
       fetchWebhookUrl: ({required String type}) async => type == 'memory_created' ? null : '',
       saveWebhookUrl: ({required String type, required String url}) async {
         sent[type] = url;
@@ -68,7 +79,7 @@ void main() {
   test('a webhook whose URL could not be read is saved once you edit it', () async {
     SharedPreferencesUtil().webhookOnTranscriptReceived = 'https://example.com/old-transcript';
     final sent = <String, String>{};
-    final provider = DeveloperModeProvider(
+    final provider = _NoStatusReadProvider(
       fetchWebhookUrl: ({required String type}) async => null,
       saveWebhookUrl: ({required String type, required String url}) async {
         sent[type] = url;
