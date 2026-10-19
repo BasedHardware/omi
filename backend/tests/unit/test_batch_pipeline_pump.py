@@ -275,3 +275,88 @@ async def test_empty_asr_handoff_quarantines_first_attempt_and_stale_token_canno
     assert job['recovery_state'] == 'held' and not job['merge_pending']
     assert ('results', 'first') not in store.rows
     assert not queue.complete(WorkResult('first', 'gs://synthetic/stale'), '', time.time())
+
+
+@pytest.mark.asyncio
+async def test_preemptible_stop_returns_leases_uncharged_and_fences_late_result(monkeypatch):
+    from utils.batch_pipeline.errors import PreemptedFlight
+
+    monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
+    release = threading.Event()
+    worker = Worker()
+    process = worker.process_batch
+    worker.process_batch = lambda items: (release.wait(5) and process(items))
+    store, queue, pump = setup(worker, release_on_stop_seconds=0.02)
+    queue.enqueue(item('second', capture=2), time.time())
+    stop = asyncio.Event()
+    task = asyncio.create_task(pump.run(stop))
+    while not all(store.rows['jobs', s]['state'] == 'leased' for s in ('first', 'second')):
+        await asyncio.sleep(0.005)
+    leased = {s: store.rows['jobs', s]['token'] for s in ('first', 'second')}
+    stop.set()
+    with pytest.raises(PreemptedFlight):
+        await task
+    for segment in ('first', 'second'):
+        job = store.rows['jobs', segment]
+        assert job['state'] == 'retry' and job['attempt'] == 0 and job['token'] == ''
+        assert job['merge_pending'] and ('results', segment) not in store.rows
+    # The abandoned flight finishing later can never publish under its old token.
+    release.set()
+    await asyncio.sleep(0.02)
+    for segment, token in leased.items():
+        assert not queue.complete(WorkResult(segment, f'gs://synthetic/{segment}'), token, time.time())
+    # Another worker re-leases after the 1s retry without a charged attempt.
+    for segment in ('first', 'second'):
+        store.rows['jobs', segment]['available_at'] = time.time() - 1
+    successor = Pump(queue, Worker(), capacity=lambda: PoolCapacity(time.time(), 8))
+    assert await successor.run_once() == 2
+    assert store.rows['jobs', 'second']['state'] == 'committed'
+    assert store.rows['jobs', 'first']['attempt'] == 1
+
+
+@pytest.mark.asyncio
+async def test_preemptible_stop_commits_flight_that_finishes_inside_budget(monkeypatch):
+    monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
+    worker = Worker(0.04)
+    store, _, pump = setup(worker, release_on_stop_seconds=5)
+    stop = asyncio.Event()
+    task = asyncio.create_task(pump.run(stop))
+    await asyncio.sleep(0.02)
+    stop.set()
+    await task
+    assert worker.finished and worker.calls == 1
+    assert store.rows['jobs', 'first']['state'] == 'committed'
+
+
+@pytest.mark.asyncio
+async def test_preemptible_release_failure_still_exits_and_leaves_lease_to_expiry(monkeypatch):
+    from utils.batch_pipeline.errors import PreemptedFlight
+
+    monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
+    release = threading.Event()
+    worker = Worker()
+    process = worker.process_batch
+    worker.process_batch = lambda items: (release.wait(5) and process(items))
+    store, queue, pump = setup(worker, release_on_stop_seconds=0)
+
+    def broken(*args):
+        raise RuntimeError('synthetic firestore outage')
+
+    monkeypatch.setattr(queue, 'defer', broken)
+    stop = asyncio.Event()
+    task = asyncio.create_task(pump.run(stop))
+    while store.rows['jobs', 'first']['state'] != 'leased':
+        await asyncio.sleep(0.005)
+    stop.set()
+    with pytest.raises(PreemptedFlight):
+        await task
+    release.set()
+    job = store.rows['jobs', 'first']
+    assert job['state'] == 'leased' and ('results', 'first') not in store.rows
+    assert queue.recover(job['lease_until'] + 1) == 1
+    assert store.rows['jobs', 'first']['state'] == 'retry'
+
+
+def test_release_budget_is_bounded():
+    with pytest.raises(ValueError):
+        setup(release_on_stop_seconds=61)

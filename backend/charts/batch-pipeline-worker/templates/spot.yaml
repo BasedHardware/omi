@@ -1,0 +1,74 @@
+{{- if and .Values.enabled .Values.spot.enabled }}
+{{- if not (regexMatch "^[a-z0-9-]+$" (toString .Values.spot.nodePool)) }}
+{{- fail "spot.nodePool must name the operator-created Spot L4 pool" }}
+{{- end }}
+{{- if eq (toString .Values.spot.nodePool) (toString (index .Values.nodeSelector "cloud.google.com/gke-nodepool")) }}
+{{- fail "spot.nodePool must differ from the on-demand baseline pool" }}
+{{- end }}
+{{- if or (lt (float64 .Values.spot.releaseOnStopSeconds) 0.0) (gt (float64 .Values.spot.releaseOnStopSeconds) 8.0) }}
+{{- fail "spot.releaseOnStopSeconds must be in [0,8]: lease return must finish inside the 15s Spot budget" }}
+{{- end }}
+{{- if or (lt (int .Values.spot.terminationGracePeriodSeconds) 10) (gt (int .Values.spot.terminationGracePeriodSeconds) 30) }}
+{{- fail "spot.terminationGracePeriodSeconds must be in [10,30]" }}
+{{- end }}
+{{- if and (not .Values.spot.autoscaling.enabled) (lt (int .Values.spot.replicaCount) 0) }}
+{{- fail "spot.replicaCount must be >=0" }}
+{{- end }}
+{{- if .Values.podMonitoring.enabled }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .Release.Name }}-spot
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: batch-pipeline-worker
+      app.kubernetes.io/instance: {{ .Release.Name }}-spot
+  endpoints:
+    - {port: http, path: /metrics, interval: 15s}
+{{- end }}
+{{- if .Values.spot.autoscaling.enabled }}
+{{- if or (lt (int .Values.spot.autoscaling.minReplicas) 0) (lt (int .Values.spot.autoscaling.maxReplicas) 1) (gt (int .Values.spot.autoscaling.minReplicas) (int .Values.spot.autoscaling.maxReplicas)) }}
+{{- fail "spot.autoscaling needs 0 <= minReplicas <= maxReplicas, maxReplicas >= 1" }}
+{{- end }}
+---
+# Overflow only: the on-demand baseline keeps sampling, so Spot may idle at zero
+# when HPAScaleToZero is available; otherwise keep minReplicas at 1.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-spot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-spot
+  minReplicas: {{ max 1 (int .Values.spot.autoscaling.minReplicas) }}
+  maxReplicas: {{ .Values.spot.autoscaling.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Pods, value: 2, periodSeconds: 60}
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - {type: Pods, value: 1, periodSeconds: 300}
+  metrics:
+    {{- range $priority, $target := .Values.spot.autoscaling.targets }}
+    - type: External
+      external:
+        metric:
+          name: omi_batch_pipeline_ready_age_seconds
+          selector:
+            matchLabels:
+              priority: {{ $priority }}
+              worker_release: {{ $.Release.Name }}
+              namespace: {{ $.Release.Namespace }}
+        target:
+          type: Value
+          value: {{ $target | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}

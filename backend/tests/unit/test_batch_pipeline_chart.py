@@ -284,3 +284,88 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
+
+
+def spot_documents(*extra):
+    result = render(*enabled_arguments(), '--set', 'spot.enabled=true', *extra)
+    assert result.returncode == 0, result.stderr
+    return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+
+
+def test_spot_overflow_is_off_by_default_and_baseline_is_unchanged():
+    values = yaml.safe_load((CHART / 'values.yaml').read_text())
+    assert values['spot']['enabled'] is False and values['spot']['autoscaling']['enabled'] is False
+    for env in ('dev', 'prod'):
+        env_values = yaml.safe_load((CHART / f'{env}_omi_batch-pipeline-worker_values.yaml').read_text())
+        assert not env_values.get('spot', {}).get('enabled', False)
+    result = render(*enabled_arguments())
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert [doc['metadata']['name'] for doc in deployments] == ['synthetic-worker']
+    pod = deployments[0]['spec']['template']['spec']
+    assert pod['terminationGracePeriodSeconds'] == 1500
+    names = {item['name'] for item in pod['containers'][0]['env']}
+    assert 'BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS' not in names
+
+
+def test_spot_overflow_pins_spot_pool_and_bounded_release_without_overlapping_baseline():
+    documents = spot_documents()
+    deployments = [doc for doc in documents if doc['kind'] == 'Deployment']
+    # The contract checker and rollout gate read the baseline first, by its release name.
+    assert [doc['metadata']['name'] for doc in deployments] == ['synthetic-worker', 'synthetic-worker-spot']
+    baseline, spot = deployments
+    assert baseline['spec']['selector'] != spot['spec']['selector']
+    assert spot['spec']['selector']['matchLabels']['app.kubernetes.io/instance'] == 'synthetic-worker-spot'
+    assert spot['spec']['replicas'] == 1 and spot['spec']['strategy'] == {'type': 'Recreate'}
+    pod = spot['spec']['template']['spec']
+    assert pod['nodeSelector'] == {
+        'cloud.google.com/gke-nodepool': 'batch-pipeline-spot-pool',
+        'cloud.google.com/gke-spot': 'true',
+        'service': 'batch-pipeline',
+        'env': 'dev',
+    }
+    assert ('cloud.google.com/gke-spot', 'Equal', 'true', 'NoSchedule') in {
+        (item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']
+    }
+    assert pod['terminationGracePeriodSeconds'] == 15
+    base_env = {
+        item['name']: item.get('value') for item in baseline['spec']['template']['spec']['containers'][0]['env']
+    }
+    spot_env = {item['name']: item.get('value') for item in pod['containers'][0]['env']}
+    assert spot_env.pop('BATCH_PIPELINE_RELEASE_ON_STOP_SECONDS') == '4'
+    # Coupled scheduler flags and the queue-age release label never split.
+    assert spot_env == base_env and spot_env['BATCH_PIPELINE_WORKER_RELEASE'] == 'synthetic-worker'
+    assert pod['containers'][0]['resources'] == baseline['spec']['template']['spec']['containers'][0]['resources']
+    monitors = {doc['metadata']['name']: doc for doc in documents if doc['kind'] == 'PodMonitoring'}
+    assert monitors['synthetic-worker-spot']['spec']['selector']['matchLabels'] == {
+        'app.kubernetes.io/name': 'batch-pipeline-worker',
+        'app.kubernetes.io/instance': 'synthetic-worker-spot',
+    }
+
+
+def test_spot_overflow_hpa_scales_only_the_spot_deployment_on_backlog_age():
+    documents = spot_documents('--set', 'spot.autoscaling.enabled=true', '--set', 'spot.autoscaling.maxReplicas=6')
+    spot = next(doc for doc in documents if doc['kind'] == 'Deployment' and doc['metadata']['name'].endswith('-spot'))
+    assert 'replicas' not in spot['spec']
+    (hpa,) = [doc for doc in documents if doc['kind'] == 'HorizontalPodAutoscaler']
+    assert hpa['spec']['scaleTargetRef']['name'] == 'synthetic-worker-spot'
+    assert hpa['spec']['minReplicas'] == 1 and hpa['spec']['maxReplicas'] == 6
+    selectors = {m['external']['metric']['selector']['matchLabels']['priority'] for m in hpa['spec']['metrics']}
+    assert selectors == {'recent', 'deep'}
+    assert all(
+        m['external']['metric']['selector']['matchLabels']['worker_release'] == 'synthetic-worker'
+        for m in hpa['spec']['metrics']
+    )
+
+
+@pytest.mark.parametrize(
+    ('extra', 'message'),
+    [
+        (('--set', 'spot.nodePool=batch-pipeline-pool'), 'differ from the on-demand'),
+        (('--set', 'spot.releaseOnStopSeconds=12'), 'releaseOnStopSeconds'),
+        (('--set', 'spot.terminationGracePeriodSeconds=1500'), 'terminationGracePeriodSeconds'),
+    ],
+)
+def test_spot_overflow_rejects_unsafe_budgets_and_shared_pool(extra, message):
+    result = render(*enabled_arguments(), '--set', 'spot.enabled=true', *extra)
+    assert result.returncode != 0 and message in result.stderr

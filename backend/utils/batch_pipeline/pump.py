@@ -17,13 +17,17 @@ from utils.batch_pipeline.contracts import (
     ValidationFailureWork,
 )
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.errors import FatalGpuError, PreemptedFlight
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
+
+# Each lease return is one small transaction; the whole release must fit the
+# preemptible pod's 15s kubelet budget after the configured flight wait.
+RELEASE_TIMEOUT_SECONDS = 5.0
 
 
 class Pump:
@@ -40,9 +44,12 @@ class Pump:
         capacity: Callable[[], PoolCapacity] | None = None,
         project_pending: Callable[[], Any] | None = None,
         authorize_compute: Callable[[list[LeasedWork]], dict] | None = None,
+        release_on_stop_seconds: float | None = None,
     ):
         if not 1 <= batch_size <= 32 or not 0 < poll_seconds <= 30:
             raise ValueError('invalid bounded pump configuration')
+        if release_on_stop_seconds is not None and not 0 <= release_on_stop_seconds <= 60:
+            raise ValueError('release_on_stop_seconds must be in [0, 60]')
         self.scheduler = scheduler
         self.worker = worker
         self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics, commit_source='gpu_pump')
@@ -53,6 +60,10 @@ class Pump:
         self.capacity = capacity
         self.project_pending = project_pending
         self.authorize_compute = authorize_compute
+        # None (on-demand): SIGTERM drains the whole flight. A number
+        # (preemptible): after stop, wait this long for the flight, then
+        # return its leases uncharged and exit so another worker re-leases.
+        self.release_on_stop_seconds = release_on_stop_seconds
         self._last_recovery = float('-inf')
         self._last_metrics = float('-inf')
 
@@ -61,8 +72,8 @@ class Pump:
         while not stop_event.is_set():
             try:
                 count = await self.run_once(stop_event=stop_event)
-            except FatalGpuError:
-                raise  # Fatal CUDA requires process replacement, never another pull.
+            except (FatalGpuError, PreemptedFlight):
+                raise  # Fatal CUDA / abandoned flight requires process exit, never another pull.
             except Exception as error:
                 logger.error('event=batch_pump outcome=retry exception_type=%s', type(error).__name__)
                 count = 0
@@ -98,6 +109,44 @@ class Pump:
                     lost.add(lease.item.segment_id)
 
             await asyncio.gather(*(renew_one(lease) for lease in leases))
+
+    async def _await_flight(self, compute: asyncio.Future, stop_event: asyncio.Event | None):
+        if self.release_on_stop_seconds is None or stop_event is None:
+            return await asyncio.shield(compute)
+        stopped = asyncio.ensure_future(stop_event.wait())
+        try:
+            await asyncio.wait({compute, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            if compute.done():
+                return compute.result()
+            try:
+                return await asyncio.wait_for(asyncio.shield(compute), timeout=self.release_on_stop_seconds)
+            except asyncio.TimeoutError:
+                raise PreemptedFlight('stop arrived during an unfinishable GPU flight') from None
+        finally:
+            stopped.cancel()
+
+    async def _release(self, leases: list[LeasedWork], lost: set[str]) -> int:
+        """Return owned leases uncharged; a late result is fenced by the cleared token."""
+
+        async def release_one(lease: LeasedWork) -> bool:
+            segment = lease.item.segment_id
+            if segment in lost:
+                return False
+            lost.add(segment)
+            try:
+                return bool(
+                    await asyncio.wait_for(
+                        run_blocking(db_executor, self.scheduler.defer, segment, lease.token, time.time(), 1),
+                        timeout=RELEASE_TIMEOUT_SECONDS,
+                    )
+                )
+            except Exception as error:
+                # Lease expiry (LEASE_SECONDS) remains the durable fallback.
+                logger.error('event=batch_preempt outcome=release_failed exception_type=%s', type(error).__name__)
+                return False
+
+        released = await asyncio.gather(*(release_one(lease) for lease in leases))
+        return sum(released)
 
     async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
         sampled_at = time.monotonic()
@@ -183,9 +232,13 @@ class Pump:
             # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal and
             # wait for the bounded model operation before leaving this process.
             try:
-                results = await asyncio.shield(compute)
+                results = await self._await_flight(compute, stop_event)
             except asyncio.CancelledError:
                 results = await compute
+                raise
+            except PreemptedFlight:
+                released = await self._release(leases, lost)
+                logger.warning('event=batch_preempt outcome=released leases=%d released=%d', len(leases), released)
                 raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
