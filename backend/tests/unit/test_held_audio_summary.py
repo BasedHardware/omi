@@ -2,11 +2,13 @@ import asyncio
 import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 from models.users import HeldAudioSummary
 from database import processing_backlog as backlog_store
 from database import fsr_read_cache
 from database.fsr_read_cache import forget_request_reads, request_read_scope
+from utils import processing_backlog as backlog, processing_backlog_worker as backlog_worker
 from utils.sync import cap_hold, cap_hold_recovery
 from utils.sync import held_audio_summary as summary
 
@@ -127,24 +129,28 @@ def test_plus_anniversary_is_not_the_minute_counter_reset():
 
 
 def test_subscription_open_never_creates_recovery_intent(monkeypatch):
-    kicked = []
-    monkeypatch.setattr(summary, 'enabled', lambda: False)
+    choose = Mock(side_effect=AssertionError('subscription read created processing consent'))
+    start = Mock(side_effect=AssertionError('subscription read persisted processing intent'))
+    run = AsyncMock(side_effect=AssertionError('subscription read started paid work'))
+    recover = AsyncMock(side_effect=AssertionError('subscription read started held recovery'))
+    monkeypatch.setattr(backlog, 'choose', choose)
+    monkeypatch.setattr(backlog_store, 'start', start)
+    monkeypatch.setattr(backlog_worker, 'run', run)
+    monkeypatch.setattr(cap_hold_recovery, 'recover', recover)
+    for managed in (False, True):
+        monkeypatch.setattr(summary, 'enabled', lambda: False)
+        response = SimpleNamespace()
+        allowance = SimpleNamespace(managed=managed)
+        summary.attach_subscription_held_audio(response, 'synthetic', allowance)
+        assert not hasattr(response, 'held_audio') or response.held_audio is None
 
-    def kick(uid):
-        kicked.append(uid)
-
-    monkeypatch.setattr(cap_hold_recovery, 'kick', kick)
-    response = SimpleNamespace()
-    summary.attach_subscription_held_audio(response, 'synthetic', SimpleNamespace(managed=False))
-    assert kicked == []
-    assert not hasattr(response, 'held_audio') or response.held_audio is None
-
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
-    monkeypatch.setattr(summary, '_load_summary', lambda uid: {'seconds': 5, 'count': 1})
-    monkeypatch.setattr(summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 9, 'seconds': 5}])
-    summary.attach_subscription_held_audio(response, 'synthetic', SimpleNamespace(managed=False))
-    assert kicked == []
-    assert response.held_audio.seconds == 5
+        monkeypatch.setattr(summary, 'enabled', lambda: True)
+        monkeypatch.setattr(summary, '_load_summary', lambda uid: {'seconds': 5, 'count': 1})
+        monkeypatch.setattr(summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 9, 'seconds': 5}])
+        summary.attach_subscription_held_audio(response, 'synthetic', allowance)
+        assert response.held_audio.seconds == 5
+        for entry in (choose, start, run, recover):
+            entry.assert_not_called()
 
 
 def test_partial_receipts_and_retries_adjust_summary_under_lease(monkeypatch):
