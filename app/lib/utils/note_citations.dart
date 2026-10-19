@@ -55,10 +55,14 @@
       return ids.isNotEmpty && ids.every(valid.contains)
           ? remove(ids)
           : value.replaceAllMapped(
-              RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|[\[［【][^\[\]［］【】\n]*[\]］】]'), (match) => unit(match[0]!));
+              RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
+              (match) => unit(match[0]!),
+            );
     }
-    final content =
-        value.substring(1, value.length - 1).replaceAll(RegExp('[\u200b\u200c\u200d\u2060\ufeff]'), '').trim();
+    final content = value
+        .substring(1, value.length - 1)
+        .replaceAll(RegExp('[\u200b\u200c\u200d\u2060\ufeff]'), '')
+        .trim();
     final tokens = content.split(RegExp(r'[\s,;]+')).where((token) => token.isNotEmpty).toList();
     if (tokens.isNotEmpty && tokens.every(valid.contains)) return remove(tokens);
     final header = content.split(RegExp(r'\s+'));
@@ -69,7 +73,8 @@
     if (mixedIDs.isNotEmpty) {
       recovered.addAll(mixedIDs);
       return cleanSeparators(
-          content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
+        content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!),
+      );
     }
     if (tokens.isEmpty ||
         RegExp(r'^(?:spk|speaker)[ _]\d+:?$', caseSensitive: false).hasMatch(content) ||
@@ -80,8 +85,9 @@
   }
 
   text = text.replaceAllMapped(
-      RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|(?<!\])\(((?:[^()\n]|\([^()\n]*\))+)\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
-      (match) => unit(match[0]!));
+    RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|(?<!\])\(((?:[^()\n]|\([^()\n]*\))+)\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
+    (match) => unit(match[0]!),
+  );
   final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
     text = text.replaceAll(RegExp('(?<![\\w-])${RegExp.escape(id)}(?![\\w-])'), marker);
@@ -114,7 +120,10 @@
 }
 
 ({String text, List<String> sourceIDs}) repairNoteCitations(String input, Iterable<String> knownIDs) {
-  final ids = knownIDs.toList();
+  // An id-less segment reaches here as '' (TranscriptSegment.fromGenerated); as a pattern it would
+  // match between every two non-word characters and the cleanup would then eat the whitespace
+  // around each match. Web and macOS drop empty ids before calling their repair; do the same.
+  final ids = knownIDs.where((id) => id.isNotEmpty).toList();
   final recovered = <String>[];
   var text = input;
   while (true) {

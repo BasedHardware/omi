@@ -17373,11 +17373,11 @@ abstract class AppLocalizations {
   /// **'Jump to {duration}'**
   String quoteJumpToTime(String duration);
 
-  /// Expand the remaining supporting transcript timestamps in this summary section
+  /// Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it
   ///
   /// In en, this message translates to:
-  /// **'+{count} more'**
-  String quoteMoreTimestamps(int count);
+  /// **'Show sources'**
+  String get quoteShowSources;
 
   /// Accessibility label and tooltip for the jump-to-latest button in chat
   ///
@@ -20115,11 +20115,11 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
+  /// Capture banner title: the pendant's audio stopped reaching the app; the Reconnect button sits below
   ///
   /// In en, this message translates to:
-  /// **'Omi isn\'t sending audio — tap to reconnect'**
-  String get captureRecoveryBanner;
+  /// **'Omi isn\'t sending audio'**
+  String get captureRecoveryBannerTitle;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.
   ///
@@ -20151,29 +20151,11 @@ abstract class AppLocalizations {
   /// **'Retry sync'**
   String get captureBannerRetrySync;
 
-  /// Text button on the capture recovery banner that opens the details sheet explaining the outage.
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s going on?'**
-  String get captureBannerWhatsWrong;
-
-  /// Semantic label for the capture recovery banner's close button.
-  ///
-  /// In en, this message translates to:
-  /// **'Dismiss'**
-  String get captureBannerDismiss;
-
   /// Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does.
   ///
   /// In en, this message translates to:
   /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
   String get captureWedgeBleExplanation;
-
-  /// Capture recovery banner, second line for a BLE-health wedge: the link stalled and transcripts resume once it recovers. Does not promise the audio was saved.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio link stalled — transcribes when it recovers'**
-  String get captureLinkStalledTranscribesLater;
 
   /// Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim.
   ///
@@ -24309,11 +24291,41 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get activityRetryAll;
 
+  /// Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t check storage'**
+  String get activityAttentionStorageUnknownTitle;
+
+  /// Needs attention row subtitle under the storage title: new recordings cannot be saved
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings paused'**
+  String get activityAttentionStorageSubtitle;
+
+  /// Needs attention row title: uploads made no progress long enough to need attention
+  ///
+  /// In en, this message translates to:
+  /// **'Upload stalled'**
+  String get activityAttentionUploadStalledTitle;
+
+  /// Needs attention row subtitle: how many recordings are waiting to upload
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
+  String activityAttentionUploadRecordings(int count);
+
   /// Needs attention row: the server gave up summarizing a conversation
   ///
   /// In en, this message translates to:
   /// **'Couldn\'t summarize this conversation'**
   String get attentionSummaryFailed;
+
+  /// Bell accessibility label when its warning dot is lit for attention items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, needs attention'**
+  String get activityAttentionSemantics;
 
   /// Headline at the top of the Connect an Agent screen
   ///
@@ -25460,6 +25472,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{saved} of {total} audio saved'**
   String playbackPartialAudioSaved(String saved, String total);
+
+  /// Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording on your Omi'**
+  String get activityAttentionLinkStalledSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

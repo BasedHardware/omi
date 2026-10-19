@@ -34,17 +34,17 @@ class RecordingTransferDrainResult {
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
   const RecordingTransferDrainResult.skipped()
-      : attempted = false,
-        failed = false,
-        needsReconciliation = false,
-        contended = false;
+    : attempted = false,
+      failed = false,
+      needsReconciliation = false,
+      contended = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
-      : attempted = false,
-        failed = false,
-        needsReconciliation = false,
-        contended = true;
+    : attempted = false,
+      failed = false,
+      needsReconciliation = false,
+      contended = true;
 
   final bool attempted;
   final bool failed;
@@ -79,29 +79,29 @@ class RecordingTransferCoordinator {
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
-  })  : _reconcile = reconcile,
-        _discover = discover,
-        _refreshPending = refreshPending,
-        _drain = drain,
-        _drainLiveCapture = drainLiveCapture,
-        _autoUploadEnabled = autoUploadEnabled,
-        _clock = clock ?? DateTime.now,
-        _scheduleCooldown = scheduleCooldown,
-        _onTransferStarted = onTransferStarted,
-        _onTransferFinished = onTransferFinished,
-        _onConnectivityRestored = onConnectivityRestored {
+  }) : _reconcile = reconcile,
+       _discover = discover,
+       _refreshPending = refreshPending,
+       _drain = drain,
+       _drainLiveCapture = drainLiveCapture,
+       _autoUploadEnabled = autoUploadEnabled,
+       _clock = clock ?? DateTime.now,
+       _scheduleCooldown = scheduleCooldown,
+       _onTransferStarted = onTransferStarted,
+       _onTransferFinished = onTransferFinished,
+       _onConnectivityRestored = onConnectivityRestored {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
   }
 
   RecordingTransferCoordinator._singleton()
-      : _reconcile = _noop,
-        _discover = _noop,
-        _refreshPending = _noop,
-        _drain = _skippedDrain,
-        _drainLiveCapture = _skippedDrain,
-        _autoUploadEnabled = _disabled,
-        _clock = DateTime.now;
+    : _reconcile = _noop,
+      _discover = _noop,
+      _refreshPending = _noop,
+      _drain = _skippedDrain,
+      _drainLiveCapture = _skippedDrain,
+      _autoUploadEnabled = _disabled,
+      _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 
@@ -139,11 +139,16 @@ class RecordingTransferCoordinator {
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
   int _periodicGeneration = 0;
+  bool _periodicDrainInFlight = false;
 
   /// Retire an expired OS window before any further discovery/upload stage.
-  void cancelPeriodicWake() {
+  /// Returns true only while that window's own drain is running, the one
+  /// transfer the window may cancel. A pass another wake started, or a device
+  /// transfer the user started, keeps running after the window ends.
+  bool cancelPeriodicWake() {
     _periodicGeneration++;
     if (_pendingWake == WakeTrigger.periodic) _pendingWake = null;
+    return _periodicDrainInFlight;
   }
 
   /// Visible to tests and diagnostics; this is not persisted because timers are
@@ -295,11 +300,11 @@ class RecordingTransferCoordinator {
   }
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
-        WakeTrigger.userRetry => 3,
-        WakeTrigger.periodic || WakeTrigger.deviceConnected || WakeTrigger.connectivityRestored => 2,
-        WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
-        _ => 0,
-      };
+    WakeTrigger.userRetry => 3,
+    WakeTrigger.periodic || WakeTrigger.deviceConnected || WakeTrigger.connectivityRestored => 2,
+    WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
+    _ => 0,
+  };
 
   Future<void> _run(WakeTrigger firstWake) async {
     final started = _onTransferStarted;
@@ -363,7 +368,13 @@ class RecordingTransferCoordinator {
 
       final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
       if (drain == null) return;
-      final result = await drain();
+      final RecordingTransferDrainResult result;
+      _periodicDrainInFlight = trigger == WakeTrigger.periodic;
+      try {
+        result = await drain();
+      } finally {
+        _periodicDrainInFlight = false;
+      }
       if (expired()) return;
       await _refreshPending();
 

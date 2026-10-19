@@ -86,7 +86,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final phase = provider.apiViewState.phase;
-      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
+      final typedResultAlreadyProjected =
+          phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
@@ -354,7 +355,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    await Future.wait(items.map((item) => provider.deleteActionItem(item)));
+    final deleted = await Future.wait(items.map(provider.deleteActionItem));
+    if (!mounted || deleted.every((ok) => ok)) return;
+    // The provider has already put each rejected row back; say so, as a single delete does
+    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -455,7 +460,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
         // Successful empty results use the existing icon and conversation guidance.
-        final showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired;
@@ -474,19 +480,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
-                          ? CustomScrollView(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              slivers: [
-                                SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
-                                ),
-                              ],
-                            )
-                          : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
-                              : _buildTasksList(categorizedItems, provider),
+                      ? CustomScrollView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(child: ActionItemsApiStatus(provider: provider)),
+                            ),
+                          ],
+                        )
+                      : categorizedItems.values.every((l) => l.isEmpty)
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // The empty state points to conversation capture on Home.

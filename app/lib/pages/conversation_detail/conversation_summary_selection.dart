@@ -18,8 +18,13 @@ class ConversationSummarySelection {
   /// Renderable first-party sections; app outputs and edited overviews keep their flat path.
   final List<Section> sections;
 
-  const ConversationSummarySelection(
-      {required this.content, required this.kind, this.appId, this.resultIndex, this.sections = const []});
+  const ConversationSummarySelection({
+    required this.content,
+    required this.kind,
+    this.appId,
+    this.resultIndex,
+    this.sections = const [],
+  });
 
   bool get isApp => kind == ConversationSummaryKind.app;
 
@@ -81,30 +86,38 @@ class ConversationSummarySelection {
 
   /// Omi's own summary: the compatibility overview or the section projection, else empty.
   static ConversationSummarySelection firstParty(ServerConversation conversation) {
-    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
+    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
     String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);
     final validIDs = knownIDs.toSet();
     final sections = conversation.structured.sections
         .where((section) => section.bodyMarkdown.trim().isNotEmpty)
-        .map((section) => Section(
-              heading: presentable(section.heading),
-              bodyMarkdown: presentable(section.bodyMarkdown),
-              kind: section.kind,
-              sourceSegmentIds: (section.sourceSegmentIds ?? []).where(validIDs.contains).toSet().toList(),
-            ))
+        .map(
+          (section) => Section(
+            heading: presentable(section.heading),
+            bodyMarkdown: presentable(section.bodyMarkdown),
+            kind: section.kind,
+            sourceSegmentIds: (section.sourceSegmentIds ?? []).where(validIDs.contains).toSet().toList(),
+          ),
+        )
         .toList(growable: false);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
       return ConversationSummarySelection(
-          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
+        content: presentable(projectedSections),
+        kind: ConversationSummaryKind.sections,
+        sections: sections,
+      );
     }
     if (overview.isNotEmpty) {
       return ConversationSummarySelection(content: presentable(overview), kind: ConversationSummaryKind.overview);
     }
     if (projectedSections.isNotEmpty) {
       return ConversationSummarySelection(
-          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
+        content: presentable(projectedSections),
+        kind: ConversationSummaryKind.sections,
+        sections: sections,
+      );
     }
     return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }

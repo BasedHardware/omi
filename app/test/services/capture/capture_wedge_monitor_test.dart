@@ -100,15 +100,16 @@ void main() {
       final monitor = await declare();
       void health({String phase = 'flowing', bool subscribed = true, bool fresh = true}) {
         monitor.observeIngressHealth(
-            'dev-a',
-            CaptureIngressHealth(
-              phase: phase,
-              generation: 'recovered',
-              reason: 'audio',
-              validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
-              subscriptionConfirmed: subscribed,
-              unverifiedSinceMs: 0,
-            ));
+          'dev-a',
+          CaptureIngressHealth(
+            phase: phase,
+            generation: 'recovered',
+            reason: 'audio',
+            validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
+            subscriptionConfirmed: subscribed,
+            unverifiedSinceMs: 0,
+          ),
+        );
       }
 
       health(subscribed: false);
@@ -199,15 +200,16 @@ void main() {
       monitor.onBleIngressBytes(CaptureWedgeMonitor.localWalDeviceId, 80);
     }
     monitor.observeIngressHealth(
-        CaptureWedgeMonitor.localWalDeviceId,
-        CaptureIngressHealth(
-          phase: 'flowing',
-          generation: 'native-1',
-          reason: 'audio',
-          validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
-          subscriptionConfirmed: true,
-          unverifiedSinceMs: 0,
-        ));
+      CaptureWedgeMonitor.localWalDeviceId,
+      CaptureIngressHealth(
+        phase: 'flowing',
+        generation: 'native-1',
+        reason: 'audio',
+        validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+        subscriptionConfirmed: true,
+        unverifiedSinceMs: 0,
+      ),
+    );
     expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
     expect(forEvent('Capture Recovery Resolved'), isEmpty);
   });
@@ -268,13 +270,13 @@ void main() {
     addTearDown(monitor.dispose);
     monitor.setNativeIngressOwner('dev-a', true);
     CaptureIngressHealth health(String phase) => CaptureIngressHealth(
-          phase: phase,
-          generation: 'epoch-1',
-          reason: phase,
-          validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
-          subscriptionConfirmed: phase == 'quiet',
-          unverifiedSinceMs: 1234,
-        );
+      phase: phase,
+      generation: 'epoch-1',
+      reason: phase,
+      validUntilMs: phase == 'flowing' ? now.millisecondsSinceEpoch + 60000 : 0,
+      subscriptionConfirmed: phase == 'quiet',
+      unverifiedSinceMs: 1234,
+    );
     for (final phase in ['unverified', 'repairing', 'reconnecting', 'quiet']) {
       monitor.observeIngressHealth('dev-a', health(phase));
       zeroSession(monitor);
@@ -1004,6 +1006,246 @@ void main() {
         containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
       );
       expect(forEvent('Capture Recovery Resolved'), hasLength(2));
+      // The episodes resolved, but upload progress proves nothing about the
+      // disk: the storage ROW — what Activity and the bell read — must survive
+      // while the retention risk keeps refusing recordings.
+      expect(monitor.storageAtRisk, isNotNull, reason: 'upload progress must not clear the storage row');
+      expect(monitor.hasCaptureAttention, isTrue);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue, reason: 'the bell keeps warning about the disk');
+
+      monitor.clearStorageAtRisk();
+      expect(monitor.storageAtRisk, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+    });
+  });
+
+  group('capture attention rows', () {
+    test('disk admission failure engages the storage row with its counts', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final engagedAt = now.subtract(const Duration(minutes: 30));
+
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, blockedCount: 3, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+
+      expect(monitor.hasCaptureAttention, isTrue);
+      expect(monitor.storageAtRisk?.engagedAt, engagedAt);
+      expect(monitor.storageAtRisk?.blockedCount, 3);
+      expect(monitor.storageAtRisk?.retainedCount, 720);
+      expect(monitor.storageAtRisk?.reason, 'disk_reserve');
+      monitor.dispose();
+    });
+
+    test('count-cap pressure never engages the storage row', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+      monitor.dispose();
+    });
+
+    test('count-cap pressure ends a storage row a disk failure engaged, and disk failure re-engages it', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 3, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNotNull, reason: 'the disk refused recordings');
+
+      // The disk admitted a write again but >= 720 unsynced WALs remain: the risk
+      // is count pressure now, which is diagnostic only. The row must not keep
+      // claiming storage is full and recordings are paused.
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNull, reason: 'count pressure never owns the storage row');
+      expect(monitor.hasCaptureAttention, isFalse);
+
+      // A disk failure that returns re-engages the row: its reason differs, so
+      // the fingerprint dedupe does not swallow it.
+      now = now.add(const Duration(minutes: 5));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk?.blockedCount, 4, reason: 'a returning disk failure re-engages the row');
+      monitor.dispose();
+    });
+
+    test('storage counts refresh while the episode slot is already held', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected'), hasLength(1));
+
+      // A later observation with different counts: no second alert, but the row tells the truth.
+      now = now.add(const Duration(minutes: 10));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 7, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+
+      expect(forEvent('Capture Wedge Detected'), hasLength(1), reason: 'one episode, not a second alert');
+      expect(monitor.storageAtRisk?.blockedCount, 7);
+      monitor.dispose();
+    });
+
+    test('an upload stall engages the row with kept-audio seconds, then refreshes counts', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final stalledAt = now;
+      monitor.observeWalBacklog(
+        pendingCount: 5,
+        oldestPendingAt: now.subtract(const Duration(hours: 3)),
+        pendingSeconds: 47 * 60,
+      );
+      await pumpEventQueue();
+
+      expect(monitor.uploadStall?.pendingCount, 5);
+      expect(monitor.uploadStall?.pendingSeconds, 47 * 60);
+      expect(monitor.uploadStall?.since, stalledAt);
+      expect(monitor.hasCaptureAttention, isTrue);
+
+      now = now.add(const Duration(minutes: 20));
+      monitor.observeWalBacklog(
+        pendingCount: 6,
+        oldestPendingAt: now.subtract(const Duration(minutes: 200)),
+        pendingSeconds: 50 * 60,
+      );
+      await pumpEventQueue();
+
+      expect(monitor.uploadStall?.pendingCount, 6, reason: 'the row shows the latest backlog');
+      expect(monitor.uploadStall?.since, stalledAt, reason: 'the stall keeps when it began');
+      monitor.dispose();
+    });
+
+    test('a backlog under the silence threshold never engages the row', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(
+        pendingCount: 5,
+        oldestPendingAt: now.subtract(const Duration(minutes: 119)),
+        pendingSeconds: 600,
+      );
+      await pumpEventQueue();
+      expect(monitor.uploadStall, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+      monitor.dispose();
+    });
+
+    test('an empty backlog and a finished upload both resolve the rows', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      monitor.observeWalBacklog(
+        pendingCount: 5,
+        oldestPendingAt: now.subtract(const Duration(hours: 3)),
+        pendingSeconds: 600,
+      );
+      await pumpEventQueue();
+      expect(monitor.hasCaptureAttention, isTrue);
+
+      monitor.onUploadCompleted();
+      expect(monitor.uploadStall, isNull);
+      // Upload progress is not disk recovery: the storage row survives it.
+      expect(monitor.storageAtRisk, isNotNull);
+      expect(monitor.hasCaptureAttention, isTrue);
+      monitor.clearStorageAtRisk();
+      expect(monitor.hasCaptureAttention, isFalse);
+
+      // Hours later the disk is still full: a fresh engagement brings the row back.
+      now = now.add(const Duration(hours: 3));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      monitor.observeWalBacklog(
+        pendingCount: 4,
+        oldestPendingAt: now.subtract(const Duration(hours: 3)),
+        pendingSeconds: 600,
+      );
+      await pumpEventQueue();
+      expect(monitor.hasCaptureAttention, isTrue);
+
+      monitor.observeWalBacklog(pendingCount: 0, oldestPendingAt: null);
+      expect(monitor.uploadStall, isNull, reason: 'an empty backlog ends the upload row');
+      expect(monitor.storageAtRisk, isNotNull, reason: 'the disk is still full; only its own observation ends the row');
+      monitor.clearStorageAtRisk();
+      expect(monitor.hasCaptureAttention, isFalse);
+      monitor.dispose();
+    });
+
+    test('dismissing the local-wal episode ends the rows until a newly declared trigger', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNotNull);
+
+      monitor.dismissDeviceEpisode(CaptureWedgeMonitor.localWalDeviceId);
+      expect(monitor.storageAtRisk, isNull);
+
+      // Same observation again: the fingerprint guard keeps it hidden, as the banner did.
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      expect(monitor.storageAtRisk, isNull);
+
+      now = now.add(const Duration(minutes: 5));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
+      expect(monitor.storageAtRisk?.blockedCount, 4);
+      monitor.dispose();
+    });
+
+    test('the bell: a new engagement lights it, Activity marks it seen, a new episode re-lights it', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+
+      now = now.add(const Duration(minutes: 5));
+      monitor.markCaptureAttentionSeen();
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      // The same condition persisting stays seen; a later engagement is news again.
+      monitor.observeStorageAtRisk(
+        engagedAt: now.add(const Duration(minutes: 1)),
+        blockedCount: 3,
+        retainedCount: 720,
+        reason: 'disk_reserve',
+      );
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+      monitor.dispose();
+    });
+
+    test('marking seen through a build snapshot never swallows a newer incident', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final builtAt = now;
+      monitor.observeStorageAtRisk(engagedAt: builtAt, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+
+      // The frame renders the row that existed at build time; an incident
+      // declared after the build (before the post-frame callback runs) must
+      // stay unseen — the bell keeps warning until a frame shows its row.
+      now = now.add(const Duration(minutes: 1));
+      monitor.markCaptureAttentionSeen(through: builtAt);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      now = now.add(const Duration(minutes: 1));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
+      monitor.markCaptureAttentionSeen(through: builtAt);
+      expect(
+        monitor.hasUnseenCaptureAttention.value,
+        isTrue,
+        reason: 'a stale callback cannot extinguish the bell for an incident it never rendered',
+      );
+
+      // The seen timestamp never rewinds: marking through an older build is a no-op.
+      monitor.markCaptureAttentionSeen();
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+      monitor.dispose();
+    });
+
+    test('reset clears the rows and the bell', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(
+        pendingCount: 5,
+        oldestPendingAt: now.subtract(const Duration(hours: 3)),
+        pendingSeconds: 600,
+      );
+      await pumpEventQueue();
+      expect(monitor.hasCaptureAttention, isTrue);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+
+      monitor.reset();
+      expect(monitor.hasCaptureAttention, isFalse);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+      monitor.dispose();
     });
   });
 
@@ -1082,8 +1324,10 @@ void main() {
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNotNull);
-      expect(forEvent('Capture Wedge Detected').map((e) => e['trigger']),
-          containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]));
+      expect(
+        forEvent('Capture Wedge Detected').map((e) => e['trigger']),
+        containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
+      );
 
       monitor.dismissVisibleEpisode(CaptureWedgeMonitor.localWalDeviceId);
 
@@ -1106,13 +1350,13 @@ void main() {
 
     test('a dismissed ingress episode stays dismissed across native re-ticks of the same incident', () async {
       CaptureIngressHealth snapshot(String generation) => CaptureIngressHealth(
-            phase: 'actionRequired',
-            generation: generation,
-            reason: 'subscription_timeout',
-            validUntilMs: 0,
-            subscriptionConfirmed: false,
-            unverifiedSinceMs: 60000,
-          );
+        phase: 'actionRequired',
+        generation: generation,
+        reason: 'subscription_timeout',
+        validUntilMs: 0,
+        subscriptionConfirmed: false,
+        unverifiedSinceMs: 60000,
+      );
       final monitor = makeMonitor(withRetry: true);
       monitor.observeIngressHealth('dev-a', snapshot('g1'));
       await pumpEventQueue();
@@ -1130,8 +1374,11 @@ void main() {
       // A new incident (new connection generation) alerts again.
       monitor.observeIngressHealth('dev-a', snapshot('g2'));
       await pumpEventQueue();
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed,
-          reason: 'a genuinely new incident is a new alert');
+      expect(
+        monitor.visiblePrompt?.trigger,
+        CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+        reason: 'a genuinely new incident is a new alert',
+      );
     });
 
     test('a positive session during retry resolves without a prompt', () async {

@@ -38,13 +38,13 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 final _now = DateTime(2026, 10, 18, 9);
 
 Wal _wal(DateTime start, int seconds, WalStatus status) => Wal(
-      timerStart: start.millisecondsSinceEpoch ~/ 1000,
-      codec: BleAudioCodec.opus,
-      seconds: seconds,
-      status: status,
-      storage: WalStorage.disk,
-      device: 'phone',
-    );
+  timerStart: start.millisecondsSinceEpoch ~/ 1000,
+  codec: BleAudioCodec.opus,
+  seconds: seconds,
+  status: status,
+  storage: WalStorage.disk,
+  device: 'phone',
+);
 
 Future<void> _pump(WidgetTester tester, List<Wal> wals, {double textScale = 1}) async {
   final sync = _FakeSync(wals);
@@ -126,9 +126,9 @@ void main() {
     expect(_headerLine(tester, '2026-10-15'), '2 recordings · 31m · 1 needs attention');
 
     // Only the attention count is in warning colour.
-    final spans = tester
-        .widget<Text>(find.descendant(of: _day('2026-10-18'), matching: find.byType(Text)).at(1))
-        .textSpan! as TextSpan;
+    final spans =
+        tester.widget<Text>(find.descendant(of: _day('2026-10-18'), matching: find.byType(Text)).at(1)).textSpan!
+            as TextSpan;
     final warning = spans.children!.cast<TextSpan>().where((s) => s.style?.color == OmiColors.warning).toList();
     expect(warning.map((s) => s.text), [' · 1 needs attention']);
 
@@ -137,6 +137,35 @@ void main() {
     expect(reason.style?.color, OmiColors.warning);
     // Sync Details still counts the refused recordings.
     expect(find.text('2 recordings need attention'), findsOneWidget);
+  });
+
+  testWidgets('a wearable source outlives its exhausted phone copy: the block shows the worse state', (tester) async {
+    // A device drain copies audio to the phone piece by piece; copy and source
+    // share the recording id. Here the phone copy exhausted its retries while
+    // the audio still sits on the wearable: the recording must read as needing
+    // attention (its worst part), never as merely syncing (its healthy part).
+    Wal drainPiece(DateTime start, int seconds, {WalStorage? original, int retries = 0}) => Wal(
+      timerStart: start.millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: seconds,
+      status: WalStatus.miss,
+      storage: original == null ? WalStorage.sdcard : WalStorage.disk,
+      originalStorage: original,
+      device: 'pendant',
+      retryCount: retries,
+    );
+    final start = DateTime(2026, 10, 18, 8);
+    await _pump(tester, [
+      drainPiece(start, 4 * 60, original: WalStorage.sdcard, retries: 3),
+      drainPiece(start, 4 * 60),
+    ]);
+
+    // One recording, shown once — as refused, not as waiting.
+    expect(_row('8:00 AM · 4m'), findsOneWidget);
+    expect(_headerLine(tester, '2026-10-18'), '1 recording · 4m · 1 needs attention');
+    expect(find.text('Failed — tap Retry'), findsOneWidget);
+    expect(find.text('1 recording need attention'), findsOneWidget);
+    expect(find.text('2 recordings need attention'), findsNothing);
   });
 
   testWidgets('a day opens and folds on tap, and stays that way for the session', (tester) async {
@@ -186,14 +215,10 @@ void main() {
   });
 
   testWidgets('pinned headers grow with large text instead of clipping', (tester) async {
-    await _pump(
-      tester,
-      [
-        _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss),
-        _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.outsideRecoveryWindow),
-      ],
-      textScale: 2,
-    );
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss),
+      _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.outsideRecoveryWindow),
+    ], textScale: 2);
     expect(tester.takeException(), isNull);
     expect(tester.getSize(_day('2026-10-18')).height, greaterThan(44 * 1.5));
     final title = tester.getRect(find.descendant(of: _day('2026-10-15'), matching: find.byType(Text)).at(1));

@@ -94,6 +94,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
@@ -347,8 +348,10 @@ class HomeProvider extends ChangeNotifier {
   Future setUserPeople() async {
     final response = await getAllPeople();
     if (response != null) {
-      SharedPreferencesUtil().cachedPeople =
-          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
+      SharedPreferencesUtil().cachedPeople = preserveCachedPeopleStats(
+        response.people,
+        SharedPreferencesUtil().cachedPeople,
+      );
     }
     notifyListeners();
   }

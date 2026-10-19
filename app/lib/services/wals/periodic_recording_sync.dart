@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 /// This bridge has no capture/device-start dependency.
 class PeriodicRecordingSync {
   PeriodicRecordingSync({required this.coordinator, required this.cancel, bool? isIOS})
-      : _isIOS = isIOS ?? Platform.isIOS;
+    : _isIOS = isIOS ?? Platform.isIOS;
 
   static const channel = MethodChannel('com.omi/periodic_recording_sync');
   final RecordingTransferCoordinator coordinator;
@@ -27,8 +27,9 @@ class PeriodicRecordingSync {
           await coordinator.waitUntilIdle();
           return !_disposed;
         case 'expire':
-          coordinator.cancelPeriodicWake();
-          cancel();
+          // Stop only this window's own drain. A transfer the user or another
+          // wake started is not the window's to cancel.
+          if (coordinator.cancelPeriodicWake()) cancel();
           return null;
         default:
           throw MissingPluginException();

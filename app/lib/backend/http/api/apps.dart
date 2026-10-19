@@ -108,7 +108,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
@@ -247,7 +247,7 @@ Future<(bool, String)> reEnableAppServer(String appId) async {
       files: [],
       fileFieldName: 'file',
       fields: {
-        'app_data': jsonEncode({'id': appId, 'disabled': false})
+        'app_data': jsonEncode({'id': appId, 'disabled': false}),
       },
       method: 'PATCH',
     );
@@ -403,8 +403,10 @@ String appSetupUrlWithUid(String url, String uid) {
   final uidParam = 'uid=${Uri.encodeQueryComponent(uid)}';
   final queryIndex = head.indexOf('?');
   if (queryIndex < 0) return '$head?$uidParam$fragment';
-  final kept =
-      head.substring(queryIndex + 1).split('&').where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
+  final kept = head
+      .substring(queryIndex + 1)
+      .split('&')
+      .where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
   return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
 }
 
@@ -724,7 +726,8 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId/keys', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    log('listApiKeysServer: ${response.body}');
+    // The key schema carries an optional `secret`; never echo the body into logs.
+    Logger.debug('listApiKeysServer: ${response.statusCode}');
     return (jsonDecode(response.body) as List)
         .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
         .map(AppApiKey.fromGenerated)
@@ -742,7 +745,8 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to create apps API key');
     }
-    log('createApiKeyServer: ${response.body}');
+    // The body holds the newly generated key secret; log only the status.
+    Logger.debug('createApiKeyServer: ${response.statusCode}');
     return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -805,7 +809,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
   );
   try {
     if (response == null) return null;
-    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    // The body can carry an OAuth `auth_url` with its state token; log only the status.
+    Logger.debug('addMcpServer: ${response.statusCode}');
     if (response.statusCode == 200) {
       return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }

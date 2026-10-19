@@ -102,10 +102,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   /// the native history's 7-day retention). Its window counts mirror `reconnection_count_window`
   /// and `fail_to_connect_count_window` in [_buildBundle].
   DiagnosticsSummary get _summary => summarizeDiagnostics(
-        _diagnostics?.disconnectHistory ?? const [],
-        nowMs: clock.now().millisecondsSinceEpoch,
-        sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
-      );
+    _diagnostics?.disconnectHistory ?? const [],
+    nowMs: clock.now().millisecondsSinceEpoch,
+    sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
+  );
 
   Future<void> _loadBatteryHistory() async {
     try {
@@ -172,7 +172,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
-      'battery_history': extended['battery_history_v2'] ??
+      'battery_history':
+          extended['battery_history_v2'] ??
           _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
       'disconnect_history': disconnects
           .map(
@@ -432,7 +433,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   Widget _buildRightNow() {
     final l10n = context.l10n;
-    final battery = context.watch<DeviceProvider>().batteryLevel;
+    // batteryLevel keeps the last value seen after the link drops (only isCharging is reset), so a
+    // disconnected pendant has no "right now" reading; the support bundle nulls it the same way.
+    final device = context.watch<DeviceProvider>();
+    final battery = device.isConnected ? device.batteryLevel : -1;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
     return OmiSettingsGroup(
       header: l10n.diagnosticsRightNow,
@@ -494,8 +498,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           ),
         OmiSettingsRow(
           title: l10n.diagnosticsDrops,
-          value:
-              rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
+          value: rate == null
+              ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops))
+              : null,
           trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
         ),
         OmiSettingsRow(title: l10n.diagnosticsLongestGap, value: longest == null ? '--' : _formatDurationMs(longest)),
@@ -979,10 +984,10 @@ DiagnosticsSignal diagnosticsSignalFor(int rssi) {
 /// Excellent and Good are success, Fair is warning, Weak is danger.
 @visibleForTesting
 Color diagnosticsSignalColor(int rssi) => switch (diagnosticsSignalFor(rssi)) {
-      DiagnosticsSignal.excellent || DiagnosticsSignal.good => OmiColors.success,
-      DiagnosticsSignal.fair => OmiColors.warning,
-      DiagnosticsSignal.weak => OmiColors.danger,
-    };
+  DiagnosticsSignal.excellent || DiagnosticsSignal.good => OmiColors.success,
+  DiagnosticsSignal.fair => OmiColors.warning,
+  DiagnosticsSignal.weak => OmiColors.danger,
+};
 
 /// Success above 20%, warning at 11–20%, danger at 10% and below.
 @visibleForTesting

@@ -16,6 +16,7 @@ import pytest
 import diarizer.batch_pipeline_runtime  # noqa: F401  (imported at collection: the timing budget is per test)
 import utils.batch_pipeline.live  # noqa: F401
 import utils.batch_pipeline.serving  # noqa: F401
+from database import batch_pipeline_shadow_hook as hook
 from database.batch_pipeline_store import FirestoreStore
 from database.jobstore import dual_store
 from database.jobstore.dual_store import DualStore
@@ -65,7 +66,7 @@ def test_every_store_construction_in_the_seam_is_wrapped(module_name, function):
         assert bare == 1
     else:
         assert bare == 0
-    assert module.shadow_from_env is dual_store.shadow_from_env
+    assert module.shadow_from_env is hook.shadow_from_env  # the light seam: no job-store import in firestore mode
     assert module.FirestoreStore is FirestoreStore
 
 
@@ -94,3 +95,11 @@ def test_seam_shadows_only_when_staging_opts_in(module_name, _function, monkeypa
     _shadow_settings(monkeypatch)
     store = module.shadow_from_env(module.FirestoreStore('batch_pipeline_dev'))
     assert isinstance(store, DualStore) and type(store.primary) is FirestoreStore
+
+
+def test_seam_failure_keeps_the_plain_primary(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    _shadow_settings(monkeypatch)
+    monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: (_ for _ in ()).throw(RuntimeError('x')))
+    primary = FirestoreStore('batch_pipeline_dev')
+    assert hook.shadow_from_env(primary) is primary

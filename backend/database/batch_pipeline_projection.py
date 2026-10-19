@@ -11,6 +11,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
@@ -59,6 +60,11 @@ class ProjectionStore:
     def ref(self, table: str, key: str):
         return self.client.collection(f'{self.store.namespace}_{table}').document(key)
 
+    def _mirror(self, binding: ProjectionBinding) -> None:
+        # A2 shadow: these transactions write batch docs outside Store.run; no-op unless shadow mode.
+        namespace = getattr(self.store, 'namespace', '')
+        mirror_refresh(namespace, [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')])
+
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
         job = self.ref('jobs', segment_id).get().to_dict() or {}
@@ -68,6 +74,10 @@ class ProjectionStore:
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
         return job, entry, normalized_binding(job['projection_binding'])
+
+    def projection_watermark(self, hashed_owner: str) -> str | None:
+        # A fetch hint only; assignment rereads the watermark transactionally.
+        return (self.ref('owners', hashed_owner).get().to_dict() or {}).get('projection_watermark')
 
     def policy(self, segment_id: str) -> ProjectionPolicy:
         _, policy = load_stage_policy(self.store, segment_id, 'projection')
@@ -94,7 +104,9 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit, policy=policy)
+        receipt = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return receipt
 
     def check(self, session):
         @firestore.transactional
@@ -116,6 +128,7 @@ class ProjectionStore:
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
         self.run(commit, policy=policy)
+        self._mirror(binding)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -182,6 +195,7 @@ class ProjectionStore:
         result = self.run(firestore.transactional(commit), policy=policy)
         if result is not None and result.wake_token:
             outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
     @staticmethod
     def _backfill_dispatch() -> dict[str, str] | None:
@@ -250,7 +264,9 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit, policy=policy)
+        held = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return held
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction."""
@@ -429,6 +445,7 @@ class ProjectionStore:
 
         with writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
+        self._mirror(binding)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result

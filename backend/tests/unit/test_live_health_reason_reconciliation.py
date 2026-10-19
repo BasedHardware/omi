@@ -153,7 +153,7 @@ def test_serving_death_is_attributed_once_and_reconciles_fallback(
         assert not live_chain.health._cost_local
 
 
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full'])
+@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'])
 def test_window_bounded_raw_reason_wins_even_without_typed_proxy(cause):
     leg = serving_leg(family='parakeet')
     before = observed(leg.routing_target, 'censored', cause)
@@ -193,6 +193,7 @@ def test_false_send_while_raw_socket_is_alive_is_send_failed():
         ('connection_lost', 'connection_lost'),
         ('first_text_deadline', 'first_text_deadline'),
         ('capacity_full', 'capacity_full'),
+        ('replay_ring_overflow', 'replay_ring_overflow'),
     ],
 )
 def test_pending_failover_emits_stable_fallback_reason_labels(monkeypatch, source_reason, metric_reason):
@@ -263,9 +264,10 @@ def test_modulate_publishes_typed_cause_before_the_dead_latch(observe_at):
 
 def test_vocabulary_is_closed_and_classifier_cannot_accept_free_text():
     assert LIVE_STT_REASONS <= ALLOWED_REASONS
-    assert len(LIVE_STT_REASONS) == 32
+    assert len(LIVE_STT_REASONS) == 33
     assert provider_observation('failover', 'no_text_rescue_complete') is None
     assert provider_observation('failover', 'cancelled') is None
+    assert provider_observation('failover', 'replay_ring_overflow') is None  # session-local, never provider failure
     assert normalize_live_stt_reason('cancelled') == 'cancelled'
     assert normalize_live_stt_reason(None, 'unknown free text') == 'connection_lost'
     assert normalize_live_stt_reason('send ConnectionError: private') == 'connection_lost'
@@ -298,7 +300,7 @@ async def test_never_refreshed_snapshot_is_distinct_from_stale_and_idle_refreshe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full'])
+@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'])
 async def test_real_window_publishes_cause_before_latch_and_next_send_is_censored(cause):
     class ObservedWindow(WindowedParakeetSocket):
         def __setattr__(self, name, value):

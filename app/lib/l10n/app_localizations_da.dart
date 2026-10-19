@@ -9310,9 +9310,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count mere';
-  }
+  String get quoteShowSources => 'Vis kilder';
 
   @override
   String get jumpToLatestMessage => 'Gå til nyeste besked';
@@ -11052,7 +11050,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get openCall => 'Åbn opkald';
 
   @override
-  String get captureRecoveryBanner => 'Omi sender ikke lyd — tryk for at oprette forbindelse igen';
+  String get captureRecoveryBannerTitle => 'Omi sender ikke lyd';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11071,18 +11069,8 @@ class AppLocalizationsDa extends AppLocalizations {
   String get captureBannerRetrySync => 'Prøv synkronisering igen';
 
   @override
-  String get captureBannerWhatsWrong => 'Hvad foregår der?';
-
-  @override
-  String get captureBannerDismiss => 'Afvis';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth-forbindelsen til din Omi er gået i stå, så lyden når ikke frem til appen. Omi optager videre på enheden og synkroniseres, når forbindelsen er tilbage. Prøv igen opretter forbindelsen igen; hvis det fortsat fejler, tjek din enhed under Indstillinger > Enhed.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'Lydbindingen er gået i stå — transskriptionen fortsætter, når den er genoprettet';
 
   @override
   String get captureIngressNeedsReconnect => 'Lyden når ikke appen — tilslut din Omi igen';
@@ -13671,7 +13659,30 @@ class AppLocalizationsDa extends AppLocalizations {
   String get activityRetryAll => 'Prøv alle igen';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Optagelser sat på pause';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Upload er gået i stå';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser venter',
+      one: '1 optagelse venter',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitet, kræver opmærksomhed';
 
   @override
   String get connectAgentHeadline => 'Brug din Omi-hukommelse i ChatGPT og dine AI-agenter';
@@ -14357,4 +14368,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved af $total lyd gemt';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi optager stadig';
 }

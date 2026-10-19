@@ -33,7 +33,8 @@ extension _CaptureUplinkPolicy on CaptureController {
     final device = _recordingDevice;
     if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
     final stagedPhase = _capture.stagedReadModel.phase;
-    final attestedIdle = testingProbe &&
+    final attestedIdle =
+        testingProbe &&
         stagedPhase == CapturePhase.idle &&
         !_capture.stagedReadModel.callActive &&
         _pendantSuspension == null;
@@ -160,14 +161,25 @@ extension _CaptureUplinkPolicy on CaptureController {
   Future<void> _pauseDeviceTailBody() async {
     var revision = _preferences.capturePolicy.revision;
     await BatteryWidgetService().updateMuteState(true);
-    if (_preferences.capturePolicy.revision != revision) return;
-    await _cancelUplinkAudio();
-    if (_preferences.capturePolicy.revision != revision) return;
+    if (_preferences.capturePolicy.revision != revision) {
+      updateRecordingState(RecordingState.pause);
+      _publishCaptureChange();
+      return;
+    }
+    await _cancelUplinkAudio().timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+    if (_preferences.capturePolicy.revision != revision) {
+      updateRecordingState(RecordingState.pause);
+      _publishCaptureChange();
+      return;
+    }
     await _preferences.saveBool('nativeBleForegroundReady', false);
     await _preferences.saveBool('nativeBleStreamingEnabled', false);
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
-    await _abandonTranscriptionSocket(reason: 'device capture paused');
+    await _abandonTranscriptionSocket(
+      reason: 'device capture paused',
+    ).timeout(const Duration(milliseconds: 500), onTimeout: () => null);
+    updateRecordingState(RecordingState.pause);
     _publishCaptureChange();
   }
 
@@ -201,7 +213,8 @@ extension _CaptureUplinkPolicy on CaptureController {
 
   bool get _shouldReconnectTranscriptionSocket {
     final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !isPaused;
-    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
+    final activePhoneOrSystemCapture =
+        recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
     return activeDeviceCapture || activePhoneOrSystemCapture;

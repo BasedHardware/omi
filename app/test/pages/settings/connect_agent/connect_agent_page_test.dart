@@ -17,10 +17,7 @@ void main() {
   }
 
   testWidgets('lists ChatGPT and the computer agents with their state', (tester) async {
-    await pumpPage(
-      tester,
-      FakeAgentBackend(chatGptConnected: true, keys: {'Muse': null}),
-    );
+    await pumpPage(tester, FakeAgentBackend(chatGptConnected: true, keys: {'Muse': null}));
     expect(find.text('Use your Omi memory in ChatGPT and your AI agents'), findsOneWidget);
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Connected'), findsOneWidget);
@@ -123,6 +120,24 @@ void main() {
     expect(backend.created, ['Instinct (Omi app)']);
     expect(backend.revokedKeys, ['key-new-1']);
     expect(find.text('Key active'), findsNothing);
+  });
+
+  testWidgets('a link that fails after the sheet closed leaves no ghost key on the list', (tester) async {
+    final backend = FakeAgentBackend()..holdShare = Completer<void>();
+    await pumpPage(tester, backend);
+    await tester.tap(find.byKey(const ValueKey('connect_agent_instinct')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('agent_key_copy_prompt')));
+    await tester.pump();
+    await tester.tapAt(const Offset(195, 20)); // the scrim
+    await settle(tester);
+    // The list reloaded while the key existed; the link then fails and the key is deleted.
+    backend.holdShare!.completeError(Exception('zkr down'));
+    await settle(tester);
+    expect(backend.created, ['Instinct (Omi app)']);
+    expect(backend.revokedKeys, ['key-new-1']);
+    expect(find.text('Waiting for the agent to use its key'), findsNothing);
+    expect(find.text('Connect'), findsNWidgets(5));
   });
 
   testWidgets('a revoke shows at once even when the refresh after it fails, and the failure is said', (tester) async {

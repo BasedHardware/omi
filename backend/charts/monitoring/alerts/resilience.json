@@ -184,7 +184,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.10",
+          "expression": "$A >= 20 && $B > 0.10 && $E >= 5",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -232,6 +232,26 @@
           "refId": "D",
           "type": "reduce"
         }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -242,11 +262,11 @@
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "7",
-      "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests in 30m",
-      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests and at least 5 failures in 30m",
+      "threshold": "failure share > 0.10; terminal outcomes >= 20; failures >= 5",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi AI chat production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "verification": "2026-10-19: a quiet half hour (~22 terminals) with 4 provider_request_rejected 400s on omi:auto:chat-agent drove the 30m success share to 0.81 and set both chat rules pending. The failure floor ($E >= 5) keeps 3-4 rejects in low traffic from paging. Backtest over the full retained history (2026-10-09..10-19, 10m and 5m steps): the old and new conditions both have zero sustained firings; the worst windows are 10-15 16:43Z (success 0.74, 5.1 failures, 20 accepted: still satisfies the new condition) and 10-19 18:13Z (0.81, 4.3 failures: now suppressed). Accepted per 30m is p50 21 / p90 40, so a full outage (~20+ failures per 30m) clears the floor at once.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
@@ -2097,7 +2117,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B < 0.90",
+          "expression": "$A >= 20 && $B < 0.90 && $E >= 5",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2145,6 +2165,26 @@
           "refId": "D",
           "type": "reduce"
         }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
+        }
       }
     ],
     "updated": "2026-08-30T00:00:00Z",
@@ -2155,11 +2195,11 @@
     "annotations": {
       "__dashboardUid__": "omi-core-features",
       "__panelId__": "4",
-      "summary": "Chat response success share below the 90% paging floor while at least 20 journeys were accepted in 30m",
-      "threshold": "accepted >= 20 per 30m and success / (success + failure) < 0.90",
+      "summary": "Chat response success share below the 90% paging floor with at least 20 journeys accepted and at least 5 failures in 30m",
+      "threshold": "accepted >= 20 per 30m and success / (success + failure) < 0.90 and failures >= 5 per 30m",
       "user_impact": "Chat requests are terminalizing as failures; users cannot get AI chat responses.",
       "scope": "The chat-response journey outcome on the Cloud Run backend, ingested via the cloud-run-application-metrics bridge.",
-      "verification": "Confirm the success tile and the accepted-vs-settled panel on the linked Core Features dashboard before intervention.",
+      "verification": "2026-10-19: a quiet half hour (~22 terminals) with 4 provider_request_rejected 400s on omi:auto:chat-agent drove the 30m success share to 0.81 and set both chat rules pending. The failure floor ($E >= 5) keeps 3-4 rejects in low traffic from paging. Backtest over the full retained history (2026-10-09..10-19, 10m and 5m steps): the old and new conditions both have zero sustained firings; the worst windows are 10-15 16:43Z (success 0.74, 5.1 failures, 20 accepted: still satisfies the new condition) and 10-19 18:13Z (0.81, 4.3 failures: now suppressed). Accepted per 30m is p50 21 / p90 40, so a full outage (~20+ failures per 30m) clears the floor at once.",
       "safe_next_action": "Follow the real-traffic journeys runbook; treat a low success share with real accepted traffic as a user-facing outage, not a capacity signal.",
       "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
     },

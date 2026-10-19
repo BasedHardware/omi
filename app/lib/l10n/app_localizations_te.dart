@@ -9368,9 +9368,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+మరో $count';
-  }
+  String get quoteShowSources => 'మూలాలను చూపించు';
 
   @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
@@ -11114,7 +11112,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBannerTitle => 'Omi ఆడియో పంపడం లేదు';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11133,18 +11131,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
 
   @override
-  String get captureBannerWhatsWrong => 'ఏమి జరుగుతోంది?';
-
-  @override
-  String get captureBannerDismiss => 'దాచు';
-
-  @override
   String get captureWedgeBleExplanation =>
       'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'ఆడియో లింక్ ఆగిపోయింది — కనెక్షన్ తిరిగి వచ్చాక ట్రాన్స్‌క్రిప్ట్ అవుతుంది';
 
   @override
   String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
@@ -13737,7 +13725,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'అప్‌లోడ్ ఆగిపోయింది';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
+      one: '1 రికార్డింగ్ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
+
+  @override
+  String get activityAttentionSemantics => 'యాక్టివిటీ, శ్రద్ధ అవసరం';
 
   @override
   String get connectAgentHeadline => 'ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి';
@@ -14426,4 +14437,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omiలో రికార్డింగ్ కొనసాగుతోంది';
 }

@@ -45,7 +45,12 @@ class _TornWriteFile implements File {
 }
 
 Wal _wal(int timerStart) => Wal(
-    timerStart: timerStart, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss, storage: WalStorage.disk);
+  timerStart: timerStart,
+  codec: BleAudioCodec.opus,
+  seconds: 60,
+  status: WalStatus.miss,
+  storage: WalStorage.disk,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -133,5 +138,13 @@ void main() {
 
     final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
     expect((backup['wals'] as List).map((w) => w['timer_start']), [1000]);
+  });
+
+  test('a corrupted backup file returns an empty list', () async {
+    walFile.writeAsStringSync('');
+    backupFile.writeAsStringSync('{ invalid json }');
+
+    final wals = await WalFileManager.loadWals();
+    expect(wals, isEmpty);
   });
 }

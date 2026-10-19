@@ -13,6 +13,7 @@ import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/wals/wal_syncs.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -227,8 +228,12 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
-      {Timer Function(Duration, void Function())? transferTimer}) {
+  RingStorageSyncImpl syncWith(
+    _FakeLocalSync local,
+    _FakeRingDevice card,
+    Wal wal, {
+    Timer Function(Duration, void Function())? transferTimer,
+  }) {
     final sync = RingStorageSyncImpl(_Listener(), transferTimer: transferTimer)
       ..testConnection = card
       ..testWals = [wal];
@@ -238,28 +243,46 @@ void main() {
   }
 
   Wal ringWal() => Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: WalStatus.miss,
-        storage: WalStorage.sdcard,
-        device: 'devkit-1',
-        storageTotalBytes: 444,
-      );
+    timerStart: 1000,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'devkit-1',
+    storageTotalBytes: 444,
+  );
+
+  // Transfer to Phone reaches the ring through WalSyncs.syncWal, which sends
+  // the ring's virtual recording (fileNum -1) to RingStorageSyncImpl.
+  WalSyncs walSyncsWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
+    final syncs = WalSyncs(_Listener());
+    syncs.ring
+      ..testConnection = card
+      ..testWals = [wal]
+      ..setLocalSync(local)
+      ..setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
+    return syncs;
+  }
 
   for (final partialAudio in [false, true]) {
     test('idle read after BEGIN stops safely (partial audio=$partialAudio)', () async {
       final card = _FakeRingDevice(
-          ringInfo: RingInfo(readSeq: 5, writeSeq: 7, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+        ringInfo: RingInfo(readSeq: 5, writeSeq: 7, capacityPackets: 100, droppedPackets: 0, packetSize: 444),
+      );
       final local = _FakeLocalSync();
       final wal = ringWal()..storageTotalBytes = 2 * 444;
       final timers = <_ManualTimer>[];
-      final sync = syncWith(local, card, wal, transferTimer: (delay, callback) {
-        expect(delay, const Duration(seconds: 15));
-        final timer = _ManualTimer(callback);
-        timers.add(timer);
-        return timer;
-      });
+      final sync = syncWith(
+        local,
+        card,
+        wal,
+        transferTimer: (delay, callback) {
+          expect(delay, const Duration(seconds: 15));
+          final timer = _ManualTimer(callback);
+          timers.add(timer);
+          return timer;
+        },
+      );
       addTearDown(sync.stop);
       addTearDown(card.controller.close);
       final transfer = sync.syncWal(wal: wal);
@@ -279,7 +302,7 @@ void main() {
       card.emit(_readBegin(5, 2));
       await Future<void>.delayed(Duration.zero);
       timers.last.fire();
-      await transfer;
+      await expectLater(transfer, throwsException);
       expect(card.stopCalls, hasLength(1));
       expect(card.advanceCalls, isEmpty);
       expect(wal.status, WalStatus.miss);
@@ -296,18 +319,25 @@ void main() {
 
   for (final throws in [false, true]) {
     test('read command failure cleans up the transfer (throws=$throws)', () async {
-      final card = _FakeRingDevice(
-          ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444))
-        ..readResult = false
-        ..readFailure = throws ? StateError('synthetic GATT failure') : null;
+      final card =
+          _FakeRingDevice(
+              ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444),
+            )
+            ..readResult = false
+            ..readFailure = throws ? StateError('synthetic GATT failure') : null;
       final wal = ringWal();
       final timers = <_ManualTimer>[];
-      final sync = syncWith(_FakeLocalSync(), card, wal, transferTimer: (_, callback) {
-        final timer = _ManualTimer(callback);
-        timers.add(timer);
-        return timer;
-      });
-      await sync.syncWal(wal: wal);
+      final sync = syncWith(
+        _FakeLocalSync(),
+        card,
+        wal,
+        transferTimer: (_, callback) {
+          final timer = _ManualTimer(callback);
+          timers.add(timer);
+          return timer;
+        },
+      );
+      await expectLater(sync.syncWal(wal: wal), throwsException);
       // A callback racing with cancellation must not re-arm the cleaned-up timer.
       card.emit(_readBegin(5, 1));
       expect(timers, isEmpty);
@@ -322,15 +352,21 @@ void main() {
 
   test('a healthy DONE cancels the idle watchdog without a spurious STOP', () async {
     final card = _FakeRingDevice(
-        ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+      ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444),
+    );
     final local = _FakeLocalSync();
     final wal = ringWal();
     final timers = <_ManualTimer>[];
-    final sync = syncWith(local, card, wal, transferTimer: (_, callback) {
-      final timer = _ManualTimer(callback);
-      timers.add(timer);
-      return timer;
-    });
+    final sync = syncWith(
+      local,
+      card,
+      wal,
+      transferTimer: (_, callback) {
+        final timer = _ManualTimer(callback);
+        timers.add(timer);
+        return timer;
+      },
+    );
     addTearDown(sync.stop);
     addTearDown(card.controller.close);
     final transfer = sync.syncWal(wal: wal);
@@ -353,18 +389,28 @@ void main() {
     test('slow custody work preserves accepted bytes (DONE received=$receivedDone)', () async {
       final recordCount = receivedDone ? 2 : 3;
       final card = _FakeRingDevice(
-          ringInfo: RingInfo(
-              readSeq: 5, writeSeq: 5 + recordCount, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
+        ringInfo: RingInfo(
+          readSeq: 5,
+          writeSeq: 5 + recordCount,
+          capacityPackets: 100,
+          droppedPackets: 0,
+          packetSize: 444,
+        ),
+      );
       final local = _FakeLocalSync();
       final custody = _BlockedCustody();
       final wal = ringWal()..storageTotalBytes = recordCount * 444;
       final timers = <_ManualTimer>[];
-      final sync = syncWith(local, card, wal, transferTimer: (_, callback) {
-        final timer = _ManualTimer(callback);
-        timers.add(timer);
-        return timer;
-      })
-        ..testCustody = custody;
+      final sync = syncWith(
+        local,
+        card,
+        wal,
+        transferTimer: (_, callback) {
+          final timer = _ManualTimer(callback);
+          timers.add(timer);
+          return timer;
+        },
+      )..testCustody = custody;
       addTearDown(sync.stop);
       addTearDown(card.controller.close);
       final transfer = sync.syncWal(wal: wal);
@@ -382,7 +428,7 @@ void main() {
       timers.last.fire();
       if (!receivedDone) await _until(() => card.stopCalls.isNotEmpty);
       custody.firstRecord.complete(false);
-      await transfer;
+      await expectLater(transfer, receivedDone ? completes : throwsException);
       expect(local.added.single.totalFrames, 2, reason: 'both received records survive slow custody work');
       expect(card.stopCalls, hasLength(receivedDone ? 0 : 1));
       expect(card.advanceCalls, receivedDone ? [7] : isEmpty);
@@ -403,7 +449,7 @@ void main() {
     card.emit(_readBegin(9, 1)); // wrong start: requested readStart was 5
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -424,7 +470,7 @@ void main() {
     card.emit(_record());
     card.emit(_record());
     card.emit(_done(0, 6)); // consumed 2 records but DONE only covers 1
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -444,7 +490,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
@@ -464,7 +510,7 @@ void main() {
     await _until(() => card.statusRequested);
     card.custodyEpochValue = 11;
     card.statusGate!.complete(RingStatus(usedBytes: 0, unreadPackets: 1, freeBytes: 0, rtcValid: 1));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.readCalls, isEmpty);
     expect(card.advanceCalls, isEmpty);
@@ -484,7 +530,7 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(0, 6));
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(card.stopCalls, isNotEmpty);
@@ -525,11 +571,53 @@ void main() {
     card.emit(_readBegin(5, 1));
     card.emit(_record());
     card.emit(_done(3, 6)); // status error
-    await future;
+    await expectLater(future, throwsException);
 
     expect(card.advanceCalls, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
     await card.controller.close();
     await sync.stop();
+  });
+
+  test('WalSyncs.syncWal fails a ring transfer that the device ends with an error', () async {
+    final info = RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444);
+    final card = _FakeRingDevice(ringInfo: info);
+    final local = _FakeLocalSync();
+    final wal = ringWal()..fileNum = -1;
+    final syncs = walSyncsWith(local, card, wal);
+
+    // Transfer to Phone reports "Transfer complete" whenever this call returns.
+    final transfer = syncs.syncWal(wal: wal);
+    await _until(() => card.readCalls.isNotEmpty);
+    card.emit(_readBegin(5, 1));
+    card.emit(_record());
+    card.emit(_done(3, 6)); // status error
+    await expectLater(transfer, throwsException);
+
+    expect(card.advanceCalls, isEmpty);
+    expect(wal.status, WalStatus.miss);
+    expect(syncs.ring.isSyncing, isFalse);
+    expect(local.added, hasLength(1), reason: 'the audio that arrived stays saved on the phone');
+    await card.controller.close();
+    await syncs.ring.stop();
+  });
+
+  test('WalSyncs.syncWal rethrows a ring transfer error instead of returning an empty success', () async {
+    final info = RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444);
+    final card = _FakeRingDevice(ringInfo: info)..statusGate = Completer<RingStatus?>();
+    final wal = ringWal()..fileNum = -1;
+    final syncs = walSyncsWith(_FakeLocalSync(), card, wal);
+    final error = StateError('synthetic GATT failure');
+
+    final transfer = syncs.syncWal(wal: wal);
+    await _until(() => card.statusRequested);
+    card.statusGate!.completeError(error);
+    await expectLater(transfer, throwsA(same(error)));
+
+    expect(card.readCalls, isEmpty);
+    expect(wal.status, WalStatus.miss);
+    expect(syncs.ring.isSyncing, isFalse);
+    await card.controller.close();
+    await syncs.ring.stop();
   });
 }

@@ -6,6 +6,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
 from utils.notifications import (
     send_action_item_completed_notification,
@@ -281,8 +282,8 @@ def update_action_item_text(
                 logger.error(f"Failed to send completion notification: {notif_error}")
 
         # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
-        # only for an open task with a due date (#5085).
-        if 'completed' in update_data or 'due_at' in update_data:
+        # only for an open task with a due date (#5085). A rename re-arms it with the new title.
+        if action_item_write_affects_reminder(update_data):
             try:
                 sync_action_item_reminder(
                     uid,

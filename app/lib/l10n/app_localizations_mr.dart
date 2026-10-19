@@ -9329,9 +9329,7 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+आणखी $count';
-  }
+  String get quoteShowSources => 'स्रोत दाखवा';
 
   @override
   String get jumpToLatestMessage => 'नवीनतम संदेशावर जा';
@@ -11074,7 +11072,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get openCall => 'कॉल उघडा';
 
   @override
-  String get captureRecoveryBanner => 'Omi ऑडिओ पाठवत नाही — पुन्हा जोडण्यासाठी टॅप करा';
+  String get captureRecoveryBannerTitle => 'Omi ऑडिओ पाठवत नाही';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11093,17 +11091,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get captureBannerRetrySync => 'सिंक पुन्हा प्रयत्न करा';
 
   @override
-  String get captureBannerWhatsWrong => 'काय चालू आहे?';
-
-  @override
-  String get captureBannerDismiss => 'लपवा';
-
-  @override
   String get captureWedgeBleExplanation =>
       'तुमच्या Omi शी असलेला ब्लूटूथ दुवा तुटला आहे, म्हणून ऑडिओ अ‍ॅपपर्यंत पोहोचत नाही. Omi डिव्हाइसवर रेकॉर्डिंग सुरू ठेवते आणि दुवा पुन्हा स्थापित झाल्यावर सिंक होईल. पुन्हा प्रयत्न केल्याने दुवा पुन्हा जोडला जातो; तो सतत अयशस्वी होत असल्यास, सेटिंग्ज > डिव्हाइसमध्ये तुमचे डिव्हाइस तपासा.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'ऑडिओ लिंक थांबला — कनेक्शन परत आल्यावर ट्रान्सक्रिप्ट होईल';
 
   @override
   String get captureIngressNeedsReconnect => 'ऑडिओ अॅपपर्यंत पोहोचत नाही — तुमचे Omi पुन्हा कनेक्ट करा';
@@ -13689,7 +13678,30 @@ class AppLocalizationsMr extends AppLocalizations {
   String get activityRetryAll => 'सर्व पुन्हा प्रयत्न करा';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'स्टोरेज तपासता येत नाही';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'रेकॉर्डिंग थांबवल्या';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'अपलोड थांबले';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग प्रतीक्षेत',
+      one: '1 रेकॉर्डिंग प्रतीक्षेत',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
+
+  @override
+  String get activityAttentionSemantics => 'अ‍ॅक्टिव्हिटी, लक्ष द्या';
 
   @override
   String get connectAgentHeadline => 'ChatGPT आणि तुमच्या AI एजंट्समध्ये तुमची Omi स्मृती वापरा';
@@ -14377,4 +14389,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ऑडिओ जतन केला, एकूण $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi वर रेकॉर्डिंग सुरू आहे';
 }

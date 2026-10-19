@@ -1,0 +1,4 @@
+{
+  "change": "Tapping an Omi answer notification opens the chat again",
+  "platforms": ["ios"]
+}

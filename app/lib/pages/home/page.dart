@@ -320,14 +320,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents =
-            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
-        final backgroundEvents =
-            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
+        final recentEvents = diagnostics.disconnectHistory
+            .where((event) => event.timestamp >= startMs && !event.isManual)
+            .toList();
+        final backgroundEvents = recentEvents
+            .where((event) => event.appState == 'background' || event.appState == 'inactive')
+            .toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
-        connectionTimeoutCount =
-            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
+        connectionTimeoutCount = backgroundEvents
+            .where((event) => event.reason.toLowerCase().contains('timeout'))
+            .length;
         final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
         reconnectCount = reconnectedEvents.length;
         for (final event in reconnectedEvents) {
@@ -337,7 +340,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         reconnectionCountTotal = diagnostics.reconnectionCount;
         failToConnectCountTotal = diagnostics.failToConnectCount;
-        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
+        bleHistorySaturated =
+            diagnostics.disconnectHistory.length >= 20 &&
             diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
         nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
         nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
@@ -925,63 +929,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   Widget _buildChatBar(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: _openChat,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _openChat,
-        child: Container(
-          height: kHomeChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openChat(voice: true),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: kHomeChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return HomeAskAnythingButton(onTap: _openChat);
   }
 
   /// Export and the completed toggle, beside the switcher while Tasks is showing.

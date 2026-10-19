@@ -21,7 +21,7 @@ from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
-from database.jobstore.dual_store import shadow_from_env
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key

@@ -43,11 +43,12 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
       phase: CapturePhase.pendantLive,
       sessionSeq: seq,
       active: () => ActiveCaptureSession(
-          source: CaptureSource.pendant,
-          mode: CaptureTransport.live,
-          sessionKey: key,
-          deviceId: device.id,
-          deviceType: device.type),
+        source: CaptureSource.pendant,
+        mode: CaptureTransport.live,
+        sessionKey: key,
+        deviceId: device.id,
+        deviceType: device.type,
+      ),
     ),
     [
       const PolicyWrite(false),
@@ -73,6 +74,7 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
   if (nextPhase != state.phase) {
     return CaptureTransition(state.copyWith(phase: nextPhase), const [
       PolicyWrite(true),
+      RunStage(RecordingMarkStage(RecordingState.pause)),
       RunStage(PauseDeviceTailStage()),
     ]);
   }
