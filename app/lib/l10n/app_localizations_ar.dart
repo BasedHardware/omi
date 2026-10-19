@@ -9262,9 +9262,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count أخرى';
-  }
+  String get quoteShowSources => 'عرض المصادر';
 
   @override
   String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';

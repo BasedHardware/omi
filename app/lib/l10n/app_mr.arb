@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "लाइव्ह ट्रान्स्क्रिप्शन, प्रश्न विचारणे आणि डबल-टॅप शॉर्टकट वापरून पहा.",
     "deviceOnboardingIntroDuration": "सुमारे 1 मिनिट",
     "quoteJumpToTime": "{duration} वर जा",
-    "quoteMoreTimestamps": "+आणखी {count}",
+    "quoteShowSources": "स्रोत दाखवा",
     "jumpToLatestMessage": "नवीनतम संदेशावर जा",
     "latest": "नवीनतम",
     "flashFirmware": "फर्मवेअर फ्लॅश करा",

@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Cuba transkripsi langsung, bertanya soalan, dan pintasan ketik dua kali.",
     "deviceOnboardingIntroDuration": "Kira-kira 1 minit",
     "quoteJumpToTime": "Lompat ke {duration}",
-    "quoteMoreTimestamps": "+{count} lagi",
+    "quoteShowSources": "Tunjukkan sumber",
     "jumpToLatestMessage": "Lompat ke mesej terkini",
     "latest": "Terkini",
     "flashFirmware": "Flash Perisian Tegar",

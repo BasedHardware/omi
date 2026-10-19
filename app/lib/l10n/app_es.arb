@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Prueba la transcripción en vivo, hacer una pregunta y el atajo de doble toque.",
     "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto",
     "quoteJumpToTime": "Ir a {duration}",
-    "quoteMoreTimestamps": "+{count} más",
+    "quoteShowSources": "Mostrar fuentes",
     "jumpToLatestMessage": "Ir al mensaje más reciente",
     "latest": "Más reciente",
     "flashFirmware": "Flashear firmware",

@@ -9372,9 +9372,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count més';
-  }
+  String get quoteShowSources => 'Mostra les fonts';
 
   @override
   String get jumpToLatestMessage => 'Vés a l\'últim missatge';

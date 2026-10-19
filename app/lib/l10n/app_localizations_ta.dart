@@ -9392,9 +9392,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+மேலும் $count';
-  }
+  String get quoteShowSources => 'மூலங்களைக் காட்டு';
 
   @override
   String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';

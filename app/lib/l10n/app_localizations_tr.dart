@@ -9330,9 +9330,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count daha';
-  }
+  String get quoteShowSources => 'Kaynakları göster';
 
   @override
   String get jumpToLatestMessage => 'En son mesaja git';

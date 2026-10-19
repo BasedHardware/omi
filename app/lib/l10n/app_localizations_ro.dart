@@ -9365,9 +9365,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ încă $count';
-  }
+  String get quoteShowSources => 'Afișează sursele';
 
   @override
   String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';

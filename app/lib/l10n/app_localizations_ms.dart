@@ -9340,9 +9340,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lagi';
-  }
+  String get quoteShowSources => 'Tunjukkan sumber';
 
   @override
   String get jumpToLatestMessage => 'Lompat ke mesej terkini';

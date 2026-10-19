@@ -9366,9 +9366,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ уште $count';
-  }
+  String get quoteShowSources => 'Прикажи извори';
 
   @override
   String get jumpToLatestMessage => 'Оди до последната порака';

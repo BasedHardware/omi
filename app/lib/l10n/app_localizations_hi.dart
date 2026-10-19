@@ -9300,9 +9300,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count और';
-  }
+  String get quoteShowSources => 'स्रोत दिखाएँ';
 
   @override
   String get jumpToLatestMessage => 'नवीनतम संदेश पर जाएं';

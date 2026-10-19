@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Probeer live transcriptie, een vraag stellen en de dubbeltik-snelkoppeling.",
     "deviceOnboardingIntroDuration": "Ongeveer 1 minuut",
     "quoteJumpToTime": "Ga naar {duration}",
-    "quoteMoreTimestamps": "+{count} meer",
+    "quoteShowSources": "Bronnen tonen",
     "jumpToLatestMessage": "Naar nieuwste bericht springen",
     "latest": "Nieuwste",
     "flashFirmware": "Firmware flashen",

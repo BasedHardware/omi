@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.",
     "deviceOnboardingIntroDuration": "כדקה אחת",
     "quoteJumpToTime": "מעבר אל {duration}",
-    "quoteMoreTimestamps": "+{count} נוספים",
+    "quoteShowSources": "הצגת מקורות",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
     "latest": "האחרון",
     "flashFirmware": "צריבת קושחה",

@@ -2999,7 +2999,7 @@
     "deviceOnboardingIntroSubtitle": "Опитайте живата транскрипция, задаването на въпрос и пряк път с двойно докосване.",
     "deviceOnboardingIntroDuration": "Около 1 минута",
     "quoteJumpToTime": "Към {duration}",
-    "quoteMoreTimestamps": "+ още {count}",
+    "quoteShowSources": "Покажи източниците",
     "jumpToLatestMessage": "Отиди до последното съобщение",
     "latest": "Последно",
     "flashFirmware": "Инсталирай фърмуера",

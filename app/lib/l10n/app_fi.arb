@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Kokeile live-litterointia, kysymyksen esittämistä ja kaksoisnapautuksen pikanäppäintä.",
     "deviceOnboardingIntroDuration": "Noin 1 minuutti",
     "quoteJumpToTime": "Siirry kohtaan {duration}",
-    "quoteMoreTimestamps": "+{count} lisää",
+    "quoteShowSources": "Näytä lähteet",
     "jumpToLatestMessage": "Siirry uusimpaan viestiin",
     "latest": "Uusin",
     "flashFirmware": "Asenna laiteohjelmisto",

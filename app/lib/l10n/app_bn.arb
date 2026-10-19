@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "লাইভ ট্রান্সক্রিপশন, প্রশ্ন করা এবং ডাবল-ট্যাপ শর্টকাট চেষ্টা করুন।",
     "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
     "quoteJumpToTime": "{duration}-এ যান",
-    "quoteMoreTimestamps": "+আরও {count}",
+    "quoteShowSources": "উৎস দেখান",
     "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
     "latest": "সর্বশেষ",
     "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন",

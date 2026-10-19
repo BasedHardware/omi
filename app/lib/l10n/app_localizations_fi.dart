@@ -9322,9 +9322,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lisää';
-  }
+  String get quoteShowSources => 'Näytä lähteet';
 
   @override
   String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';

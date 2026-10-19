@@ -9342,9 +9342,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count meer';
-  }
+  String get quoteShowSources => 'Bronnen tonen';
 
   @override
   String get jumpToLatestMessage => 'Naar nieuwste bericht springen';

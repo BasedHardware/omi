@@ -9183,9 +9183,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+他$count件';
-  }
+  String get quoteShowSources => '出典を表示';
 
   @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
