@@ -105,10 +105,15 @@ def test_randomized_compact_maps_preserve_every_correct_base_window(base_mapper,
                     assert candidate == oracle
                 if base != candidate:
                     counts['changed'] += 1
-                    # Only exact exclusive ends at a discontinuous compact
+                    # Only exact exclusive edges at a discontinuous compact
                     # boundary change. Non-boundary windows retain base output.
-                    index = next(i for i, span in enumerate(sends._spans) if span[0] + span[2] == end)
-                    assert index + 1 < len(sends._spans)
+                    index = next(
+                        i
+                        for i, span in enumerate(sends._spans)
+                        if span[0] + span[2] in (first, end)
+                        and i + 1 < len(sends._spans)
+                        and span[1] + span[2] != sends._spans[i + 1][1]
+                    )
                     previous, following = sends._spans[index : index + 2]
                     assert previous[1] + previous[2] != following[1]
                     assert base != oracle  # never alter a previously correct accepted window
