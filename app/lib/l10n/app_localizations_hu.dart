@@ -13182,6 +13182,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewProposalSuggested => 'Javasolt';
 
   @override
+  String get reviewQuestionOutOfDate => 'Ez a kérdés már nem aktuális, ezért semmi sem változott.';
+
+  @override
   String get reviewProposalConflict => 'Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.';
 
   @override

@@ -135,11 +135,11 @@ def record_agent_change(
         rows = [(e, r, r.get(transaction=tx).to_dict()) for e, r in snapshots]
         if existing:
             if existing['edit_key'] != edit_key:
-                raise store.ReviewConflict('Change identity conflict')
+                raise store.ReviewStale('Change identity conflict')
             result.update(existing)
             raise _Unchanged
         if blocked and not store.is_user_request(uid):
-            raise store.ReviewConflict('Agent edit was undone by the user')
+            raise store.ReviewStale('Agent edit was undone by the user')
         store.validate_records(uid, tx, expected_records)
         records = []
         for edit, _, data in rows:
@@ -257,7 +257,7 @@ def merge_review_entities(
         # witness. Never bless a fresh reread or discard unrelated null fences.
         fences[path] = nodes[entity_id]
     if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
-        raise store.ReviewConflict('Two current distinct entity nodes are required')
+        raise store.ReviewStale('Two current distinct entity nodes are required')
     merged = entities.apply_entity_mutations({left: a, right: b}, [memory_ledger.merge_entities(left, right)])[left]
     aliases = merged.get('aliases', [])
     return record_agent_change(

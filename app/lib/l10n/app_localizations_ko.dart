@@ -12948,6 +12948,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewProposalSuggested => '제안';
 
   @override
+  String get reviewQuestionOutOfDate => '이 질문은 더 이상 유효하지 않아 아무것도 변경되지 않았습니다.';
+
+  @override
   String get reviewProposalConflict => 'Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.';
 
   @override

@@ -23343,6 +23343,12 @@ abstract class AppLocalizations {
   /// **'Suggested'**
   String get reviewProposalSuggested;
 
+  /// Neutral feedback when a Review answer conflicts with current data.
+  ///
+  /// In en, this message translates to:
+  /// **'This question is out of date, so nothing changed.'**
+  String get reviewQuestionOutOfDate;
+
   /// Error after Apply: the item changed after Dream suggested the change, so nothing was applied
   ///
   /// In en, this message translates to:

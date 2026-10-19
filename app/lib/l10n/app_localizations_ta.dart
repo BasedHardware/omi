@@ -13220,6 +13220,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewProposalSuggested => 'பரிந்துரைக்கப்பட்டது';
 
   @override
+  String get reviewQuestionOutOfDate => 'இந்தக் கேள்வி காலாவதியாகிவிட்டது, எனவே எதுவும் மாறவில்லை.';
+
+  @override
   String get reviewProposalConflict => 'Dream பரிந்துரைத்த பிறகு இது மாறியுள்ளது, அதனால் எதுவும் பயன்படுத்தப்படவில்லை.';
 
   @override

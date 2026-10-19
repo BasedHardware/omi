@@ -13168,6 +13168,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reviewProposalSuggested => 'ಸೂಚಿಸಲಾಗಿದೆ';
 
   @override
+  String get reviewQuestionOutOfDate => 'ಈ ಪ್ರಶ್ನೆ ಹಳೆಯದಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನೂ ಬದಲಾಗಿಲ್ಲ.';
+
+  @override
   String get reviewProposalConflict => 'Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.';
 
   @override

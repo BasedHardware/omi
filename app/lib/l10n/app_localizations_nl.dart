@@ -13166,6 +13166,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reviewProposalSuggested => 'Voorgesteld';
 
   @override
+  String get reviewQuestionOutOfDate => 'Deze vraag is verouderd, dus er is niets gewijzigd.';
+
+  @override
   String get reviewProposalConflict => 'Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.';
 
   @override

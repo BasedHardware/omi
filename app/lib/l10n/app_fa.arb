@@ -11449,6 +11449,7 @@
     "reviewProposalGeneric": "این اصلاح پیشنهادی اعمال شود؟",
     "reviewProposalApply": "اعمال",
     "reviewProposalSuggested": "پیشنهادی",
+    "reviewQuestionOutOfDate": "این پرسش دیگر به‌روز نیست، بنابراین چیزی تغییر نکرد.",
     "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.",
     "itemLinkListTitle": "{count, plural, =0{هیچ موردی نیست} =1{۱ مورد} other{{count} مورد}}",
     "paywallRecommended": "پیشنهادی",

@@ -74,7 +74,7 @@ def validate_summary_edit(edit, row, *, full=False, authority='dream'):
     if edit.kind not in {'title', 'overview'}:
         return
     if row.get('is_locked') or not conversations.is_visible_conversation(row):
-        raise review_store.ReviewConflict('Dream conversation unavailable')
+        raise review_store.ReviewStale('Dream conversation unavailable')
     if authority == 'user' and isinstance(edit, HarnessEdit):
         current = (
             row.get('user_title')
@@ -82,14 +82,14 @@ def validate_summary_edit(edit, row, *, full=False, authority='dream'):
             else (row.get('structured') or {}).get(edit.kind, '')
         )
         if edit.before != current:
-            raise review_store.ReviewConflict('Agent summary changed')
+            raise review_store.ReviewStale('Agent summary changed')
         if not edit.after.strip():
             raise ValueError('agent_empty_summary')
         return
     if edit.kind == 'title' and row.get('user_title'):
-        raise review_store.ReviewConflict('Dream title was set by the user')
+        raise review_store.ReviewStale('Dream title was set by the user')
     if edit.before != ((row.get('structured') or {}).get(edit.kind) or ''):
-        raise review_store.ReviewConflict('Dream summary changed')
+        raise review_store.ReviewStale('Dream summary changed')
     reason = summary_rejection(edit, row, full=full)
     if reason:
         raise ValueError('agent_summary_' + reason)
@@ -102,7 +102,7 @@ def validate_memory_hygiene(edit, records):
         raise ValueError('agent_invalid_memory')
     row = records[ref]
     if edit.before and edit.before != row.get('content'):
-        raise review_store.ReviewConflict('Dream memory changed')
+        raise review_store.ReviewStale('Dream memory changed')
     if not any(
         base_ref(ev) != ref and base_ref(ev).partition('/')[0] in {'conversations', 'memories', 'memory_items'}
         for ev in edit.evidence
@@ -122,7 +122,7 @@ def validate_memory_hygiene(edit, records):
         if any(
             row.get(field) != other.get(field) for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
         ):
-            raise review_store.ReviewConflict('Replacement must share privacy, subject and attribute')
+            raise review_store.ReviewStale('Replacement must share privacy, subject and attribute')
     elif edit.kind == 'supersede_memory' and not any(base_ref(ev).startswith('conversations/') for ev in edit.evidence):
         raise ValueError('agent_unknown_evidence')
 
@@ -216,10 +216,12 @@ def answer_spelling(uid, source, value):
     selected = edit.model_copy(update={'after': value})
     try:
         status = apply_edit(uid, selected, records, expected_records=source.get('fences'), authority='user')
+    except (review_store.ReviewConflict, review_store.ReviewNotFound):
+        raise
     except ValueError as exc:
-        raise review_store.ReviewConflict('Dream spelling proposal no longer valid') from exc
+        raise review_store.ReviewStale('Dream spelling proposal no longer valid') from exc
     if status == 'suppressed':
-        raise review_store.ReviewConflict('Dream spelling proposal was suppressed')
+        raise review_store.ReviewStale('Dream spelling proposal was suppressed')
     return status == 'applied'
 
 
@@ -257,18 +259,22 @@ def revalidate_proposal(uid, source):
     for ref, snapshot in records.items():
         try:
             current = proposal_record(uid, ref, snapshot)
+        except review_store.ReviewConflict:
+            raise
         except (review_store.ReviewNotFound, LookupError, ValueError) as exc:
-            raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
+            raise review_store.ReviewStale('Dream proposal evidence unavailable') from exc
         except HTTPException as exc:
-            if exc.status_code not in {402, 404}:
+            if exc.status_code == 402:
+                raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
+            if exc.status_code != 404:
                 raise
-            raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
+            raise review_store.ReviewStale('Dream proposal evidence unavailable') from exc
         if review_store.fingerprint(current) != review_store.fingerprint(snapshot):
-            raise review_store.ReviewConflict('Dream proposal evidence changed')
+            raise review_store.ReviewStale('Dream proposal evidence changed')
     for path, snapshot in source.get('auxiliary', {}).items():
         collection, key = path.split('/', 1)
         if review_store.user(uid).collection(collection).document(key).get().to_dict() != snapshot:
-            raise review_store.ReviewConflict('Dream proposal target changed')
+            raise review_store.ReviewStale('Dream proposal target changed')
     return records
 
 
@@ -319,12 +325,12 @@ def validate_canonical_proposal(uid, edit):
         or row.ledger_schema_version != 'knowledge_ledger.v1'
         for row in sources
     ):
-        raise review_store.ReviewConflict('Only active canonical facts may be proposed')
+        raise review_store.ReviewStale('Only active canonical facts may be proposed')
     if len(sources) == 2 and any(
         getattr(sources[0], field) != getattr(sources[1], field)
         for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot', 'tier')
     ):
-        raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
+        raise review_store.ReviewStale('Duplicate facts must share visibility and subject')
 
 
 def proposal_label(row):
@@ -437,10 +443,12 @@ def answer_proposal(uid, proposal, source, decision):
             if selected
             else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'), user_accepted=True)
         )
+    except (review_store.ReviewConflict, review_store.ReviewNotFound):
+        raise
     except ValueError as exc:
-        raise review_store.ReviewConflict('Dream proposal no longer valid') from exc
+        raise review_store.ReviewStale('Dream proposal no longer valid') from exc
     if status == 'suppressed':
-        raise review_store.ReviewConflict('Dream proposal was suppressed')
+        raise review_store.ReviewStale('Dream proposal was suppressed')
     return status == 'applied'
 
 
@@ -517,7 +525,7 @@ def validate_memory(edit, records, *, authority='dream'):
         raise ValueError('agent_invalid_memory')
     MemoryEdit(memory_id=key_id, content=edit.after)
     if edit.kind == 'memory' and edit.before and (edit.before != row.get('content')):
-        raise review_store.ReviewConflict('Dream memory changed')
+        raise review_store.ReviewStale('Dream memory changed')
     if edit.kind == 'merge_memories':
         other = records.get(base_ref(edit.other))
         if (
@@ -532,7 +540,7 @@ def validate_memory(edit, records, *, authority='dream'):
                 for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot', 'memory_tier')
             )
         ):
-            raise review_store.ReviewConflict('Duplicate facts must share visibility and subject')
+            raise review_store.ReviewStale('Duplicate facts must share visibility and subject')
 
 
 def validate_entity(edit, records, *, authority='dream'):
@@ -572,7 +580,7 @@ def validate_edit(edit, records, *, authority='dream'):
     if not _separator or not key_id or '/' in key_id:
         raise ValueError('agent_invalid_target')
     if row.get('is_locked') or row.get('deleted') or row.get('discarded') or row.get('is_dismissed'):
-        raise review_store.ReviewConflict('Dream target unavailable')
+        raise review_store.ReviewStale('Dream target unavailable')
     from utils.agent_capabilities.registry import get_kind
 
     get_kind(edit.kind).validate(edit, records, authority=authority)
@@ -601,7 +609,7 @@ def apply_entity(uid, edit, records, change, key, row, *, expected_records=None,
     raw = cache_ref.get().to_dict()
     current = review_store.decode_doc(uid, raw) or {}
     if edit.before != current.get('summary', ''):
-        raise review_store.ReviewConflict('Dream entity summary changed')
+        raise review_store.ReviewStale('Dream entity summary changed')
     patch = review_store.encode_doc(uid, {'summary': edit.after, 'updated_at': change.created_at})
     review_changes.record_agent_change(
         uid,
@@ -650,9 +658,9 @@ def patch_task(
     if collection != 'action_items' or raw.get('status', 'active') != 'active':
         raise ValueError('agent_invalid_task')
     if raw.get('account_generation', 0) != get_task_workflow_control(uid).account_generation:
-        raise review_store.ReviewConflict('Dream task generation changed')
+        raise review_store.ReviewStale('Dream task generation changed')
     if raw.get('updated_at') != row.get('updated_at') or raw.get('status', 'active') != row.get('status', 'active'):
-        raise review_store.ReviewConflict('Dream task changed')
+        raise review_store.ReviewStale('Dream task changed')
     if authority == 'dream':
         reason = task_rejection(edit, raw, records)
         if reason:
@@ -670,14 +678,14 @@ def patch_summary(
 ):
     current = conversations.prepare_conversation_for_read(copy.deepcopy(raw), uid)
     if current is None:
-        raise review_store.ReviewConflict('Dream conversation unavailable')
+        raise review_store.ReviewStale('Dream conversation unavailable')
     fields = [edit.kind, 'sections', 'note_claims'] if edit.kind == 'overview' else [edit.kind]
     if (
         current.get('transcript_segments') != row.get('transcript_segments')
         or any(((current.get('structured') or {}).get(k) != (row.get('structured') or {}).get(k) for k in fields))
         or current.get('user_title') != row.get('user_title')
     ):
-        raise review_store.ReviewConflict('Dream conversation changed')
+        raise review_store.ReviewStale('Dream conversation changed')
     validate_summary_edit(edit, current, full=isinstance(edit, HarnessEdit), authority=authority)
     patch: dict[str, Any] = {'structured.' + edit.kind: edit.after}
     if authority == 'user' and isinstance(edit, HarnessEdit) and (edit.kind == 'title') and current.get('user_title'):
@@ -697,16 +705,16 @@ def patch_spelling(
 ):
     if collection == 'people':
         if raw.get('name') != row.get('name'):
-            raise review_store.ReviewConflict('Dream person changed')
+            raise review_store.ReviewStale('Dream person changed')
         patch = {'name': replace_term(row['name'], edit.before, edit.after)}
     elif collection == 'conversations':
         current = conversations.prepare_conversation_for_read(copy.deepcopy(raw), uid)
         if current is None:
-            raise review_store.ReviewConflict('Dream conversation unavailable')
+            raise review_store.ReviewStale('Dream conversation unavailable')
         if current.get('transcript_segments') != row.get('transcript_segments') or current.get('structured') != row.get(
             'structured'
         ):
-            raise review_store.ReviewConflict('Dream conversation changed')
+            raise review_store.ReviewStale('Dream conversation changed')
         structured = current.get('structured') or {}
         if '#' not in edit.target:
             structured = _replace_tree(structured, edit.before, edit.after)
@@ -772,7 +780,7 @@ def apply_fields(uid, edit, records, change, key, row, *, expected_records=None,
     collection, key_id = base_ref(edit.target).split('/', 1)
     raw = review_store.user(uid).collection(collection).document(key_id).get().to_dict()
     if not raw or raw.get('is_locked'):
-        raise review_store.ReviewConflict('Dream target unavailable')
+        raise review_store.ReviewStale('Dream target unavailable')
     from utils.agent_capabilities.registry import get_kind
 
     patch = get_kind(edit.kind).patch(

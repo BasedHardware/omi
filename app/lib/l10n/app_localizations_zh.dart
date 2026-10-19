@@ -12924,6 +12924,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewProposalSuggested => '建议';
 
   @override
+  String get reviewQuestionOutOfDate => '此问题已过时，因此未做任何更改。';
+
+  @override
   String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
 
   @override

@@ -13233,6 +13233,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reviewProposalSuggested => 'Suggéré';
 
   @override
+  String get reviewQuestionOutOfDate => 'Cette question n’est plus d’actualité, donc rien n’a changé.';
+
+  @override
   String get reviewProposalConflict => 'Ceci a changé depuis la suggestion de Dream, donc rien n\'a été appliqué.';
 
   @override

@@ -13143,6 +13143,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reviewProposalSuggested => 'Önerilen';
 
   @override
+  String get reviewQuestionOutOfDate => 'Bu soru güncelliğini yitirdiği için hiçbir şey değişmedi.';
+
+  @override
   String get reviewProposalConflict => 'Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.';
 
   @override

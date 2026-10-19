@@ -12943,6 +12943,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reviewProposalSuggested => '提案';
 
   @override
+  String get reviewQuestionOutOfDate => 'この質問は古くなっているため、何も変更されませんでした。';
+
+  @override
   String get reviewProposalConflict => 'Dreamが提案した後に内容が変わったため、何も適用されませんでした。';
 
   @override

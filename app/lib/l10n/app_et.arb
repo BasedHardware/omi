@@ -4026,6 +4026,7 @@
     "reviewProposalGeneric": "Kas rakendada see soovitatud parandus?",
     "reviewProposalApply": "Rakenda",
     "reviewProposalSuggested": "Soovitatud",
+    "reviewQuestionOutOfDate": "See küsimus on aegunud, seega midagi ei muudetud.",
     "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.",
     "itemLinkListTitle": "{count, plural, =0{Üksusi pole} =1{1 üksus} other{{count} üksust}}",
     "paywallRecommended": "Soovitatud",

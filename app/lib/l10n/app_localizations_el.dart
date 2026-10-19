@@ -13213,6 +13213,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewProposalSuggested => 'Προτεινόμενο';
 
   @override
+  String get reviewQuestionOutOfDate => 'Αυτή η ερώτηση δεν είναι πλέον επίκαιρη, οπότε δεν άλλαξε τίποτα.';
+
+  @override
   String get reviewProposalConflict => 'Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.';
 
   @override

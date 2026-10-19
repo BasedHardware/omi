@@ -4061,6 +4061,7 @@
     "reviewProposalGeneric": "Применить это предложенное исправление?",
     "reviewProposalApply": "Применить",
     "reviewProposalSuggested": "Предложено",
+    "reviewQuestionOutOfDate": "Этот вопрос устарел, поэтому ничего не изменилось.",
     "reviewProposalConflict": "Это изменилось после предложения Dream, поэтому ничего не применено.",
     "itemLinkListTitle": "{count, plural, =0{Нет элементов} =1{1 элемент} other{{count} элементов}}",
     "paywallRecommended": "Рекомендуем",

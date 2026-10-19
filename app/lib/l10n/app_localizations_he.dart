@@ -13036,6 +13036,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewProposalSuggested => 'מוצע';
 
   @override
+  String get reviewQuestionOutOfDate => 'השאלה הזו כבר לא עדכנית, ולכן דבר לא השתנה.';
+
+  @override
   String get reviewProposalConflict => 'זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.';
 
   @override

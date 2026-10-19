@@ -13110,6 +13110,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reviewProposalSuggested => 'सुझाया गया';
 
   @override
+  String get reviewQuestionOutOfDate => 'यह सवाल पुराना हो गया है, इसलिए कुछ नहीं बदला।';
+
+  @override
   String get reviewProposalConflict => 'Dream के सुझाव के बाद यह बदल गया, इसलिए कुछ भी लागू नहीं किया गया।';
 
   @override

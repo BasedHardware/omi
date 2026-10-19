@@ -13164,6 +13164,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reviewProposalSuggested => 'Прапанавана';
 
   @override
+  String get reviewQuestionOutOfDate => 'Гэтае пытанне састарэла, таму нічога не змянілася.';
+
+  @override
   String get reviewProposalConflict => 'Гэта змянілася пасля прапановы Dream, таму нічога не ўжыта.';
 
   @override

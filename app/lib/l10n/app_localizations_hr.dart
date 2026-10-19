@@ -13164,6 +13164,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get reviewProposalSuggested => 'Predloženo';
 
   @override
+  String get reviewQuestionOutOfDate => 'Ovo je pitanje zastarjelo, pa ništa nije promijenjeno.';
+
+  @override
   String get reviewProposalConflict => 'Ovo se promijenilo otkako je Dream to predložio, pa ništa nije primijenjeno.';
 
   @override

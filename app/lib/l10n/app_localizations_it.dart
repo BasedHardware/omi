@@ -13199,6 +13199,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reviewProposalSuggested => 'Suggerito';
 
   @override
+  String get reviewQuestionOutOfDate => 'Questa domanda non è più attuale, quindi non è cambiato nulla.';
+
+  @override
   String get reviewProposalConflict =>
       'È cambiato da quando Dream lo ha suggerito, quindi non è stato applicato nulla.';
 

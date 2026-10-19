@@ -13135,6 +13135,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reviewProposalSuggested => 'Föreslaget';
 
   @override
+  String get reviewQuestionOutOfDate => 'Den här frågan är inaktuell, så ingenting ändrades.';
+
+  @override
   String get reviewProposalConflict => 'Det här har ändrats sedan Dream föreslog det, så inget tillämpades.';
 
   @override

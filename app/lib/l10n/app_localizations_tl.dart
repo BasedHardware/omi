@@ -13235,6 +13235,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewProposalSuggested => 'Iminungkahi';
 
   @override
+  String get reviewQuestionOutOfDate => 'Luma na ang tanong na ito, kaya walang nabago.';
+
+  @override
   String get reviewProposalConflict => 'Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.';
 
   @override

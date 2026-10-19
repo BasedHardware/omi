@@ -13160,6 +13160,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewProposalSuggested => 'Dicadangkan';
 
   @override
+  String get reviewQuestionOutOfDate => 'Soalan ini sudah lapuk, jadi tiada apa-apa yang berubah.';
+
+  @override
   String get reviewProposalConflict => 'Ini telah berubah sejak Dream mencadangkannya, jadi tiada apa yang digunakan.';
 
   @override

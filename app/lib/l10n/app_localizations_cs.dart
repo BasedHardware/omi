@@ -13131,6 +13131,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reviewProposalSuggested => 'Navrženo';
 
   @override
+  String get reviewQuestionOutOfDate => 'Tato otázka je zastaralá, takže se nic nezměnilo.';
+
+  @override
   String get reviewProposalConflict => 'Od návrhu Dream se to změnilo, takže se nic nepoužilo.';
 
   @override

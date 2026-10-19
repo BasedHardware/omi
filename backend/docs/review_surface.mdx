@@ -55,7 +55,17 @@ Task resolution delegates to `utils.task_intelligence.candidate_service`; option
 user description/due/project edits occur inside its existing accept transaction,
 including account generation and task-link checks.
 
-A known pre-application error releases its reserved attention slot. An interrupted
+A retryable pre-application conflict (lease loss or a transactional fence race)
+releases its reserved attention slot. A `ReviewStale` conflict instead atomically
+refunds the slot and resolves the matching proposal evidence version, returning
+409 once; later GETs omit it. This includes missing entities, incompatible entity
+types, stale item-kind shapes, and permanently invalid Dream evidence. An
+incorrect request payload does not retire a valid question. If both identity
+references already resolve to the same entity, Yes succeeds with `applied=false`;
+No retires the stale question. Not sure retains its evidence-scoped suppression.
+Existing stuck proposals settle on the next answer after deployment; GET itself
+does not mutate them or require a migration. New evidence enqueued during an
+answer remains pending. An interrupted
 source application remains fenced rather than applying it twice; another answer
 returns 409 until its outcome is reconciled. Canonical memory journal intents can
 be retried using the same change id and provenance. No worker is introduced here.

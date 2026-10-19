@@ -15887,6 +15887,10 @@
     "@reviewProposalSuggested": {
         "description": "Label above the value Dream suggests, shown under the current value"
     },
+    "reviewQuestionOutOfDate": "This question is out of date, so nothing changed.",
+    "@reviewQuestionOutOfDate": {
+        "description": "Neutral feedback when a Review answer conflicts with current data."
+    },
     "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
     "@reviewProposalConflict": {
         "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"

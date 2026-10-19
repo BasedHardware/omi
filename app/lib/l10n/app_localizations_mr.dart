@@ -13135,6 +13135,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reviewProposalSuggested => 'सुचवलेले';
 
   @override
+  String get reviewQuestionOutOfDate => 'हा प्रश्न कालबाह्य झाला आहे, त्यामुळे काहीही बदलले नाही.';
+
+  @override
   String get reviewProposalConflict => 'Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.';
 
   @override

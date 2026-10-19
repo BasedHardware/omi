@@ -13160,6 +13160,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reviewProposalSuggested => 'Запропоновано';
 
   @override
+  String get reviewQuestionOutOfDate => 'Це запитання застаріло, тому нічого не змінилося.';
+
+  @override
   String get reviewProposalConflict => 'Це змінилося після пропозиції Dream, тому нічого не застосовано.';
 
   @override
