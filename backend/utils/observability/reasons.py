@@ -271,6 +271,15 @@ class FallbackReason(StrEnum):
     DOCUMENT_SIZE_LIMIT = 'document_size_limit'
     KEPT_OVER_80PCT = 'kept_over_80pct'
     NONE = 'none'
+    DEFERRALS_EXHAUSTED = 'deferrals_exhausted'
+    PRE_LOCK_EXPIRY = 'pre_lock_expiry'
+    MARKER_CLEAR_FAILED = 'marker_clear_failed'
+    MARKER_FAILED = 'marker_failed'
+    OWNER_WRITE_FAILED = 'owner_write_failed'
+    ENQUEUE_UNCERTAIN = 'enqueue_uncertain'
+    ACQUIRE_UNSETTLED = 'acquire_unsettled'
+    MARKER_TIMEOUT = 'marker_timeout'
+    PREAMBLE_TIMEOUT = 'preamble_timeout'
 
 
 def reason_values(enum: type[StrEnum]) -> frozenset[str]:
