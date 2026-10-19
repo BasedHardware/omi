@@ -123,6 +123,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  bool _signupPaywallShown = false;
   late final _stepTelemetry = MobileOnboardingStepTelemetry(
     emit: const TypedEvents().emit,
     platform: () => switch (Theme.of(context).platform) {
@@ -274,10 +275,26 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
-  /// control, and never when subscription UI is hidden (the router checks that).
+  /// control, and never when subscription UI is hidden (the router checks that). The `trial` arm
+  /// has its placement right after sign-up instead ([_maybeShowSignupPaywall]).
   Future<void> _maybeShowOnboardingPaywall() async {
     final config = await PaywallExperiment.resolve();
     if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (config.variant == PaywallVariant.trial) return;
+    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+  }
+
+  /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
+  /// Dismissing it ("Continue with the free plan") just continues onboarding.
+  Future<void> _maybeShowSignupPaywall() async {
+    if (_signupPaywallShown) return;
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
+    _signupPaywallShown = true;
+    // The router needs the subscription (trial eligibility) that sign-in only started fetching.
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) await usage.fetchSubscription();
+    if (!mounted) return;
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
@@ -285,6 +302,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
   /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
+    await _maybeShowSignupPaywall();
+    if (!mounted) return;
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
@@ -459,6 +478,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<void> _prebuildKnowledgeGraph() async {
     try {
       final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      // Canonical graphs are derived on read, even when no relationships exist.
+      // Do not schedule the legacy mutation rejected by the canonical fence.
+      if (current['canonical'] == true) return;
       final nodes = current['nodes'] as List<dynamic>? ?? const [];
       final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
       if (hasGraph) return;

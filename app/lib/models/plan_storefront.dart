@@ -1,4 +1,5 @@
 import 'package:omi/models/subscription.dart';
+import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
 /// Schema version 2 is the only accepted payload. Unknown versions and malformed purchasable prices fail closed.
@@ -10,6 +11,8 @@ class PlanStorefront {
   final String header;
   final String? yearlyToggleLabel;
   final bool showSubscriptionUi;
+  final GeneratedStorefrontCapChoice? atCap;
+  final ChatAtCap? chatAtCap;
 
   const PlanStorefront({
     required this.catalogRevision,
@@ -19,6 +22,8 @@ class PlanStorefront {
     required this.header,
     this.yearlyToggleLabel,
     required this.showSubscriptionUi,
+    this.atCap,
+    this.chatAtCap,
   });
 
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
@@ -56,6 +61,8 @@ class PlanStorefront {
       throw const FormatException('Invalid yearly toggle label');
     }
     return PlanStorefront(
+      chatAtCap: json['chat_at_cap'] == null ? null : ChatAtCap.fromJson(_object(json['chat_at_cap'])),
+      atCap: json['at_cap'] == null ? null : GeneratedStorefrontCapChoice.fromJson(_object(json['at_cap'])),
       catalogRevision: revision,
       tiers: List.unmodifiable(tiers),
       current: json['current'] == null ? null : StorefrontCurrentPlan.fromJson(_object(json['current'])),
@@ -265,6 +272,7 @@ class StorefrontPrice {
   final String? renewalLine;
   final int? monthsFree;
   final String? ctaLabel;
+  final List<String> confirmLines;
 
   const StorefrontPrice({
     required this.id,
@@ -276,6 +284,7 @@ class StorefrontPrice {
     this.renewalLine,
     this.monthsFree,
     this.ctaLabel,
+    this.confirmLines = const [],
   });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
@@ -298,6 +307,8 @@ class StorefrontPrice {
       renewalLine: _optionalText(json, 'renewal_line'),
       monthsFree: months as int?,
       ctaLabel: _optionalText(json, 'cta_label'),
+      confirmLines: List<String>.unmodifiable(
+          (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty)),
     );
   }
 }
@@ -358,8 +369,11 @@ class StorefrontUsage {
   final String? periodId;
   final String? resetLabel;
   final String? meterLine;
+  final int? hoursLeft;
   final String? nudgeLine;
+  final String? moreLabel;
   final Set<String> proGates;
+  final bool mcpCapReached;
 
   const StorefrontUsage({
     required this.kind,
@@ -367,7 +381,10 @@ class StorefrontUsage {
     this.periodId,
     this.resetLabel,
     this.meterLine,
+    this.hoursLeft,
     this.nudgeLine,
+    this.moreLabel,
+    this.mcpCapReached = false,
     this.proGates = const {},
   });
 
@@ -390,10 +407,26 @@ class StorefrontUsage {
       periodId: _optionalText(json, 'period_id'),
       resetLabel: _optionalText(json, 'reset_label'),
       meterLine: _optionalText(json, 'meter_line'),
+      hoursLeft: _optionalCount(json, 'hours_left'),
       nudgeLine: _optionalText(json, 'nudge_line'),
+      moreLabel: _optionalText(json, 'more_label'),
+      mcpCapReached: json['mcp_cap_reached'] == true,
       proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
     );
   }
+
+  StorefrontUsage withMeterLine(String? meterLine) => StorefrontUsage(
+        kind: kind,
+        percent: percent,
+        periodId: periodId,
+        resetLabel: resetLabel,
+        meterLine: meterLine,
+        hoursLeft: hoursLeft,
+        nudgeLine: nudgeLine,
+        moreLabel: moreLabel,
+        mcpCapReached: mcpCapReached,
+        proGates: proGates,
+      );
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.
   bool get showBudgetNudge =>
@@ -416,6 +449,13 @@ String _text(Map<String, dynamic> json, String key) {
   return value;
 }
 
+int? _optionalCount(Map<String, dynamic> json, String key) {
+  if (!json.containsKey(key) || json[key] == null) return null;
+  final value = json[key];
+  if (value is! int || value < 0) throw FormatException('Invalid storefront $key');
+  return value;
+}
+
 String? _optionalText(Map<String, dynamic> json, String key) {
   if (!json.containsKey(key) || json[key] == null) return null;
   return _text(json, key);
@@ -425,4 +465,25 @@ bool _boolean(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! bool) throw FormatException('Missing storefront $key');
   return value;
+}
+
+/// Backend-owned composer state. Never inferred from a local tier or message count.
+class ChatAtCap {
+  final String title, body, resetLine;
+  final int resetAt;
+  final String? upgradeLabel;
+  const ChatAtCap(
+      {required this.title, required this.body, required this.resetLine, required this.resetAt, this.upgradeLabel});
+  factory ChatAtCap.fromJson(Map<String, dynamic> json) {
+    if (json['state'] != 'paused' || json['trigger'] != 'usage_budget' || json['reset_at'] is! int) {
+      throw const FormatException('Invalid chat pause state');
+    }
+    return ChatAtCap(
+        title: _text(json, 'title'),
+        body: _text(json, 'body'),
+        resetLine: _text(json, 'reset_line'),
+        resetAt: json['reset_at'] as int,
+        upgradeLabel: json['upgrade_label'] as String?);
+  }
+  bool get active => DateTime.now().millisecondsSinceEpoch < resetAt * 1000;
 }

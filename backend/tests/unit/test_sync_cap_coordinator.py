@@ -1,5 +1,7 @@
 """Exercise real v2 coordination: coverage precedes custody and late holds do not bill."""
 
+import pytest
+
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -49,11 +51,13 @@ def _ledger(pipeline, monkeypatch):
     return writer
 
 
-async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path):
+@pytest.mark.parametrize('dispatch', [False, True])
+async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinator, monkeypatch, tmp_path, dispatch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     state = _wire(
         pipeline,
         monkeypatch,
@@ -62,7 +66,7 @@ async def test_full_hold_contains_only_wal_audio_not_already_committed(coordinat
     )
     writer = _ledger(pipeline, monkeypatch)
     monkeypatch.setattr(
-        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+        cap_hold, 'funded_allowance', lambda uid: SimpleNamespace(managed=False, reason='usage_budget_exhausted')
     )
     retained = []
 

@@ -90,7 +90,7 @@ enum ConversationSummarySelection {
 
   /// References are useful only when their source is in the loaded transcript.
   static func resolvableSourceIDs(_ ids: [String], segments: [TranscriptSegment]) -> [String] {
-    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 }.filter { !$0.isEmpty } })
     var seen = Set<String>()
     return ids.filter { valid.contains($0) && seen.insert($0).inserted }
   }

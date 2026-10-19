@@ -274,6 +274,53 @@ def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, c
     assert "WHERE (appName LIKE '%Discord%' ESCAPE '!') AND" in fallback_query
 
 
+def test_search_screen_no_results_survives_exact_fallback_sql_error(config_path: Path, cli_runner) -> None:
+    """When ``search_screen_history`` succeeds with zero matches, a failure in
+    the secondary ``execute_sql`` fallback must be recorded under
+    ``exact_fallback.result.error`` instead of aborting ``search-screen`` and
+    discarding the primary response."""
+    _configure_local_profile(config_path)
+    response = "No screen history is available yet."
+    sql_error = "SQL Error: The local database could not complete that query."
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(200, json=_tool_response(sql_error)),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["reason"] == response
+    assert payload["exact_fallback"]["result"] == {"error": sql_error}
+    assert "suggested_screenshot_ids" not in payload
+
+
+def test_search_screen_no_results_survives_exact_fallback_http_error(config_path: Path, cli_runner) -> None:
+    """An HTTP/tool error from the secondary ``execute_sql`` fallback must also
+    degrade inside ``exact_fallback.result`` rather than failing ``search-screen``."""
+    _configure_local_profile(config_path)
+    response = 'No matching screen-history results for "Discord" in the last 7 day(s).'
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(400, json={"ok": False, "error": "no such table: screenshots"}),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["reason"] == response
+    assert payload["exact_fallback"]["result"]["error"] == "Local Omi Desktop API error (400)"
+    assert payload["exact_fallback"]["result"]["detail"] == "no such table: screenshots"
+
+
 @pytest.mark.parametrize("literal,decoy", [("50%", "500"), ("a_b", "axb"), ("a!b", "ab"), ("it's", "its")])
 @pytest.mark.parametrize("field", ["appName", "windowTitle", "ocrText", "app_filter"])
 def test_search_screen_fallback_matches_literal_text(

@@ -894,14 +894,14 @@ checks:
     reason: "admin Cloud Run deploys must decide scope before taking the shared prod environment slot"
   - id: admin-deploy-scope-fixtures
     command: ["python3", ".github/scripts/test_check_admin_deploy_scope.py"]
-    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", "web/admin/grafana/apply_omi_tv_dashboard.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "generated-client-only diffs must skip admin deploy; real admin runtime diffs and workflow_dispatch must still deploy"
   - id: grafana-dashboard-build
-    command: ["python3", "web/admin/grafana/test_build_dashboards.py"]
+    command: ["python3", "web/admin/grafana/test_build_wall_dashboard.py"]
     triggers: ["web/admin/grafana/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "platform boards must stay honest per-platform and every day-grain column must render on its NYC calendar day (bare UTC dates hid the latest day)"
+    reason: "the Business Omi TV board artifact must stay aligned with its source builder and embed contract"
   - id: web-llm-gateway-only
     command: ["python3", ".github/scripts/check_web_llm_gateway_only.py"]
     triggers: ["web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.ts", "web/**/*.tsx", "web/**/package.json", ".github/scripts/check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -1019,12 +1019,12 @@ checks:
     reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
   - id: pusher-runtime-capability-admission-dev
     command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "dev"]
-    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/config/free_tier_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 Pusher outage: every explicit conversation-finalization host must satisfy its semantic memory-mutation capability before deployment"
   - id: pusher-runtime-capability-admission-prod
     command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "prod"]
-    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/config/free_tier_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 Pusher outage: production admission must reject an omitted host or missing, disabled, or invalid memory fence"
   - id: backend-workflow-contracts
@@ -1381,7 +1381,7 @@ checks:
     reason: "#11979 keeps automatic development admission on merged-into-main ancestry, not main-tip equality"
   - id: superseded-auto-deploy-workflow-contracts
     command: ["python3", ".github/scripts/test_superseded_auto_deploys.py"]
-    triggers: [".github/workflows/gcp_daily_memory_sweep_job.yml", ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml", ".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Superseded deployment runs must report a neutral notice, and every later step must stay gated so stale images and deployments cannot run"
   - id: gcp-backend-production-boundary

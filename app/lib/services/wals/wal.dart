@@ -176,6 +176,7 @@ class Wal {
 
   /// Explicit phone-only custody. Never admitted to a cloud audio drain.
   bool onDeviceOnly;
+  Map<String, dynamic>? onDeviceConversation;
 
   /// Recording-time custody evidence. Null identifies pre-fix dev records.
   bool? capturedOnDeviceOnly;
@@ -184,6 +185,7 @@ class Wal {
   /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
   void repairLegacyImportedCustody() {
     if (capturedOnDeviceOnly == null &&
+        onDeviceConversation == null &&
         (originalStorage == WalStorage.sdcard || originalStorage == WalStorage.flashPage)) {
       onDeviceOnly = false;
     }
@@ -354,6 +356,7 @@ class Wal {
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
     this.onDeviceOnly = false,
+    this.onDeviceConversation,
     this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
@@ -394,6 +397,8 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
+      onDeviceConversation:
+          json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
       capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
@@ -436,6 +441,7 @@ class Wal {
       'status': status.name,
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
+      'on_device_conversation': onDeviceConversation,
       if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config import stt_cap_dispatch as flag
+from models.message_event import SttCapLiveHeldEvent
 from utils import stt_cap_dispatch as cap
 from routers.listen.receiver import _RecordingSTTSocket
 from utils.stt.live_session import LiveLegSocket
@@ -126,9 +127,15 @@ def test_queued_sync_always_resolves_omi_funding(managed, monkeypatch):
 
 
 @pytest.mark.parametrize('kind', ['recording', 'gated', 'managed', 'replay', 'idle-replay'])
-def test_suppression_never_fabricates_provider_timeline_spans(kind):
+@pytest.mark.parametrize('ladder_packet', [False, True])
+def test_suppression_never_fabricates_provider_timeline_spans(kind, ladder_packet):
     state = cap.LiveAdmission('synthetic')
     state.reason = 'plan_allowance_exhausted'
+    if ladder_packet:
+        state.managed = True
+        state.remaining = 1 / 32000
+        state.remaining_units = cap._units_per_second('parakeet') / 32000
+        state.reason = 'usage_budget_available'
     raw = Mock()
     guarded = cap.CapSocket(state, 'parakeet', 16000, AsyncMock(), raw)
     tracker = Mock()
@@ -224,3 +231,188 @@ async def test_paused_soniox_binds_wire_ledger_before_resumed_audio():
     await socket.resume()
     raw.set_wire_ledger.assert_called_once_with(ledger)
     raw.set_capture_axis_ledger.assert_called_once_with(ledger)
+
+
+@pytest.mark.parametrize('dispatch', [False, True])
+@pytest.mark.parametrize('percent', [99, 100])
+def test_funded_dispatch_uses_ladder_budget_instead_of_legacy_seconds(monkeypatch, dispatch, percent):
+    from utils import ladder_v1, subscription
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(
+        ladder_v1,
+        'budget_snapshot',
+        lambda *a, **k: {'budget_percent': percent, 'budget_units': 100, 'used_units': percent},
+    )
+    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
+    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
+    monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda _: SimpleNamespace(plan='plus'))
+    legacy = Mock(side_effect=AssertionError('ladder admission consulted the legacy seconds meter'))
+    monkeypatch.setattr(subscription, 'get_monthly_usage_for_subscription', legacy)
+    assert cap.sync_allowed('synthetic') is (percent < 100)
+    assert cap.funded_allowance('synthetic').reason == (
+        'usage_budget_available' if percent < 100 else 'usage_budget_exhausted'
+    )
+    legacy.assert_not_called()
+
+
+def test_ladder_only_execution_bypasses_legacy_dispatch_and_fails_closed_on_budget_error(monkeypatch):
+    from utils import ladder_v1
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', lambda *a, **k: None)
+    assert cap.sync_allowed('synthetic')
+    monkeypatch.setattr(ladder_v1, 'budget_snapshot', Mock(side_effect=RuntimeError('ledger unavailable')))
+    assert not cap.sync_allowed('synthetic')
+
+
+async def test_live_minute_refresh_stops_funded_audio_after_ladder_crossing(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    allowance = SimpleNamespace(
+        managed=True, remaining_seconds=None, reason='usage_budget_available', remaining_units=None, budget_units=None
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', lambda *a, **k: allowance)
+
+    async def run(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    raw = Mock(send=Mock(return_value=True))
+    # Crossing just after a flush permits at most the next minute's audio.
+    for _ in range(60):
+        state.send(raw, b'\0' * 32000, 'modulate', 16000)
+    allowance = SimpleNamespace(
+        managed=False, remaining_seconds=0, reason='usage_budget_exhausted', remaining_units=0, budget_units=100
+    )
+    await state.refresh()
+    for _ in range(60):
+        state.send(raw, b'\0' * 32000, 'modulate', 16000)
+    assert raw.send.call_count == 60
+
+
+@pytest.mark.parametrize('percent,interval', [(0, 900), (50, 900), (95, 60)])
+@pytest.mark.parametrize('dispatch', [False, True])
+async def test_ladder_live_estimate_debits_locally_and_bounds_rescans(monkeypatch, percent, interval, dispatch):
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    now = [0]
+    monkeypatch.setattr(cap.time, 'monotonic', lambda: now[0])
+    budget = 100000
+    resolver = Mock(
+        return_value=TranscriptionAllowance(
+            'managed', None, 'usage_budget_available', remaining_units=budget * (1 - percent / 100), budget_units=budget
+        )
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+
+    async def run(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    raw = Mock(send=Mock(return_value=True))
+    token = cap.current_live_admission.set(state)
+    try:
+        socket = await cap.live_provider('modulate', 0)(AsyncMock(return_value=raw))(16000)
+    finally:
+        cap.current_live_admission.reset(token)
+    before = state.remaining_units
+    for second in range(1, interval):
+        now[0] = second
+        socket.send(b'\0' * 32000)
+        await state.refresh(force=False)
+    assert state.remaining_units < before
+    assert resolver.call_count == 1
+    now[0] = interval
+    await state.refresh(force=False)
+    assert resolver.call_count == 2
+    # Local exhaustion suppresses every subsequent provider packet, including
+    # ladder-only activation with the legacy dispatch switch still dark.
+    state.remaining_units = cap._units_per_second('modulate') * 0.5
+    state.remaining = state.remaining_units / cap._units_per_second()
+    sent = raw.send.call_count
+    for _ in range(100):
+        socket.send(b'\0' * 32000)
+    assert raw.send.call_count == sent
+    assert state.reason == 'usage_budget_exhausted'
+    await state.refresh(force=True)  # Subscription invalidation bypasses cadence.
+    assert resolver.call_count == 3
+
+
+async def test_ladder_only_legacy_profile_keeps_long_read_cadence_and_invalidates(monkeypatch):
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    now = [0]
+    monkeypatch.setattr(cap.time, 'monotonic', lambda: now[0])
+    resolver = Mock(return_value=TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled'))
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+
+    async def run(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    for second in (60, 120, 899):
+        now[0] = second
+        await state.refresh(force=False)
+    assert resolver.call_count == 1
+    now[0] = 900
+    await state.refresh(force=False)
+    assert resolver.call_count == 2
+    resolver.return_value = TranscriptionAllowance(
+        'managed', None, 'usage_budget_available', remaining_units=10000, budget_units=10000
+    )
+    await state.refresh(force=True)
+    assert resolver.call_count == 3
+    assert state.remaining_units == 10000
+
+
+def test_live_notice_is_a_session_scoped_durable_receipt():
+    event = SttCapLiveHeldEvent(session_id='socket-1', held_seconds=12, paused=True, reset_at=123)
+    assert event.to_json() == {
+        'type': 'stt_cap_live_held',
+        'session_id': 'socket-1',
+        'held_seconds': 12,
+        'paused': True,
+        'reset_at': 123,
+    }
+
+
+def test_provider_capture_observer_sees_only_actual_admission(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    state.managed, state.remaining = True, 1
+    observer = Mock()
+    state.capture_observer = observer
+    raw = Mock(send=Mock(return_value=True))
+    socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(), raw)
+    packet = b'\0' * 32000
+    assert not cap.suppress_socket_audio(socket, packet, start_sample=0)
+    assert socket.send(packet)
+    assert cap.suppress_socket_audio(socket, packet, start_sample=16000)
+    assert [c.args[-1] for c in observer.call_args_list] == [True, False]
+    raw.send.assert_called_once()
+
+
+def test_vad_preroll_observer_uses_actual_spans_not_current_input(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    state.managed, state.remaining = True, None
+    observer = Mock()
+    state.capture_observer = observer
+    socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(), Mock(send=Mock(return_value=True)))
+    data = b'\1\0' * 100 + b'\2\0' * 200
+    cap.set_cap_capture(socket, data, ((100, 100), (900, 200)))
+    assert socket.send(data)
+    assert [call.args for call in observer.call_args_list] == [
+        (b'\1\0' * 100, 16000, 100, True),
+        (b'\2\0' * 200, 16000, 900, True),
+    ]

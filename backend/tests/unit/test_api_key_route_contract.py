@@ -164,11 +164,12 @@ def test_create_mcp_key_rejects_unknown_scope_before_persistence(monkeypatch):
     create = MagicMock()
     monkeypatch.setattr(routes.mcp_api_key_db, "create_mcp_key", create)
 
-    with pytest.raises(HTTPException) as caught:
-        routes.create_mcp_key(
-            routes.McpApiKeyCreate(name="unsafe", scopes=["people.delete"]),
-            uid="user-1",
-        )
+    for invalid_scopes in (["people.delete"], []):
+        with pytest.raises(HTTPException) as caught:
+            routes.create_mcp_key(
+                routes.McpApiKeyCreate(name="unsafe", scopes=invalid_scopes),
+                uid="user-1",
+            )
 
-    assert caught.value.status_code == 400
+        assert caught.value.status_code == 400
     create.assert_not_called()

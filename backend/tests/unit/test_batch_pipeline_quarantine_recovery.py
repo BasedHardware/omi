@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from unittest.mock import Mock
 
+from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import recovery_owners
@@ -302,7 +303,7 @@ def legacy_dependencies():
         'utils.sync.intake_completion',
     ):
         importlib.import_module(module)
-    from utils.stt import pre_recorded, vad
+    from utils.stt import pre_recorded, local_vad as vad
     from utils.batch_pipeline.projection_parts import split_result
     from utils.batch_pipeline.projection import build_incoming
     from utils import fair_use
@@ -524,3 +525,556 @@ def test_recovered_duration_counts_only_one_settlement(setup, monkeypatch):
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert recovery.recover('bad', binding.owner_id) == 'held'
     metric.assert_called_once_with('recovered', seconds=5)
+
+
+@pytest.mark.parametrize('enabled', [None, 'true', 'false'])
+def test_recovery_tasks_ship_on_with_inline_kill_switch(monkeypatch, enabled):
+    from config.batch_pipeline import recovery_tasks_enabled
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', raising=False)
+    if enabled is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', enabled)
+    assert recovery_tasks_enabled() is (enabled != 'false')
+
+
+@pytest.mark.parametrize('queue', [None, '', '  ', 'batch-quarantine-recovery'])
+def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(setup, monkeypatch, queue):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', raising=False)
+    if queue is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', queue)
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic-invoker')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', '0')  # Legacy wake kill switch.
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    intent = deepcopy(row(client)['recovery'])
+    assert row(client)['recovery_state'] == 'prepared'
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args_list[0] == enqueue.call_args_list[1]
+    assert enqueue.call_args.args[0] == (queue.strip() if queue and queue.strip() else 'sync-jobs')
+    assert enqueue.call_args.args[1] == 'https://synthetic.run.app/v2/batch-pipeline/recover-quarantine'
+    assert enqueue.call_args.args[3] == {'stage': 'prod', 'segment_id': 'bad'}
+    recovery.clock = lambda: 240
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args_list[2].args[2] != enqueue.call_args_list[1].args[2]
+    assert row(client)['recovery'] == intent  # New wake is never a new paid epoch.
+    # A delayed old-queue delivery can race the replacement queue's wake.
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', 'replacement-recovery')
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args.args[0] == 'replacement-recovery'
+    assert row(client)['recovery'] == intent
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+
+
+def test_running_dispatch_only_reconciles_and_never_reissues_provider(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, artifacts, stt, recovery = setup
+    job = recovery.protocol.prepare('bad', binding.owner_id, 100)
+    assert recovery.protocol.start('bad', job['recovery']['token'], 100)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    artifacts.find_recovery_result.assert_called_once()
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    enqueue.assert_not_called()
+
+
+def test_sweep_batch_one_rollback_and_inline_calls_recover(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '1')
+    monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)] * 2))
+    recovery.dispatch = Mock(return_value='queued')
+    recovery.recover = Mock(return_value='recovered')
+    assert recovery.sweep() == {'queued': 1}
+    recovery.recover.assert_not_called()
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
+    assert recovery.sweep() == {'recovered': 1}
+    recovery.recover.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'audience', ['', 'http://synthetic.invalid', 'https://synthetic.invalid/foreign', 'https://synthetic.invalid?x=1']
+)
+def test_invalid_request_target_falls_back_inline_with_same_intent(setup, monkeypatch, audience):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', audience)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    intent = recovery.protocol.prepare('bad', binding.owner_id, 100)['recovery']
+    assert recovery.dispatch('bad', binding.owner_id) == 'recovered'
+    assert row(client)['recovery']['token'] == intent['token']
+    assert row(client)['recovery_state'] == 'recovered'
+    enqueue.assert_not_called()
+    stt.assert_called_once()
+    artifacts.fetch_audio.assert_called_once()
+
+
+@pytest.mark.parametrize('blocked', ['account', 'source', 'protection'])
+def test_dispatch_keeps_privacy_cancellation_before_enqueue(setup, monkeypatch, blocked):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
+    if blocked == 'account':
+        client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    elif blocked == 'source':
+        row(client)['conversation_id'] = 'deleted-source'
+        client.rows[('users', binding.owner_id, 'deleted_conversations', 'deleted-source')] = {'deleted': True}
+    else:
+        client.rows[('users', binding.owner_id)]['data_protection_level'] = 'e2ee'
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'cancelled'
+    assert row(client)['recovery_state'] == 'cancelled'
+    enqueue.assert_not_called()
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+    from unittest.mock import AsyncMock
+
+    _, store, _, _, stt, recovery = setup
+    service = Serving(store, recovery=recovery)
+    service.reconcile_async = AsyncMock()
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_worker] = lambda: 0
+    client = TestClient(app)
+    payload = {'stage': 'prod', 'segment_id': 'bad'}
+    assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
+    assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
+    assert stt.call_count == 1
+    service.reconcile_async.assert_awaited_once_with()
+
+
+@pytest.mark.parametrize('delivery_wins', [False, True])
+def test_enqueue_failure_falls_back_inline_without_second_paid_call(setup, monkeypatch, delivery_wins):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, store, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://integration.run.app')
+    monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)]))
+    intent = recovery.protocol.prepare('bad', binding.owner_id, 100)['recovery']
+
+    def enqueue(*args, **kwargs):
+        if delivery_wins:
+            # The task was created, but the caller lost its acknowledgement.
+            assert recovery.recover('bad', binding.owner_id) == 'recovered'
+        raise TimeoutError('synthetic lost acknowledgement')
+
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_fallback', metric)
+    assert recovery.sweep() == {('held' if delivery_wins else 'recovered'): 1}
+    assert row(client)['recovery']['token'] == intent['token']
+    assert recovery.recover('bad', binding.owner_id) == 'held'  # Later task delivery/retry.
+    stt.assert_called_once()
+    assert any(call.kwargs.get('reason') == 'enqueue_failed' for call in metric.call_args_list)
+
+
+@pytest.mark.parametrize('disabled', ['host', 'cohort', 'missing_recovery'])
+def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monkeypatch, disabled):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+
+    client, store, binding, artifacts, stt, recovery = setup
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
+    if disabled == 'host':
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'off')
+    elif disabled == 'cohort':
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    service = Serving(store, recovery=None if disabled == 'missing_recovery' else recovery)
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_worker] = lambda: 0
+    response = TestClient(app).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+    assert response.status_code == 503
+    assert row(client)['recovery_state'] == 'prepared'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_504_leaves_executor_running_and_retry_adopts_token(setup, monkeypatch):
+    import asyncio
+    import threading
+    from starlette.requests import Request
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+    from utils.other.timeout import TimeoutMiddleware
+    from unittest.mock import AsyncMock
+
+    client, store, binding, artifacts, stt, recovery = setup
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+    def paid_call(*args):
+        entered.set()
+        assert release.wait(5)
+        return {'synthetic': True}
+
+    stt.side_effect = paid_call
+
+    def persist(*args, **kwargs):
+        finished.set()
+        return 'gs://synthetic/recovered'
+
+    artifacts.persist_recovery_result.side_effect = persist
+    service = Serving(store, recovery=recovery)
+    service.reconcile_async = AsyncMock()
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    body = routes.RedriveRequest(stage='prod', segment_id='bad')
+    path = '/v2/batch-pipeline/recover-quarantine'
+    middleware = TimeoutMiddleware(Mock(), paths_timeout={path: 0.05})
+    request = Request({'type': 'http', 'path': path, 'method': 'POST', 'headers': []})
+
+    paid_request = asyncio.create_task(routes.recover_quarantine(body, SimpleNamespace(headers={})))
+
+    async def call_next(request):
+        return await paid_request
+
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        response = await middleware.dispatch(request, call_next)
+        assert entered.is_set()
+        assert response.status_code == 504
+        token = row(client)['recovery']['token']
+        assert row(client)['recovery_state'] == 'running'
+        assert not finished.is_set()  # Cancelling the await did not stop paid work.
+        assert await routes.recover_quarantine(body, SimpleNamespace(headers={})) == {'status': 'held'}
+        assert row(client)['recovery']['token'] == token
+        stt.assert_called_once()
+    finally:
+        release.set()
+    assert await asyncio.to_thread(finished.wait, 2)
+    # Wait for settlement after result persistence, without timing assumptions.
+    for _ in range(100):
+        if row(client)['recovery_state'] == 'recovered':
+            break
+        await asyncio.sleep(0.01)
+    assert row(client)['recovery_state'] == 'recovered'
+    stt.assert_called_once()
+
+
+@pytest.mark.parametrize('value,expected', [(None, 16), ('1', 1), ('64', 64), ('0', 16), ('65', 16), ('bad', 16)])
+def test_recovery_batch_config_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_dispatch_batch_size
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', value)
+    assert recovery_dispatch_batch_size() == expected
+
+
+def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    candidates = [(f'bad-{i:02}', binding.owner_id) for i in range(33)]
+
+    def page(client, namespace, owner, limit, *, after_id):
+        assert limit == 16
+        return [(sid, uid) for sid, uid in candidates if after_id is None or sid > after_id][:limit]
+
+    query = Mock(side_effect=page)
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    recovery.dispatch = Mock(return_value='queued')
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 16}
+    assert recovery.sweep() == {'queued': 1}
+    assert recovery.dispatch.call_count == 33
+    assert query.call_count == 3
+    assert recovery.sweep() == {}
+    assert recovery.sweep() == {'queued': 16}
+
+
+def test_sweep_bounds_held_errors_and_rotates_allowlisted_owners(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '2')
+    monkeypatch.setattr(module, 'recovery_owners', lambda: ('first', 'second'))
+    query = Mock(side_effect=lambda client, namespace, owner, limit: [(f'{owner}-{i}', owner) for i in range(limit)])
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    recovery.dispatch = Mock(side_effect=[RuntimeError('synthetic'), 'held', 'queued', 'queued'])
+    assert recovery.sweep() == {'held': 2}
+    assert recovery.sweep() == {'queued': 2}
+    assert [call.args[2] for call in query.call_args_list] == ['first', 'second']
+
+
+def _wake_env(monkeypatch, lease=None):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', 'batch-quarantine-recovery')
+    if lease is None:
+        monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', lease)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    # Default custody: the previous wake's task is gone (delivered or exhausted).
+    monkeypatch.setattr(module, 'named_task_exists', Mock(return_value=False))
+    return module, enqueue
+
+
+def test_waiting_unit_gets_one_task_across_sweeps_until_the_wake_lease_expires(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)]))
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    outcomes = []
+    # A backlog: the queued task is not delivered for ten minutes of 20s sweeps.
+    while clock[0] < 100 + 600:
+        outcomes.append(recovery.sweep())
+        clock[0] += 20
+    assert outcomes[0] == {'queued': 1}
+    assert all(sweep == {'pending': 1} for sweep in outcomes[1:])
+    assert enqueue.call_count == 1
+    intent = deepcopy(row(client)['recovery'])
+    assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w1")
+    # At expiry a task still waiting in a saturated queue keeps its lease.
+    module.named_task_exists.return_value = True
+    clock[0] = 701.0
+    assert recovery.sweep() == {'pending': 1}
+    assert enqueue.call_count == 1
+    assert module.named_task_exists.call_args.args == ('batch-quarantine-recovery', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake']['wake_until'] == 701.0 + 600
+    # Only an authoritative NotFound repairs it with a new deterministic name.
+    module.named_task_exists.return_value = False
+    clock[0] = 1302.0
+    assert recovery.sweep() == {'queued': 1}
+    assert enqueue.call_count == 2
+    assert enqueue.call_args.args[2].endswith(f"-{intent['token']}-w2")
+    assert row(client)['recovery'] == intent
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+
+
+def test_duplicate_wake_names_are_deterministic_and_deliveries_spend_once(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    first = enqueue.call_args.args[2]
+    # A concurrent sweeper that read the same pre-claim snapshot cannot add a wake.
+    token = row(client)['recovery']['token']
+    assert recovery.protocol.claim_wake('bad', token, 100, 600) is None
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+    assert enqueue.call_count == 1 and enqueue.call_args.args[2] == first
+    # Old-style and new-style deliveries of the same intent still spend once.
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'  # Settled: no further wakes.
+    assert enqueue.call_count == 1
+
+
+def test_held_delivery_rearms_the_former_cadence_without_new_intent(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    intent = deepcopy(row(client)['recovery'])
+    clock[0] = 200.0
+    name = enqueue.call_args.args[2]
+    recovery.delivered('bad', 'held')  # An unnamed (legacy) delivery changes nothing.
+    assert row(client)['recovery_wake']['wake_until'] == 700.0
+    # Delivered, but e.g. allowance refused the start: Cloud Tasks names the wake.
+    recovery.delivered('bad', 'held', f'projects/p/locations/l/queues/q/tasks/{name}')
+    assert row(client)['recovery_wake']['wake_until'] == 320.0
+    clock[0] = 300.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+    clock[0] = 321.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_count == 2
+    assert row(client)['recovery'] == intent
+    recovery.delivered('bad', 'recovered', enqueue.call_args.args[2])  # Only held shortens.
+    assert row(client)['recovery_wake']['wake_until'] == 921.0
+    stt.assert_not_called()
+
+
+def test_wake_kill_switch_restores_time_bucketed_wakes(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch, lease='0')
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_count == 2
+    assert 'recovery_wake' not in row(client)
+    recovery.delivered('bad', 'held')
+    assert 'recovery_wake' not in row(client)
+
+
+def test_wake_claim_keeps_the_privacy_fence(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, artifacts, stt, recovery = setup
+    token = recovery.protocol.prepare('bad', binding.owner_id, 100)['recovery']['token']
+    client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    with pytest.raises(BatchPrivacyBlocked):
+        recovery.protocol.claim_wake('bad', token, 100, 600)
+    assert recovery.dispatch('bad', binding.owner_id) == 'cancelled'
+    enqueue.assert_not_called()
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'value,expected', [(None, 600), ('0', 0), ('120', 120), ('3600', 3600), ('119', 600), ('3601', 600), ('x', 600)]
+)
+def test_recovery_wake_lease_config_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_wake_lease_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', value)
+    assert recovery_wake_lease_seconds() == expected
+
+
+def test_enqueue_failure_rearms_the_former_cadence_instead_of_the_full_lease(setup, monkeypatch):
+    module, _ = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setattr(module, 'enqueue_named_task', Mock(side_effect=RuntimeError('synthetic rejected task')))
+    recovery.recover = Mock(return_value='held')  # Inline fallback could not start either.
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert row(client)['recovery_wake']['wake_until'] == 100 + 120
+    stt.assert_not_called()
+
+
+def test_stack_harness_accepts_leased_and_legacy_wake_names():
+    from testing.sync_cloud_tasks_stack.cloud_tasks import _RECOVERY_TASK_ID
+
+    prefix = 'bpr-prod-' + 'a' * 64 + '-' + 'b' * 32
+    assert _RECOVERY_TASK_ID.fullmatch(prefix + '-w1')
+    assert _RECOVERY_TASK_ID.fullmatch(prefix + '-15000000')
+    assert not _RECOVERY_TASK_ID.fullmatch(prefix + '-wx')
+
+
+def test_stale_held_delivery_never_shortens_a_newer_wake(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    first = enqueue.call_args.args[2]
+    clock[0] = 701.0  # w1 was lost before delivery; NotFound repairs with w2.
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert row(client)['recovery_wake']['seq'] == 2
+    clock[0] = 750.0
+    recovery.delivered('bad', 'held', first)  # A late duplicate of w1 answers held.
+    assert row(client)['recovery_wake']['wake_until'] == 1301.0
+    module.named_task_exists.return_value = True
+    clock[0] = 900.0
+    assert recovery.dispatch('bad', binding.owner_id) == 'pending'  # w2 is still outstanding.
+    assert enqueue.call_count == 2
+    stt.assert_not_called()
+
+
+def test_unknown_task_custody_extends_a_bounded_number_of_times(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, stt, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    module.named_task_exists.side_effect = PermissionError('synthetic missing tasks.get')
+    for attempt in range(1, 4):
+        clock[0] += 601
+        assert recovery.dispatch('bad', binding.owner_id) == 'pending'
+        assert row(client)['recovery_wake']['probe_errors'] == attempt
+    clock[0] += 601
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'  # Never stranded.
+    assert row(client)['recovery_wake']['seq'] == 2
+    assert 'probe_errors' not in row(client)['recovery_wake']
+    assert enqueue.call_count == 2
+    stt.assert_not_called()
+
+
+def test_concurrent_sweepers_cannot_both_advance_an_expired_wake(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    token = row(client)['recovery']['token']
+    assert recovery.protocol.claim_wake('bad', token, 800, 600, expected_seq=1) == 2
+    # A second sweeper that inspected seq 1 loses the compare-and-set.
+    assert recovery.protocol.claim_wake('bad', token, 1500, 600, expected_seq=1) is None
+
+
+def test_wake_shortening_keeps_the_privacy_fence(setup, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    before = deepcopy(row(client)['recovery_wake'])
+    client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    with pytest.raises(BatchPrivacyBlocked):
+        recovery.delivered('bad', 'held', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake'] == before
+
+
+def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+
+    module, enqueue = _wake_env(monkeypatch)
+    client, store, binding, _, stt, recovery = setup
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    monkeypatch.setattr(module, 'sync_allowed', lambda *args: False)  # Allowance refuses the start.
+    service = Serving(store, recovery=recovery)
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_worker] = lambda: 0
+    response = TestClient(app).post(
+        '/v2/batch-pipeline/recover-quarantine',
+        json={'stage': 'prod', 'segment_id': 'bad'},
+        headers={'X-CloudTasks-TaskName': f'projects/p/locations/l/queues/q/tasks/{enqueue.call_args.args[2]}'},
+    )
+    assert response.json() == {'status': 'held'}
+    assert row(client)['recovery_wake']['wake_until'] == 100 + 120
+    stt.assert_not_called()
+
+
+def test_extend_never_overrides_a_concurrent_held_rearm(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    token = row(client)['recovery']['token']
+    clock[0] = 701.0
+    # The delivery answers held while the sweep's custody probe is in flight.
+    recovery.delivered('bad', 'held', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake']['wake_until'] == 821.0
+    assert recovery.protocol.extend_wake('bad', token, 1, 701.0, 600) is False
+    assert row(client)['recovery_wake']['wake_until'] == 821.0

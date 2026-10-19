@@ -18,6 +18,20 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         @main
         struct OmiBleConnectionPolicyTestHarness {
             static func main() {
+                var telemetry = OmiSavedReconnectTelemetry()
+                precondition(telemetry.admit("attempted"))
+                for _ in 0..<10000 { precondition(!telemetry.admit("attempted")) }
+                for i in 0..<6 { precondition(telemetry.admit("failed:" + String(i))) }
+                precondition(!telemetry.admit("failed:extra"))
+                precondition(telemetry.admit("connected"))
+                precondition(!telemetry.admit("connected"))
+
+                precondition(OmiBleConnectionPolicy.savedRetryAllowed(saved: true, everConnected: false, manual: false, pairingLost: false))
+                precondition(!OmiBleConnectionPolicy.savedRetryAllowed(saved: false, everConnected: false, manual: false, pairingLost: false))
+                precondition(!OmiBleConnectionPolicy.savedRetryAllowed(saved: true, everConnected: true, manual: true, pairingLost: false))
+                precondition(!OmiBleConnectionPolicy.savedRetryAllowed(saved: true, everConnected: true, manual: false, pairingLost: true))
+                precondition(OmiBleConnectionPolicy.savedRetryDelay(attempt: 1) == 1)
+                precondition(OmiBleConnectionPolicy.savedRetryDelay(attempt: 1000) == 60)
                 precondition(OmiBleConnectionPolicy.readyRecoveryAction(
                     peripheralState: .connected,
                     nativeReady: true,

@@ -10,10 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.dream_agent import enabled
+from utils.rollout_cohorts import configure_rollout_runtime
 from utils.dream_agent import run_pass
 
 
 def main():
+    configure_rollout_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--uid', required=True, help='Authorized owner in the operator isolated pod')
     args = parser.parse_args()

@@ -1,0 +1,3 @@
+{
+  "change": "Live transcription retries reliably after a connection failure, and the reconnect warning clears when Omi audio recovers."
+}

@@ -4,6 +4,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
+| savedPendantReconnectObserved | Saved Pendant Reconnect | trigger, attempt, result, disconnected_ms | active | saved-pendant-reconnect |
 | onboardingCompleted | Onboarding Completed | none | active | mobile-instrumentation-presence |
 | recordingProducedNoConversation | Recording Produced No Conversation | source, duration_s, transcript_observed, reason | active | onboarding-activation-funnel |
 | onboardingWelcomeShown | Onboarding Welcome Shown | none | active | onboarding-activation-funnel |

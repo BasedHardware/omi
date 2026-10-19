@@ -23,6 +23,7 @@ abstract final class PaywallCheckout {
     required String interval,
     required String source,
     void Function(String message)? surface,
+    int? trialDays,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -49,7 +50,7 @@ abstract final class PaywallCheckout {
     }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
-      final session = await provider.createUserCheckoutSession(priceId: priceId);
+      final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
         report(
@@ -85,7 +86,13 @@ abstract final class PaywallCheckout {
         PlatformManager.instance.analytics.upgradeCancelled();
         return PaywallCheckoutOutcome.cancelled;
       }
-      if (context.mounted) report(l10n.subscriptionSuccessfulCharged, error: false);
+      if (context.mounted) {
+        // A trial checkout charges nothing today; say so instead of the paid-checkout message.
+        report(
+          trialDays != null && trialDays > 0 ? l10n.paywallTrialStarted(trialDays) : l10n.subscriptionSuccessfulCharged,
+          error: false,
+        );
+      }
       PlatformManager.instance.analytics
           .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
       await provider.fetchSubscription();

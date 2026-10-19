@@ -153,13 +153,9 @@ and the daily sweep share that policy:
   `subject_scope=primary_user` is admitted. Ambiguous or absent clustering
   demotes the claim (`demoted_owner_untrusted` on the sweep path) rather than
   rewriting it as a third-party fact.
-- Capture only, behind `MEMORY_OWNER_JEV_FLIP_ENABLED` (default off): a
-  candidate resolved to a third party is asked the Jev owner question
-  (`utils/conversations/owner_jev.py`); at P(user) >= 0.9 it is stored as the
-  user's (`subject_entity_id=user`, `subject_scope=primary_user`, category
-  `system`) with `promotion.source_attribution.override` recording the
-  probability and the original subject. Nothing flips toward a third party.
-  The consolidation planner still reads only the three subject fields.
+- Owner attribution has no model override. A candidate without trusted unique
+  owner-cluster evidence is not rewritten as an owner fact; correct attribution
+  at the source before admitting it.
 - Every sweep memory must name a subject in `about`. Subject-less, `unknown`,
   and `uncertain` rows are omitted (`dropped_subjectless`). An omitted `about`
   on the structured-output schema defaults to empty so one subjectless row
@@ -173,10 +169,9 @@ and the daily sweep share that policy:
   prefix the canonical memory id so the model can cite it. A non-empty
   marker that is not one of those ids is ignored and the candidate is treated
   as new.
-- Staged daily-summary pages are `daily_memory_sweep_daily_summary_stage.v3`
-  because they now carry owner evidence and `about`. A reader that finds a
-  foreign-version stage attests it consumed (empty candidates) so the cursor
-  can advance without double-billing the model.
+- Staged daily-sweep pages may remain in Firestore from the retired sweep. No
+  current runtime reads or writes those pages; export, account deletion, and
+  retention continue to handle the stored collections.
 
 Clusters are `(speaker_id_scope, speaker_id)`. A `TranscriptSegment` that only
 materialized `speaker_id` from the SPEAKER_00 default is not evidence; a

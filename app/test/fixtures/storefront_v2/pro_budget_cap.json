@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 7,
+  "catalog_revision": 10,
   "show_subscription_ui": true,
   "header": "You've used all of this month's usage",
   "current": {
@@ -18,8 +18,9 @@
     "percent": 100,
     "period_id": "2026-10",
     "reset_label": "resets Nov 1",
-    "meter_line": "100% used · about 0 hours of recording left · resets Nov 1",
+    "meter_line": "100% used · resets Nov 1",
     "nudge_line": null,
+    "more_label": "Get more usage",
     "pro_gates": [
       "proactive_agent",
       "screen_context"
@@ -123,6 +124,11 @@
           "subline": "$499.90 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2,
+          "confirm_lines": [
+            "Your monthly plan continues until Nov 1",
+            "Your payment method will be charged $499.90 when your yearly plan starts",
+            "Your yearly plan starts on Nov 1"
+          ],
           "cta_label": "Switch to yearly · save $99.98"
         }
       ]

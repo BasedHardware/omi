@@ -13,19 +13,30 @@ import 'package:omi/providers/device_provider.dart';
 /// A device provider with no BLE behind it: paired/connected devices are absent, so the page
 /// never reaches ServiceManager.
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider({required this.connected});
+  _StubDeviceProvider({required this.connected, this.lastDevice, this.paired});
 
   final bool connected;
+
+  /// The device the page knows about while the link is down. Exposed as [connectedDevice], not
+  /// [pairedDevice], so the page does not probe features through the (absent) device service.
+  final BtDevice? lastDevice;
+
+  /// What [getDeviceInfo] would have left behind: the stored device, or [BtDevice.empty] when
+  /// nothing is remembered.
+  final BtDevice? paired;
   int setIsConnectedCalls = 0;
 
   @override
   bool get isConnected => connected;
 
   @override
-  BtDevice? get connectedDevice => null;
+  bool get hasRememberedDevice => paired?.id.isNotEmpty ?? false;
 
   @override
-  BtDevice? get pairedDevice => null;
+  BtDevice? get connectedDevice => lastDevice;
+
+  @override
+  BtDevice? get pairedDevice => paired;
 
   @override
   int get batteryLevel => 0;
@@ -110,5 +121,41 @@ void main() {
     await _scrollTo(tester, find.text('Offline Sync'));
     expect(find.text('Offline Sync'), findsOneWidget);
     expect(find.text('SD Card Sync'), findsNothing);
+  });
+
+  testWidgets('a remembered but disconnected pendant still offers Diagnostics', (tester) async {
+    final provider = _StubDeviceProvider(
+      connected: false,
+      lastDevice: BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -60),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider, const DeviceSettings()));
+    await tester.pump();
+
+    await _scrollTo(tester, find.text('Diagnostics'));
+    expect(find.text('Diagnostics'), findsOneWidget);
+  });
+
+  testWidgets('no remembered device offers no Diagnostics', (tester) async {
+    final provider = _StubDeviceProvider(connected: false);
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider, const DeviceSettings()));
+    await tester.pump();
+
+    expect(find.text('Diagnostics', skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('the empty device sentinel (id "") offers no Diagnostics either', (tester) async {
+    // getDeviceInfo() leaves pairedDevice = BtDevice.empty() when nothing is remembered; that
+    // must not open native diagnostics keyed by a blank device id.
+    final provider = _StubDeviceProvider(connected: false, paired: BtDevice.empty());
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider, const DeviceSettings()));
+    await tester.pump();
+
+    expect(find.text('Diagnostics', skipOffstage: false), findsNothing);
   });
 }

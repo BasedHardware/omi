@@ -159,6 +159,15 @@ Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` su
 
 ---
 
+## List freshness
+
+Conversation, memory, and action-item list responses may be reused for up to **10 seconds** for the same
+credential and query. After any write (including edits or deletion in another app), a list may reflect the
+previous state for up to 10 seconds. Authentication, permission checks, and rate limits apply to every poll.
+
+A `200` response with `X-Omi-List-Truncated: true` contains incomplete results. Do not interpret an empty
+or short truncated page as the end of your data. See the conversation pagination guidance below.
+
 ## Rate Limits
 
 Budgets are operation-specific, per credential context (user/app/key), rather than a blanket per-minute or daily allowance. Default budgets are:

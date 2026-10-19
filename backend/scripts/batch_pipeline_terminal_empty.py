@@ -24,6 +24,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -99,16 +100,15 @@ def inspect_unit(store, artifacts, sid, uid, key, attestation):
     require(spent_canary(job) or exhausted(job, attestation), 'missing_exhaustion_evidence')
     if not spans:
         return 'silence'
-    if spent_canary(job):
-        require(
-            attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
-            'missing_padded_retry_evidence',
-        )
-        return 'canary_recovery'
-    require(
-        attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
-        'missing_padded_retry_evidence',
+    has_padded_empty = (
+        job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+        or attestation
+        and not job.get('worker_empty_evidence')
     )
+    if spent_canary(job):
+        require(has_padded_empty, 'missing_padded_retry_evidence')
+        return 'canary_recovery'
+    require(has_padded_empty, 'missing_padded_retry_evidence')
     return 'no_recoverable_speech'
 
 
@@ -174,6 +174,7 @@ def main():
     require(offset is not None and offset.total_seconds() == 0, 'utc_cutoff_required')
     cutoff = cutoff_time.timestamp()
     os.environ['OMI_ENV_STAGE'] = args.stage
+    configure_rollout_runtime()
     if args.metadata_only:
         require(not args.apply, 'metadata_cannot_apply')
         client = firestore.Client(project='based-hardware')
