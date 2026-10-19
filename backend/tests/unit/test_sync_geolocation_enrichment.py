@@ -102,6 +102,14 @@ def _build_pipeline_fakes() -> dict:
     for name in heavy_leaves:
         fakes[name] = AutoMockModule(name)
     fakes['utils.dream_vocabulary'].keyterms = AsyncMock(side_effect=lambda uid, existing: existing)
+    # Files that hold this module-scoped stub set open (e.g. the reprocess
+    # coalesce tests) also import routers/sync.py inside it: its import-time
+    # handler-budget resolution compares these constants inside min(), so they
+    # must be real numbers rather than auto-mocked attributes.
+    fakes['database.sync_jobs'].RUN_LOCK_TTL_SECONDS = 1800
+    fakes['database.sync_jobs'].STALE_THRESHOLD_SECONDS = 600
+    fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
+    fakes['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
     return fakes
 
 

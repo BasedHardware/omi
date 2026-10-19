@@ -154,7 +154,18 @@ def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, c
     result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     calls = (tmp_path / 'queue-args').read_text().splitlines()
-    assert len(calls) == 2
+    # The backfill queue reconcile (describe + create/update) plus the
+    # update-only max-attempts reconciliation of the main sync-jobs queue
+    # that the fallback route and fresh lane deliver through: its describe
+    # succeeds under the same double, so update-only adds describe+update
+    # when the queue exists and just the failed describe when it does not
+    # (create is deliberately omitted — another team owns that queue).
+    assert len(calls) == (4 if exists else 3)
     assert calls[1].startswith('tasks queues ' + ('update' if exists else 'create') + ' sync-backfill ')
     assert f'--max-concurrent-dispatches={expected}' in calls[1]
     assert '--max-dispatches-per-second=15' in calls[1]
+    assert calls[2] == 'tasks queues describe sync-jobs --location=us-central1 --project=test-project'
+    if exists:
+        assert (
+            calls[3] == 'tasks queues update sync-jobs --location=us-central1 --project=test-project --max-attempts=5'
+        )
