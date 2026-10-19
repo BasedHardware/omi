@@ -78,7 +78,7 @@ def candidate_once(candidates, key, resolve):
 
 def check_unit_privacy(tx, job):
     binding = job.get('projection_binding') or {}
-    ids = set(job.get('conversation_ids') or ())
+    ids: set[str] = set(job.get('conversation_ids') or ())
     ids.update(value for value in (job.get('conversation_id'), binding.get('target_conversation_id')) if value)
     if binding and 'capture_at' in job:
         from utils.sync.capture import chunk_identity
