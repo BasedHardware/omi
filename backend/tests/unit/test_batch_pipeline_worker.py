@@ -33,6 +33,14 @@ from utils.stt import local_vad as vad
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 
+@pytest.fixture(autouse=True)
+def _full_gpu_stages(monkeypatch):
+    # This suite pins the full-stage chain. The ship-on GPU skips have their own
+    # contract in test_batch_pipeline_diarization_gate.py.
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
+
+
 class Samples:
     def __init__(self, seconds):
         self.size = int(seconds * 16000)

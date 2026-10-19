@@ -37,6 +37,11 @@ worker:
   headPriorityEnabled: false
   workerSilenceDispositionEnabled: false
   workerValidationDispositionEnabled: true
+  # Ship-on speech-only diarization; false restores full-unit diarization.
+  diarizeSpeechOnlyEnabled: true
+  # Default off until a paired run on the prod pyannote revision qualifies it
+  # (see backend/diarizer/batch_pipeline_runtime.md).
+  shortSpeechSingleEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
