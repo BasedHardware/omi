@@ -3145,9 +3145,9 @@ _add(
 
 _add(
     DriverEntry(
-        'utils.sync.reprocess.sweep',
+        'utils.enrichment.outbox.sweep',
         neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
-        patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
+        patchers=(_stub('utils.enrichment.outbox._mutate', None), _stub('utils.enrichment.outbox.owns_runtime', True)),
     )
 )
 
