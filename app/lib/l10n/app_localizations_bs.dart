@@ -9,7 +9,8 @@ class AppLocalizationsBs extends AppLocalizations {
   AppLocalizationsBs([String locale = 'bs']) : super(locale);
 
   @override
-  String get sessionExpiredSignInAgain => 'Sesija je istekla — prijavite se ponovo.';
+  String get sessionExpiredSignInAgain =>
+      'Sesija je istekla — prijavite se ponovo.';
 
   @override
   String get appTitle => 'Omi';
@@ -27,7 +28,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteConversationTitle => 'Izbrisati razgovor?';
 
   @override
-  String get deleteConversationMessage => 'Ovo će takođe izbrisati povezane uspomene, zadatke i audio fajlove.';
+  String get deleteConversationMessage =>
+      'Ovo će takođe izbrisati povezane uspomene, zadatke i audio fajlove.';
 
   @override
   String get confirm => 'Potvrdi';
@@ -87,10 +89,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get failedToUpdateStarred => 'Neuspelo ažuriranje označene stavke.';
 
   @override
-  String get conversationUrlNotShared => 'URL razgovora nije mogao biti deljenje.';
+  String get conversationUrlNotShared =>
+      'URL razgovora nije mogao biti deljenje.';
 
   @override
-  String get errorProcessingConversation => 'Greška pri obradi razgovora. Pokušajte ponovo kasnije.';
+  String get errorProcessingConversation =>
+      'Greška pri obradi razgovora. Pokušajte ponovo kasnije.';
 
   @override
   String get noInternetConnection => 'Nema internet konekcije';
@@ -99,7 +103,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get unableToDeleteConversation => 'Neuspešno brisanje razgovora';
 
   @override
-  String get somethingWentWrong => 'Nešto je pošlo po zlu! Pokušajte ponovo kasnije.';
+  String get somethingWentWrong =>
+      'Nešto je pošlo po zlu! Pokušajte ponovo kasnije.';
 
   @override
   String get copyErrorMessage => 'Kopiraj poruku greške';
@@ -131,7 +136,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get editPerson => 'Uredi osobu';
 
   @override
-  String get createPersonHint => 'Kreiraj novu osobu i trenings Omi-ja da prepozna njihov govor!';
+  String get createPersonHint =>
+      'Kreiraj novu osobu i trenings Omi-ja da prepozna njihov govor!';
 
   @override
   String get speechProfile => 'Glasovni profil';
@@ -158,13 +164,16 @@ class AppLocalizationsBs extends AppLocalizations {
       'Molimo vas da završite autentifikaciju u vašem pregledniku. Kada završite, vratite se u aplikaciju.';
 
   @override
-  String get failedToStartAuthentication => 'Neuspelo pokretanje autentifikacije';
+  String get failedToStartAuthentication =>
+      'Neuspelo pokretanje autentifikacije';
 
   @override
-  String get importStarted => 'Uvoz je počeo! Bićete obaviješteni kada je gotov.';
+  String get importStarted =>
+      'Uvoz je počeo! Bićete obaviješteni kada je gotov.';
 
   @override
-  String get failedToStartImport => 'Neuspelo pokretanje uvoza. Pokušajte ponovo.';
+  String get failedToStartImport =>
+      'Neuspelo pokretanje uvoza. Pokušajte ponovo.';
 
   @override
   String get couldNotAccessFile => 'Nije moguće pristupiti odabranoj datoteci';
@@ -218,7 +227,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tapSyncToStart => 'Dodirnite Sinhronizuj da počnete';
 
   @override
-  String get pendantNotConnected => 'Privesak nije povezan. Povežite se za sinhronizovanje.';
+  String get pendantNotConnected =>
+      'Privesak nije povezan. Povežite se za sinhronizovanje.';
 
   @override
   String get everythingSynced => 'Sve je već sinhronizovano.';
@@ -227,7 +237,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get recordingsNotSynced => 'Imate snimke koji nisu sinhronizovani.';
 
   @override
-  String get syncingBackground => 'Nastavićemo da sinhronizujemo vaše snimke u pozadini.';
+  String get syncingBackground =>
+      'Nastavićemo da sinhronizujemo vaše snimke u pozadini.';
 
   @override
   String get noConversationsYet => 'Nema razgovora';
@@ -236,7 +247,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noStarredConversations => 'Nema označenih razgovora';
 
   @override
-  String get starConversationHint => 'Da označite razgovor, otvorite ga i dodirnite ikonu zvezdice u zaglavlje.';
+  String get starConversationHint =>
+      'Da označite razgovor, otvorite ga i dodirnite ikonu zvezdice u zaglavlje.';
 
   @override
   String get searchConversations => 'Pretraži razgovore';
@@ -258,7 +270,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get mergingInBackground => 'Spajanje u pozadini. Ovo može potrajati trenutak.';
+  String get mergingInBackground =>
+      'Spajanje u pozadini. Ovo može potrajati trenutak.';
 
   @override
   String get failedToStartMerge => 'Neuspelo pokretanje spajanja';
@@ -294,7 +307,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get clearChat => 'Očisti čat';
 
   @override
-  String get clearChatConfirm => 'Sve poruke u ovom četu bit će obrisane. Ovo se ne može poništiti.';
+  String get clearChatConfirm =>
+      'Sve poruke u ovom četu bit će obrisane. Ovo se ne može poništiti.';
 
   @override
   String get maxFilesLimit => 'Možete najednom učitati samo 4 datoteke';
@@ -309,7 +323,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noAppsFound => 'Nema pronađenih aplikacija';
 
   @override
-  String get tryAdjustingSearch => 'Pokušajte da prilagodite pretragu ili filtere';
+  String get tryAdjustingSearch =>
+      'Pokušajte da prilagodite pretragu ili filtere';
 
   @override
   String get createYourOwnApp => 'Kreiraj svoju aplikaciju';
@@ -346,7 +361,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteAccountTitle => 'Izbriši nalog';
 
   @override
-  String get deleteAccountConfirm => 'Jeste li sigurni da želite da izbrišete svoj nalog?';
+  String get deleteAccountConfirm =>
+      'Jeste li sigurni da želite da izbrišete svoj nalog?';
 
   @override
   String get cannotBeUndone => 'Ovo se ne može opozvati.';
@@ -355,7 +371,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get allDataErased => 'Vaše uspomene i razgovori bit će izbrisani.';
 
   @override
-  String get appsDisconnected => 'Vaše aplikacije i integracije bit će odspojene.';
+  String get appsDisconnected =>
+      'Vaše aplikacije i integracije bit će odspojene.';
 
   @override
   String get exportBeforeDelete =>
@@ -428,7 +445,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get autoSync => 'Automatska sinkronizacija';
 
   @override
-  String get autoSyncDescription => 'Automatski sinkronizuj offline snimke kada se vaš uređaj poveže';
+  String get autoSyncDescription =>
+      'Automatski sinkronizuj offline snimke kada se vaš uređaj poveže';
 
   @override
   String get omiButtonActions => 'Radnje Omi dugmeta';
@@ -480,7 +498,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Sledeće aplikacije mogu pristupiti vašim podacima. Dodirnite aplikaciju da upravljate njenim dozvolama.';
 
   @override
-  String get noAppsExternalAccess => 'Nema instalirane aplikacije koje imaju spoljni pristup vašim podacima.';
+  String get noAppsExternalAccess =>
+      'Nema instalirane aplikacije koje imaju spoljni pristup vašim podacima.';
 
   @override
   String get deviceName => 'Naziv uređaja';
@@ -548,7 +567,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceNotConnected => 'Uređaj nije povezan';
 
   @override
-  String get connectDeviceMessage => 'Povežite svoj Omi uređaj da pristupite\npostavkama uređaja i prilagođavanju';
+  String get connectDeviceMessage =>
+      'Povežite svoj Omi uređaj da pristupite\npostavkama uređaja i prilagođavanju';
 
   @override
   String get deviceInfoSection => 'Informacije o uređaju';
@@ -648,7 +668,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get conversationTimeout => 'Vremensko ograničenje razgovora';
 
   @override
-  String get conversationTimeoutConfig => 'Koliko dugo Omi čeka u tišini prije završetka razgovora';
+  String get conversationTimeoutConfig =>
+      'Koliko dugo Omi čeka u tišini prije završetka razgovora';
 
   @override
   String get importData => 'Uvezi podatke';
@@ -690,7 +711,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noActivityYet => 'Nema aktivnosti';
 
   @override
-  String get startConversationToSeeInsights => 'Započnite razgovor sa Omijom\nda vidite vaše uvide o upotrebi ovde.';
+  String get startConversationToSeeInsights =>
+      'Započnite razgovor sa Omijom\nda vidite vaše uvide o upotrebi ovde.';
 
   @override
   String get listening => 'Slušanje';
@@ -741,7 +763,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get shareStatsMessage => 'Dele svoje Omi statistike! (omi.me - vaš AI asistent koji je uvek dostupan)';
+  String get shareStatsMessage =>
+      'Dele svoje Omi statistike! (omi.me - vaš AI asistent koji je uvek dostupan)';
 
   @override
   String get sharePeriodToday => 'Danas, Omi je:';
@@ -800,7 +823,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get debugLogCleared => 'Log otklanjanja grešaka očišćen';
 
   @override
-  String get exportStarted => 'Izvoz je počeo. Ovo može potrajati nekoliko sekundi…';
+  String get exportStarted =>
+      'Izvoz je počeo. Ovo može potrajati nekoliko sekundi…';
 
   @override
   String get exportAllData => 'Izvezi sve podatke';
@@ -934,7 +958,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get visibility => 'Vidljivost';
 
   @override
-  String get visibilitySubtitle => 'Kontrolišite koji se razgovori pojavljuju na vašoj listi';
+  String get visibilitySubtitle =>
+      'Kontrolišite koji se razgovori pojavljuju na vašoj listi';
 
   @override
   String get showShortConversations => 'Prikaži kratke razgovore';
@@ -946,7 +971,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get showDiscardedConversations => 'Prikaži odbijene razgovore';
 
   @override
-  String get showDiscardedConversationsDesc => 'Uključi razgovore označene kao odbijeni';
+  String get showDiscardedConversationsDesc =>
+      'Uključi razgovore označene kao odbijeni';
 
   @override
   String get shortConversationThreshold => 'Prag kratkog razgovora';
@@ -985,7 +1011,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get comingSoon => 'Uskoro dolazi';
 
   @override
-  String get integrationsFooter => 'Povežite svoje aplikacije da vidite podatke i metrike u čatu.';
+  String get integrationsFooter =>
+      'Povežite svoje aplikacije da vidite podatke i metrike u čatu.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1049,16 +1076,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get needYourPermission => 'Trebamo vašu dozvolu';
 
   @override
-  String get alreadyGavePermission => 'Već ste nam dali dozvolu da čuvamo vaše snimke. Evo podsetnika zašto nam treba:';
+  String get alreadyGavePermission =>
+      'Već ste nam dali dozvolu da čuvamo vaše snimke. Evo podsetnika zašto nam treba:';
 
   @override
-  String get wouldLikePermission => 'Želeli bismo vašu dozvolu da čuvamo vaše govorne snimke. Evo zašto:';
+  String get wouldLikePermission =>
+      'Želeli bismo vašu dozvolu da čuvamo vaše govorne snimke. Evo zašto:';
 
   @override
   String get improveSpeechProfile => 'Poboljšaj svoj profil govora';
 
   @override
-  String get improveSpeechProfileDesc => 'Koristimo snimke da dodatno obučimo i poboljšamo vaš lični profil govora.';
+  String get improveSpeechProfileDesc =>
+      'Koristimo snimke da dodatno obučimo i poboljšamo vaš lični profil govora.';
 
   @override
   String get trainFamilyProfiles => 'Obučite profile za prijatelje i porodicu';
@@ -1087,7 +1117,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get authorizationSuccessful => 'Autorizacija je uspešna!';
 
   @override
-  String get failedToAuthorize => 'Nije uspelo autentifikovanje. Pokušajte ponovo.';
+  String get failedToAuthorize =>
+      'Nije uspelo autentifikovanje. Pokušajte ponovo.';
 
   @override
   String get authorizationRevoked => 'Autentifikacija je odbijena.';
@@ -1096,13 +1127,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get recordingsDeleted => 'Snimanja su obrisana.';
 
   @override
-  String get failedToRevoke => 'Nije uspelo odbijanje autentifikacije. Pokušajte ponovo.';
+  String get failedToRevoke =>
+      'Nije uspelo odbijanje autentifikacije. Pokušajte ponovo.';
 
   @override
   String get permissionRevokedTitle => 'Dozvola je odbijena';
 
   @override
-  String get permissionRevokedMessage => 'Želite li da obrišemo i sva vaša postojeća snimanja?';
+  String get permissionRevokedMessage =>
+      'Želite li da obrišemo i sva vaša postojeća snimanja?';
 
   @override
   String get yes => 'Da';
@@ -1144,7 +1177,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get showMeetingsMenuBar => 'Prikaži nadolazeće sastanke u meniju';
 
   @override
-  String get showMeetingsMenuBarDesc => 'Prikaži sledeći sastanak i vreme do početka u macOS meniju';
+  String get showMeetingsMenuBarDesc =>
+      'Prikaži sledeći sastanak i vreme do početka u macOS meniju';
 
   @override
   String get showEventsNoParticipants => 'Prikaži događaje bez učesnika';
@@ -1169,7 +1203,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tomorrow => 'Sutra';
 
   @override
-  String get googleCalendarComingSoon => 'Integracija sa Google Kalendarom uskoro stiže!';
+  String get googleCalendarComingSoon =>
+      'Integracija sa Google Kalendarom uskoro stiže!';
 
   @override
   String connectedAsUser(String userId) {
@@ -1180,16 +1215,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get defaultWorkspace => 'Podrazumevana radna oblast';
 
   @override
-  String get tasksCreatedInWorkspace => 'Zadaci će biti kreirani u ovoj radnoj oblasti';
+  String get tasksCreatedInWorkspace =>
+      'Zadaci će biti kreirani u ovoj radnoj oblasti';
 
   @override
   String get defaultProjectOptional => 'Podrazumevan projekat (opciono)';
 
   @override
-  String get leaveUnselectedTasks => 'Ostavite neodabrano da kreirate zadatke bez projekta';
+  String get leaveUnselectedTasks =>
+      'Ostavite neodabrano da kreirate zadatke bez projekta';
 
   @override
-  String get noProjectsInWorkspace => 'Nema pronađenih projekata u ovoj radnoj oblasti';
+  String get noProjectsInWorkspace =>
+      'Nema pronađenih projekata u ovoj radnoj oblasti';
 
   @override
   String get conversationTimeoutDesc =>
@@ -1226,7 +1264,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get timeout4HoursDesc => 'Završi razgovor nakon 4 sata tišine';
 
   @override
-  String get conversationEndAfterHours => 'Razgovori će se sada završiti nakon 4 sata tišine';
+  String get conversationEndAfterHours =>
+      'Razgovori će se sada završiti nakon 4 sata tišine';
 
   @override
   String conversationEndAfterMinutes(int minutes) {
@@ -1237,10 +1276,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tellUsPrimaryLanguage => 'Recite nam koji je vaš primarni jezik';
 
   @override
-  String get languageForTranscription => 'Omi koristi ovaj jezik za transkripciju, sažetke i uspomene.';
+  String get languageForTranscription =>
+      'Omi koristi ovaj jezik za transkripciju, sažetke i uspomene.';
 
   @override
-  String get singleLanguageModeInfo => 'Modus jedan jezik je omogućen. Prevod je onemogućen za veću preciznost.';
+  String get singleLanguageModeInfo =>
+      'Modus jedan jezik je omogućen. Prevod je onemogućen za veću preciznost.';
 
   @override
   String get searchLanguageHint => 'Pretražite jezik po imenu ili kodu';
@@ -1291,10 +1332,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get defaultSpace => 'Podrazumevani prostor';
 
   @override
-  String get selectSpaceInWorkspace => 'Izaberite prostor u vašoj radnoj oblasti';
+  String get selectSpaceInWorkspace =>
+      'Izaberite prostor u vašoj radnoj oblasti';
 
   @override
-  String get noSpacesInWorkspace => 'Nema pronađenih prostora u ovoj radnoj oblasti';
+  String get noSpacesInWorkspace =>
+      'Nema pronađenih prostora u ovoj radnoj oblasti';
 
   @override
   String get defaultList => 'Podrazumevana lista';
@@ -1314,7 +1357,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get defaultRepoSaved => 'Podrazumevani repozitorijum je sačuvan';
 
   @override
-  String get failedToSaveDefaultRepo => 'Nije uspelo čuvanje podrazumevanog repozitorijuma';
+  String get failedToSaveDefaultRepo =>
+      'Nije uspelo čuvanje podrazumevanog repozitorijuma';
 
   @override
   String get defaultRepository => 'Podrazumevani repozitorijum';
@@ -1359,7 +1403,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get issuesCreatedInRepo => 'Problemi će biti kreirani u vašem podrazumevanom repozitorijumu';
+  String get issuesCreatedInRepo =>
+      'Problemi će biti kreirani u vašem podrazumevanom repozitorijumu';
 
   @override
   String get taskIntegrations => 'Integracije zadataka';
@@ -1403,7 +1448,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get gotIt => 'Razumeo sam';
 
   @override
-  String get tasksExportedOneApp => 'Zadaci se mogu izvoziti u jednu aplikaciju istovremeno.';
+  String get tasksExportedOneApp =>
+      'Zadaci se mogu izvoziti u jednu aplikaciju istovremeno.';
 
   @override
   String get completeYourUpgrade => 'Dovršite vašu nadogradnju';
@@ -1418,10 +1464,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get bringYourOwn => 'Dovedite svoje';
 
   @override
-  String get payYourSttProvider => 'Besplatno u Omiju. Transkripcijskom dobavljaču plaćate direktno.';
+  String get payYourSttProvider =>
+      'Besplatno u Omiju. Transkripcijskom dobavljaču plaćate direktno.';
 
   @override
-  String get freeMinutesMonth => '300 besplatnih minuta/mesec uključeno. Neograničeno sa ';
+  String get freeMinutesMonth =>
+      '300 besplatnih minuta/mesec uključeno. Neograničeno sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1433,7 +1481,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get validPortRequired => 'Validan port je obavezan';
 
   @override
-  String get validWebsocketUrlRequired => 'Validan WebSocket URL je obavezan (wss://)';
+  String get validWebsocketUrlRequired =>
+      'Validan WebSocket URL je obavezan (wss://)';
 
   @override
   String get apiUrlRequired => 'API URL je obavezan';
@@ -1450,13 +1499,15 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get configCopiedToClipboard => 'Konfiguracija je kopirana u privremenu memoriju';
+  String get configCopiedToClipboard =>
+      'Konfiguracija je kopirana u privremenu memoriju';
 
   @override
   String get pasteJsonConfig => 'Nalepite vašu JSON konfiguraciju ispod:';
 
   @override
-  String get addApiKeyAfterImport => 'Trebalo bi da dodate vlastiti API ključ nakon uvoza';
+  String get addApiKeyAfterImport =>
+      'Trebalo bi da dodate vlastiti API ključ nakon uvoza';
 
   @override
   String get paste => 'Nalepite';
@@ -1496,7 +1547,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get websocketUrl => 'WebSocket URL';
 
   @override
-  String get enterLiveSttWebsocket => 'Unesite vašu uživo STT WebSocket krajnju tačku';
+  String get enterLiveSttWebsocket =>
+      'Unesite vašu uživo STT WebSocket krajnju tačku';
 
   @override
   String get apiKey => 'API ključ';
@@ -1505,7 +1557,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get enterApiKey => 'Unesite vaš API ključ';
 
   @override
-  String get storedLocallyNeverShared => 'Sačuvano na ovom telefonu. Šalje se samo vašem dobavljaču transkripcije.';
+  String get storedLocallyNeverShared =>
+      'Sačuvano na ovom telefonu. Šalje se samo vašem dobavljaču transkripcije.';
 
   @override
   String get host => 'Domaćin';
@@ -1529,7 +1582,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get modified => 'Izmenjeno';
 
   @override
-  String get resetRequestConfig => 'Vratite konfiguraciju zahteva na podrazumevanu';
+  String get resetRequestConfig =>
+      'Vratite konfiguraciju zahteva na podrazumevanu';
 
   @override
   String get logs => 'Logovi';
@@ -1538,7 +1592,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get logsCopied => 'Logovi su kopirani';
 
   @override
-  String get noLogsYet => 'Još nema zapisa. Snimite nešto da vidite zahtjeve upućene vašem dobavljaču transkripcije.';
+  String get noLogsYet =>
+      'Još nema zapisa. Snimite nešto da vidite zahtjeve upućene vašem dobavljaču transkripcije.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
@@ -1708,7 +1763,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get locationAccess => 'Pristup lokaciji';
 
   @override
-  String get locationAccessDesc => 'Da bi Omi mogao zabilježiti gdje su se vaši razgovori odvijali.';
+  String get locationAccessDesc =>
+      'Da bi Omi mogao zabilježiti gdje su se vaši razgovori odvijali.';
 
   @override
   String get notifications => 'Obaveštenja';
@@ -1721,10 +1777,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get locationServiceDisabled => 'Lokacijska usluga je onemogućena';
 
   @override
-  String get locationServiceDisabledDesc => 'Usluge lokacije su isključene na ovom uređaju. Uključite ih u Postavkama.';
+  String get locationServiceDisabledDesc =>
+      'Usluge lokacije su isključene na ovom uređaju. Uključite ih u Postavkama.';
 
   @override
-  String get backgroundLocationDenied => 'Pristup lokalnosti u pozadini je odbijen';
+  String get backgroundLocationDenied =>
+      'Pristup lokalnosti u pozadini je odbijen';
 
   @override
   String get backgroundLocationDeniedDesc =>
@@ -1737,7 +1795,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get maybeLater => 'Možda kasnije';
 
   @override
-  String get speechProfileIntro => 'Omi trebا da nauči vaše ciljeve i vaš glas. Moći ćete ga da izmenjujete kasnije.';
+  String get speechProfileIntro =>
+      'Omi trebا da nauči vaše ciljeve i vaš glas. Moći ćete ga da izmenjujete kasnije.';
 
   @override
   String get getStarted => 'Početak';
@@ -1759,20 +1818,24 @@ class AppLocalizationsBs extends AppLocalizations {
       'Nije uspelo povezivanje na server. Molimo proverite vašu internet konekciju i pokušajte ponovo.';
 
   @override
-  String get invalidRecordingMultipleSpeakers => 'Nevažeće snimanje detektovano';
+  String get invalidRecordingMultipleSpeakers =>
+      'Nevažeće snimanje detektovano';
 
   @override
   String get multipleSpeakersDesc =>
       'Čini se da ima više govornika u snimanju. Molimo uverite se da ste u tihoj lokaciji i pokušajte ponovo.';
 
   @override
-  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+  String get discardedOnlyRecording =>
+      'That recording was too short or empty to keep.';
 
   @override
-  String get tooShortDesc => 'Nema dovoljno govora otkrivenog. Molimo govorite više i pokušajte ponovo.';
+  String get tooShortDesc =>
+      'Nema dovoljno govora otkrivenog. Molimo govorite više i pokušajte ponovo.';
 
   @override
-  String get invalidRecordingDesc => 'Molimo uverite se da ste govorili najmanje 5 sekundi i ne više od 90.';
+  String get invalidRecordingDesc =>
+      'Molimo uverite se da ste govorili najmanje 5 sekundi i ne više od 90.';
 
   @override
   String get areYouThere => 'Jeste li tu?';
@@ -1785,7 +1848,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get connectionLost => 'Veza je prekinuta';
 
   @override
-  String get connectionLostDesc => 'Veza je prekinuta. Molimo proverite vašu internet konekciju i pokušajte ponovo.';
+  String get connectionLostDesc =>
+      'Veza je prekinuta. Molimo proverite vašu internet konekciju i pokušajte ponovo.';
 
   @override
   String get tryAgain => 'Pokušajte ponovo';
@@ -1810,7 +1874,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get whatsYourName => 'Kako se zoveš?';
 
   @override
-  String get speakTranscribeSummarize => 'Govorite. Transkribirajte. Rezimeirajte.';
+  String get speakTranscribeSummarize =>
+      'Govorite. Transkribirajte. Rezimeirajte.';
 
   @override
   String get signInWithApple => 'Prijavite se sa Apple';
@@ -1828,7 +1893,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – Vaš AI pratilac';
 
   @override
-  String get captureEveryMoment => 'Omi snima vaše razgovore i za vas\npiše sažetak i obaveze.';
+  String get captureEveryMoment =>
+      'Omi snima vaše razgovore i za vas\npiše sažetak i obaveze.';
 
   @override
   String get appleWatchSetup => 'Apple Watch postavljanje';
@@ -1878,7 +1944,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectPrimaryLanguage => 'Izaberite svoj primarni jezik';
 
   @override
-  String get languageBenefits => 'Omi koristi ovaj jezik za transkripciju, sažetke i uspomene.';
+  String get languageBenefits =>
+      'Omi koristi ovaj jezik za transkripciju, sažetke i uspomene.';
 
   @override
   String get whatsYourPrimaryLanguage => 'Koji je vaš primarni jezik?';
@@ -1890,7 +1957,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get actionItemsTitle => 'Zadaci';
 
   @override
-  String get actionItemsDescription => 'Dodirnite za izmenu • Dugo dodirnite za izbor • Pošvapite za akcije';
+  String get actionItemsDescription =>
+      'Dodirnite za izmenu • Dugo dodirnite za izbor • Pošvapite za akcije';
 
   @override
   String get tabToDo => 'Uradi';
@@ -1963,7 +2031,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get autoExtractionFeature => 'Automatski ekstrahuje iz razgovora';
 
   @override
-  String get editSwipeFeature => 'Dodirnite za izmenu, pošvapite da završite ili obrišete';
+  String get editSwipeFeature =>
+      'Dodirnite za izmenu, pošvapite da završite ili obrišete';
 
   @override
   String itemsSelected(int count) {
@@ -1983,7 +2052,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryDeleted => 'Uspomena je obrisana';
 
   @override
-  String get memoryHistoryPartial => 'Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.';
+  String get memoryHistoryPartial =>
+      'Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.';
 
   @override
   String get memoryHistory => 'Historija';
@@ -2013,7 +2083,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get clearMemoryTitle => 'Obriši Omi-jevu memoriju';
 
   @override
-  String get clearMemoryMessage => 'Sve vaše uspomene bit će obrisane. Ovo se ne može poništiti.';
+  String get clearMemoryMessage =>
+      'Sve vaše uspomene bit će obrisane. Ovo se ne može poništiti.';
 
   @override
   String get clearMemoryButton => 'Obriši memoriju';
@@ -2081,7 +2152,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryContentHint => 'Više volim jutarnje sastanke.';
 
   @override
-  String get failedToSaveMemory => 'Nije uspelo čuvanje. Molimo proverite vašu konekciju.';
+  String get failedToSaveMemory =>
+      'Nije uspelo čuvanje. Molimo proverite vašu konekciju.';
 
   @override
   String get saveMemory => 'Sačuvaj uspomenu';
@@ -2179,13 +2251,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Omi prevodi razgovore na vašem primarnom jeziku. Ažurirajte ga bilo kada u Postavke → Profili.';
 
   @override
-  String get pleaseCheckInternetConnection => 'Molimo proverite vašu internet konekciju i pokušajte ponovo';
+  String get pleaseCheckInternetConnection =>
+      'Molimo proverite vašu internet konekciju i pokušajte ponovo';
 
   @override
   String get pleaseSelectReason => 'Molimo izaberite razlog';
 
   @override
-  String get tellUsMoreWhatWentWrong => 'Recite nam više o šta je pošlo naopako…';
+  String get tellUsMoreWhatWentWrong =>
+      'Recite nam više o šta je pošlo naopako…';
 
   @override
   String get selectText => 'Izaberite tekst';
@@ -2196,7 +2270,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get conversationCannotBeMerged => 'Ovaj razgovor ne može biti spojen (zaključan ili već se spaja)';
+  String get conversationCannotBeMerged =>
+      'Ovaj razgovor ne može biti spojen (zaključan ili već se spaja)';
 
   @override
   String get pleaseEnterFolderName => 'Molimo unesite naziv foldere';
@@ -2223,13 +2298,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteFolder => 'Obriši mapu';
 
   @override
-  String get transcriptCopiedToClipboard => 'Transkripcija kopirana u clipboard';
+  String get transcriptCopiedToClipboard =>
+      'Transkripcija kopirana u clipboard';
 
   @override
   String get summaryCopiedToClipboard => 'Sažetak kopiran u clipboard';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL razgovora nije mogao biti podijeljen.';
+  String get conversationUrlCouldNotBeShared =>
+      'URL razgovora nije mogao biti podijeljen.';
 
   @override
   String get urlCopiedToClipboard => 'URL kopiran u clipboard';
@@ -2253,7 +2330,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get generateSummary => 'Generiši sažetak';
 
   @override
-  String get conversationNotFoundOrDeleted => 'Razgovor nije pronađen ili je obrisan';
+  String get conversationNotFoundOrDeleted =>
+      'Razgovor nije pronađen ili je obrisan';
 
   @override
   String get deleteMemory => 'Obriši uspomenu';
@@ -2283,13 +2361,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firmwareDisconnectUsb => 'Iskopči USB';
 
   @override
-  String get firmwareUsbWarning => 'USB veza tijekom ažuriranja može oštetiti tvoj uređaj.';
+  String get firmwareUsbWarning =>
+      'USB veza tijekom ažuriranja može oštetiti tvoj uređaj.';
 
   @override
   String get firmwareBatteryAbove15 => 'Baterija iznad 15%';
 
   @override
-  String get firmwareEnsureBattery => 'Provjeri da tvoj uređaj ima 15% baterije.';
+  String get firmwareEnsureBattery =>
+      'Provjeri da tvoj uređaj ima 15% baterije.';
 
   @override
   String get firmwareStableConnection => 'Stabilna veza';
@@ -2380,7 +2460,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get createKeyToGetStarted => 'Kreiraj ključ da počneš';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Koliko dugo Omi čeka u tišini prije završetka razgovora';
+  String get setWhenConversationsAutoEnd =>
+      'Koliko dugo Omi čeka u tišini prije završetka razgovora';
 
   @override
   String get importDataFromOtherSources => 'Uvezi podatke iz drugih izvora';
@@ -2395,7 +2476,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Pomaže u dijagnostici problema';
 
   @override
-  String get exportStartedMessage => 'Izvoz počeo. Ovo može potrajati nekoliko sekundi…';
+  String get exportStartedMessage =>
+      'Izvoz počeo. Ovo može potrajati nekoliko sekundi…';
 
   @override
   String get exportConversationsToJson => 'Izvezi razgovore u JSON datoteku';
@@ -2409,7 +2491,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get connectAiAssistantsToData => 'Poveži AI asistente sa tvojim podacima';
+  String get connectAiAssistantsToData =>
+      'Poveži AI asistente sa tvojim podacima';
 
   @override
   String get realTimeTranscript => 'Transkripcija u realnom vremenu';
@@ -2427,16 +2510,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get followUpQuestions => 'Praćenja pitanja';
 
   @override
-  String get suggestQuestionsAfterConversations => 'Predloži pitanja nakon razgovora';
+  String get suggestQuestionsAfterConversations =>
+      'Predloži pitanja nakon razgovora';
 
   @override
   String get goalTracker => 'Pratilac ciljeva';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Prati svoje lične ciljeve na početnoj stranici';
+  String get trackPersonalGoalsOnHomepage =>
+      'Prati svoje lične ciljeve na početnoj stranici';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'Opis zadatka ne može biti prazan';
+  String get actionItemDescriptionCannotBeEmpty =>
+      'Opis zadatka ne može biti prazan';
 
   @override
   String get saved => 'Spremljeno';
@@ -2487,16 +2573,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get howDoesItWork => 'Kako funkcioniše?';
 
   @override
-  String get sdCardSyncDescription => 'SD kartična sinhronizacija će uvesti tvoje uspomene sa SD kartice u aplikaciju';
+  String get sdCardSyncDescription =>
+      'SD kartična sinhronizacija će uvesti tvoje uspomene sa SD kartice u aplikaciju';
 
   @override
   String get checksForAudioFiles => 'Provjerava audio datoteke na SD kartici';
 
   @override
-  String get omiSyncsAudioFiles => 'Omi zatim sinhronizuje audio datoteke sa serverom';
+  String get omiSyncsAudioFiles =>
+      'Omi zatim sinhronizuje audio datoteke sa serverom';
 
   @override
-  String get serverProcessesAudio => 'Server obrađuje audio datoteke i kreira uspomene';
+  String get serverProcessesAudio =>
+      'Server obrađuje audio datoteke i kreira uspomene';
 
   @override
   String get youreAllSet => 'Sve je spremno!';
@@ -2575,16 +2664,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get yourConversations => 'Tvoji razgovori';
 
   @override
-  String get reviewAndManageConversations => 'Pregledaj i upravljaj svojima uhvaćenim razgovorima';
+  String get reviewAndManageConversations =>
+      'Pregledaj i upravljaj svojima uhvaćenim razgovorima';
 
   @override
-  String get useMobileAppToCapture => 'Koristi svoju mobilnu aplikaciju za bilježenje zvuka';
+  String get useMobileAppToCapture =>
+      'Koristi svoju mobilnu aplikaciju za bilježenje zvuka';
 
   @override
   String get showAll => 'Prikaži sve';
 
   @override
-  String get noTasksForToday => 'Nema zadataka za danas.\nZatraži Omi za više zadataka ili kreiraj ručno.';
+  String get noTasksForToday =>
+      'Nema zadataka za danas.\nZatraži Omi za više zadataka ili kreiraj ručno.';
 
   @override
   String get dailyScore => 'DNEVNA OCJENA';
@@ -2614,7 +2706,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tasks => 'Zadaci';
 
   @override
-  String get swipeTasksToIndent => 'Preskini zadatke za indentaciju, vuči između kategorija';
+  String get swipeTasksToIndent =>
+      'Preskini zadatke za indentaciju, vuči između kategorija';
 
   @override
   String get create => 'Kreiraj';
@@ -2681,7 +2774,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteActionItem => 'Obriši zadatak';
 
   @override
-  String get deleteActionItemConfirmation => 'Obrisati ovaj zadatak? Ovo se ne može poništiti.';
+  String get deleteActionItemConfirmation =>
+      'Obrisati ovaj zadatak? Ovo se ne može poništiti.';
 
   @override
   String get enterActionItemDescription => 'Unesite opis zadatka';
@@ -2699,7 +2793,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get loadingApps => 'Učitavanje aplikacija…';
 
   @override
-  String get browseInstallCreateApps => 'Pregledi, instaliraj i kreiraj aplikacije';
+  String get browseInstallCreateApps =>
+      'Pregledi, instaliraj i kreiraj aplikacije';
 
   @override
   String get all => 'Sve';
@@ -2717,19 +2812,22 @@ class AppLocalizationsBs extends AppLocalizations {
   String get unableToLoadApps => 'Nije moguće učitati aplikacije';
 
   @override
-  String get tryAdjustingSearchTermsOrFilters => 'Pokušaj prilagoditi svoje pojmove pretrage ili filtere';
+  String get tryAdjustingSearchTermsOrFilters =>
+      'Pokušaj prilagoditi svoje pojmove pretrage ili filtere';
 
   @override
   String get checkBackLaterForNewApps => 'Provjeri kasnije za nove aplikacije';
 
   @override
-  String get pleaseCheckInternetConnectionAndTryAgain => 'Molimo provjeri svoju internet vezu i pokušaj ponovno';
+  String get pleaseCheckInternetConnectionAndTryAgain =>
+      'Molimo provjeri svoju internet vezu i pokušaj ponovno';
 
   @override
   String get createNewApp => 'Kreiraj novu aplikaciju';
 
   @override
-  String get buildSubmitCustomOmiApp => 'Izgradi i pošalji svoju prilagođenu Omi aplikaciju';
+  String get buildSubmitCustomOmiApp =>
+      'Izgradi i pošalji svoju prilagođenu Omi aplikaciju';
 
   @override
   String get submittingYourApp => 'Slanje tvoje aplikacije…';
@@ -2763,7 +2861,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get conversationPrompt => 'Upit razgovora';
 
   @override
-  String get conversationPromptPlaceholder => 'Ti si odličan aplikacija, dobićeš transkripciju i sažetak razgovora…';
+  String get conversationPromptPlaceholder =>
+      'Ti si odličan aplikacija, dobićeš transkripciju i sažetak razgovora…';
 
   @override
   String get notificationScopes => 'Djelokruzi obavijesti';
@@ -2785,7 +2884,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get needHelpGettingStarted => 'Trebam pomoć za početak?';
 
   @override
-  String get clickHereForAppBuildingGuides => 'Klikni ovdje za vodiče i dokumentaciju za izgrađivanje aplikacija';
+  String get clickHereForAppBuildingGuides =>
+      'Klikni ovdje za vodiče i dokumentaciju za izgrađivanje aplikacija';
 
   @override
   String get submitAppQuestion => 'Pošalji aplikaciju?';
@@ -2802,7 +2902,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get startEarning => 'Počni zarada! 💰';
 
   @override
-  String get connectStripeOrPayPal => 'Poveži Stripe ili PayPal da primjaš uplate za svoju aplikaciju.';
+  String get connectStripeOrPayPal =>
+      'Poveži Stripe ili PayPal da primjaš uplate za svoju aplikaciju.';
 
   @override
   String get connectNow => 'Poveži se sada';
@@ -2871,7 +2972,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get errorActivatingApp => 'Greška pri aktiviranju aplikacije';
 
   @override
-  String get integrationSetupRequired => 'Ako je ovo aplikacija za integraciju, provjeri da je postavljanje završeno.';
+  String get integrationSetupRequired =>
+      'Ako je ovo aplikacija za integraciju, provjeri da je postavljanje završeno.';
 
   @override
   String get installed => 'Instaliran';
@@ -2956,7 +3058,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get filterCapabilities => 'Mogućnosti';
 
   @override
-  String get noNotificationScopesAvailable => 'Nema dostupnih djelokruga obavijesti';
+  String get noNotificationScopesAvailable =>
+      'Nema dostupnih djelokruga obavijesti';
 
   @override
   String get popularApps => 'Popularne aplikacije';
@@ -3045,7 +3148,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get report => 'Prijavi';
 
   @override
-  String get microphonePermissionRequired => 'Dozvola za mikrofon je potrebna za pozivanje';
+  String get microphonePermissionRequired =>
+      'Dozvola za mikrofon je potrebna za pozivanje';
 
   @override
   String get microphonePermissionDenied =>
@@ -3101,13 +3205,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noTranscriptMessage => 'Ovaj razgovor nema transkripcije.';
 
   @override
-  String get conversationUrlCouldNotBeGenerated => 'URL razgovora nije mogao biti generisan.';
+  String get conversationUrlCouldNotBeGenerated =>
+      'URL razgovora nije mogao biti generisan.';
 
   @override
-  String get failedToGenerateConversationLink => 'Neuspješno generisanje veze razgovora';
+  String get failedToGenerateConversationLink =>
+      'Neuspješno generisanje veze razgovora';
 
   @override
-  String get failedToGenerateShareLink => 'Neuspješno generisanje veze za dijeljenje';
+  String get failedToGenerateShareLink =>
+      'Neuspješno generisanje veze za dijeljenje';
 
   @override
   String get reloadingConversations => 'Ponovno učitavanje razgovora…';
@@ -3125,10 +3232,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noResultsFound => 'Nema pronađenih rezultata';
 
   @override
-  String get tryAdjustingSearchTerms => 'Pokušaj prilagoditi svoje pojmove pretrage';
+  String get tryAdjustingSearchTerms =>
+      'Pokušaj prilagoditi svoje pojmove pretrage';
 
   @override
-  String get starConversationsToFindQuickly => 'Označi razgovore zvjezdicom kako bi ih brzo pronašao ovdje';
+  String get starConversationsToFindQuickly =>
+      'Označi razgovore zvjezdicom kako bi ih brzo pronašao ovdje';
 
   @override
   String noConversationsOnDate(String date) {
@@ -3184,7 +3293,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get createYourFirstMemory => 'Kreiraj svoju prvu uspomenu da bi počeo';
 
   @override
-  String get tryAdjustingFilter => 'Pokušaj prilagoditi svoju pretragu ili filtar';
+  String get tryAdjustingFilter =>
+      'Pokušaj prilagoditi svoju pretragu ili filtar';
 
   @override
   String get whatWouldYouLikeToRemember => 'Što bi htio zapamtiti?';
@@ -3196,13 +3306,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get public => 'Javno';
 
   @override
-  String get failedToSaveCheckConnection => 'Neuspješno čuvanje. Molimo provjeri svoju vezu.';
+  String get failedToSaveCheckConnection =>
+      'Neuspješno čuvanje. Molimo provjeri svoju vezu.';
 
   @override
   String get createMemory => 'Kreiraj uspomenu';
 
   @override
-  String get deleteMemoryConfirmation => 'Obrisati ovu uspomenu? Ovo se ne može poništiti.';
+  String get deleteMemoryConfirmation =>
+      'Obrisati ovu uspomenu? Ovo se ne može poništiti.';
 
   @override
   String get makePrivate => 'Učini privatnom';
@@ -3217,7 +3329,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get makeAllMemoriesPublic => 'Učini sve uspomene javnim';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Trajno ukloni sve uspomene iz Omija';
+  String get permanentlyRemoveAllMemories =>
+      'Trajno ukloni sve uspomene iz Omija';
 
   @override
   String get allMemoriesAreNowPrivate => 'Sve uspomene su sada privatne';
@@ -3261,7 +3374,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get secureAuthViaAppleId => 'Sigurna autentifikacija putem Apple ID-a';
 
   @override
-  String get secureAuthViaGoogleAccount => 'Sigurna autentifikacija putem Google računa';
+  String get secureAuthViaGoogleAccount =>
+      'Sigurna autentifikacija putem Google računa';
 
   @override
   String get whatWeCollect => 'Što prikupljamo';
@@ -3277,7 +3391,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get yourDataIsProtected => 'Tvoji su podaci zaštićeni i vođeni našim ';
 
   @override
-  String get pleaseSelectYourPrimaryLanguage => 'Molimo odaberi svoj primarni jezik';
+  String get pleaseSelectYourPrimaryLanguage =>
+      'Molimo odaberi svoj primarni jezik';
 
   @override
   String get chooseYourLanguage => 'Odaberi svoj jezik';
@@ -3295,7 +3410,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pleaseEnterYourName => 'Molimo unesi svoje ime';
 
   @override
-  String get nameMustBeAtLeast2Characters => 'Ime mora sadržavati najmanje 2 znaka';
+  String get nameMustBeAtLeast2Characters =>
+      'Ime mora sadržavati najmanje 2 znaka';
 
   @override
   String get tellUsHowYouWouldLikeToBeAddressed =>
@@ -3320,7 +3436,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get screenRecording => 'Snimanje zaslonom';
 
   @override
-  String get captureSystemAudioFromMeetings => 'Snimaj sistemski audio sa sastanaka';
+  String get captureSystemAudioFromMeetings =>
+      'Snimaj sistemski audio sa sastanaka';
 
   @override
   String get screenRecordingDescription =>
@@ -3376,13 +3493,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get payment => 'Plaćanje';
 
   @override
-  String get addOrChangeYourPaymentMethod => 'Dodaj ili promijeni način plaćanja';
+  String get addOrChangeYourPaymentMethod =>
+      'Dodaj ili promijeni način plaćanja';
 
   @override
   String get preferences => 'Postavke';
 
   @override
-  String get helpImproveOmiBySharing => 'Pomozi poboljšati Omi dijeljenjem anonimiziranih podataka analitike';
+  String get helpImproveOmiBySharing =>
+      'Pomozi poboljšati Omi dijeljenjem anonimiziranih podataka analitike';
 
   @override
   String get deleteAccount => 'Obriši račun';
@@ -3400,7 +3519,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get exportConversations => 'Izvezi razgovore';
 
   @override
-  String get exportAllConversationsToJson => 'Izvezi sve svoje razgovore u JSON datoteku.';
+  String get exportAllConversationsToJson =>
+      'Izvezi sve svoje razgovore u JSON datoteku.';
 
   @override
   String get conversationsExportStarted =>
@@ -3419,49 +3539,60 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysFound => 'Nema pronađenih API ključeva. Stvori jedan kako bi započeo.';
+  String get noApiKeysFound =>
+      'Nema pronađenih API ključeva. Stvori jedan kako bi započeo.';
 
   @override
   String get advancedSettings => 'Napredne postavke';
 
   @override
-  String get triggersWhenNewConversationCreated => 'Pokreće se kada je stvoren novi razgovor.';
+  String get triggersWhenNewConversationCreated =>
+      'Pokreće se kada je stvoren novi razgovor.';
 
   @override
-  String get triggersWhenNewTranscriptReceived => 'Pokreće se kada je primljena nova transkripcija.';
+  String get triggersWhenNewTranscriptReceived =>
+      'Pokreće se kada je primljena nova transkripcija.';
 
   @override
   String get realtimeAudioBytes => 'Bajtovi zvuka u realnom vremenu';
 
   @override
-  String get triggersWhenAudioBytesReceived => 'Pokreće se kada su primljeni bajtovi zvuka.';
+  String get triggersWhenAudioBytesReceived =>
+      'Pokreće se kada su primljeni bajtovi zvuka.';
 
   @override
   String get everyXSeconds => 'Svakih x sekundi';
 
   @override
-  String get triggersWhenDaySummaryGenerated => 'Pokreće se kada je generiran sažetak dana.';
+  String get triggersWhenDaySummaryGenerated =>
+      'Pokreće se kada je generiran sažetak dana.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'Pokušaj najnovije eksperimentalne značajke od Omi tima.';
+  String get tryLatestExperimentalFeatures =>
+      'Pokušaj najnovije eksperimentalne značajke od Omi tima.';
 
   @override
-  String get transcriptionServiceDiagnosticStatus => 'Status dijagnostike servisa transkripcije';
+  String get transcriptionServiceDiagnosticStatus =>
+      'Status dijagnostike servisa transkripcije';
 
   @override
-  String get enableDetailedDiagnosticMessages => 'Aktiviraj detaljne dijagnostičke poruke iz servisa transkripcije';
+  String get enableDetailedDiagnosticMessages =>
+      'Aktiviraj detaljne dijagnostičke poruke iz servisa transkripcije';
 
   @override
-  String get autoCreateAndTagNewSpeakers => 'Automatski stvori i označi nove govornike';
+  String get autoCreateAndTagNewSpeakers =>
+      'Automatski stvori i označi nove govornike';
 
   @override
-  String get automaticallyCreateNewPerson => 'Automatski stvori novu osobu kada je ime detektirano u transkripciji.';
+  String get automaticallyCreateNewPerson =>
+      'Automatski stvori novu osobu kada je ime detektirano u transkripciji.';
 
   @override
   String get pilotFeatures => 'Pilot karakteristike';
 
   @override
-  String get pilotFeaturesDescription => 'Ove su karakteristike testovi i nema jamstva za podršku.';
+  String get pilotFeaturesDescription =>
+      'Ove su karakteristike testovi i nema jamstva za podršku.';
 
   @override
   String get suggestFollowUpQuestion => 'Predloži pitanje praćenja';
@@ -3470,7 +3601,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get saveSettings => 'Spremi postavke';
 
   @override
-  String get syncingDeveloperSettings => 'Sinkroniziranje postavki razvojnog programera…';
+  String get syncingDeveloperSettings =>
+      'Sinkroniziranje postavki razvojnog programera…';
 
   @override
   String get summary => 'Sažetak';
@@ -3514,10 +3646,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'Pusti Omi da automatski odabere najbolju aplikaciju';
+  String get letOmiChooseAutomatically =>
+      'Pusti Omi da automatski odabere najbolju aplikaciju';
 
   @override
-  String get deleteConversationConfirmation => 'Obrisati ovaj razgovor? Ovo se ne može poništiti.';
+  String get deleteConversationConfirmation =>
+      'Obrisati ovaj razgovor? Ovo se ne može poništiti.';
 
   @override
   String get conversationDeleted => 'Razgovor je obrisan';
@@ -3529,10 +3663,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get editConversation => 'Uredi razgovor';
 
   @override
-  String get conversationLinkCopiedToClipboard => 'Veza razgovora je kopirana u clipboard';
+  String get conversationLinkCopiedToClipboard =>
+      'Veza razgovora je kopirana u clipboard';
 
   @override
-  String get conversationTranscriptCopiedToClipboard => 'Transkripcija razgovora je kopirana u clipboard';
+  String get conversationTranscriptCopiedToClipboard =>
+      'Transkripcija razgovora je kopirana u clipboard';
 
   @override
   String get editConversationDialogTitle => 'Uredi razgovor';
@@ -3547,13 +3683,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get enterConversationTitle => 'Unesi naslov razgovora…';
 
   @override
-  String get conversationTitleUpdatedSuccessfully => 'Naslov razgovora je uspješno ažuriran';
+  String get conversationTitleUpdatedSuccessfully =>
+      'Naslov razgovora je uspješno ažuriran';
 
   @override
-  String get failedToUpdateConversationTitle => 'Ažuriranje naslova razgovora nije uspjelo';
+  String get failedToUpdateConversationTitle =>
+      'Ažuriranje naslova razgovora nije uspjelo';
 
   @override
-  String get errorUpdatingConversationTitle => 'Greška pri ažuriranju naslova razgovora';
+  String get errorUpdatingConversationTitle =>
+      'Greška pri ažuriranju naslova razgovora';
 
   @override
   String get settingUp => 'Postavljanje…';
@@ -3562,7 +3701,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get startYourFirstRecording => 'Započni svojom prvom snimkom';
 
   @override
-  String get preparingSystemAudioCapture => 'Priprema snimanja sistemskog zvuka';
+  String get preparingSystemAudioCapture =>
+      'Priprema snimanja sistemskog zvuka';
 
   @override
   String get reconnecting => 'Ponovno se povezujem…';
@@ -3624,13 +3764,16 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get clickPlayToResumeOrStop => 'Klikni play da nastaviš ili stop da završiš';
+  String get clickPlayToResumeOrStop =>
+      'Klikni play da nastaviš ili stop da završiš';
 
   @override
-  String get settingUpSystemAudioCapture => 'Postavljanje snimanja sistemskog zvuka';
+  String get settingUpSystemAudioCapture =>
+      'Postavljanje snimanja sistemskog zvuka';
 
   @override
-  String get clickToBeginRecordingSystemAudio => 'Klikni da bi započeo snimanje sistemskog zvuka';
+  String get clickToBeginRecordingSystemAudio =>
+      'Klikni da bi započeo snimanje sistemskog zvuka';
 
   @override
   String get you => 'Ti';
@@ -3703,7 +3846,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get customVocabularyHeader => 'PRILAGOĐENI VOKABULAR';
 
   @override
-  String get addWordsDescription => 'Dodaj riječi koje Omi trebam prepoznati tijekom transkripcije.';
+  String get addWordsDescription =>
+      'Dodaj riječi koje Omi trebam prepoznati tijekom transkripcije.';
 
   @override
   String get enterWordsHint => 'Unesi riječi (odvojeno zarezom)';
@@ -3715,7 +3859,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get dailySummaryTitle => 'Dnevni sažetak';
 
   @override
-  String get dailySummaryDescription => 'Obavijesti s personaliziranim sažetkom razgovora tijekom dana.';
+  String get dailySummaryDescription =>
+      'Obavijesti s personaliziranim sažetkom razgovora tijekom dana.';
 
   @override
   String get deliveryTime => 'Vrijeme dostave';
@@ -3727,7 +3872,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get viewPlansAndUsage => 'Prikaži planove i korištenje';
 
   @override
-  String get viewPlansDescription => 'Upravljaj svojom pretplatom i vidi statistiku korištenja';
+  String get viewPlansDescription =>
+      'Upravljaj svojom pretplatom i vidi statistiku korištenja';
 
   @override
   String get addOrChangePaymentMethod => 'Dodaj ili promijeni način plaćanja';
@@ -3739,13 +3885,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get showMeetingsInMenuBar => 'Prikaži sastanke u alatnoj traci';
 
   @override
-  String get displayUpcomingMeetingsDescription => 'Prikaži nadolazeće sastanke u alatnoj traci';
+  String get displayUpcomingMeetingsDescription =>
+      'Prikaži nadolazeće sastanke u alatnoj traci';
 
   @override
   String get showEventsWithoutParticipants => 'Prikaži događaje bez sudionika';
 
   @override
-  String get includePersonalEventsDescription => 'Uključi osobne događaje bez prisutnih';
+  String get includePersonalEventsDescription =>
+      'Uključi osobne događaje bez prisutnih';
 
   @override
   String get upcomingMeetings => 'Nadolazeći sastanci';
@@ -3757,7 +3905,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get shortcuts => 'Prečaci';
 
   @override
-  String get shortcutChangeInstruction => 'Klikni na prečac da ga promijeniš. Pritisni Escape da otkazes.';
+  String get shortcutChangeInstruction =>
+      'Klikni na prečac da ga promijeniš. Pritisni Escape da otkazes.';
 
   @override
   String get importDataDescription => 'Uvezi podatke iz drugih izvora';
@@ -3778,7 +3927,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noAPIKeys => 'Nema API ključeva. Stvori jedan kako bi započeo.';
 
   @override
-  String get autoCreateWhenDetected => 'Automatski stvori kada je ime detektirano';
+  String get autoCreateWhenDetected =>
+      'Automatski stvori kada je ime detektirano';
 
   @override
   String get trackPersonalGoals => 'Prati osobne ciljeve na početnoj stranici';
@@ -3811,7 +3961,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get termsAndPrivacyPolicy => 'Uvjetima i politikom privatnosti';
 
   @override
-  String get helpsDiagnoseIssuesAutoDeletes => 'Pomaže u dijagnostici problema. Automatski se briše nakon 3 dana.';
+  String get helpsDiagnoseIssuesAutoDeletes =>
+      'Pomaže u dijagnostici problema. Automatski se briše nakon 3 dana.';
 
   @override
   String get manageYourApp => 'Upravljaj svojom aplikacijom';
@@ -3826,7 +3977,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get updateAppQuestion => 'Ažurirati aplikaciju?';
 
   @override
-  String get updateAppConfirmation => 'Promjene će biti objavljene nakon što ih pregleda naš tim.';
+  String get updateAppConfirmation =>
+      'Promjene će biti objavljene nakon što ih pregleda naš tim.';
 
   @override
   String get updateApp => 'Ažurira aplikaciju';
@@ -3857,7 +4009,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Pretplata je uspješno otkazana. Ostaće aktivna do kraja trenutnog razdoblja naplate.';
 
   @override
-  String get failedToCancelSubscription => 'Otkazivanje pretplate nije uspjelo. Molimo pokušaj ponovno.';
+  String get failedToCancelSubscription =>
+      'Otkazivanje pretplate nije uspjelo. Molimo pokušaj ponovno.';
 
   @override
   String get invalidPaymentUrl => 'Nevaljani URL plaćanja';
@@ -3890,7 +4043,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Otkazati pretplatu?';
 
   @override
-  String get cancelSubscriptionConfirmation => 'Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.';
+  String get cancelSubscriptionConfirmation =>
+      'Nastavit ćeš imati pristup do kraja svog trenutnog razdoblja naplate.';
 
   @override
   String get cancelSubscriptionButton => 'Otkaži pretplatu';
@@ -3899,7 +4053,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get cancelling => 'Otkazivanje…';
 
   @override
-  String get betaTesterMessage => 'Jesi beta tester za ovu aplikaciju. Još nije javna. Biti će javna kada se odobri.';
+  String get betaTesterMessage =>
+      'Jesi beta tester za ovu aplikaciju. Još nije javna. Biti će javna kada se odobri.';
 
   @override
   String get appUnderReviewMessage =>
@@ -3916,7 +4071,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tapToComplete => 'Dodirni za dovršetak';
 
   @override
-  String get invalidSetupInstructionsUrl => 'Nevaljani URL uputa za postavljanje';
+  String get invalidSetupInstructionsUrl =>
+      'Nevaljani URL uputa za postavljanje';
 
   @override
   String get pushToTalk => 'Pritisni za razgovor';
@@ -3934,7 +4090,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'Recenzija je uspješno ažurirana 🚀';
 
   @override
-  String get failedToSubmitReview => 'Slanje recenzije nije uspjelo. Molimo pokušaj ponovno.';
+  String get failedToSubmitReview =>
+      'Slanje recenzije nije uspjelo. Molimo pokušaj ponovno.';
 
   @override
   String get addYourReview => 'Dodaj svoju recenziju';
@@ -3958,7 +4115,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get anonymousUser => 'Anonimni korisnik';
 
   @override
-  String get issueActivatingApp => 'Došlo je do problema pri aktiviranju ove aplikacije. Molimo pokušaj ponovno.';
+  String get issueActivatingApp =>
+      'Došlo je do problema pri aktiviranju ove aplikacije. Molimo pokušaj ponovno.';
 
   @override
   String get dataAccessNoticeDescription =>
@@ -4028,7 +4186,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get permissionDeniedForAppleReminders => 'Dozvola odbijena za Apple Reminders';
+  String get permissionDeniedForAppleReminders =>
+      'Dozvola odbijena za Apple Reminders';
 
   @override
   String failedToCreateApiKey(String error) {
@@ -4063,7 +4222,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get copyToClipboard => 'Kopira u clipboard';
 
   @override
-  String get pleaseCopyKeyNow => 'Molimo kopira ga sada i zapiši ga negdje sigurno. ';
+  String get pleaseCopyKeyNow =>
+      'Molimo kopira ga sada i zapiši ga negdje sigurno. ';
 
   @override
   String get willNotSeeAgain => 'Nećeš ga moći vidjeti ponovno.';
@@ -4075,7 +4235,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Opozovi API ključ?';
 
   @override
-  String get revokeApiKeyWarning => 'Aplikacije koje koriste ovaj ključ gube pristup API-ju. Ovo se ne može poništiti.';
+  String get revokeApiKeyWarning =>
+      'Aplikacije koje koriste ovaj ključ gube pristup API-ju. Ovo se ne može poništiti.';
 
   @override
   String get revoke => 'Opozovi';
@@ -4155,13 +4316,15 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get failedToCreateKeyTryAgain => 'Stvaranje ključa nije uspjelo. Molimo pokušaj ponovno.';
+  String get failedToCreateKeyTryAgain =>
+      'Stvaranje ključa nije uspjelo. Molimo pokušaj ponovno.';
 
   @override
   String get keyCreated => 'Ključ je stvoren';
 
   @override
-  String get keyCreatedMessage => 'Tvoj novi ključ je stvoren. Molimo kopira ga sada. Nećeš ga moći vidjeti ponovno.';
+  String get keyCreatedMessage =>
+      'Tvoj novi ključ je stvoren. Molimo kopira ga sada. Nećeš ga moći vidjeti ponovno.';
 
   @override
   String get keyWord => 'Ključ';
@@ -4174,7 +4337,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Slijedeće instalirane aplikacije imaju vanjske integracije i mogu pristupiti tvojim podacima, kao što su razgovori i uspomene.';
 
   @override
-  String get noExternalAppsHaveAccess => 'Nema vanjskih aplikacija koje imaju pristup tvojim podacima.';
+  String get noExternalAppsHaveAccess =>
+      'Nema vanjskih aplikacija koje imaju pristup tvojim podacima.';
 
   @override
   String get maximumSecurityE2ee => 'Maksimalna sigurnost (E2EE)';
@@ -4183,10 +4347,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get importantTradeoffs => 'Važni kompromisi:';
 
   @override
-  String get e2eeTradeoff1 => '• Neke značajke kao što su integracije vanjske aplikacije mogu biti onemogućene.';
+  String get e2eeTradeoff1 =>
+      '• Neke značajke kao što su integracije vanjske aplikacije mogu biti onemogućene.';
 
   @override
-  String get e2eeTradeoff2 => '• Ako zaboraviš lozinku, tvoji podaci se ne mogu oporaviti.';
+  String get e2eeTradeoff2 =>
+      '• Ako zaboraviš lozinku, tvoji podaci se ne mogu oporaviti.';
 
   @override
   String get featureComingSoon => 'Ova će se značajka uskoro pojaviti!';
@@ -4215,7 +4381,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get endToEndEncryption => 'End-to-End enkripcija';
 
   @override
-  String get dataAlwaysEncrypted => 'Bez obzira na razinu, tvoji su podaci uvijek šifrirani u mirovanju i u prijenosu.';
+  String get dataAlwaysEncrypted =>
+      'Bez obzira na razinu, tvoji su podaci uvijek šifrirani u mirovanju i u prijenosu.';
 
   @override
   String get readOnlyScope => 'Samo čitanje';
@@ -4233,7 +4400,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get apiKeyCreated => 'API ključ je stvoren!';
 
   @override
-  String get saveKeyWarning => 'Spremi ovaj ključ sada! Nećeš ga moći vidjeti ponovno.';
+  String get saveKeyWarning =>
+      'Spremi ovaj ključ sada! Nećeš ga moći vidjeti ponovno.';
 
   @override
   String get yourApiKey => 'TVOJ API KLJUČ';
@@ -4248,7 +4416,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get createApiKey => 'Stvori API ključ';
 
   @override
-  String get accessDataProgrammatically => 'Pristupi tvojim podacima programski';
+  String get accessDataProgrammatically =>
+      'Pristupi tvojim podacima programski';
 
   @override
   String get keyNameLabel => 'IME KLJUČA';
@@ -4260,7 +4429,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get permissionsLabel => 'DOZVOLE';
 
   @override
-  String get permissionsInfoNote => 'R = Čitaj, W = Napiši. Zadano je samo čitanje ako ništa nije odabrano.';
+  String get permissionsInfoNote =>
+      'R = Čitaj, W = Napiši. Zadano je samo čitanje ako ništa nije odabrano.';
 
   @override
   String get developerApi => 'API za razvojne programere';
@@ -4284,13 +4454,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Dobij Omi Unlimited besplatno doprinošenjem svojih podataka za treniranje AI modela.';
 
   @override
-  String get trainingDataBullets => '• Vaši podaci pomažu poboljšanju AI modela\n• Dijele se samo neosjetljivi podaci';
+  String get trainingDataBullets =>
+      '• Vaši podaci pomažu poboljšanju AI modela\n• Dijele se samo neosjetljivi podaci';
 
   @override
   String get learnMoreAtOmiTraining => 'Saznaj više na omi.me/training';
 
   @override
-  String get agreeToContributeData => 'Razumijem i slažem se doprinijeti svoje podatke za obuku AI';
+  String get agreeToContributeData =>
+      'Razumijem i slažem se doprinijeti svoje podatke za obuku AI';
 
   @override
   String get submitRequest => 'Podnesi zahtjev';
@@ -4311,19 +4483,23 @@ class AppLocalizationsBs extends AppLocalizations {
   String get keepMyPlan => 'Čuvi moj plan';
 
   @override
-  String get subscriptionSetToCancel => 'Tvoja pretplata je postavljena na otkazivanje na kraju razdoblja.';
+  String get subscriptionSetToCancel =>
+      'Tvoja pretplata je postavljena na otkazivanje na kraju razdoblja.';
 
   @override
   String get switchedToOnDevice => 'Prebačeno na transkripciju na uređaju';
 
   @override
-  String get couldNotSwitchToFreePlan => 'Nije moguće prijeći na besplatni plan. Molimo pokušajte ponovno.';
+  String get couldNotSwitchToFreePlan =>
+      'Nije moguće prijeći na besplatni plan. Molimo pokušajte ponovno.';
 
   @override
-  String get couldNotLoadPlans => 'Nije moguće učitati dostupne planove. Molimo pokušajte ponovno.';
+  String get couldNotLoadPlans =>
+      'Nije moguće učitati dostupne planove. Molimo pokušajte ponovno.';
 
   @override
-  String get selectedPlanNotAvailable => 'Odabrani plan nije dostupan. Molimo pokušajte ponovno.';
+  String get selectedPlanNotAvailable =>
+      'Odabrani plan nije dostupan. Molimo pokušajte ponovno.';
 
   @override
   String get upgradeToAnnualPlan => 'Nadogradnja na godišnji plan';
@@ -4332,7 +4508,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get importantBillingInfo => 'Važne informacije o naplati:';
 
   @override
-  String get monthlyPlanContinues => 'Vaš trenutni mjesečni plan će nastaviti do kraja vašeg perioda naplate';
+  String get monthlyPlanContinues =>
+      'Vaš trenutni mjesečni plan će nastaviti do kraja vašeg perioda naplate';
 
   @override
   String get paymentMethodCharged =>
@@ -4343,7 +4520,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Vaša godišnja pretplata od 12 mjeseci će se pokrenuti automatski nakon naplate';
 
   @override
-  String get thirteenMonthsCoverage => 'Dobit ćete 13 mjeseci pokrića ukupno (trenutni mjesec + 12 mjeseci godišnjeg)';
+  String get thirteenMonthsCoverage =>
+      'Dobit ćete 13 mjeseci pokrića ukupno (trenutni mjesec + 12 mjeseci godišnjeg)';
 
   @override
   String get confirmUpgrade => 'Potvrdi nadogradnju';
@@ -4361,7 +4539,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get changePlan => 'Promijeni plan';
 
   @override
-  String get upgradeAlreadyScheduled => 'Vaša nadogradnja na godišnji plan je već zakazana';
+  String get upgradeAlreadyScheduled =>
+      'Vaša nadogradnja na godišnji plan je već zakazana';
 
   @override
   String get youAreOnUnlimitedPlan => 'Vi ste na Neograničenom planu.';
@@ -4413,7 +4592,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get youreOnAnnualPlan => 'Vi ste na godišnjem planu';
 
   @override
-  String get alreadyBestValuePlan => 'Već imate plan s najboljom vrijednosti. Nema potrebe za promjenama.';
+  String get alreadyBestValuePlan =>
+      'Već imate plan s najboljom vrijednosti. Nema potrebe za promjenama.';
 
   @override
   String get unableToLoadPlans => 'Nije moguće učitati planove';
@@ -4428,13 +4608,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get continueText => 'Nastavi';
 
   @override
-  String get resubscribeFirstToChangePlans => 'Prvo se ponovo pretplatite da biste promijenili plan.';
+  String get resubscribeFirstToChangePlans =>
+      'Prvo se ponovo pretplatite da biste promijenili plan.';
 
   @override
   String get resubscribe => 'Ponovna pretplata';
 
   @override
-  String get couldNotOpenPaymentSettings => 'Nije moguće otvoriti postavke plaćanja. Molimo pokušajte ponovno.';
+  String get couldNotOpenPaymentSettings =>
+      'Nije moguće otvoriti postavke plaćanja. Molimo pokušajte ponovno.';
 
   @override
   String get managePaymentMethod => 'Upravljaj metodom plaćanja';
@@ -4514,13 +4696,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get autoDeletesAfterThreeDays => 'Automatski se briše nakon 3 dana.';
 
   @override
-  String get knowledgeGraphDeletedSuccessfully => 'Grafikon znanja je uspješno obrisan';
+  String get knowledgeGraphDeletedSuccessfully =>
+      'Grafikon znanja je uspješno obrisan';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'Izvoz je započet. Ovo može potrajati nekoliko sekundi…';
+  String get exportStartedMayTakeFewSeconds =>
+      'Izvoz je započet. Ovo može potrajati nekoliko sekundi…';
 
   @override
-  String get configureDailySummaryDigest => 'Konfiguriraj svoj dnevni sažetak zadataka';
+  String get configureDailySummaryDigest =>
+      'Konfiguriraj svoj dnevni sažetak zadataka';
 
   @override
   String accessesDataTypes(String dataTypes) {
@@ -4533,7 +4718,10 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription i pokrenuto sa $triggerDescription.';
   }
 
@@ -4543,10 +4731,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get noSpecificDataAccessConfigured => 'Nema specifičnog pristupa podacima konfiguriranog.';
+  String get noSpecificDataAccessConfigured =>
+      'Nema specifičnog pristupa podacima konfiguriranog.';
 
   @override
-  String get basicPlanDescription => '300 premium minuta + neograničeno na uređaju';
+  String get basicPlanDescription =>
+      '300 premium minuta + neograničeno na uređaju';
 
   @override
   String get minutes => 'minute';
@@ -4561,7 +4751,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get setupOnDevice => 'Postavi na uređaj';
 
   @override
-  String get forUnlimitedFreeTranscription => 'za neograničenu besplatnu transkripciju.';
+  String get forUnlimitedFreeTranscription =>
+      'za neograničenu besplatnu transkripciju.';
 
   @override
   String premiumMinsLeft(int count) {
@@ -4584,7 +4775,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get otherDevicesComingSoon => 'Drugi uređaji dolaze uskoro';
 
   @override
-  String get deleteAllLimitlessConversations => 'Obrisati sve razgovore bez ograničenja?';
+  String get deleteAllLimitlessConversations =>
+      'Obrisati sve razgovore bez ograničenja?';
 
   @override
   String get deleteAllLimitlessWarning =>
@@ -4622,7 +4814,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pleaseEnterName => 'Molimo unesite naziv';
 
   @override
-  String get nameMustBeBetweenCharacters => 'Naziv mora biti između 2 i 40 znakova';
+  String get nameMustBeBetweenCharacters =>
+      'Naziv mora biti između 2 i 40 znakova';
 
   @override
   String get deleteSampleQuestion => 'Obrisati uzorak?';
@@ -4780,7 +4973,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get setActive => 'Postavi aktivno';
 
   @override
-  String get getPaidThroughStripe => 'Dobijte plaćanje za prodaju aplikacije preko Stripea';
+  String get getPaidThroughStripe =>
+      'Dobijte plaćanje za prodaju aplikacije preko Stripea';
 
   @override
   String get monthlyPayouts => 'Mjesečne isplate';
@@ -4800,16 +4994,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectYourCountry => 'Odaberite vašu zemlju';
 
   @override
-  String get countrySelectionPermanent => 'Vaš izbor zemlje je trajno i ne može se kasnije promijeniti.';
+  String get countrySelectionPermanent =>
+      'Vaš izbor zemlje je trajno i ne može se kasnije promijeniti.';
 
   @override
   String get byClickingConnectNow => 'Klikom na \"Poveži sada\" pristajete na';
 
   @override
-  String get stripeConnectedAccountAgreement => 'Sporazum Stripe-ova povezanog računa';
+  String get stripeConnectedAccountAgreement =>
+      'Sporazum Stripe-ova povezanog računa';
 
   @override
-  String get errorConnectingToStripe => 'Greška pri povezivanju na Stripe! Molimo pokušajte kasnije.';
+  String get errorConnectingToStripe =>
+      'Greška pri povezivanju na Stripe! Molimo pokušajte kasnije.';
 
   @override
   String get connectingYourStripeAccount => 'Povezivanje vašeg Stripe računa';
@@ -4835,7 +5032,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get updateStripeDetails => 'Ažuriraj Stripe detalje';
 
   @override
-  String get errorUpdatingStripeDetails => 'Greška pri ažuriranju Stripe detalja! Molimo pokušajte kasnije.';
+  String get errorUpdatingStripeDetails =>
+      'Greška pri ažuriranju Stripe detalja! Molimo pokušajte kasnije.';
 
   @override
   String get updatePayPal => 'Ažuriraj PayPal';
@@ -4844,7 +5042,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get setUpPayPal => 'Postavi PayPal';
 
   @override
-  String get updatePayPalAccountDetails => 'Ažuriraj detalje svog PayPal računa';
+  String get updatePayPalAccountDetails =>
+      'Ažuriraj detalje svog PayPal računa';
 
   @override
   String get connectPayPalToReceivePayments =>
@@ -4857,7 +5056,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paypalMeLink => 'PayPal.me veza';
 
   @override
-  String get stripeRecommendation => 'Ako je Stripe dostupan u vašoj zemlji, preporučujemo ga za brže i lakše isplate.';
+  String get stripeRecommendation =>
+      'Ako je Stripe dostupan u vašoj zemlji, preporučujemo ga za brže i lakše isplate.';
 
   @override
   String get updatePayPalDetails => 'Ažuriraj PayPal detalje';
@@ -4866,16 +5066,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get savePayPalDetails => 'Spremi PayPal detalje';
 
   @override
-  String get pleaseEnterPayPalEmail => 'Molimo unesite vašu PayPal e-mail adresu';
+  String get pleaseEnterPayPalEmail =>
+      'Molimo unesite vašu PayPal e-mail adresu';
 
   @override
   String get pleaseEnterPayPalMeLink => 'Molimo unesite vašu PayPal.me vezu';
 
   @override
-  String get doNotIncludeHttpInLink => 'Nemojte uključiti http ili https ili www u vezu';
+  String get doNotIncludeHttpInLink =>
+      'Nemojte uključiti http ili https ili www u vezu';
 
   @override
-  String get pleaseEnterValidPayPalMeLink => 'Molimo unesite valjanu PayPal.me vezu';
+  String get pleaseEnterValidPayPalMeLink =>
+      'Molimo unesite valjanu PayPal.me vezu';
 
   @override
   String get pleaseEnterValidEmail => 'Molimo unesite valjanu e-mail adresu';
@@ -4906,14 +5109,16 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get additionalSpeechSampleRemoved => 'Dodatni uzorak govora je uklonjen';
+  String get additionalSpeechSampleRemoved =>
+      'Dodatni uzorak govora je uklonjen';
 
   @override
   String get consentDataMessage =>
       'Nastavljanjem, vaši razgovori, snimke i lični podaci bit će sigurno pohranjeni na našim serverima. Vaši audio zapisi i transkripti se obrađuju od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane vještačkom inteligencijom i omogućili sve funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage => 'Započnite razgovor da kreirate zadatak.';
+  String get tasksEmptyStateMessage =>
+      'Započnite razgovor da kreirate zadatak.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -4934,7 +5139,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get loadingYourRecording => 'Učitavanje vaše snimke…';
 
   @override
-  String get photoDiscardedMessage => 'Ova fotografija je odbijena jer nije bila signifikantna.';
+  String get photoDiscardedMessage =>
+      'Ova fotografija je odbijena jer nije bila signifikantna.';
 
   @override
   String get analyzing => 'Analiza u tijeku…';
@@ -4963,14 +5169,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get openWatchApp => 'Otvori aplikaciju satnice';
 
   @override
-  String get iveInstalledAndOpenedTheApp => 'Instalirao/a sam i otvorio/a aplikaciju';
+  String get iveInstalledAndOpenedTheApp =>
+      'Instalirao/a sam i otvorio/a aplikaciju';
 
   @override
   String get unableToOpenWatchApp =>
       'Nije moguće otvoriti Apple Watch aplikaciju. Molimo ručno otvorite Watch aplikaciju na vašoj Apple Watch satnici i instalirajte Omi iz odjeljka \"Dostupne aplikacije\".';
 
   @override
-  String get appleWatchConnectedSuccessfully => 'Apple Watch je uspješno povezan!';
+  String get appleWatchConnectedSuccessfully =>
+      'Apple Watch je uspješno povezan!';
 
   @override
   String get appleWatchNotReachable =>
@@ -4991,7 +5199,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get finishedConversation => 'Završili ste razgovor?';
 
   @override
-  String get stopRecordingConfirmation => 'Zaustaviti snimanje i sada sažeti razgovor?';
+  String get stopRecordingConfirmation =>
+      'Zaustaviti snimanje i sada sažeti razgovor?';
 
   @override
   String get conversationEndsManually => 'Razgovor će se završiti samo ručno.';
@@ -5005,7 +5214,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get dontAskAgain => 'Nemoj me više pitati';
 
   @override
-  String get waitingForTranscriptOrPhotos => 'Čekanje na transkripciju ili fotografije…';
+  String get waitingForTranscriptOrPhotos =>
+      'Čekanje na transkripciju ili fotografije…';
 
   @override
   String get noSummaryYet => 'Nema sažetka još';
@@ -5052,13 +5262,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get updateOmiFirmware => 'Ažuriraj Omi firmware';
 
   @override
-  String get anErrorOccurredTryAgain => 'Došlo je do greške. Molimo pokušajte ponovno.';
+  String get anErrorOccurredTryAgain =>
+      'Došlo je do greške. Molimo pokušajte ponovno.';
 
   @override
   String get welcomeBackSimple => 'Dobrodošli natrag';
 
   @override
-  String get addVocabularyDescription => 'Dodajte riječi koje bi Omi trebao prepoznati tijekom transkripcije.';
+  String get addVocabularyDescription =>
+      'Dodajte riječi koje bi Omi trebao prepoznati tijekom transkripcije.';
 
   @override
   String get enterWordsCommaSeparated => 'Unesite riječi (odvojene zarezima)';
@@ -5078,7 +5290,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get developerApiKeys => 'Ključevi razvojnog API-ja';
 
   @override
-  String get noApiKeysCreateOne => 'Nema API ključeva. Kreirajte jedan kako biste započeli.';
+  String get noApiKeysCreateOne =>
+      'Nema API ključeva. Kreirajte jedan kako biste započeli.';
 
   @override
   String get commandRequired => '⌘ obavezno';
@@ -5225,13 +5438,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get wrappedSwipeUpToBegin => 'Prijeđite prema gore da biste započeli';
 
   @override
-  String get wrappedShareText => 'Moja 2025, zapamćena od Omija ✨ omi.me/wrapped';
+  String get wrappedShareText =>
+      'Moja 2025, zapamćena od Omija ✨ omi.me/wrapped';
 
   @override
-  String get wrappedFailedToShare => 'Nije moguće dijeliti. Molimo pokušajte ponovno.';
+  String get wrappedFailedToShare =>
+      'Nije moguće dijeliti. Molimo pokušajte ponovno.';
 
   @override
-  String get wrappedFailedToStartGeneration => 'Nije moguće započeti generiranje. Molimo pokušajte ponovno.';
+  String get wrappedFailedToStartGeneration =>
+      'Nije moguće započeti generiranje. Molimo pokušajte ponovno.';
 
   @override
   String get wrappedStarting => 'Pokretanje…';
@@ -5297,7 +5513,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get wrappedThatAwkwardMoment => 'Taj neugodan trenutak';
 
   @override
-  String get wrappedYouHadFunnyMoments => 'Imali ste neke smiješne trenutke ove godine!';
+  String get wrappedYouHadFunnyMoments =>
+      'Imali ste neke smiješne trenutke ove godine!';
 
   @override
   String get wrappedWeveAllBeenThere => 'Svi smo bili tamo!';
@@ -5410,7 +5627,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Nema dovoljno detektiranog govora. Molimo govorite više i pokušajte ponovno.';
 
   @override
-  String get speechDurationDescription => 'Molimo osigurajte da govorite najmanje 5 sekundi i ne više od 90.';
+  String get speechDurationDescription =>
+      'Molimo osigurajte da govorite najmanje 5 sekundi i ne više od 90.';
 
   @override
   String get connectionLostDescription =>
@@ -5424,7 +5642,8 @@ class AppLocalizationsBs extends AppLocalizations {
       '1. Osigurajte se da ste na mirnom mjestu.\n2. Govorite jasno i prirodno.\n3. Osigurajte se da je vaš uređaj u prirodnoj poziciji, na vašoj vratu.\n\nKada se napravi, uvijek ga možete poboljšati ili ponoviti.';
 
   @override
-  String get noDeviceConnectedUseMic => 'Nema priključenog uređaja. Koristit će se mikrofon telefona.';
+  String get noDeviceConnectedUseMic =>
+      'Nema priključenog uređaja. Koristit će se mikrofon telefona.';
 
   @override
   String get doItAgain => 'Uradi to ponovno';
@@ -5439,7 +5658,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get keepGoingGreat => 'Nastavi dalje, odličan si';
 
   @override
-  String get somethingWentWrongTryAgain => 'Nešto je pošlo po zlu! Molimo pokušajte ponovno kasnije.';
+  String get somethingWentWrongTryAgain =>
+      'Nešto je pošlo po zlu! Molimo pokušajte ponovno kasnije.';
 
   @override
   String get uploadingVoiceProfile => 'Prenosim vašu profila glasa….';
@@ -5463,7 +5683,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get notificationFrequency => 'Učestalost obaveštenja';
 
   @override
-  String get controlNotificationFrequency => 'Kontroliši kako često Omi šalje proaktivna obaveštenja.';
+  String get controlNotificationFrequency =>
+      'Kontroliši kako često Omi šalje proaktivna obaveštenja.';
 
   @override
   String get yourScore => 'Tvoj rezultat';
@@ -5488,7 +5709,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Tvoj dnevni rezultat je zasnovan na završetku zadataka. Završi svoje zadatke da poboljšaš rezultat!';
 
   @override
-  String get notificationFrequencyDescription => 'Kontroliši kako često Omi šalje proaktivna obaveštenja i podsetnike.';
+  String get notificationFrequencyDescription =>
+      'Kontroliši kako često Omi šalje proaktivna obaveštenja i podsetnike.';
 
   @override
   String get sliderOff => 'Isključeno';
@@ -5502,7 +5724,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummary => 'Nije moguće generisati rezime. Osigurajte se da imate razgovore za taj dan.';
+  String get failedToGenerateSummary =>
+      'Nije moguće generisati rezime. Osigurajte se da imate razgovore za taj dan.';
 
   @override
   String get recap => 'Pregled';
@@ -5557,7 +5780,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get frequencyDescLow => 'Samo važne stvari, otprilike 3–5 dnevno';
 
   @override
-  String get frequencyDescBalanced => 'Korisni prijedlozi, otprilike 5–8 dnevno';
+  String get frequencyDescBalanced =>
+      'Korisni prijedlozi, otprilike 5–8 dnevno';
 
   @override
   String get frequencyDescHigh => 'Više prijedloga, otprilike 6–9 dnevno';
@@ -5578,7 +5802,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectApp => 'Odaberi aplikaciju';
 
   @override
-  String get noChatAppsEnabled => 'Nema aktivnih aplikacija za razgovor.\nTapni \"Omogući aplikacije\" da dodam neke.';
+  String get noChatAppsEnabled =>
+      'Nema aktivnih aplikacija za razgovor.\nTapni \"Omogući aplikacije\" da dodam neke.';
 
   @override
   String get disable => 'Onemogući';
@@ -5590,13 +5815,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chooseFile => 'Odaberi datoteku';
 
   @override
-  String get connectAiAssistantsToYourData => 'Poveži AI asistente sa tvojim podacima';
+  String get connectAiAssistantsToYourData =>
+      'Poveži AI asistente sa tvojim podacima';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Prati svoje lične ciljeve na početnoj stranici';
+  String get trackYourGoalsOnHomepage =>
+      'Prati svoje lične ciljeve na početnoj stranici';
 
   @override
   String get deleteRecording => 'Obriši snimak';
@@ -5631,7 +5858,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get cancelSync => 'Otkaži sinhronizaciju';
 
   @override
-  String get cancelSyncMessage => 'Podaci koji su već preuzeti biće sačuvani. Možete nastaviti kasnije.';
+  String get cancelSyncMessage =>
+      'Podaci koji su već preuzeti biće sačuvani. Možete nastaviti kasnije.';
 
   @override
   String get syncCancelled => 'Sinhronizacija otkazana';
@@ -5643,7 +5871,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get processedFilesDeleted => 'Obrađene datoteke obrisane';
 
   @override
-  String get deviceNotResponding => 'Uređaj nije odgovorio. Molimo pokušajte ponovno.';
+  String get deviceNotResponding =>
+      'Uređaj nije odgovorio. Molimo pokušajte ponovno.';
 
   @override
   String get sdCardProcessing => 'Obrada SD kartice';
@@ -5680,7 +5909,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noRecordings => 'Nema snimaka';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio sa vašeg Omi uređaja će se pojaviti ovdje';
+  String get audioFromOmiWillAppearHere =>
+      'Audio sa vašeg Omi uređaja će se pojaviti ovdje';
 
   @override
   String get deleteProcessed => 'Obriši obrađene';
@@ -5724,16 +5954,20 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => 'Sažimam razgovor…\nOvo može potrajati nekoliko sekundi';
+  String get summarizingConversation =>
+      'Sažimam razgovor…\nOvo može potrajati nekoliko sekundi';
 
   @override
-  String get resummarizingConversation => 'Ponovno sažimam razgovor…\nOvo može potrajati nekoliko sekundi';
+  String get resummarizingConversation =>
+      'Ponovno sažimam razgovor…\nOvo može potrajati nekoliko sekundi';
 
   @override
-  String get nothingInterestingRetry => 'Ništa zanimljivo nije pronađeno,\nželiš li pokušati ponovno?';
+  String get nothingInterestingRetry =>
+      'Ništa zanimljivo nije pronađeno,\nželiš li pokušati ponovno?';
 
   @override
-  String get noSummaryForConversation => 'Rezime nije dostupan\nza ovaj razgovor.';
+  String get noSummaryForConversation =>
+      'Rezime nije dostupan\nza ovaj razgovor.';
 
   @override
   String get unknownLocation => 'Nepoznata lokacija';
@@ -5742,7 +5976,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get couldNotLoadMap => 'Nije moguće učitati mapu';
 
   @override
-  String get triggerConversationIntegration => 'Pokretanje integracije kreirane konverzacije';
+  String get triggerConversationIntegration =>
+      'Pokretanje integracije kreirane konverzacije';
 
   @override
   String get webhookUrlNotSet => 'Webhook URL nije postavljen';
@@ -5764,7 +5999,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get debugModeDetected => 'Detektovan režim otklanjanja grešaka';
 
   @override
-  String get performanceReduced => 'Performanse smanjene za 5-10x. Koristi Release modu.';
+  String get performanceReduced =>
+      'Performanse smanjene za 5-10x. Koristi Release modu.';
 
   @override
   String autoClosingInSeconds(int seconds) {
@@ -5775,19 +6011,23 @@ class AppLocalizationsBs extends AppLocalizations {
   String get modelRequired => 'Model obavezan';
 
   @override
-  String get downloadWhisperModel => 'Molimo preuzmite Whisper model prije nego što sačuvate.';
+  String get downloadWhisperModel =>
+      'Molimo preuzmite Whisper model prije nego što sačuvate.';
 
   @override
   String get deviceNotCompatible => 'Uređaj nije kompatibilan';
 
   @override
-  String get deviceRequirements => 'Vaš uređaj ne ispunjava zahtjeve za transkripciju na uređaju.';
+  String get deviceRequirements =>
+      'Vaš uređaj ne ispunjava zahtjeve za transkripciju na uređaju.';
 
   @override
-  String get willLikelyCrash => 'Omogućavanje toga će vjerovatno uzrokovati pad aplikacije ili smrzavanje.';
+  String get willLikelyCrash =>
+      'Omogućavanje toga će vjerovatno uzrokovati pad aplikacije ili smrzavanje.';
 
   @override
-  String get transcriptionSlowerLessAccurate => 'Transkripcija će biti znatno sporija i manje točna.';
+  String get transcriptionSlowerLessAccurate =>
+      'Transkripcija će biti znatno sporija i manje točna.';
 
   @override
   String get proceedAnyway => 'Nastavi svakako';
@@ -5796,28 +6036,35 @@ class AppLocalizationsBs extends AppLocalizations {
   String get olderDeviceDetected => 'Detektovan stariji uređaj';
 
   @override
-  String get onDeviceSlower => 'Transkripcija na uređaju može biti sporija na ovom uređaju.';
+  String get onDeviceSlower =>
+      'Transkripcija na uređaju može biti sporija na ovom uređaju.';
 
   @override
-  String get batteryUsageHigher => 'Potrošnja baterije će biti veća nego pri transkripciji oblaka.';
+  String get batteryUsageHigher =>
+      'Potrošnja baterije će biti veća nego pri transkripciji oblaka.';
 
   @override
-  String get considerOmiCloud => 'Razmotri korištenje Omi Cloud-a za bolje performanse.';
+  String get considerOmiCloud =>
+      'Razmotri korištenje Omi Cloud-a za bolje performanse.';
 
   @override
   String get highResourceUsage => 'Visoka potrošnja resursa';
 
   @override
-  String get onDeviceIntensive => 'Transkripcija na uređaju je računski intenzivna.';
+  String get onDeviceIntensive =>
+      'Transkripcija na uređaju je računski intenzivna.';
 
   @override
-  String get batteryDrainIncrease => 'Drenaža baterije će se značajno povećati.';
+  String get batteryDrainIncrease =>
+      'Drenaža baterije će se značajno povećati.';
 
   @override
-  String get deviceMayWarmUp => 'Uređaj može postati topao tokom dužeg korištenja.';
+  String get deviceMayWarmUp =>
+      'Uređaj može postati topao tokom dužeg korištenja.';
 
   @override
-  String get speedAccuracyLower => 'Brzina i točnost mogu biti niže nego kod Cloud modela.';
+  String get speedAccuracyLower =>
+      'Brzina i točnost mogu biti niže nego kod Cloud modela.';
 
   @override
   String get cloudProvider => 'Pružalac usluga u oblaku';
@@ -5844,7 +6091,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ovaj model je velik i može uzrokovati pad aplikacije ili vrlo sporo pokretanje na mobilnim uređajima.\n\nPreporučuje se \"small\" ili \"base\".';
 
   @override
-  String get usingNativeIosSpeech => 'Korištenje nativnog iOS prepoznavanja govora';
+  String get usingNativeIosSpeech =>
+      'Korištenje nativnog iOS prepoznavanja govora';
 
   @override
   String get noModelDownloadRequired =>
@@ -5893,16 +6141,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceNotCompatibleTitle => 'Uređaj nije kompatibilan';
 
   @override
-  String get deviceNotMeetRequirements => 'Vaš uređaj ne ispunjava zahtjeve za transkripciju na uređaju.';
+  String get deviceNotMeetRequirements =>
+      'Vaš uređaj ne ispunjava zahtjeve za transkripciju na uređaju.';
 
   @override
-  String get transcriptionSlowerOnDevice => 'Transkripcija na uređaju može biti sporija na ovom uređaju.';
+  String get transcriptionSlowerOnDevice =>
+      'Transkripcija na uređaju može biti sporija na ovom uređaju.';
 
   @override
-  String get computationallyIntensive => 'Transkripcija na uređaju je računski intenzivna.';
+  String get computationallyIntensive =>
+      'Transkripcija na uređaju je računski intenzivna.';
 
   @override
-  String get batteryDrainSignificantly => 'Drenaža baterije će se značajno povećati.';
+  String get batteryDrainSignificantly =>
+      'Drenaža baterije će se značajno povećati.';
 
   @override
   String get premiumMinutesMonth =>
@@ -5973,10 +6225,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectProviderTemplate => 'Odaberi šablon pružaoca…';
 
   @override
-  String get quicklyPopulateResponse => 'Brzo popuni sa poznatim formatom odgovora pružaoca';
+  String get quicklyPopulateResponse =>
+      'Brzo popuni sa poznatim formatom odgovora pružaoca';
 
   @override
-  String get quicklyPopulateRequest => 'Brzo popuni sa poznatim formatom zahtjeva pružaoca';
+  String get quicklyPopulateRequest =>
+      'Brzo popuni sa poznatim formatom zahtjeva pružaoca';
 
   @override
   String get invalidJsonError => 'Neispravan JSON';
@@ -6022,19 +6276,24 @@ class AppLocalizationsBs extends AppLocalizations {
   String get permissionTypeTrigger => 'Pokretanje';
 
   @override
-  String get permissionDescReadConversations => 'Ova aplikacija može pristupiti tvojim razgovorima.';
+  String get permissionDescReadConversations =>
+      'Ova aplikacija može pristupiti tvojim razgovorima.';
 
   @override
-  String get permissionDescReadMemories => 'Ova aplikacija može pristupiti tvojim uspomenama.';
+  String get permissionDescReadMemories =>
+      'Ova aplikacija može pristupiti tvojim uspomenama.';
 
   @override
-  String get permissionDescReadTasks => 'Ova aplikacija može pristupiti tvojim zadacima.';
+  String get permissionDescReadTasks =>
+      'Ova aplikacija može pristupiti tvojim zadacima.';
 
   @override
-  String get permissionDescCreateConversations => 'Ova aplikacija može kreirati nove razgovore.';
+  String get permissionDescCreateConversations =>
+      'Ova aplikacija može kreirati nove razgovore.';
 
   @override
-  String get permissionDescCreateMemories => 'Ova aplikacija može kreirati nove uspomene.';
+  String get permissionDescCreateMemories =>
+      'Ova aplikacija može kreirati nove uspomene.';
 
   @override
   String get realtimeListening => 'Slušanje u realnom vremenu';
@@ -6049,7 +6308,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get writeReviewOptional => 'Napiši recenziju (opcionalno)';
 
   @override
-  String get setupQuestionsIntro => 'Pomozi nam poboljšati Omi odgovarajući na nekoliko pitanja.  🫶 💜';
+  String get setupQuestionsIntro =>
+      'Pomozi nam poboljšati Omi odgovarajući na nekoliko pitanja.  🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. Šta radiš?';
@@ -6136,7 +6396,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get enterPasswordError => 'Molimo unesite vašu lozinku';
 
   @override
-  String get passwordMinLengthError => 'Lozinka mora biti najmanje 8 znakova dugačka';
+  String get passwordMinLengthError =>
+      'Lozinka mora biti najmanje 8 znakova dugačka';
 
   @override
   String get signInSuccess => 'Prijava uspješna!';
@@ -6178,7 +6439,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noKnowledgeGraphYet => 'Nema grafa znanja';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'Gradim tvoj graf znanja iz uspomena…';
+  String get buildingKnowledgeGraphFromMemories =>
+      'Gradim tvoj graf znanja iz uspomena…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically =>
@@ -6217,7 +6479,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noChangesInReview => 'Nema promjena u recenziji za ažuriranje.';
 
   @override
-  String get cantRateWithoutInternet => 'Ne možeš ocijenjivati aplikaciju bez internet konekcije.';
+  String get cantRateWithoutInternet =>
+      'Ne možeš ocijenjivati aplikaciju bez internet konekcije.';
 
   @override
   String get appAnalytics => 'Analitika aplikacije';
@@ -6350,7 +6613,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get personNameAlreadyExists => 'Osoba sa ovim imenom već postoji.';
 
   @override
-  String get selectYouFromList => 'Za označavanje sebe, molimo odaberite \"Ti\" sa liste.';
+  String get selectYouFromList =>
+      'Za označavanje sebe, molimo odaberite \"Ti\" sa liste.';
 
   @override
   String get enterPersonsName => 'Unesi ime osobe';
@@ -6373,7 +6637,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get shareViaSms => 'Dijeli preko SMS-a';
 
   @override
-  String get selectContactsToShareSummary => 'Odaberi kontakte sa kojima želiš podijeliti rezime razgovora';
+  String get selectContactsToShareSummary =>
+      'Odaberi kontakte sa kojima želiš podijeliti rezime razgovora';
 
   @override
   String get searchContactsHint => 'Pretraži kontakte';
@@ -6403,16 +6668,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get contactsPermissionRequired => 'Dozvola za kontakte obavezna';
 
   @override
-  String get contactsPermissionRequiredForSms => 'Dozvola za kontakte obavezna za dijeljenje preko SMS-a';
+  String get contactsPermissionRequiredForSms =>
+      'Dozvola za kontakte obavezna za dijeljenje preko SMS-a';
 
   @override
-  String get grantContactsPermissionForSms => 'Molimo dajte dozvolu za kontakte da biste dijelili preko SMS-a';
+  String get grantContactsPermissionForSms =>
+      'Molimo dajte dozvolu za kontakte da biste dijelili preko SMS-a';
 
   @override
-  String get noContactsWithPhoneNumbers => 'Nema pronađenih kontakata sa brojevima telefona';
+  String get noContactsWithPhoneNumbers =>
+      'Nema pronađenih kontakata sa brojevima telefona';
 
   @override
-  String get noContactsMatchSearch => 'Nema kontakata koji se poklapaju sa vašom pretragom';
+  String get noContactsMatchSearch =>
+      'Nema kontakata koji se poklapaju sa vašom pretragom';
 
   @override
   String get failedToLoadContacts => 'Neuspješno učitavanje kontakata';
@@ -6422,7 +6691,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Neuspješna priprema razgovora za dijeljenje. Molimo pokušajte ponovno.';
 
   @override
-  String get couldNotOpenSmsApp => 'Nije moguće otvoriti SMS aplikaciju. Molimo pokušajte ponovno.';
+  String get couldNotOpenSmsApp =>
+      'Nije moguće otvoriti SMS aplikaciju. Molimo pokušajte ponovno.';
 
   @override
   String heresWhatWeDiscussed(String link) {
@@ -6471,7 +6741,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transferRequired => 'Transfer obavezan';
 
   @override
-  String get downloadingAudioFromSdCard => 'Preuzimanje audija sa SD kartice vašeg uređaja';
+  String get downloadingAudioFromSdCard =>
+      'Preuzimanje audija sa SD kartice vašeg uređaja';
 
   @override
   String get transferRequiredDescription =>
@@ -6532,7 +6803,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get statusUnprocessed => 'Neobrađeno';
 
   @override
-  String get transferCompleteMessage => 'Prenos je završen! Sada možete reproducirati ovaj snimak.';
+  String get transferCompleteMessage =>
+      'Prenos je završen! Sada možete reproducirati ovaj snimak.';
 
   @override
   String transferFailedMessage(String error) {
@@ -6543,7 +6815,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transferCancelled => 'Prenos je otkazan';
 
   @override
-  String get bluetoothSyncEnabled => 'Sinhronizacija preko Bluetootha je omogućena';
+  String get bluetoothSyncEnabled =>
+      'Sinhronizacija preko Bluetootha je omogućena';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6573,7 +6846,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get batteryFullyChargedTitle => 'Omi je potpuno napunjen';
 
   @override
-  String get batteryFullyChargedBody => 'Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!';
+  String get batteryFullyChargedBody =>
+      'Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Vaš Omi uređaj se odvojio';
@@ -6597,7 +6871,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appDeletedSuccessfully => 'Aplikacija je uspješno obrisana';
 
   @override
-  String get appDeleteFailed => 'Greška pri brisanju aplikacije. Molimo pokušajte ponovo kasnije.';
+  String get appDeleteFailed =>
+      'Greška pri brisanju aplikacije. Molimo pokušajte ponovo kasnije.';
 
   @override
   String get appVisibilityChangedSuccessfully =>
@@ -6608,7 +6883,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Greška pri aktiviranju aplikacije. Ako je ovo aplikacija za integraciju, pazite da je setup završen.';
 
   @override
-  String get errorUpdatingAppStatus => 'Greška pri ažuriranju statusa aplikacije.';
+  String get errorUpdatingAppStatus =>
+      'Greška pri ažuriranju statusa aplikacije.';
 
   @override
   String get calculatingETA => 'Izračunavanje…';
@@ -6636,7 +6912,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'Nema podataka za migraciju. Finalizovanje…';
+  String get noDataToMigrateFinalizing =>
+      'Nema podataka za migraciju. Finalizovanje…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
@@ -6644,10 +6921,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'Svi objekti su migrirati. Finalizovanje…';
+  String get allObjectsMigratedFinalizing =>
+      'Svi objekti su migrirati. Finalizovanje…';
 
   @override
-  String get migrationErrorOccurred => 'Greška je došlo do greške tokom migracije. Molimo pokušajte ponovo.';
+  String get migrationErrorOccurred =>
+      'Greška je došlo do greške tokom migracije. Molimo pokušajte ponovo.';
 
   @override
   String get migrationComplete => 'Migracija je završena!';
@@ -6673,7 +6952,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get importantConversationTitle => 'Važna razgovor';
 
   @override
-  String get importantConversationBody => 'Upravo ste imali važnu razgovoru. Tapnite da dijeli sažetak sa ostalima.';
+  String get importantConversationBody =>
+      'Upravo ste imali važnu razgovoru. Tapnite da dijeli sažetak sa ostalima.';
 
   @override
   String get templateName => 'Naziv šablona';
@@ -6682,7 +6962,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get templateNameHint => 'npr., Ekstraktor zadataka sa sastanka';
 
   @override
-  String get nameMustBeAtLeast3Characters => 'Naziv mora biti najmanje 3 karaktera';
+  String get nameMustBeAtLeast3Characters =>
+      'Naziv mora biti najmanje 3 karaktera';
 
   @override
   String get conversationPromptHint =>
@@ -6692,7 +6973,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pleaseEnterAppPrompt => 'Molimo unesite prompt za vašu aplikaciju';
 
   @override
-  String get promptMustBeAtLeast10Characters => 'Prompt mora biti najmanje 10 karaktera';
+  String get promptMustBeAtLeast10Characters =>
+      'Prompt mora biti najmanje 10 karaktera';
 
   @override
   String get anyoneCanDiscoverTemplate => 'Bilo ko može otkriti vaš šablon';
@@ -6710,50 +6992,61 @@ class AppLocalizationsBs extends AppLocalizations {
   String get installingApp => 'Instalacija aplikacije…';
 
   @override
-  String get appCreatedAndInstalled => 'Aplikacija je napravljena i instalirana!';
+  String get appCreatedAndInstalled =>
+      'Aplikacija je napravljena i instalirana!';
 
   @override
   String get appCreatedSuccessfully => 'Aplikacija je uspješno napravljena!';
 
   @override
-  String get failedToCreateApp => 'Greška pri pravljenju aplikacije. Molimo pokušajte ponovo.';
+  String get failedToCreateApp =>
+      'Greška pri pravljenju aplikacije. Molimo pokušajte ponovo.';
 
   @override
   String get addAppSelectCoreCapability =>
       'Molimo odaberite jednu više osnovnu mogućnost za vašu aplikaciju da nastavite';
 
   @override
-  String get addAppSelectPaymentPlan => 'Molimo odaberite plan plaćanja i unesite cijenu za vašu aplikaciju';
+  String get addAppSelectPaymentPlan =>
+      'Molimo odaberite plan plaćanja i unesite cijenu za vašu aplikaciju';
 
   @override
-  String get addAppSelectCapability => 'Molimo odaberite najmanje jednu mogućnost za vašu aplikaciju';
+  String get addAppSelectCapability =>
+      'Molimo odaberite najmanje jednu mogućnost za vašu aplikaciju';
 
   @override
   String get addAppSelectLogo => 'Molimo odaberite logotip za vašu aplikaciju';
 
   @override
-  String get addAppEnterChatPrompt => 'Molimo unesite chat prompt za vašu aplikaciju';
+  String get addAppEnterChatPrompt =>
+      'Molimo unesite chat prompt za vašu aplikaciju';
 
   @override
-  String get addAppEnterConversationPrompt => 'Molimo unesite conversation prompt za vašu aplikaciju';
+  String get addAppEnterConversationPrompt =>
+      'Molimo unesite conversation prompt za vašu aplikaciju';
 
   @override
-  String get addAppSelectTriggerEvent => 'Molimo odaberite trigger event za vašu aplikaciju';
+  String get addAppSelectTriggerEvent =>
+      'Molimo odaberite trigger event za vašu aplikaciju';
 
   @override
-  String get addAppEnterWebhookUrl => 'Molimo unesite webhook URL za vašu aplikaciju';
+  String get addAppEnterWebhookUrl =>
+      'Molimo unesite webhook URL za vašu aplikaciju';
 
   @override
-  String get addAppSelectCategory => 'Molimo odaberite kategoriju za vašu aplikaciju';
+  String get addAppSelectCategory =>
+      'Molimo odaberite kategoriju za vašu aplikaciju';
 
   @override
-  String get addAppFillRequiredFields => 'Molimo popunite sva obavezna polja ispravno';
+  String get addAppFillRequiredFields =>
+      'Molimo popunite sva obavezna polja ispravno';
 
   @override
   String get addAppUpdatedSuccess => 'Aplikacija je uspješno ažurirana 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Greška pri ažuriranju aplikacije. Molimo pokušajte ponovo kasnije';
+  String get addAppUpdateFailed =>
+      'Greška pri ažuriranju aplikacije. Molimo pokušajte ponovo kasnije';
 
   @override
   String get addAppSubmittedSuccess => 'Aplikacija je uspješno poslana 🚀';
@@ -6773,7 +7066,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Dozvola za fotografije je odbijena. Molimo dozvolite pristup fotografijama da odaberete sliku';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Greška pri odabiru slike. Molimo pokušajte ponovo.';
+  String get addAppErrorSelectingImageRetry =>
+      'Greška pri odabiru slike. Molimo pokušajte ponovo.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
@@ -6781,13 +7075,16 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Greška pri odabiru minijature. Molimo pokušajte ponovo.';
+  String get addAppErrorSelectingThumbnailRetry =>
+      'Greška pri odabiru minijature. Molimo pokušajte ponovo.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Ostale mogućnosti ne mogu biti odabrane sa Persona';
+  String get addAppCapabilityConflictWithPersona =>
+      'Ostale mogućnosti ne mogu biti odabrane sa Persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona ne može biti odabrana sa ostalim mogućnostima';
+  String get addAppPersonaConflictWithCapabilities =>
+      'Persona ne može biti odabrana sa ostalim mogućnostima';
 
   @override
   String get paymentFailedToFetchCountries =>
@@ -6798,7 +7095,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Greška pri postavljanju zadane metode plaćanja. Molimo pokušajte ponovo kasnije.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Greška pri čuvanju PayPal detalja. Molimo pokušajte ponovo kasnije.';
+  String get paymentFailedToSavePaypal =>
+      'Greška pri čuvanju PayPal detalja. Molimo pokušajte ponovo kasnije.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -6828,7 +7126,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paymentEnterValidAmount => 'Molimo unesite važeću iznos';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Molimo unesite iznos veći od 0';
+  String get paymentEnterAmountGreaterThanZero =>
+      'Molimo unesite iznos veći od 0';
 
   @override
   String get paymentPlan => 'Plan plaćanja';
@@ -6837,7 +7136,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paymentNoneSelected => 'Nije odabrano';
 
   @override
-  String get aiGenPleaseEnterDescription => 'Molimo unesite opis za vašu aplikaciju';
+  String get aiGenPleaseEnterDescription =>
+      'Molimo unesite opis za vašu aplikaciju';
 
   @override
   String get aiGenCreatingAppIcon => 'Pravljenje ikone aplikacije…';
@@ -6848,22 +7148,27 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get aiGenAppCreatedSuccessfully => 'Aplikacija je uspješno napravljena!';
+  String get aiGenAppCreatedSuccessfully =>
+      'Aplikacija je uspješno napravljena!';
 
   @override
   String get aiGenFailedToCreateApp => 'Greška pri pravljenju aplikacije';
 
   @override
-  String get aiGenErrorWhileCreatingApp => 'Greška je došla do greške tokom pravljenja aplikacije';
+  String get aiGenErrorWhileCreatingApp =>
+      'Greška je došla do greške tokom pravljenja aplikacije';
 
   @override
-  String get aiGenFailedToGenerateApp => 'Greška pri generisanju aplikacije. Molimo pokušajte ponovo.';
+  String get aiGenFailedToGenerateApp =>
+      'Greška pri generisanju aplikacije. Molimo pokušajte ponovo.';
 
   @override
-  String get aiGenFailedToRegenerateIcon => 'Greška pri ponovnom generisanju ikone';
+  String get aiGenFailedToRegenerateIcon =>
+      'Greška pri ponovnom generisanju ikone';
 
   @override
-  String get aiGenPleaseGenerateAppFirst => 'Molimo prvo generirajte aplikaciju';
+  String get aiGenPleaseGenerateAppFirst =>
+      'Molimo prvo generirajte aplikaciju';
 
   @override
   String get nextButton => 'Dalje';
@@ -6881,23 +7186,28 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ažuriranja je zakazana! Vaš mjesečni plan se nastavlja do kraja vašeg perioda naplate, zatim se automatski prebacuje na godišnji.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Nije moguće zakazati promenu plana. Molimo pokušajte ponovo.';
+  String get couldNotSchedulePlanChange =>
+      'Nije moguće zakazati promenu plana. Molimo pokušajte ponovo.';
 
   @override
   String get subscriptionReactivatedDefault =>
       'Vaša pretplata je reaktivirana! Nema naknade sada - biće vam naplaćeno na kraju vašeg trenutnog perioda.';
 
   @override
-  String get subscriptionSuccessfulCharged => 'Pretplata je uspješna! Bačena vam je naplaćena za novi period naplate.';
+  String get subscriptionSuccessfulCharged =>
+      'Pretplata je uspješna! Bačena vam je naplaćena za novi period naplate.';
 
   @override
-  String get couldNotProcessSubscription => 'Nije moguće obraditi pretplatu. Molimo pokušajte ponovo.';
+  String get couldNotProcessSubscription =>
+      'Nije moguće obraditi pretplatu. Molimo pokušajte ponovo.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Nije moguće pokrenuti stranicu za ažuriranje. Molimo pokušajte ponovo.';
+  String get couldNotLaunchUpgradePage =>
+      'Nije moguće pokrenuti stranicu za ažuriranje. Molimo pokušajte ponovo.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Zalijepite vašu JSON konfiguraciju ovdje…';
+  String get transcriptionJsonPlaceholder =>
+      'Zalijepite vašu JSON konfiguraciju ovdje…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -6967,7 +7277,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get myGoal => 'Moj cilj';
 
   @override
-  String get appNotAvailable => 'Ups! Izgleda da aplikacija koju tražite nije dostupna.';
+  String get appNotAvailable =>
+      'Ups! Izgleda da aplikacija koju tražite nije dostupna.';
 
   @override
   String get failedToConnectTodoist => 'Greška pri povezivanju sa Todoist';
@@ -6976,7 +7287,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get failedToConnectAsana => 'Greška pri povezivanju sa Asana';
 
   @override
-  String get failedToConnectGoogleTasks => 'Greška pri povezivanju sa Google Tasks';
+  String get failedToConnectGoogleTasks =>
+      'Greška pri povezivanju sa Google Tasks';
 
   @override
   String get failedToConnectClickUp => 'Greška pri povezivanju sa ClickUp';
@@ -6987,79 +7299,102 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get successfullyConnectedTodoist => 'Uspješno ste se povezali sa Todoist!';
+  String get successfullyConnectedTodoist =>
+      'Uspješno ste se povezali sa Todoist!';
 
   @override
-  String get failedToConnectTodoistRetry => 'Greška pri povezivanju sa Todoist. Molimo pokušajte ponovo.';
+  String get failedToConnectTodoistRetry =>
+      'Greška pri povezivanju sa Todoist. Molimo pokušajte ponovo.';
 
   @override
   String get successfullyConnectedAsana => 'Uspješno ste se povezali sa Asana!';
 
   @override
-  String get failedToConnectAsanaRetry => 'Greška pri povezivanju sa Asana. Molimo pokušajte ponovo.';
+  String get failedToConnectAsanaRetry =>
+      'Greška pri povezivanju sa Asana. Molimo pokušajte ponovo.';
 
   @override
-  String get successfullyConnectedGoogleTasks => 'Uspješno ste se povezali sa Google Tasks!';
+  String get successfullyConnectedGoogleTasks =>
+      'Uspješno ste se povezali sa Google Tasks!';
 
   @override
-  String get failedToConnectGoogleTasksRetry => 'Greška pri povezivanju sa Google Tasks. Molimo pokušajte ponovo.';
+  String get failedToConnectGoogleTasksRetry =>
+      'Greška pri povezivanju sa Google Tasks. Molimo pokušajte ponovo.';
 
   @override
-  String get successfullyConnectedClickUp => 'Uspješno ste se povezali sa ClickUp!';
+  String get successfullyConnectedClickUp =>
+      'Uspješno ste se povezali sa ClickUp!';
 
   @override
-  String get failedToConnectClickUpRetry => 'Greška pri povezivanju sa ClickUp. Molimo pokušajte ponovo.';
+  String get failedToConnectClickUpRetry =>
+      'Greška pri povezivanju sa ClickUp. Molimo pokušajte ponovo.';
 
   @override
-  String get successfullyConnectedNotion => 'Uspješno ste se povezali sa Notion!';
+  String get successfullyConnectedNotion =>
+      'Uspješno ste se povezali sa Notion!';
 
   @override
-  String get failedToRefreshNotionStatus => 'Greška pri osvježavanju statusa Notion konekcije.';
+  String get failedToRefreshNotionStatus =>
+      'Greška pri osvježavanju statusa Notion konekcije.';
 
   @override
-  String get successfullyConnectedGoogle => 'Uspješno ste se povezali sa Google!';
+  String get successfullyConnectedGoogle =>
+      'Uspješno ste se povezali sa Google!';
 
   @override
-  String get failedToRefreshGoogleStatus => 'Greška pri osvježavanju statusa Google konekcije.';
+  String get failedToRefreshGoogleStatus =>
+      'Greška pri osvježavanju statusa Google konekcije.';
 
   @override
   String get successfullyConnectedWhoop => 'Uspješno ste se povezali sa Whoop!';
 
   @override
-  String get failedToRefreshWhoopStatus => 'Greška pri osvježavanju statusa Whoop konekcije.';
+  String get failedToRefreshWhoopStatus =>
+      'Greška pri osvježavanju statusa Whoop konekcije.';
 
   @override
-  String get successfullyConnectedGitHub => 'Uspješno ste se povezali sa GitHub!';
+  String get successfullyConnectedGitHub =>
+      'Uspješno ste se povezali sa GitHub!';
 
   @override
-  String get failedToRefreshGitHubStatus => 'Greška pri osvježavanju statusa GitHub konekcije.';
+  String get failedToRefreshGitHubStatus =>
+      'Greška pri osvježavanju statusa GitHub konekcije.';
 
   @override
-  String get authFailedToSignInWithGoogle => 'Greška pri prijavi sa Google, molimo pokušajte ponovo.';
+  String get authFailedToSignInWithGoogle =>
+      'Greška pri prijavi sa Google, molimo pokušajte ponovo.';
 
   @override
-  String get authenticationFailed => 'Autentifikacija nije uspješna. Molimo pokušajte ponovo.';
+  String get authenticationFailed =>
+      'Autentifikacija nije uspješna. Molimo pokušajte ponovo.';
 
   @override
-  String get authFailedToSignInWithApple => 'Greška pri prijavi sa Apple, molimo pokušajte ponovo.';
+  String get authFailedToSignInWithApple =>
+      'Greška pri prijavi sa Apple, molimo pokušajte ponovo.';
 
   @override
-  String get authFailedToRetrieveToken => 'Greška pri preuzimanju firebase token, molimo pokušajte ponovo.';
+  String get authFailedToRetrieveToken =>
+      'Greška pri preuzimanju firebase token, molimo pokušajte ponovo.';
 
   @override
-  String get authUnexpectedErrorFirebase => 'Neočekivana greška pri prijavi, Firebase greška, molimo pokušajte ponovo.';
+  String get authUnexpectedErrorFirebase =>
+      'Neočekivana greška pri prijavi, Firebase greška, molimo pokušajte ponovo.';
 
   @override
-  String get authUnexpectedError => 'Neočekivana greška pri prijavi, molimo pokušajte ponovo';
+  String get authUnexpectedError =>
+      'Neočekivana greška pri prijavi, molimo pokušajte ponovo';
 
   @override
-  String get authFailedToLinkGoogle => 'Greška pri povezivanju sa Google, molimo pokušajte ponovo.';
+  String get authFailedToLinkGoogle =>
+      'Greška pri povezivanju sa Google, molimo pokušajte ponovo.';
 
   @override
-  String get authFailedToLinkApple => 'Greška pri povezivanju sa Apple, molimo pokušajte ponovo.';
+  String get authFailedToLinkApple =>
+      'Greška pri povezivanju sa Apple, molimo pokušajte ponovo.';
 
   @override
-  String get onboardingBluetoothRequired => 'Dozvola za Bluetooth je potrebna za povezivanje sa vašim uređajem.';
+  String get onboardingBluetoothRequired =>
+      'Dozvola za Bluetooth je potrebna za povezivanje sa vašim uređajem.';
 
   @override
   String get onboardingBluetoothDeniedSystemPrefs =>
@@ -7098,7 +7433,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Molimo dozvoli dozvolu za lokaciju u Postavkama > Privatnost i sigurnost > Lokacijske usluge';
 
   @override
-  String get onboardingMicrophoneRequired => 'Dozvola za mikrofon je potrebna za snimanje.';
+  String get onboardingMicrophoneRequired =>
+      'Dozvola za mikrofon je potrebna za snimanje.';
 
   @override
   String get onboardingMicrophoneDenied =>
@@ -7115,7 +7451,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'Dozvola za snimanje ekrana je potrebna za snimanje sistemskog zvuka.';
+  String get onboardingScreenCaptureRequired =>
+      'Dozvola za snimanje ekrana je potrebna za snimanje sistemskog zvuka.';
 
   @override
   String get onboardingScreenCaptureDenied =>
@@ -7146,10 +7483,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get msgCameraNotAvailable => 'Snimanje kamerom nije dostupno na ovoj platformi';
+  String get msgCameraNotAvailable =>
+      'Snimanje kamerom nije dostupno na ovoj platformi';
 
   @override
-  String get msgCameraPermissionDenied => 'Dozvola za kameru je odbijena. Molimo dozvoli pristup kameri';
+  String get msgCameraPermissionDenied =>
+      'Dozvola za kameru je odbijena. Molimo dozvoli pristup kameri';
 
   @override
   String msgCameraAccessError(String error) {
@@ -7157,7 +7496,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get msgPhotoError => 'Greška pri snimanju fotografije. Molimo pokušajte ponovo.';
+  String get msgPhotoError =>
+      'Greška pri snimanju fotografije. Molimo pokušajte ponovo.';
 
   @override
   String get msgMaxImagesLimit => 'Možete odabrati samo do 4 slike';
@@ -7177,7 +7517,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Dozvola za fotografije je odbijena. Molimo dozvoli pristup fotografijama da odaberete slike';
 
   @override
-  String get msgSelectImagesGenericError => 'Greška pri odabiru slika. Molimo pokušajte ponovo.';
+  String get msgSelectImagesGenericError =>
+      'Greška pri odabiru slika. Molimo pokušajte ponovo.';
 
   @override
   String get msgMaxFilesLimit => 'Možete odabrati samo do 4 datoteke';
@@ -7188,10 +7529,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get msgSelectFilesGenericError => 'Greška pri odabiru datoteka. Molimo pokušajte ponovo.';
+  String get msgSelectFilesGenericError =>
+      'Greška pri odabiru datoteka. Molimo pokušajte ponovo.';
 
   @override
-  String get msgUploadFileFailed => 'Greška pri učitavanju datoteke, molimo pokušajte ponovo kasnije';
+  String get msgUploadFileFailed =>
+      'Greška pri učitavanju datoteke, molimo pokušajte ponovo kasnije';
 
   @override
   String get msgReadingMemories => 'Čitanje vaših uspomena u toku…';
@@ -7200,7 +7543,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get msgLearningMemories => 'Učenje iz vaših uspomena u toku…';
 
   @override
-  String get msgUploadAttachedFileFailed => 'Greška pri učitavanju priložene datoteke.';
+  String get msgUploadAttachedFileFailed =>
+      'Greška pri učitavanju priložene datoteke.';
 
   @override
   String captureRecordingError(String error) {
@@ -7213,28 +7557,36 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get captureMicrophonePermissionRequired => 'Dozvola za mikrofon je potrebna';
+  String get captureMicrophonePermissionRequired =>
+      'Dozvola za mikrofon je potrebna';
 
   @override
-  String get captureMicrophonePermissionInSystemPreferences => 'Dozvoli dozvolu za mikrofon u Postavkama sistema';
+  String get captureMicrophonePermissionInSystemPreferences =>
+      'Dozvoli dozvolu za mikrofon u Postavkama sistema';
 
   @override
-  String get captureScreenRecordingPermissionRequired => 'Dozvola za snimanje ekrana je potrebna';
+  String get captureScreenRecordingPermissionRequired =>
+      'Dozvola za snimanje ekrana je potrebna';
 
   @override
-  String get captureDisplayDetectionFailed => 'Detektovanje ekrana nije uspješno. Snimanje je zaustavljeno.';
+  String get captureDisplayDetectionFailed =>
+      'Detektovanje ekrana nije uspješno. Snimanje je zaustavljeno.';
 
   @override
-  String get devModeInvalidAudioBytesWebhookUrl => 'Nevažeći audio bytes webhook URL';
+  String get devModeInvalidAudioBytesWebhookUrl =>
+      'Nevažeći audio bytes webhook URL';
 
   @override
-  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Nevažeći realtime transcript webhook URL';
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'Nevažeći realtime transcript webhook URL';
 
   @override
-  String get devModeInvalidConversationCreatedWebhookUrl => 'Nevažeći conversation created webhook URL';
+  String get devModeInvalidConversationCreatedWebhookUrl =>
+      'Nevažeći conversation created webhook URL';
 
   @override
-  String get devModeInvalidDaySummaryWebhookUrl => 'Nevažeći day summary webhook URL';
+  String get devModeInvalidDaySummaryWebhookUrl =>
+      'Nevažeći day summary webhook URL';
 
   @override
   String get devModeSettingsSaved => 'Postavke su čuvane!';
@@ -7384,7 +7736,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noDailyRecapsYet => 'Još nema dnevnih rezimea';
 
   @override
-  String get dailyRecapsDescription => 'Vaši dnevni rezimei će se pojaviti ovdje nakon što se generiraju';
+  String get dailyRecapsDescription =>
+      'Vaši dnevni rezimei će se pojaviti ovdje nakon što se generiraju';
 
   @override
   String largeTimeGapDetected(String gap) {
@@ -7397,7 +7750,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health nije dostupan na ovom uređaju';
+  String get appleHealthNotAvailable =>
+      'Apple Health nije dostupan na ovom uređaju';
 
   @override
   String get downloadAudio => 'Preuzmi zvuk';
@@ -7663,10 +8017,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get googleSearch => 'Google pretraga';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio datoteka nije dostupna za reprodukciju';
+  String get audioPlaybackUnavailable =>
+      'Audio datoteka nije dostupna za reprodukciju';
 
   @override
-  String get audioPlaybackFailed => 'Nije moguće reproducirati audio. Datoteka može biti oštećena ili nedostaje.';
+  String get audioPlaybackFailed =>
+      'Nije moguće reproducirati audio. Datoteka može biti oštećena ili nedostaje.';
 
   @override
   String get connectionGuide => 'Vodič za povezivanje';
@@ -7687,7 +8043,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingTitleOmi => 'Uključi Omi';
 
   @override
-  String get pairingDescOmi => 'Drži uređaj pritisnuo/a dok se ne vibrira da bi ga uključio/a.';
+  String get pairingDescOmi =>
+      'Drži uređaj pritisnuo/a dok se ne vibrira da bi ga uključio/a.';
 
   @override
   String get pairingTitleOmiDevkit => 'Postavi Omi DevKit u režim uparivanja';
@@ -7700,7 +8057,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingTitleOmiGlass => 'Uključi Omi Glass';
 
   @override
-  String get pairingDescOmiGlass => 'Uključi pritiskivanjem bočnog dugmeta 3 sekunde.';
+  String get pairingDescOmiGlass =>
+      'Uključi pritiskivanjem bočnog dugmeta 3 sekunde.';
 
   @override
   String get pairingTitlePlaudNote => 'Postavi Plaud Note u režim uparivanja';
@@ -7713,7 +8071,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingTitleBee => 'Postavi Bee u režim uparivanja';
 
   @override
-  String get pairingDescBee => 'Pritisni dugme 5 puta bez prekida. Svetlo će početi treperitati plavo i zeleno.';
+  String get pairingDescBee =>
+      'Pritisni dugme 5 puta bez prekida. Svetlo će početi treperitati plavo i zeleno.';
 
   @override
   String get pairingTitleLimitless => 'Postavi Limitless u režim uparivanja';
@@ -7723,7 +8082,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Kada je neko svetlo vidljivo, pritisni jednom, a zatim drži dok uređaj ne prikaže ružičasto svetlo, zatim otpusti.';
 
   @override
-  String get pairingTitleFriendPendant => 'Postavi Friend Pendant u režim uparivanja';
+  String get pairingTitleFriendPendant =>
+      'Postavi Friend Pendant u režim uparivanja';
 
   @override
   String get pairingDescFriendPendant =>
@@ -7733,7 +8093,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingTitleFieldy => 'Postavi Fieldy u režim uparivanja';
 
   @override
-  String get pairingDescFieldy => 'Drži uređaj pritisnuo/a dok se svetlo ne pojavi da bi ga uključio/a.';
+  String get pairingDescFieldy =>
+      'Drži uređaj pritisnuo/a dok se svetlo ne pojavi da bi ga uključio/a.';
 
   @override
   String get pairingTitleAppleWatch => 'Poveži Apple Watch';
@@ -7746,7 +8107,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingTitleNeoOne => 'Postavi Neo One u režim uparivanja';
 
   @override
-  String get pairingDescNeoOne => 'Drži dugme za napajanje dok LED ne počne treperitati. Uređaj će biti otkrivljiv.';
+  String get pairingDescNeoOne =>
+      'Drži dugme za napajanje dok LED ne počne treperitati. Uređaj će biti otkrivljiv.';
 
   @override
   String get downloadingFromDevice => 'Preuzimanje sa uređaja';
@@ -7804,7 +8166,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get addToYourTaskList => 'Dodaj u listu zadataka?';
 
   @override
-  String get failedToCreateShareLink => 'Nije uspelo pravljenje linka za deljenje';
+  String get failedToCreateShareLink =>
+      'Nije uspelo pravljenje linka za deljenje';
 
   @override
   String get deleteGoal => 'Obriši cilj';
@@ -7816,7 +8179,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get wifiConfiguration => 'WiFi konfiguracija';
 
   @override
-  String get wifiConfigurationSubtitle => 'Unesite vaše WiFi kredencijale kako bi uređaj mogao preuzeti firmware.';
+  String get wifiConfigurationSubtitle =>
+      'Unesite vaše WiFi kredencijale kako bi uređaj mogao preuzeti firmware.';
 
   @override
   String get networkNameSsid => 'Ime mreže (SSID)';
@@ -7834,7 +8198,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingWhatIKnowAboutYouTitle => 'Evo šta znam o vama';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'Ova mapa se ažurira kako Omi uči iz vaših razgovora.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Ova mapa se ažurira kako Omi uči iz vaših razgovora.';
 
   @override
   String get apiEnvironment => 'API okruženje';
@@ -7846,7 +8211,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get staging => 'Staging';
 
   @override
-  String get switchRequiresRestart => 'Prebacivanje zahteva ponovno pokretanje aplikacije';
+  String get switchRequiresRestart =>
+      'Prebacivanje zahteva ponovno pokretanje aplikacije';
 
   @override
   String get switchApiConfirmTitle => 'Promeni API okruženje';
@@ -7864,7 +8230,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Staging može biti buggy, imati neusaglašene performanse i podaci mogu biti izgubljeni. Koristite samo za testiranje.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Sačuvano. Zatvorite i ponovo otvorite aplikaciju da se primene izmene.';
+  String get apiEnvSavedRestartRequired =>
+      'Sačuvano. Zatvorite i ponovo otvorite aplikaciju da se primene izmene.';
 
   @override
   String get shared => 'Deljeno';
@@ -7888,19 +8255,22 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneCallsWithOmi => 'Pozivi sa Omi-em';
 
   @override
-  String get phoneCallsSubtitle => 'Pozivaj sa transkribovanjem u realnom vremenu';
+  String get phoneCallsSubtitle =>
+      'Pozivaj sa transkribovanjem u realnom vremenu';
 
   @override
   String get phoneSetupStep1Title => 'Verifikuj svoj telefonski broj';
 
   @override
-  String get phoneSetupStep1Subtitle => 'Poslacemo ti poziv da potvrdi da je tvoj';
+  String get phoneSetupStep1Subtitle =>
+      'Poslacemo ti poziv da potvrdi da je tvoj';
 
   @override
   String get phoneSetupStep2Title => 'Unesite verifikacioni kod';
 
   @override
-  String get phoneSetupStep2Subtitle => 'Kratak kod koji ćete uneti tokom poziva';
+  String get phoneSetupStep2Subtitle =>
+      'Kratak kod koji ćete uneti tokom poziva';
 
   @override
   String get phoneSetupStep3Title => 'Počni da poziva svoje kontakte';
@@ -7912,13 +8282,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneGetStarted => 'Počni';
 
   @override
-  String get callRecordingConsentDisclaimer => 'Snimanje poziva može zahtevati pristanak u vašoj jurisdikciji';
+  String get callRecordingConsentDisclaimer =>
+      'Snimanje poziva može zahtevati pristanak u vašoj jurisdikciji';
 
   @override
   String get enterYourNumber => 'Unesite svoj broj';
 
   @override
-  String get phoneNumberCallerIdHint => 'Nakon verifikacije, ovo postaje vaš caller ID';
+  String get phoneNumberCallerIdHint =>
+      'Nakon verifikacije, ovo postaje vaš caller ID';
 
   @override
   String get phoneNumberHint => 'Telefonski broj';
@@ -8020,13 +8392,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get showPhoneCallButtonTitle => 'Prikaži dugme za pozive';
 
   @override
-  String get showPhoneCallButtonDesc => 'Prikaži dugme za pozive na početnom ekranu';
+  String get showPhoneCallButtonDesc =>
+      'Prikaži dugme za pozive na početnom ekranu';
 
   @override
   String get yourVerifiedNumbers => 'Tvoji verifikovani brojevi';
 
   @override
-  String get verifiedNumbersDescription => 'Kada pozoveš nekoga, oni će videti ovaj broj na svom telefonu';
+  String get verifiedNumbersDescription =>
+      'Kada pozoveš nekoga, oni će videti ovaj broj na svom telefonu';
 
   @override
   String get noVerifiedNumbers => 'Nema verifikovanih brojeva';
@@ -8037,7 +8411,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get deletePhoneNumberWarning => 'Trebace da ponovo verifikuješ da bi pozivao/a';
+  String get deletePhoneNumberWarning =>
+      'Trebace da ponovo verifikuješ da bi pozivao/a';
 
   @override
   String get phoneDeleteButton => 'Obriši';
@@ -8069,10 +8444,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get callAlreadyInProgress => 'Poziv je već u toku';
 
   @override
-  String get failedToGetCallToken => 'Nije uspelo dobijanje token za poziv. Prvo verifikuj svoj telefonski broj.';
+  String get failedToGetCallToken =>
+      'Nije uspelo dobijanje token za poziv. Prvo verifikuj svoj telefonski broj.';
 
   @override
-  String get failedToInitializeCallService => 'Nije uspelo inicijalizovanje servisa za pozive';
+  String get failedToInitializeCallService =>
+      'Nije uspelo inicijalizovanje servisa za pozive';
 
   @override
   String get speakerLabelYou => 'Vi';
@@ -8081,7 +8458,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get speakerLabelUnknown => 'Nepoznato';
 
   @override
-  String get showDailyScoreOnHomepage => 'Prikaži dnevni rezultat na početnoj strani';
+  String get showDailyScoreOnHomepage =>
+      'Prikaži dnevni rezultat na početnoj strani';
 
   @override
   String get showTasksOnHomepage => 'Prikaži zadatke na početnoj strani';
@@ -8094,13 +8472,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Pozivaj preko Omi-a i dobij transkribovanje u realnom vremenu, automatske rezime i još mnogo toga. Dostupno isključivo pretplatnicima Unlimited plana.';
 
   @override
-  String get phoneCallsUpsellFeature1 => 'Transkribovanje u realnom vremenu svakog poziva';
+  String get phoneCallsUpsellFeature1 =>
+      'Transkribovanje u realnom vremenu svakog poziva';
 
   @override
   String get phoneCallsUpsellFeature2 => 'Automatski rezimei poziva i zadaci';
 
   @override
-  String get phoneCallsUpsellFeature3 => 'Primaoci vide vaš pravi broj, ne nasumičan';
+  String get phoneCallsUpsellFeature3 =>
+      'Primaoci vide vaš pravi broj, ne nasumičan';
 
   @override
   String get phoneCallsUpgradeButton => 'Nadgradi se na Unlimited';
@@ -8174,7 +8554,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get fairUsePolicy => 'Fer upotreba';
 
   @override
-  String get fairUseLoadError => 'Nije moguće učitati status fer upotrebe. Pokušajte ponovo.';
+  String get fairUseLoadError =>
+      'Nije moguće učitati status fer upotrebe. Pokušajte ponovo.';
 
   @override
   String get fairUseStatusNormal => 'Vaša upotreba je u normalnim granicama.';
@@ -8224,7 +8605,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get fairUseBudgetExhausted => 'Dnevna granica transkribovanja je dostignutna';
+  String get fairUseBudgetExhausted =>
+      'Dnevna granica transkribovanja je dostignutna';
 
   @override
   String fairUseBudgetResetsAt(String time) {
@@ -8235,7 +8617,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcriptionPaused => 'Snimanje, ponovno povezivanje';
 
   @override
-  String get transcriptionPausedReconnecting => 'Još uvek se snima — ponovno povezivanje na transkribovanje…';
+  String get transcriptionPausedReconnecting =>
+      'Još uvek se snima — ponovno povezivanje na transkribovanje…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8273,10 +8656,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noSyncedRecordings => 'Nema sinhronizovanih snimaka';
 
   @override
-  String get recordingsSyncAutomatically => 'Snimke se sinhronizuju automatski — nema potrebe za akcijom.';
+  String get recordingsSyncAutomatically =>
+      'Snimke se sinhronizuju automatski — nema potrebe za akcijom.';
 
   @override
-  String get filesDownloadedUploadedNextTime => 'Datoteke koje su već preuzete biće učitane sledeći put.';
+  String get filesDownloadedUploadedNextTime =>
+      'Datoteke koje su već preuzete biće učitane sledeći put.';
 
   @override
   String nConversationsCreated(int count) {
@@ -8310,7 +8695,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Nakon učitavanja, vaše snimke se obrađuju i transkribuju. Razgovori će biti dostupni u roku od minute.';
 
   @override
-  String get tipKeepPhoneNearby => 'Čuvajte telefon blizu za brže sinhronizovanje';
+  String get tipKeepPhoneNearby =>
+      'Čuvajte telefon blizu za brže sinhronizovanje';
 
   @override
   String get tipStableInternet => 'Stabilni internet ubrzava cloud učitavanja';
@@ -8342,7 +8728,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get permissionsSetupTitle => 'Uži najbolje iskustvo';
 
   @override
-  String get permissionsChangeAnytime => 'Možete promeniti ove dozvole bilo kada u Postavke > Dozvole';
+  String get permissionsChangeAnytime =>
+      'Možete promeniti ove dozvole bilo kada u Postavke > Dozvole';
 
   @override
   String get location => 'Lokacija';
@@ -8387,7 +8774,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get justAMoment => 'Čekaj malo';
 
   @override
-  String get cancelConsequencesSubtitle => 'Toplo preporučujemo da umesto otkazivanja istražite druge opcije.';
+  String get cancelConsequencesSubtitle =>
+      'Toplo preporučujemo da umesto otkazivanja istražite druge opcije.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
@@ -8398,16 +8786,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get ifYouCancel => 'Ako otkazuješ:';
 
   @override
-  String get cancelConsequenceNoAccess => 'Više nema neograničenog pristupa na kraju vašeg perioda naplate.';
+  String get cancelConsequenceNoAccess =>
+      'Više nema neograničenog pristupa na kraju vašeg perioda naplate.';
 
   @override
-  String get cancelConsequenceBattery => '7 puta više baterije (obrada na uređaju)';
+  String get cancelConsequenceBattery =>
+      '7 puta više baterije (obrada na uređaju)';
 
   @override
-  String get cancelConsequenceQuality => '30% niža kvaliteta transkribovanja (modeli na uređaju)';
+  String get cancelConsequenceQuality =>
+      '30% niža kvaliteta transkribovanja (modeli na uređaju)';
 
   @override
-  String get cancelConsequenceDelay => 'Kašnjenje od 5-7 sekundi obrade (modeli na uređaju)';
+  String get cancelConsequenceDelay =>
+      'Kašnjenje od 5-7 sekundi obrade (modeli na uređaju)';
 
   @override
   String get cancelConsequenceSpeakers => 'Ne mogu identificirati govornike.';
@@ -8416,7 +8808,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get confirmAndCancel => 'Potvrdi i otkaži';
 
   @override
-  String get cancelConsequencePhoneCalls => 'Nema transkribovanja telefonskih poziva u realnom vremenu';
+  String get cancelConsequencePhoneCalls =>
+      'Nema transkribovanja telefonskih poziva u realnom vremenu';
 
   @override
   String get feedbackTitleTooExpensive => 'Koja cena bi vam odgovarala?';
@@ -8434,25 +8827,32 @@ class AppLocalizationsBs extends AppLocalizations {
   String get feedbackTitleFoundAlternative => 'Na šta prelazite?';
 
   @override
-  String get feedbackTitleNotUsing => 'Šta bi vas učinilo da više koristite Omi?';
+  String get feedbackTitleNotUsing =>
+      'Šta bi vas učinilo da više koristite Omi?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'Vaša povratna informacija nam pomaže da nađemo pravi balans.';
+  String get feedbackSubtitleTooExpensive =>
+      'Vaša povratna informacija nam pomaže da nađemo pravi balans.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'Uvek gradimo — ovo nam pomaže da damo prioritet.';
+  String get feedbackSubtitleMissingFeatures =>
+      'Uvek gradimo — ovo nam pomaže da damo prioritet.';
 
   @override
-  String get feedbackSubtitleAudioQuality => 'Voljeli bismo da razumemo šta je pošlo naopako.';
+  String get feedbackSubtitleAudioQuality =>
+      'Voljeli bismo da razumemo šta je pošlo naopako.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'Ovo pomaže našem hardware timu da se poboljša.';
+  String get feedbackSubtitleBatteryDrain =>
+      'Ovo pomaže našem hardware timu da se poboljša.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'Voljeli bismo da saznamo šta vam se dopalo.';
+  String get feedbackSubtitleFoundAlternative =>
+      'Voljeli bismo da saznamo šta vam se dopalo.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'Želimo da učinimo Omi korisnijim za vas.';
+  String get feedbackSubtitleNotUsing =>
+      'Želimo da učinimo Omi korisnijim za vas.';
 
   @override
   String get deviceDiagnostics => 'Dijagnostika uređaja';
@@ -8566,16 +8966,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get stableFirmware => 'Stabilna firmware';
 
   @override
-  String get fetchingStableFirmware => 'Preuzimanje najnovije stabilne firmware…';
+  String get fetchingStableFirmware =>
+      'Preuzimanje najnovije stabilne firmware…';
 
   @override
-  String get noStableFirmwareFound => 'Nije moguće pronaći stabilnu verziju firmware za vaš uređaj.';
+  String get noStableFirmwareFound =>
+      'Nije moguće pronaći stabilnu verziju firmware za vaš uređaj.';
 
   @override
   String get installStableFirmware => 'Instaliraj stabilnu firmware';
 
   @override
-  String get alreadyOnStableFirmware => 'Već ste na najnovijoj stabilnoj verziji.';
+  String get alreadyOnStableFirmware =>
+      'Već ste na najnovijoj stabilnoj verziji.';
 
   @override
   String audioSavedLocally(String duration) {
@@ -8603,7 +9006,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Slušam… ovdje će se pojaviti transkript.';
+  String get listeningTranscriptWillAppear =>
+      'Slušam… ovdje će se pojaviti transkript.';
 
   @override
   String get recordingOfflineTranscriptWillCatchUp =>
@@ -8636,7 +9040,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcriptionConnecting => 'Povezivanje transkribovanja…';
 
   @override
-  String get transcriptionReconnecting => 'Ponovno povezivanje transkribovanja…';
+  String get transcriptionReconnecting =>
+      'Ponovno povezivanje transkribovanja…';
 
   @override
   String get transcriptionUnavailable => 'Transkribovanje nije dostupno';
@@ -8685,19 +9090,22 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appleHealthFeatureChatTitle => 'Razgovarajte o svom zdravlju';
 
   @override
-  String get appleHealthFeatureChatDesc => 'Pitajte Omi o vašim koracima, snu, otkucajima srca i treninzima.';
+  String get appleHealthFeatureChatDesc =>
+      'Pitajte Omi o vašim koracima, snu, otkucajima srca i treninzima.';
 
   @override
   String get appleHealthFeatureReadOnlyTitle => 'Samo za čitanje';
 
   @override
-  String get appleHealthFeatureReadOnlyDesc => 'Omi nikada ne upisuje u Apple Health niti mijenja vaše podatke.';
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Omi nikada ne upisuje u Apple Health niti mijenja vaše podatke.';
 
   @override
   String get appleHealthFeatureSecureTitle => 'Sigurna sinhronizacija';
 
   @override
-  String get appleHealthFeatureSecureDesc => 'Vaši Apple Health podaci se privatno sinhroniziraju s vašim Omi računom.';
+  String get appleHealthFeatureSecureDesc =>
+      'Vaši Apple Health podaci se privatno sinhroniziraju s vašim Omi računom.';
 
   @override
   String get appleHealthDeniedTitle => 'Pristup Apple Health-u je odbijen';
@@ -8710,7 +9118,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteFlowReasonTitle => 'Zašto odlazite?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'Vaše povratne informacije pomažu nam da Omi bude bolji za sve.';
+  String get deleteFlowReasonSubtitle =>
+      'Vaše povratne informacije pomažu nam da Omi bude bolji za sve.';
 
   @override
   String get deleteReasonPrivacy => 'Brige o privatnosti';
@@ -8740,19 +9149,23 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteFlowFeedbackSubtitle => 'Šta bi učinilo da Omi radi za vas?';
 
   @override
-  String get deleteFlowFeedbackHint => 'Opcionalno — vaše misli nam pomažu da napravimo bolji proizvod.';
+  String get deleteFlowFeedbackHint =>
+      'Opcionalno — vaše misli nam pomažu da napravimo bolji proizvod.';
 
   @override
   String get deleteFlowConfirmTitle => 'Izbrisati vaš račun?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'Ovo se ne može poništiti, čak ni uz pomoć podrške.';
+  String get deleteFlowConfirmSubtitle =>
+      'Ovo se ne može poništiti, čak ni uz pomoć podrške.';
 
   @override
-  String get deleteConsequenceSubscription => 'Svaka aktivna pretplata će biti otkazana.';
+  String get deleteConsequenceSubscription =>
+      'Svaka aktivna pretplata će biti otkazana.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'Vaš račun se ne može vratiti — čak ni preko podrške.';
+  String get deleteConsequenceNoRecovery =>
+      'Vaš račun se ne može vratiti — čak ni preko podrške.';
 
   @override
   String get deleteTypeToConfirm => 'Upišite DELETE za potvrdu';
@@ -8767,7 +9180,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get keepMyAccount => 'Zadrži moj račun';
 
   @override
-  String get deleteAccountFailed => 'Brisanje vašeg računa nije uspjelo. Pokušajte ponovo.';
+  String get deleteAccountFailed =>
+      'Brisanje vašeg računa nije uspjelo. Pokušajte ponovo.';
 
   @override
   String get planUpdate => 'Ažuriranje plana';
@@ -8803,7 +9217,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Limit chata dostignut. Nadogradite za više poruka.';
+  String get chatLimitReachedUpgrade =>
+      'Limit chata dostignut. Nadogradite za više poruka.';
 
   @override
   String get chatLimitReachedTitle => 'Limit chata dostignut';
@@ -8929,7 +9344,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get recordWithPhoneMic => 'Snimaj mikrofonom telefona';
 
   @override
-  String get recordWithPhoneMicSubtitle => 'Snimajte i transkribujte pomoću mikrofona ovog telefona';
+  String get recordWithPhoneMicSubtitle =>
+      'Snimajte i transkribujte pomoću mikrofona ovog telefona';
 
   @override
   String get phoneCall => 'Telefonski poziv';
@@ -8971,7 +9387,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get selectAllTasksMenu => 'Odaberi sve';
 
   @override
-  String get connectTaskAppToExport => 'Povežite aplikaciju za zadatke u Postavkama za izvoz';
+  String get connectTaskAppToExport =>
+      'Povežite aplikaciju za zadatke u Postavkama za izvoz';
 
   @override
   String get connectAction => 'Poveži';
@@ -8983,7 +9400,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get bulkExportAlreadyExported => 'Svi odabrani zadaci već su izvezeni';
 
   @override
-  String get bulkDeleteFailed => 'Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo.';
+  String get bulkDeleteFailed =>
+      'Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo.';
 
   @override
   String get deleteRecap => 'Obriši pregled';
@@ -9002,7 +9420,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get recapDeletedSnackbar => 'Pregled obrisan';
 
   @override
-  String get recapDeleteFailed => 'Pregled nije moguće obrisati. Pokušajte ponovo kasnije.';
+  String get recapDeleteFailed =>
+      'Pregled nije moguće obrisati. Pokušajte ponovo kasnije.';
 
   @override
   String get syncStatusBackedUp => 'Sigurnosno kopirano';
@@ -9094,7 +9513,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncStepBackedUpDesc => 'Pronađite ga u Razgovori';
 
   @override
-  String get syncFailureFootnote => 'Ako obrada ne uspije, snimak se automatski ponavlja pri sljedećoj sinkronizaciji.';
+  String get syncFailureFootnote =>
+      'Ako obrada ne uspije, snimak se automatski ponavlja pri sljedećoj sinkronizaciji.';
 
   @override
   String get syncStatusConversationCreated => 'Razgovor stvoren';
@@ -9125,23 +9545,28 @@ class AppLocalizationsBs extends AppLocalizations {
   String get noSyncedRecordingsYet => 'Još nema sinhronizovanih snimaka';
 
   @override
-  String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+  String get morePaymentMethodsComingSoon =>
+      'Uskoro stižu novi načini plaćanja';
 
   @override
-  String get syncProcessingBackgroundHint => 'Ovo se nastavlja u pozadini — možete napustiti ovaj ekran.';
+  String get syncProcessingBackgroundHint =>
+      'Ovo se nastavlja u pozadini — možete napustiti ovaj ekran.';
 
   @override
-  String get syncCardRateLimited => 'Dostignut je limit poštene upotrebe — sinkronizacija će se automatski nastaviti';
+  String get syncCardRateLimited =>
+      'Dostignut je limit poštene upotrebe — sinkronizacija će se automatski nastaviti';
 
   @override
-  String get syncCardThrottlePaused => 'Sinhronizacija je nakratko pauzirana — nastavit će se automatski';
+  String get syncCardThrottlePaused =>
+      'Sinhronizacija je nakratko pauzirana — nastavit će se automatski';
 
   @override
   String get syncCardBackendBusy =>
       'Omi serveri su zauzeti — vaši snimci će se sinhronizovati kada se oslobodi kapacitet';
 
   @override
-  String get unableToDetermineFirmwareVersion => 'Nije moguće odrediti trenutnu verziju firmvera';
+  String get unableToDetermineFirmwareVersion =>
+      'Nije moguće odrediti trenutnu verziju firmvera';
 
   @override
   String get promoCode => 'Promo kod';
@@ -9156,7 +9581,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get backgroundModeTitle => 'Pozadinski način rada';
 
   @override
-  String get backgroundModeDescription => 'Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.';
+  String get backgroundModeDescription =>
+      'Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.';
 
   @override
   String get backgroundModeUnavailable =>
@@ -9169,16 +9595,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get recapRegeneratedSnackbar => 'Rezime je ponovo generisan';
 
   @override
-  String get recapRegenerateFailed => 'Nije moguće ponovo generisati rezime. Pokušajte ponovo kasnije.';
+  String get recapRegenerateFailed =>
+      'Nije moguće ponovo generisati rezime. Pokušajte ponovo kasnije.';
 
   @override
-  String get recapRegenerateCooldown => 'Molimo sačekajte nekoliko sekundi prije ponovnog generisanja.';
+  String get recapRegenerateCooldown =>
+      'Molimo sačekajte nekoliko sekundi prije ponovnog generisanja.';
 
   @override
-  String get recapRegenerateNoConversations => 'Nema razgovora za sažimanje za ovaj dan.';
+  String get recapRegenerateNoConversations =>
+      'Nema razgovora za sažimanje za ovaj dan.';
 
   @override
-  String get syncCustomSttWarningTitle => 'Sinkronizacija koristi Omi transkripciju';
+  String get syncCustomSttWarningTitle =>
+      'Sinkronizacija koristi Omi transkripciju';
 
   @override
   String get syncCustomSttWarningMessage =>
@@ -9206,10 +9636,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get captureModeLater => 'Kasnije';
 
   @override
-  String get captureModeLiveDescription => 'Transkribirajte u stvarnom vremenu dok govorite.';
+  String get captureModeLiveDescription =>
+      'Transkribirajte u stvarnom vremenu dok govorite.';
 
   @override
-  String get captureModeLaterDescription => 'Spremite zvuk sada i transkribirajte kad god želite.';
+  String get captureModeLaterDescription =>
+      'Spremite zvuk sada i transkribirajte kad god želite.';
 
   @override
   String get unmute => 'Uključi zvuk';
@@ -9277,10 +9709,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingTurnOffSubtitle => 'Drži dugme 3 sekunde';
 
   @override
-  String get deviceOnboardingTurnOnSubtitle => 'Pritisni dugme da ga ponovo uključiš';
+  String get deviceOnboardingTurnOnSubtitle =>
+      'Pritisni dugme da ga ponovo uključiš';
 
   @override
-  String get deviceOnboardingHoldButtonHint => 'Čvrsto drži dugme dok se svjetlo ne ugasi';
+  String get deviceOnboardingHoldButtonHint =>
+      'Čvrsto drži dugme dok se svjetlo ne ugasi';
 
   @override
   String get deviceOnboardingStatusConnected => 'Povezano';
@@ -9301,7 +9735,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingEndConversation => 'Završi razgovor';
 
   @override
-  String get deviceOnboardingEndConversationDesc => 'Sačuvaj i završi trenutni razgovor';
+  String get deviceOnboardingEndConversationDesc =>
+      'Sačuvaj i završi trenutni razgovor';
 
   @override
   String get deviceOnboardingMuteUnmute => 'Isključi / uključi zvuk';
@@ -9310,16 +9745,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingMuteUnmuteDesc => 'Uključi ili isključi mikrofon';
 
   @override
-  String get deviceOnboardingStarConversation => 'Označi tekući razgovor zvjezdicom';
+  String get deviceOnboardingStarConversation =>
+      'Označi tekući razgovor zvjezdicom';
 
   @override
-  String get deviceOnboardingStarConversationDesc => 'Označi razgovor kao važan';
+  String get deviceOnboardingStarConversationDesc =>
+      'Označi razgovor kao važan';
 
   @override
-  String get deviceOnboardingSingleTapHint => 'To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!';
+  String get deviceOnboardingSingleTapHint =>
+      'To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!';
 
   @override
-  String get deviceOnboardingTryDoubleTap => 'Probaj odmah! Dvaput dodirni svoj Omi';
+  String get deviceOnboardingTryDoubleTap =>
+      'Probaj odmah! Dvaput dodirni svoj Omi';
 
   @override
   String get deviceOnboardingContinue => 'Nastavi';
@@ -9343,9 +9782,7 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ još $count';
-  }
+  String get quoteShowSources => 'Prikaži izvore';
 
   @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';
@@ -9364,7 +9801,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Vaš privjesak snima samostalno. Snimci se sinhroniziraju s telefonom dok je aplikacija otvorena.';
 
   @override
-  String get pendantSyncingRecordings => 'Sinhronizacija snimaka s vašeg privjeska…';
+  String get pendantSyncingRecordings =>
+      'Sinhronizacija snimaka s vašeg privjeska…';
 
   @override
   String pendantMinutesStored(int minutes) {
@@ -9386,7 +9824,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get raybanMetaOpenMetaAI => 'Poveži se putem Meta AI';
 
   @override
-  String get raybanMetaWaitingForMetaAI => 'Završite povezivanje u Meta AI aplikaciji, a zatim se vratite ovdje.';
+  String get raybanMetaWaitingForMetaAI =>
+      'Završite povezivanje u Meta AI aplikaciji, a zatim se vratite ovdje.';
 
   @override
   String get raybanMetaCheckAgain => 'Provjeri ponovo';
@@ -9402,14 +9841,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get raybanMetaSkipForNow => 'Preskoči za sada';
 
   @override
-  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta način rada samo sa zvukom';
+  String get raybanMetaAudioOnlyTitle =>
+      'Ray-Ban Meta način rada samo sa zvukom';
 
   @override
   String get raybanMetaAudioOnlyExplanation =>
       'Ova verzija Omija može koristiti mikrofon vaših naočala putem Bluetooth-a. Snimanje fotografija zahtijeva Meta razvojnu verziju Omija.';
 
   @override
-  String get raybanMetaMusicPauseNote => 'Muzika na vašem telefonu se pauzira dok se koristi mikrofon naočala.';
+  String get raybanMetaMusicPauseNote =>
+      'Muzika na vašem telefonu se pauzira dok se koristi mikrofon naočala.';
 
   @override
   String get raybanMetaContinue => 'Nastavi';
@@ -9418,7 +9859,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get raybanMetaCapturePhoto => 'Snimi fotografiju';
 
   @override
-  String get raybanMetaPhotoRequested => 'Fotografija zatražena — pojavit će se u vašem razgovoru.';
+  String get raybanMetaPhotoRequested =>
+      'Fotografija zatražena — pojavit će se u vašem razgovoru.';
 
   @override
   String get raybanMetaMicrophoneReady => 'Mikrofon spreman';
@@ -9427,7 +9869,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get raybanMetaImageCaptureReady => 'Snimanje slike spremno';
 
   @override
-  String get raybanMetaImageCaptureUnavailable => 'Nedostupno u načinu rada samo sa zvukom';
+  String get raybanMetaImageCaptureUnavailable =>
+      'Nedostupno u načinu rada samo sa zvukom';
 
   @override
   String get raybanMetaCamera => 'Kamera';
@@ -9456,7 +9899,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get deviceStorageNearlyFull => 'Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.';
+  String get deviceStorageNearlyFull =>
+      'Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.';
 
   @override
   String get phoneMicOfflineFallbackMessage =>
@@ -9512,13 +9956,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceModelDownloadFailed => 'Preuzimanje modela nije uspjelo';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovo.';
+  String get onDeviceModelDownloadFailedDesc =>
+      'Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovo.';
 
   @override
   String get onDeviceModelDownloadSuccess => 'Model preuzet';
 
   @override
-  String get onDeviceModelDownloadSuccessDesc => 'Whisper model je uspješno preuzet';
+  String get onDeviceModelDownloadSuccessDesc =>
+      'Whisper model je uspješno preuzet';
 
   @override
   String get onDeviceModelSize => 'Veličina modela';
@@ -9530,7 +9976,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceTranscription => 'Prepis na uređaju';
 
   @override
-  String get onDeviceTranscriptionDesc => 'Prepis se obrađuje lokalno na vašem uređaju';
+  String get onDeviceTranscriptionDesc =>
+      'Prepis se obrađuje lokalno na vašem uređaju';
 
   @override
   String get sttModelSlower => 'Sporije';
@@ -9545,7 +9992,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get speechToTextProvider => 'Pružatelj usluge govor-u-tekst';
 
   @override
-  String get speechToTextProviderDesc => 'Odaberite uslugu koja se koristi za prepis';
+  String get speechToTextProviderDesc =>
+      'Odaberite uslugu koja se koristi za prepis';
 
   @override
   String get sttProviderSpeechmatics => 'Speechmatics';
@@ -9572,7 +10020,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get downgradeToFreemiumTitle => 'Preći na besplatni plan?';
 
   @override
-  String get downgradeLimitationsHeading => 'Suočit ćete se sa sljedećim ograničenjima:';
+  String get downgradeLimitationsHeading =>
+      'Suočit ćete se sa sljedećim ograničenjima:';
 
   @override
   String get downgradeLimitBattery => '7x veća potrošnja baterije';
@@ -9602,7 +10051,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get failedToLinkCalendarEvent => 'Povezivanje s događajem u kalendaru nije uspjelo';
+  String get failedToLinkCalendarEvent =>
+      'Povezivanje s događajem u kalendaru nije uspjelo';
 
   @override
   String get thanksForYourFeedback => 'Hvala na povratnoj informaciji!';
@@ -9636,7 +10086,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.';
 
   @override
-  String get syncStatusTooOld => 'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
+  String get syncStatusTooOld =>
+      'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
 
   @override
   String get planSheetChooseYourPlan => 'Odaberite plan koji vam odgovara.';
@@ -9675,13 +10126,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Omi je besplatan, ali besplatna verzija ima ograničenja koja utiču na vaše iskustvo:';
 
   @override
-  String get downgradeLimitDelayNotRealTime => 'Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)';
+  String get downgradeLimitDelayNotRealTime =>
+      'Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)';
 
   @override
   String get downgradeToFreemiumAction => 'Pređite na besplatnu verziju';
 
   @override
-  String get getFreeUnlimitedAccess => 'Ostvarite besplatan neograničen pristup';
+  String get getFreeUnlimitedAccess =>
+      'Ostvarite besplatan neograničen pristup';
 
   @override
   String get shareDataForTraining => 'Dijelite podatke za treniranje';
@@ -9729,10 +10182,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get findDevice => 'Pronađi';
 
   @override
-  String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovo.';
+  String get diagnosticsShareFailed =>
+      'Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovo.';
 
   @override
-  String get appDisabledTitle => 'Ova aplikacija je onemogućena i ne može se instalirati.';
+  String get appDisabledTitle =>
+      'Ova aplikacija je onemogućena i ne može se instalirati.';
 
   @override
   String get appDisabledWebhookFailures =>
@@ -9752,7 +10207,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appReEnableFailedTitle => 'Ponovno omogućavanje nije uspjelo';
 
   @override
-  String get appReEnableFailedBody => 'Ovu aplikaciju nije bilo moguće ponovo omogućiti. Pokušaj ponovo.';
+  String get appReEnableFailedBody =>
+      'Ovu aplikaciju nije bilo moguće ponovo omogućiti. Pokušaj ponovo.';
 
   @override
   String appDisabledOn(String date) {
@@ -9802,7 +10258,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija ne prima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Dodirnite dugme za snimanje za početak snimanja';
+  String get tapPlusToStartRecording =>
+      'Dodirnite dugme za snimanje za početak snimanja';
 
   @override
   String get chatBlockTask => 'Zadatak';
@@ -9854,13 +10311,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Pretvaranje govora u tekst trenutno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju, pa pokušajte ponovo.';
 
   @override
-  String get speechProfileEnrollmentPrompt => 'Da Omi zna koji je glas vaš — pričajte o bilo čemu oko 5 sekundi.';
+  String get speechProfileEnrollmentPrompt =>
+      'Da Omi zna koji je glas vaš — pričajte o bilo čemu oko 5 sekundi.';
 
   @override
   String get home => 'Početna';
 
   @override
-  String get failedToUpdateBaselineStatus => 'Nije moguće ažurirati ovu uspomenu. Pokušajte ponovo.';
+  String get failedToUpdateBaselineStatus =>
+      'Nije moguće ažurirati ovu uspomenu. Pokušajte ponovo.';
 
   @override
   String get unstarConversation => 'Ukloni zvjezdicu s razgovora';
@@ -9876,124 +10335,123 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String guidedVoiceExperience(String part) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'unavailable': 'Voice transcription is unavailable right now. Type your answer instead.',
-        'type': 'Type Your Answer Instead',
-        'typing': 'Your answer',
-        'heard': 'Here\'s what I heard',
-        'transcribing': 'Got it, transcribing…',
-        'confirm': 'Use This Answer',
-        'answer': 'Save Answer',
-        'retry': 'Try Speaking Again',
-        'title': 'Here\'s what I\'ll remember',
-        'question': 'What should I focus on this week?',
-        'fallback': 'I’ll use these to help you.',
-        'thinking': 'Thinking about your answers…',
-        'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
-        'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
-        'retryTranscription': 'Retry transcription',
-        'namePrompt': 'My name is ___, and I usually ___.',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'unavailable':
+          'Voice transcription is unavailable right now. Type your answer instead.',
+      'type': 'Type Your Answer Instead',
+      'typing': 'Your answer',
+      'heard': 'Here\'s what I heard',
+      'transcribing': 'Got it, transcribing…',
+      'confirm': 'Use This Answer',
+      'answer': 'Save Answer',
+      'retry': 'Try Speaking Again',
+      'title': 'Here\'s what I\'ll remember',
+      'question': 'What should I focus on this week?',
+      'fallback': 'I’ll use these to help you.',
+      'thinking': 'Thinking about your answers…',
+      'failed':
+          'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
+      'engine':
+          'The microphone couldn\'t start. Try again or type your answer instead.',
+      'retryTranscription': 'Retry transcription',
+      'namePrompt': 'My name is ___, and I usually ___.',
+      'other': '',
+    });
     return '$_temp0';
   }
 
   @override
   String voiceIntroduction(String part) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'title': 'Let Omi get to know you',
-        'intro':
-            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
-        'hint': 'Say the whole sentence and finish it in your own words.',
-        'name': 'My name is ___, and I spend most of my time ___.',
-        'work': 'Right now, I am working on ___.',
-        'enjoy': 'Outside of that, I really enjoy ___.',
-        'food': 'My favorite food is ___.',
-        'remember': 'Something I would like help remembering is ___.',
-        'day': 'A good day for me includes ___.',
-        'another': 'Try Another Prompt',
-        'start': 'Start Speaking',
-        'skipPrompt': 'Skip Question',
-        'captured': 'Voice sample captured',
-        'silence': 'Take your time. Speak toward your phone microphone.',
-        'audio': 'Audio detected',
-        'review': 'Here is what I heard',
-        'reviewHint': 'Uncheck anything you don\'t want saved.',
-        'saveVoice': 'Save Voice Profile',
-        'savingVoice': 'Saving your voice profile…',
-        'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set Up My Voice Later',
-        'keep': 'Save Selected Answers',
-        'without': 'Continue Without Saving Answers',
-        'savedMemories': 'Your memories are saved',
-        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add Another Sentence',
-        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
-        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
-        'noMemories': 'You can tell Omi more about yourself whenever you like.',
-        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
-        'goalPrompt': 'Right now my number one goal is to ___.',
-        'savedGoal': 'Your goal is saved',
-        'goalError':
-            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
-        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
-        'voiceUnavailable':
-            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and Finish',
-        'retryRemaining': 'Retry Remaining',
-        'saveHint': 'Saves your voice profile and checked answers.',
-        'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue With What Is Saved',
-        'reviewAnswers': 'Review Answers',
-        'originalGoal': 'Use Original Wording',
-        'savingAnswers': 'Saving your answers…',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'title': 'Let Omi get to know you',
+      'intro':
+          'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+      'hint': 'Say the whole sentence and finish it in your own words.',
+      'name': 'My name is ___, and I spend most of my time ___.',
+      'work': 'Right now, I am working on ___.',
+      'enjoy': 'Outside of that, I really enjoy ___.',
+      'food': 'My favorite food is ___.',
+      'remember': 'Something I would like help remembering is ___.',
+      'day': 'A good day for me includes ___.',
+      'another': 'Try Another Prompt',
+      'start': 'Start Speaking',
+      'skipPrompt': 'Skip Question',
+      'captured': 'Voice sample captured',
+      'silence': 'Take your time. Speak toward your phone microphone.',
+      'audio': 'Audio detected',
+      'review': 'Here is what I heard',
+      'reviewHint': 'Uncheck anything you don\'t want saved.',
+      'saveVoice': 'Save Voice Profile',
+      'savingVoice': 'Saving your voice profile…',
+      'savedVoice': 'Voice profile saved',
+      'voiceLater': 'Set Up My Voice Later',
+      'keep': 'Save Selected Answers',
+      'without': 'Continue Without Saving Answers',
+      'savedMemories': 'Your memories are saved',
+      'short':
+          'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+      'addSample': 'Add Another Sentence',
+      'uploadError':
+          'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+      'memoryError':
+          'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+      'transcriptionError':
+          'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
+      'noMemories': 'You can tell Omi more about yourself whenever you like.',
+      'voiceOnlyHint':
+          'You can skip any personal prompt and talk about something else.',
+      'goalPrompt': 'Right now my number one goal is to ___.',
+      'savedGoal': 'Your goal is saved',
+      'goalError':
+          'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+      'goalLong':
+          'Shorten your goal to 500 characters or fewer, then try again.',
+      'voiceUnavailable':
+          'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+      'saveFinish': 'Save and Finish',
+      'retryRemaining': 'Retry Remaining',
+      'saveHint': 'Saves your voice profile and checked answers.',
+      'savedAll': 'Your introduction is saved.',
+      'continueSaved': 'Continue With What Is Saved',
+      'reviewAnswers': 'Review Answers',
+      'originalGoal': 'Use Original Wording',
+      'savingAnswers': 'Saving your answers…',
+      'other': '',
+    });
     return '$_temp0';
   }
 
   @override
   String voiceRecognitionStatus(String status) {
-    String _temp0 = intl.Intl.selectLogic(
-      status,
-      {
-        'ready': 'Glas je spreman za prepoznavanje',
-        'saved_sample_awaiting_embedding': 'Uzorak je sačuvan, čeka obradu glasa',
-        'not_learned': 'Glas nije naučen',
-        'other': 'Status glasa je nepoznat',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(status, {
+      'ready': 'Glas je spreman za prepoznavanje',
+      'saved_sample_awaiting_embedding': 'Uzorak je sačuvan, čeka obradu glasa',
+      'not_learned': 'Glas nije naučen',
+      'other': 'Status glasa je nepoznat',
+    });
     return '$_temp0';
   }
 
   @override
-  String get tagSpeakerIncludingLaterSpeech => 'Označi i kasniji govor ovog govornika';
+  String get tagSpeakerIncludingLaterSpeech =>
+      'Označi i kasniji govor ovog govornika';
 
   @override
   String get updateSummaryWithNewNames => 'Ažuriraj sažetak s novim imenima';
 
   @override
-  String get syncStatusUnsupportedAudio => 'Zvuk se ne može pročitati — sinkronizacija nije moguća';
+  String get syncStatusUnsupportedAudio =>
+      'Zvuk se ne može pročitati — sinkronizacija nije moguća';
 
   @override
   String chatStarterPrompt(String kind) {
-    String _temp0 = intl.Intl.selectLogic(
-      kind,
-      {
-        'capabilities': 'Šta možeš učiniti za mene?',
-        'goal': 'Pomozi mi da postavim cilj',
-        'activity': 'Sažmi moje nedavne aktivnosti',
-        'improve': 'Kako mogu napredovati?',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'capabilities': 'Šta možeš učiniti za mene?',
+      'goal': 'Pomozi mi da postavim cilj',
+      'activity': 'Sažmi moje nedavne aktivnosti',
+      'improve': 'Kako mogu napredovati?',
+      'other': '',
+    });
     return '$_temp0';
   }
 
@@ -10019,7 +10477,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get discardChangesTitle => 'Odbaciti promjene?';
 
   @override
-  String get discardChangesMessage => 'Vaše nesačuvane promjene će biti izgubljene.';
+  String get discardChangesMessage =>
+      'Vaše nesačuvane promjene će biti izgubljene.';
 
   @override
   String get pause => 'Pauza';
@@ -10036,7 +10495,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get deleteConversationsMessage => 'Ovo će izbrisati i njihove uspomene, zadatke i audio fajlove.';
+  String get deleteConversationsMessage =>
+      'Ovo će izbrisati i njihove uspomene, zadatke i audio fajlove.';
 
   @override
   String conversationsDeletedCount(int count) {
@@ -10124,7 +10584,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get newMemoryTitle => 'Novo sjećanje';
 
   @override
-  String get memoryReadOnlyHint => 'Ovo sjećanje se čuva kao historija i ne može se uređivati.';
+  String get memoryReadOnlyHint =>
+      'Ovo sjećanje se čuva kao historija i ne može se uređivati.';
 
   @override
   String get openConversation => 'Otvori razgovor';
@@ -10154,7 +10615,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryReviewUpdated => 'Ažurirano.';
 
   @override
-  String get memoryReviewSaveFailed => 'Spremanje nije uspjelo, pokušajte ponovo';
+  String get memoryReviewSaveFailed =>
+      'Spremanje nije uspjelo, pokušajte ponovo';
 
   @override
   String get indentTask => 'Uvuci';
@@ -10166,7 +10628,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get goalDeleted => 'Cilj je izbrisan';
 
   @override
-  String get sharedTasksAcceptFailed => 'Nije moguće prihvatiti ove zadatke. Možda ste već prihvatili ovo dijeljenje.';
+  String get sharedTasksAcceptFailed =>
+      'Nije moguće prihvatiti ove zadatke. Možda ste već prihvatili ovo dijeljenje.';
 
   @override
   String get pausePlayback => 'Pauza';
@@ -10252,7 +10715,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get linkEvent => 'Poveži događaj';
 
   @override
-  String get noCalendarEventsNearby => 'Nema događaja u kalendaru oko ovog vremena.';
+  String get noCalendarEventsNearby =>
+      'Nema događaja u kalendaru oko ovog vremena.';
 
   @override
   String get suggestedEvent => 'Predloženo';
@@ -10284,7 +10748,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get shareConversationQuestion => 'Podijeliti razgovor?';
 
   @override
-  String get conversationTasksEmptyMessage => 'Zadaci iz ovog razgovora pojavit će se ovdje.';
+  String get conversationTasksEmptyMessage =>
+      'Zadaci iz ovog razgovora pojavit će se ovdje.';
 
   @override
   String get noPendingTasks => 'Nema zadataka na čekanju';
@@ -10298,14 +10763,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get identifySpeaker => 'Označi govornika';
 
   @override
-  String get couldNotLoadCheckout => 'Stranica za plaćanje se nije mogla učitati. Provjerite vezu i pokušajte ponovo.';
+  String get couldNotLoadCheckout =>
+      'Stranica za plaćanje se nije mogla učitati. Provjerite vezu i pokušajte ponovo.';
 
   @override
   String get phoneFreeCallLimitReached =>
       'Dostignut je mjesečni limit besplatnih poziva. Resetuje se sljedećeg mjeseca.';
 
   @override
-  String get couldNotLoadImportHistory => 'Historija uvoza se nije mogla učitati';
+  String get couldNotLoadImportHistory =>
+      'Historija uvoza se nije mogla učitati';
 
   @override
   String get phoneCallButton => 'Pozovi';
@@ -10323,7 +10790,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneNoVerifiedNumbersTitle => 'Nema potvrđenih brojeva';
 
   @override
-  String get phoneNoVerifiedNumbersMessage => 'Potvrdite svoj broj da biste zvali putem Omi.';
+  String get phoneNoVerifiedNumbersMessage =>
+      'Potvrdite svoj broj da biste zvali putem Omi.';
 
   @override
   String get phoneDeleteNumberFailed => 'Nije moguće izbrisati ovaj broj';
@@ -10332,7 +10800,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get forgetDeviceConfirmTitle => 'Zaboraviti uređaj?';
 
   @override
-  String get forgetDeviceConfirmMessage => 'Omi se više neće povezivati s ovim uređajem.';
+  String get forgetDeviceConfirmMessage =>
+      'Omi se više neće povezivati s ovim uređajem.';
 
   @override
   String get deviceForgottenMessage => 'Uređaj je zaboravljen';
@@ -10450,13 +10919,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get vadGate => 'VAD Gate';
 
   @override
-  String get vadGateDescription => 'Preskače tiho audio prije transkripcije kako bi se smanjili troškovi.';
+  String get vadGateDescription =>
+      'Preskače tiho audio prije transkripcije kako bi se smanjili troškovi.';
 
   @override
   String get flashCustomFirmware => 'Instaliraj prilagođeni firmver';
 
   @override
-  String get flashCustomFirmwareDescription => 'Instalirajte prilagođene verzije firmvera';
+  String get flashCustomFirmwareDescription =>
+      'Instalirajte prilagođene verzije firmvera';
 
   @override
   String get selectFirmwareZip => 'Odaberite ZIP datoteku firmvera';
@@ -10483,7 +10954,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get keepSubscription => 'Zadrži pretplatu';
 
   @override
-  String get couldNotLoadPage => 'Stranica se nije mogla učitati. Provjerite vezu i pokušajte ponovo.';
+  String get couldNotLoadPage =>
+      'Stranica se nije mogla učitati. Provjerite vezu i pokušajte ponovo.';
 
   @override
   String leaveFlowStepOf(int current, int total) {
@@ -10491,7 +10963,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get sharedTasksLinkExpired => 'Ovi dijeljeni zadaci nisu pronađeni ili je link istekao.';
+  String get sharedTasksLinkExpired =>
+      'Ovi dijeljeni zadaci nisu pronađeni ili je link istekao.';
 
   @override
   String get sharedTasksUnknownSender => 'Neko';
@@ -10503,7 +10976,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get permissionAllowed => 'Dozvoljeno';
 
   @override
-  String get permissionBlockedHint => 'Isključeno u Postavkama. Dozvolite to tamo da biste ovo koristili.';
+  String get permissionBlockedHint =>
+      'Isključeno u Postavkama. Dozvolite to tamo da biste ovo koristili.';
 
   @override
   String get useDifferentAccount => 'Koristi drugi račun';
@@ -10547,7 +11021,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceConnecting => 'Povezivanje…';
 
   @override
-  String get recordOptionsTip => 'Savjet: dodirnite strelicu na dugmetu za snimanje da snimite telefonski poziv.';
+  String get recordOptionsTip =>
+      'Savjet: dodirnite strelicu na dugmetu za snimanje da snimite telefonski poziv.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Ažuriranje nije uspjelo';
@@ -10569,7 +11044,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get startUpdate => 'Pokreni ažuriranje';
 
   @override
-  String get otaNotSupported => 'Ovaj firmver se ne može ažurirati preko Wi-Fi mreže.';
+  String get otaNotSupported =>
+      'Ovaj firmver se ne može ažurirati preko Wi-Fi mreže.';
 
   @override
   String otaConnectFailed(String deviceName) {
@@ -10577,7 +11053,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get otaUpdateUnavailable => 'Ovo ažuriranje trenutno nije dostupno. Pokušajte kasnije.';
+  String get otaUpdateUnavailable =>
+      'Ovo ažuriranje trenutno nije dostupno. Pokušajte kasnije.';
 
   @override
   String get otaStarting => 'Pokretanje ažuriranja…';
@@ -10598,7 +11075,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get cancelUpdate => 'Otkaži ažuriranje';
 
   @override
-  String get otaKeepNearby => 'Tokom ažuriranja držite uređaj uključenim i blizu i ne zatvarajte aplikaciju.';
+  String get otaKeepNearby =>
+      'Tokom ažuriranja držite uređaj uključenim i blizu i ne zatvarajte aplikaciju.';
 
   @override
   String get otaWifiConnecting => 'Povezivanje na Wi-Fi…';
@@ -10607,13 +11085,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get otaWifiConnected => 'Povezano na Wi-Fi';
 
   @override
-  String get otaWifiFailed => 'Povezivanje na Wi-Fi nije uspjelo. Provjerite naziv mreže i lozinku.';
+  String get otaWifiFailed =>
+      'Povezivanje na Wi-Fi nije uspjelo. Provjerite naziv mreže i lozinku.';
 
   @override
-  String get otaDownloadFailed => 'Preuzimanje firmvera nije uspjelo. Provjerite Wi-Fi vezu i pokušajte ponovo.';
+  String get otaDownloadFailed =>
+      'Preuzimanje firmvera nije uspjelo. Provjerite Wi-Fi vezu i pokušajte ponovo.';
 
   @override
-  String get otaInstallFailed => 'Instalacija nije uspjela. Uređaj je i dalje na trenutnom firmveru.';
+  String get otaInstallFailed =>
+      'Instalacija nije uspjela. Uređaj je i dalje na trenutnom firmveru.';
 
   @override
   String otaUpdatedMessage(String deviceName) {
@@ -10644,7 +11125,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get discardRecordingTitle => 'Odbaciti snimanje?';
 
   @override
-  String get discardRecordingMessage => 'Vaš uzorak glasa još nije sačuvan. Ako sada izađete, bit će odbačen.';
+  String get discardRecordingMessage =>
+      'Vaš uzorak glasa još nije sačuvan. Ako sada izađete, bit će odbačen.';
 
   @override
   String get keepRecording => 'Nastavi snimanje';
@@ -10697,7 +11179,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appOptions => 'Opcije aplikacije';
 
   @override
-  String get cancelSubscriptionKeepAccessMessage => 'Pristup ćete zadržati do kraja trenutnog obračunskog perioda.';
+  String get cancelSubscriptionKeepAccessMessage =>
+      'Pristup ćete zadržati do kraja trenutnog obračunskog perioda.';
 
   @override
   String get chatSendMessage => 'Pošalji poruku';
@@ -10712,10 +11195,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatRemoveSelectedText => 'Ukloni citirani tekst';
 
   @override
-  String get chatOfflineHint => 'Niste na mreži. Ponovo se povežite da biste slali poruke.';
+  String get chatOfflineHint =>
+      'Niste na mreži. Ponovo se povežite da biste slali poruke.';
 
   @override
-  String get chatReplyFailed => 'Omi nije mogao odgovoriti. Provjerite vezu i pokušajte ponovo.';
+  String get chatReplyFailed =>
+      'Omi nije mogao odgovoriti. Provjerite vezu i pokušajte ponovo.';
 
   @override
   String disableAppNamed(String appName) {
@@ -10744,7 +11229,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get feedbackReasonIgnoredInstructions => 'Nije pratio upute';
 
   @override
-  String get additionalFeedbackOptional => 'Dodatne povratne informacije (neobavezno)';
+  String get additionalFeedbackOptional =>
+      'Dodatne povratne informacije (neobavezno)';
 
   @override
   String get helpful => 'Korisno';
@@ -10773,7 +11259,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get githubRepositoryUrl => 'URL GitHub repozitorija';
 
   @override
-  String get githubRepositoryUrlHint => 'Link na repozitorij izvornog koda vaše aplikacije';
+  String get githubRepositoryUrlHint =>
+      'Link na repozitorij izvornog koda vaše aplikacije';
 
   @override
   String get triggerEvents => 'Događaji pokretanja';
@@ -10785,7 +11272,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get scopes => 'Opsezi';
 
   @override
-  String get aiAppGeneratorBannerTitle => 'Napravite aplikaciju pomoću AI jednim dodirom';
+  String get aiAppGeneratorBannerTitle =>
+      'Napravite aplikaciju pomoću AI jednim dodirom';
 
   @override
   String get refreshManifest => 'Osvježi manifest';
@@ -10831,7 +11319,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get invalidWebhookUrlError => 'Unesite važeći webhook URL';
 
   @override
-  String get githubRepositoryUrlRequired => 'URL GitHub repozitorija je obavezan';
+  String get githubRepositoryUrlRequired =>
+      'URL GitHub repozitorija je obavezan';
 
   @override
   String get removeScreenshot => 'Ukloni snimak ekrana';
@@ -10889,7 +11378,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get captureRecordingSeparateConfirm => 'Odvoji';
 
   @override
-  String get captureRecordingSeparateFailed => 'Odvajanje nije uspjelo. Pokušajte ponovo.';
+  String get captureRecordingSeparateFailed =>
+      'Odvajanje nije uspjelo. Pokušajte ponovo.';
 
   @override
   String get captureRecordingOpenFailed => 'Nije moguće otvoriti ovaj snimak.';
@@ -10989,29 +11479,34 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptSaveVoicesTitle => 'Zapamti glasove osoba koje imenuješ';
+  String get speakerTagPromptSaveVoicesTitle =>
+      'Zapamti glasove osoba koje imenuješ';
 
   @override
   String get speakerTagPromptSaveVoicesBody =>
       'Omi čuva kratak uzorak glasa kako bi ih sljedeći put prepoznao. Ovo možete promijeniti bilo kada u Postavkama.';
 
   @override
-  String get speakerTagPromptThanks => 'Hvala! Omi će sve bolje prepoznavati glasove.';
+  String get speakerTagPromptThanks =>
+      'Hvala! Omi će sve bolje prepoznavati glasove.';
 
   @override
   String get speakerTagPromptNameHint => 'Ime osobe';
 
   @override
-  String get speakerTagPromptClipUnavailable => 'Nije moguće reproducirati ovaj isječak';
+  String get speakerTagPromptClipUnavailable =>
+      'Nije moguće reproducirati ovaj isječak';
 
   @override
-  String get speakerTagPromptAnswerFailed => 'Čuvanje nije uspjelo. Pokušajte ponovo.';
+  String get speakerTagPromptAnswerFailed =>
+      'Čuvanje nije uspjelo. Pokušajte ponovo.';
 
   @override
   String get voiceSettingsAskToTag => 'Traži od mene da označim glasove';
 
   @override
-  String get voiceSettingsAskToTagSubtitle => 'Povremeno Omi pita ko je govorio u vašim nedavnim razgovorima';
+  String get voiceSettingsAskToTagSubtitle =>
+      'Povremeno Omi pita ko je govorio u vašim nedavnim razgovorima';
 
   @override
   String get voiceSettingsSaveOthersSubtitle =>
@@ -11061,19 +11556,22 @@ class AppLocalizationsBs extends AppLocalizations {
   String get finish => 'Završi';
 
   @override
-  String get pendantPausedResumesWhenYouFinish => 'Privjesak pauziran · nastavlja kad završite';
+  String get pendantPausedResumesWhenYouFinish =>
+      'Privjesak pauziran · nastavlja kad završite';
 
   @override
   String get pendantIsListeningTitle => 'Vaš privjesak sluša';
 
   @override
-  String get oneSourceAtATime => 'Omi snima samo iz jednog izvora u isto vrijeme.';
+  String get oneSourceAtATime =>
+      'Omi snima samo iz jednog izvora u isto vrijeme.';
 
   @override
   String get recordWithPhoneInstead => 'Umjesto toga snimaj telefonom';
 
   @override
-  String get pendantPausesUntilYouFinish => 'Privjesak je pauziran dok ne završite';
+  String get pendantPausesUntilYouFinish =>
+      'Privjesak je pauziran dok ne završite';
 
   @override
   String get pendantPausesDuringCall => 'Privjesak je pauziran tokom poziva';
@@ -11091,7 +11589,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get openCall => 'Otvori poziv';
 
   @override
-  String get captureRecoveryBanner => 'Omi ne šalje zvuk — dodirnite za ponovno povezivanje';
+  String get captureRecoveryBanner =>
+      'Omi ne šalje zvuk — dodirnite za ponovno povezivanje';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11101,7 +11600,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get captureNotTranscribing => 'Nema transkripcije';
 
   @override
-  String get captureAudioSavedTranscribesLater => 'Zvuk je sačuvan, transkripcija kasnije';
+  String get captureAudioSavedTranscribesLater =>
+      'Zvuk je sačuvan, transkripcija kasnije';
 
   @override
   String get captureBannerTryReconnect => 'Pokušaj ponovo povezati';
@@ -11124,7 +11624,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Audio veza je prekinuta — transkripcija se nastavlja kad se oporavi';
 
   @override
-  String get captureIngressNeedsReconnect => 'Audio ne stiže do aplikacije — ponovo povežite Omi';
+  String get captureIngressNeedsReconnect =>
+      'Audio ne stiže do aplikacije — ponovo povežite Omi';
 
   @override
   String get captureIngressNeedsReconnectExplanation =>
@@ -11169,13 +11670,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingVoiceReplyTitle => 'Čujte Omijeve odgovore';
 
   @override
-  String get deviceOnboardingVoiceReplySample => 'U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.';
+  String get deviceOnboardingVoiceReplySample =>
+      'U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.';
 
   @override
   String get deviceOnboardingAllSetTitle => 'Sve je spremno';
 
   @override
-  String get deviceOnboardingAllSetSubtitle => 'Dodirnite red da ga pregledate ili promijenite.';
+  String get deviceOnboardingAllSetSubtitle =>
+      'Dodirnite red da ga pregledate ili promijenite.';
 
   @override
   String get deviceOnboardingAllSetSinglePressBadge => '1×';
@@ -11191,7 +11694,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingVoiceReplyPreviewIdle => 'Čuj svoj zadnji odgovor';
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Reprodukcija vašeg posljednjeg odgovora...';
+  String get deviceOnboardingVoiceReplyPreviewPlaying =>
+      'Reprodukcija vašeg posljednjeg odgovora...';
 
   @override
   String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
@@ -11199,23 +11703,28 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Preko zvučnika telefona';
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker =>
+      'Preko zvučnika telefona';
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Preko trenutnog audio izlaza';
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput =>
+      'Preko trenutnog audio izlaza';
 
   @override
-  String get deviceOnboardingVoiceReplyOffDescription => 'Odgovori ostaju na ekranu. Ništa se ne govori.';
+  String get deviceOnboardingVoiceReplyOffDescription =>
+      'Odgovori ostaju na ekranu. Ništa se ne govori.';
 
   @override
   String get deviceOnboardingVoiceReplyHeadphonesDescription =>
       'Privatno. Govori samo preko AirPods, Bluetooth ili žičanih slušalica.';
 
   @override
-  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Koristi zvučnik telefona kada nisu povezane slušalice.';
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Koristi zvučnik telefona kada nisu povezane slušalice.';
 
   @override
-  String get deviceOnboardingVoiceReplyStatusOff => 'Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.';
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.';
 
   @override
   String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
@@ -11232,15 +11741,23 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Reproducira se naglas preko zvučnika telefona.';
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Reproducira se naglas preko zvučnika telefona.';
 
   @override
-  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+  String deviceOnboardingVoiceReplySettingsHint(
+    String settings,
+    String voiceResponse,
+  ) {
     return 'Ovo možete promijeniti bilo kada u $settings › $voiceResponse';
   }
 
   @override
-  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+  String deviceOnboardingAllSetReplayHint(
+    String settings,
+    String deviceSettings,
+    String deviceTutorial,
+  ) {
     return 'Ponovite ovu turneju bilo kada u $settings › $deviceSettings › $deviceTutorial';
   }
 
@@ -11328,7 +11845,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceDiagnosticsTicket => 'Support ticket code';
 
   @override
-  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+  String get deviceDiagnosticsUploadFailed =>
+      'Could not send diagnostics to support. Please try again.';
 
   @override
   String get feedbackGiveFeedback => 'Give feedback';
@@ -11367,7 +11885,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
 
   @override
-  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+  String get feedbackReasonRecordingFragmentedOrDuplicated =>
+      'Fragmented or duplicated';
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
@@ -11524,7 +12043,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get meetingScreenshotsTitle => 'Šta je bilo na ekranu';
 
   @override
-  String get meetingScreenshotFallbackCaption => 'Snimak ekrana sa ovog sastanka';
+  String get meetingScreenshotFallbackCaption =>
+      'Snimak ekrana sa ovog sastanka';
 
   @override
   String get deleteMeetingScreenshotTitle => 'Izbrisati snimak ekrana?';
@@ -11615,7 +12135,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get confidenceReasonAutoOnly => 'Automatski označeno, još nije potvrđeno';
+  String get confidenceReasonAutoOnly =>
+      'Automatski označeno, još nije potvrđeno';
 
   @override
   String get confidenceReasonNeverConfirmed => 'Nikad potvrđeno';
@@ -11828,7 +12349,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get cleanUpBannerBody => 'Uglavnom pogrešno čuta imena. Pregledajte ih i uklonite ona koja nisu stvarna.';
+  String get cleanUpBannerBody =>
+      'Uglavnom pogrešno čuta imena. Pregledajte ih i uklonite ona koja nisu stvarna.';
 
   @override
   String get reviewAction => 'Pregledaj';
@@ -11849,7 +12371,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get cleanUpPinnedNote => 'Prikvačene osobe nikad nisu uključene u čišćenje.';
+  String get cleanUpPinnedNote =>
+      'Prikvačene osobe nikad nisu uključene u čišćenje.';
 
   @override
   String deletePeopleCountAction(int count) {
@@ -11890,7 +12413,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get ignoredVoicesTitle => 'Ignorisani glasovi';
 
   @override
-  String get ignoredVoicesSubtitle => 'TV, podcasti i drugi glasovi koje ste označili kao „Nije osoba“';
+  String get ignoredVoicesSubtitle =>
+      'TV, podcasti i drugi glasovi koje ste označili kao „Nije osoba“';
 
   @override
   String get ignoredVoicesEmpty => 'Nema ignorisanih glasova';
@@ -11917,7 +12441,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get speakerTagPromptClosestVoices => 'Najbliži glasovi';
 
   @override
-  String get speakerTagPromptRecentPeople => 'Osobe s kojima ste nedavno razgovarali';
+  String get speakerTagPromptRecentPeople =>
+      'Osobe s kojima ste nedavno razgovarali';
 
   @override
   String get voiceMatchClose => 'Blisko podudaranje';
@@ -11934,10 +12459,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintIdentify => 'Vaš odgovor pomaže Omiju da sljedeći put prepozna ovaj glas.';
+  String get speakerTagPromptHintIdentify =>
+      'Vaš odgovor pomaže Omiju da sljedeći put prepozna ovaj glas.';
 
   @override
-  String get speakerTagPromptHintOwner => 'Vaš odgovor označava samo pušteni isječak.';
+  String get speakerTagPromptHintOwner =>
+      'Vaš odgovor označava samo pušteni isječak.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -11984,7 +12511,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get speakerSuggestionAppliesToSpeaker => 'Odnosi se na svaki red ovog govornika';
+  String get speakerSuggestionAppliesToSpeaker =>
+      'Odnosi se na svaki red ovog govornika';
 
   @override
   String get collapseAction => 'Sažmi';
@@ -12017,7 +12545,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get updateAvailableTitle => 'Dostupno je ažuriranje';
 
   @override
-  String get updateAvailableMessage => 'Nova verzija Omija je spremna, s ispravkama i poboljšanjima.';
+  String get updateAvailableMessage =>
+      'Nova verzija Omija je spremna, s ispravkama i poboljšanjima.';
 
   @override
   String get updateRequiredTitle => 'Potrebno je ažuriranje';
@@ -12042,7 +12571,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get autoRemoveSyncedCopiesTitle => 'Automatski ukloni sinhronizirane kopije';
+  String get autoRemoveSyncedCopiesTitle =>
+      'Automatski ukloni sinhronizirane kopije';
 
   @override
   String autoRemoveSyncedCopiesDays(int days) {
@@ -12067,29 +12597,25 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String speakerLabelVoiceStatus(String state) {
-    String _temp0 = intl.Intl.selectLogic(
-      state,
-      {
-        'learned': 'Glas je naučen',
-        'pending': 'Učenje glasa…',
-        'disabled': 'Spremanje glasa je isključeno',
-        'other': 'Glas još nije naučen',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'learned': 'Glas je naučen',
+      'pending': 'Učenje glasa…',
+      'disabled': 'Spremanje glasa je isključeno',
+      'other': 'Glas još nije naučen',
+    });
     return '$_temp0';
   }
 
   @override
   String speakerLabelVoiceDetail(String state, String name) {
-    String _temp0 = intl.Intl.selectLogic(
-      state,
-      {
-        'learned': 'Omi će prepoznati osobu $name sljedeći put.',
-        'pending': 'Ovo traje nekoliko sekundi.',
-        'disabled': 'Uključite spremanje glasova u postavkama da bi Omi mogao prepoznati osobu $name.',
-        'other': 'Omi treba više jasnog govora osobe $name i nastavit će pokušavati.',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'learned': 'Omi će prepoznati osobu $name sljedeći put.',
+      'pending': 'Ovo traje nekoliko sekundi.',
+      'disabled':
+          'Uključite spremanje glasova u postavkama da bi Omi mogao prepoznati osobu $name.',
+      'other':
+          'Omi treba više jasnog govora osobe $name i nastavit će pokušavati.',
+    });
     return '$_temp0';
   }
 
@@ -12106,18 +12632,15 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String speakerLabelText(String part, String name) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'likely': 'Vjerovatno',
-        'soundsLike': 'Zvuči kao $name',
-        'notPerson': 'Nije $name',
-        'alsoTitle': 'Je li ovo također $name?',
-        'alsoBody': 'Omi je pronašao isti glas u ranijim razgovorima.',
-        'confirmed': 'Potvrdili ste ovu oznaku',
-        'other': 'Pregledaj',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'likely': 'Vjerovatno',
+      'soundsLike': 'Zvuči kao $name',
+      'notPerson': 'Nije $name',
+      'alsoTitle': 'Je li ovo također $name?',
+      'alsoBody': 'Omi je pronašao isti glas u ranijim razgovorima.',
+      'confirmed': 'Potvrdili ste ovu oznaku',
+      'other': 'Pregledaj',
+    });
     return '$_temp0';
   }
 
@@ -12191,19 +12714,23 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatReplyOffline => 'Nije moguće povezivanje. Provjerite vezu i pokušajte ponovo.';
+  String get chatReplyOffline =>
+      'Nije moguće povezivanje. Provjerite vezu i pokušajte ponovo.';
 
   @override
-  String get chatReplyServerError => 'Nešto je pošlo po zlu s naše strane. Pokušajte ponovo.';
+  String get chatReplyServerError =>
+      'Nešto je pošlo po zlu s naše strane. Pokušajte ponovo.';
 
   @override
   String get chatReplyTimeout => 'Odgovor je predugo trajao. Pokušajte ponovo.';
 
   @override
-  String get chatReplyNotSignedIn => 'Niste prijavljeni. Prijavite se i pokušajte ponovo.';
+  String get chatReplyNotSignedIn =>
+      'Niste prijavljeni. Prijavite se i pokušajte ponovo.';
 
   @override
-  String get chatAppsLoadFailed => 'Nije moguće učitati aplikacije za ćaskanje. Pokušajte ponovo.';
+  String get chatAppsLoadFailed =>
+      'Nije moguće učitati aplikacije za ćaskanje. Pokušajte ponovo.';
 
   @override
   String get assistantVoiceSettingsTitle => 'Glas';
@@ -12212,13 +12739,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get assistantVoice => 'Glas asistenta';
 
   @override
-  String get voiceSharedAcrossDevices => 'Vaš izbor glasa dijeli se između mobilne i desktop aplikacije.';
+  String get voiceSharedAcrossDevices =>
+      'Vaš izbor glasa dijeli se između mobilne i desktop aplikacije.';
 
   @override
   String get readChatRepliesAloud => 'Čitaj odgovore iz chata naglas';
 
   @override
-  String get readChatRepliesAloudDescription => 'Govori samo kada to dozvoli \"Glasovni odgovor\".';
+  String get readChatRepliesAloudDescription =>
+      'Govori samo kada to dozvoli \"Glasovni odgovor\".';
 
   @override
   String get voicePreviewSample => 'Zdravo, ja sam Omi. Ovo je moj glas.';
@@ -12253,7 +12782,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get processingConversationProgress => 'Obrada razgovora…';
 
   @override
-  String get conversationProcessingFailedMessage => 'Ovaj razgovor nije moguće obraditi.';
+  String get conversationProcessingFailedMessage =>
+      'Ovaj razgovor nije moguće obraditi.';
 
   @override
   String get waitForReprocessing => 'Sačekajte da se ponovna obrada završi.';
@@ -12262,7 +12792,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get unnamedSpeakerLabel => 'Govornik';
 
   @override
-  String get unresolvedSpeakersNotice => 'Oznake govornika možda se ne podudaraju između snimaka u ovom razgovoru.';
+  String get unresolvedSpeakersNotice =>
+      'Oznake govornika možda se ne podudaraju između snimaka u ovom razgovoru.';
 
   @override
   String get unresolvedSpeakersTitle => 'O oznakama govornika';
@@ -12315,7 +12846,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingSetupStepWorkspace => 'Pripremamo tvoj radni prostor';
 
   @override
-  String get onboardingSetupStepLanguage => 'Prilagođavamo transkripciju tvom jeziku';
+  String get onboardingSetupStepLanguage =>
+      'Prilagođavamo transkripciju tvom jeziku';
 
   @override
   String get onboardingSetupStepMemory => 'Postavljamo tvoju memoriju';
@@ -12342,16 +12874,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get importTranscriptFiles => 'Datoteke transkripta';
 
   @override
-  String get importTranscriptFilesDescription => 'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
+  String get importTranscriptFilesDescription =>
+      'Odaberite SRT, VTT ili TXT transkripte ili ZIP s njima';
 
   @override
-  String get importTooManyAttempts => 'Trenutno ima previše uvoza. Pokušajte ponovo kasnije.';
+  String get importTooManyAttempts =>
+      'Trenutno ima previše uvoza. Pokušajte ponovo kasnije.';
 
   @override
   String get importFileTooLarge => 'Ova datoteka je prevelika za uvoz.';
 
   @override
-  String get importUnsupportedFileType => 'Ova vrsta datoteke se ne može uvesti.';
+  String get importUnsupportedFileType =>
+      'Ova vrsta datoteke se ne može uvesti.';
 
   @override
   String get reviewTitle => 'Pregled';
@@ -12397,7 +12932,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reviewAddTask => 'Dodaj zadatak';
 
   @override
-  String get reviewAnswerFailed => 'Nije moguće spremiti odgovor. Pokušajte ponovo.';
+  String get reviewAnswerFailed =>
+      'Nije moguće spremiti odgovor. Pokušajte ponovo.';
 
   @override
   String reviewAnswersConversations(int count) {
@@ -12488,7 +13024,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reviewChangeUndone => 'Poništeno. Omi ovo neće ponoviti sam.';
 
   @override
-  String get reviewChangeFailed => 'Nije moguće ažurirati ovu promjenu. Pokušajte ponovo.';
+  String get reviewChangeFailed =>
+      'Nije moguće ažurirati ovu promjenu. Pokušajte ponovo.';
 
   @override
   String get reviewChangesLoadFailed => 'Nije moguće učitati nedavne promjene.';
@@ -12497,7 +13034,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reviewNoChangesTitle => 'Još nema promjena';
 
   @override
-  String get reviewNoChangesBody => 'Kada Omi uredi vaše bilješke, promjene će se pojaviti ovdje.';
+  String get reviewNoChangesBody =>
+      'Kada Omi uredi vaše bilješke, promjene će se pojaviti ovdje.';
 
   @override
   String get reviewChangesSectionTerms => 'Imena i pojmovi';
@@ -12571,7 +13109,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get entityCorrectionSaved => 'Hvala. Omi će to popraviti.';
 
   @override
-  String get entityCorrectionFailed => 'Nije moguće poslati ispravku. Pokušajte ponovo.';
+  String get entityCorrectionFailed =>
+      'Nije moguće poslati ispravku. Pokušajte ponovo.';
 
   @override
   String get entityLoadFailed => 'Nije moguće učitati ovu stranicu.';
@@ -12634,10 +13173,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get dreamReportRunLimit => 'Danas nema više ručnih pokretanja';
 
   @override
-  String get dreamReportRunInProgress => 'Prolaz je već u toku. Pokušajte ponovo za minut.';
+  String get dreamReportRunInProgress =>
+      'Prolaz je već u toku. Pokušajte ponovo za minut.';
 
   @override
-  String get dreamReportRunFailed => 'Dream nije moguće pokrenuti. Pokušajte ponovo.';
+  String get dreamReportRunFailed =>
+      'Dream nije moguće pokrenuti. Pokušajte ponovo.';
 
   @override
   String get dreamReportIdle => 'Zasad nema ničeg novog za pregled.';
@@ -12649,7 +13190,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get dreamReportEmptyTitle => 'Još nema prolaza';
 
   @override
-  String get dreamReportEmptyBody => 'Dream otprilike jednom na sat pregleda šta se promijenilo u vašem računu.';
+  String get dreamReportEmptyBody =>
+      'Dream otprilike jednom na sat pregleda šta se promijenilo u vašem računu.';
 
   @override
   String get dreamReportScheduled => 'Zakazano';
@@ -12762,10 +13304,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptExcerptSaved => 'Odgovor je sačuvan za ovaj isječak.';
+  String get speakerTagPromptExcerptSaved =>
+      'Odgovor je sačuvan za ovaj isječak.';
 
   @override
-  String get pinPersonDescription => 'Prikvačene osobe ostaju na vrhu vaše liste Osobe i ne uklanja ih Čišćenje.';
+  String get pinPersonDescription =>
+      'Prikvačene osobe ostaju na vrhu vaše liste Osobe i ne uklanja ih Čišćenje.';
 
   @override
   String get chatAppsProblemFailed => 'Nešto je pošlo naopako. Pokušaj ponovo.';
@@ -12776,7 +13320,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsRefreshFailed => 'Osvježavanje nije uspjelo. Prikazujemo ono što smo posljednje vidjeli.';
+  String get chatAppsRefreshFailed =>
+      'Osvježavanje nije uspjelo. Prikazujemo ono što smo posljednje vidjeli.';
 
   @override
   String chatAppsReadOnlyBanner(String app) {
@@ -12784,7 +13329,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsWaitlistConfirmed => 'Hvala. WhatsApp će se pojaviti ovdje kad bude spreman.';
+  String get chatAppsWaitlistConfirmed =>
+      'Hvala. WhatsApp će se pojaviti ovdje kad bude spreman.';
 
   @override
   String get chatAppsUseTelegramForNow => 'Za sada koristi Telegram';
@@ -12812,7 +13358,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsConnectTelegramMessage => 'Omi će otvoriti Telegram s privatnim linkom koji je samo za tebe.';
+  String get chatAppsConnectTelegramMessage =>
+      'Omi će otvoriti Telegram s privatnim linkom koji je samo za tebe.';
 
   @override
   String get chatAppsOpenMessages => 'Otvori Poruke';
@@ -12859,13 +13406,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsProPerkContext => 'Omi pamti kontekst u svakoj aplikaciji';
 
   @override
-  String get chatAppsWhatsAppMeantime => 'Telegram i iMessage rade već danas, s istim uspomenama i zadacima.';
+  String get chatAppsWhatsAppMeantime =>
+      'Telegram i iMessage rade već danas, s istim uspomenama i zadacima.';
 
   @override
   String get chatAppsComingLater => 'Uskoro';
 
   @override
-  String get chatAppsProblemRateLimited => 'Previše pokušaja. Sačekaj minut i pokušaj ponovo.';
+  String get chatAppsProblemRateLimited =>
+      'Previše pokušaja. Sačekaj minut i pokušaj ponovo.';
 
   @override
   String get chatAppsMessage => 'Poruka';
@@ -12893,7 +13442,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsProPerkText => 'Piši Omiju iz Telegrama i iMessagea';
 
   @override
-  String get chatAppsVoiceNotesSubtitle => 'Pošalji glasovnu poruku i Omi će odgovoriti na nju.';
+  String get chatAppsVoiceNotesSubtitle =>
+      'Pošalji glasovnu poruku i Omi će odgovoriti na nju.';
 
   @override
   String get chatAppsPartOfPro => 'Chat aplikacije su dio Proa';
@@ -12915,7 +13465,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsChannelsTitle => 'Chat aplikacije';
 
   @override
-  String get chatAppsDoesAnswer => 'Odgovara na pitanja o tvojim razgovorima i uspomenama';
+  String get chatAppsDoesAnswer =>
+      'Odgovara na pitanja o tvojim razgovorima i uspomenama';
 
   @override
   String chatAppsChannelChats(String app) {
@@ -12929,7 +13480,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsLink => 'Link';
 
   @override
-  String get chatAppsNeverMessagesOthers => 'Nikada ne piše drugim ljudima umjesto tebe';
+  String get chatAppsNeverMessagesOthers =>
+      'Nikada ne piše drugim ljudima umjesto tebe';
 
   @override
   String get chatAppsNotConnectedTitle => 'Nije povezano';
@@ -12939,7 +13491,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Telegram takođe pohranjuje tvoje razgovore s Omijem. Omi odgovara samo tebi, nikada drugim ljudima, a možeš ga odvojiti kad god želiš.';
 
   @override
-  String get chatAppsProblemOffline => 'Offline si. Provjeri vezu i pokušaj ponovo.';
+  String get chatAppsProblemOffline =>
+      'Offline si. Provjeri vezu i pokušaj ponovo.';
 
   @override
   String get chatAppsIMessageSubtitle => 'Piši Omiju s broja svog telefona';
@@ -12951,13 +13504,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsConnectTelegramTitle => 'Poveži Telegram';
 
   @override
-  String get chatAppsInsightsSubtitle => 'Dozvoli Omiju da ti ovdje šalje sažetak ili uvid.';
+  String get chatAppsInsightsSubtitle =>
+      'Dozvoli Omiju da ti ovdje šalje sažetak ili uvid.';
 
   @override
-  String get chatAppsTelegramWaiting => 'Čekamo da dodirneš Pokreni u Telegramu…';
+  String get chatAppsTelegramWaiting =>
+      'Čekamo da dodirneš Pokreni u Telegramu…';
 
   @override
-  String get chatAppsEntrySubtitle => 'Razgovaraj s Omijem iz aplikacija koje svaki dan koristiš.';
+  String get chatAppsEntrySubtitle =>
+      'Razgovaraj s Omijem iz aplikacija koje svaki dan koristiš.';
 
   @override
   String chatAppsConnectedAs(String handle) {
@@ -12965,10 +13521,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsProPerkSave => 'Spremaj uspomene i upravljaj zadacima direktno iz chata';
+  String get chatAppsProPerkSave =>
+      'Spremaj uspomene i upravljaj zadacima direktno iz chata';
 
   @override
-  String get chatAppsConnectIMessageTitle => 'Pošalji poruku Omiju da se poveže';
+  String get chatAppsConnectIMessageTitle =>
+      'Pošalji poruku Omiju da se poveže';
 
   @override
   String get chatAppsWaitingMessage =>
@@ -12978,7 +13536,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsShowInApp => 'Prikaži ove razgovore u aplikaciji Omi';
 
   @override
-  String get chatAppsCodeExpiredMessage => 'Uzmi novi kod i pošalji ga iz Poruka.';
+  String get chatAppsCodeExpiredMessage =>
+      'Uzmi novi kod i pošalji ga iz Poruka.';
 
   @override
   String get chatAppsNoMessages => 'Nema poruka';
@@ -12998,7 +13557,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsNotConnectedMessage => 'Ova chat aplikacija je odvojena.';
 
   @override
-  String get chatAppsRepliesOnlyNote => 'Omi odgovara samo tebi. Nikada ne piše prvi.';
+  String get chatAppsRepliesOnlyNote =>
+      'Omi odgovara samo tebi. Nikada ne piše prvi.';
 
   @override
   String chatAppsDisconnectFooter(String app) {
@@ -13014,10 +13574,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsTryAsking => 'Probaj pitati';
 
   @override
-  String get chatAppsTelegramStepReturn => 'Vrati se ovdje. Potvrdit ćemo da je uspjelo.';
+  String get chatAppsTelegramStepReturn =>
+      'Vrati se ovdje. Potvrdit ćemo da je uspjelo.';
 
   @override
-  String get chatAppsDoesFiles => 'Šalje i prima fajlove, fotografije i glasovne poruke';
+  String get chatAppsDoesFiles =>
+      'Šalje i prima fajlove, fotografije i glasovne poruke';
 
   @override
   String get chatAppsTryWeek => 'Sažmi moju sedmicu u tri reda';
@@ -13034,7 +13596,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsCodeExpiredTitle => 'Ovaj kod je istekao';
 
   @override
-  String get chatAppsProblemUnavailable => 'Chat aplikacije još nisu dostupne za tvoj nalog.';
+  String get chatAppsProblemUnavailable =>
+      'Chat aplikacije još nisu dostupne za tvoj nalog.';
 
   @override
   String get chatAppsWhatOmiDoes => 'Šta Omi radi u chat aplikacijama';
@@ -13063,7 +13626,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsTelegramStepOpen => 'Dodirni Otvori Telegram ispod';
 
   @override
-  String get chatAppsShowInAppOn => 'Uključeno: pojavljuju se u aplikaciji Omi kao razgovori samo za čitanje.';
+  String get chatAppsShowInAppOn =>
+      'Uključeno: pojavljuju se u aplikaciji Omi kao razgovori samo za čitanje.';
 
   @override
   String chatAppsDisconnectChannel(String app) {
@@ -13071,7 +13635,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsTelegramStepStart => 'Dodirni Pokreni u razgovoru s Omijem';
+  String get chatAppsTelegramStepStart =>
+      'Dodirni Pokreni u razgovoru s Omijem';
 
   @override
   String get chatAppsLocked => 'Zahtijeva Omi Pro';
@@ -13113,7 +13678,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get chatAppsLinkExpired => 'Taj link je istekao. Dodirni Otvori Telegram za novi.';
+  String get chatAppsLinkExpired =>
+      'Taj link je istekao. Dodirni Otvori Telegram za novi.';
 
   @override
   String chatAppsIMessageTo(String address) {
@@ -13178,7 +13744,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallRecommended => 'Preporučeno';
 
   @override
-  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+  String get paywallNoPlans =>
+      'Plans aren\'t available right now. Try again in a minute.';
 
   @override
   String get paywallOtherPlans => 'Pogledaj sve planove';
@@ -13199,7 +13766,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallManageBilling => 'Manage billing';
 
   @override
-  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+  String get paywallLoadError =>
+      'Couldn\'t load plans. Check your connection and try again.';
 
   @override
   String get paywallPlans => 'Plans';
@@ -13208,7 +13776,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
-  String get firstCaptureDescription => 'Choose how you want to capture your first conversation.';
+  String get firstCaptureDescription =>
+      'Choose how you want to capture your first conversation.';
 
   @override
   String get firstCaptureOmi => 'I Have an Omi';
@@ -13223,7 +13792,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureConnectTitle => 'Povežite svoj Omi';
 
   @override
-  String get firstCaptureConnectDescription => 'Uparite svoj Omi i on će snimati vaše razgovore bez ruku, cijeli dan.';
+  String get firstCaptureConnectDescription =>
+      'Uparite svoj Omi i on će snimati vaše razgovore bez ruku, cijeli dan.';
 
   @override
   String get firstCaptureConnect => 'Poveži moj Omi';
@@ -13260,7 +13830,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureResult => 'Your first conversation';
 
   @override
-  String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
+  String get firstCaptureEmpty =>
+      'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
   String get watchCaptureTitle => 'Record from your Apple Watch';
@@ -13269,19 +13840,23 @@ class AppLocalizationsBs extends AppLocalizations {
   String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
 
   @override
-  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+  String get watchCaptureRecord =>
+      'Tap Record. Allow microphone access if asked.';
 
   @override
   String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
 
   @override
-  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+  String get pairingBluetoothOff =>
+      'Turn on Bluetooth on your phone, then try again.';
 
   @override
-  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+  String get pairingBluetoothPermission =>
+      'Allow Bluetooth access for Omi in Settings, then try again.';
 
   @override
-  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+  String get pairingNearbyPermission =>
+      'Allow Nearby devices access for Omi in Settings, then try again.';
 
   @override
   String get pairingLocationPermission =>
@@ -13292,7 +13867,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
 
   @override
-  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+  String get pairingBondRecovery =>
+      'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
 
   @override
   String get pairingHowTo => 'How to pair';
@@ -13324,7 +13900,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureShortTitle => 'Finish This Recording?';
 
   @override
-  String get firstCaptureShortWarning => 'A few more sentences help Omi understand you. About 30 seconds is ideal.';
+  String get firstCaptureShortWarning =>
+      'A few more sentences help Omi understand you. About 30 seconds is ideal.';
 
   @override
   String get firstCaptureCancelTitle => 'Leave This Recording?';
@@ -13337,23 +13914,27 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
 
   @override
-  String get paywallOutlineHeadline => 'Nikad više ne propustite nijednu riječ.';
+  String get paywallOutlineHeadline =>
+      'Nikad više ne propustite nijednu riječ.';
 
   @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
-  String get paywallTrialHeadline => 'Evo kako funkcioniše vaše besplatno probno razdoblje.';
+  String get paywallTrialHeadline =>
+      'Evo kako funkcioniše vaše besplatno probno razdoblje.';
 
   @override
-  String get paywallTrialSlideSummariesTitle => 'Neograničeni sažeci, zauvijek sačuvani';
+  String get paywallTrialSlideSummariesTitle =>
+      'Neograničeni sažeci, zauvijek sačuvani';
 
   @override
   String get paywallTrialSlideSummariesBody =>
       'Svaki razgovor postaje jasan sažetak sa sljedećim koracima, tako da ništa ne propustite.';
 
   @override
-  String get paywallTrialSlideTranscriptionTitle => 'Najbolja transkripcija u klasi';
+  String get paywallTrialSlideTranscriptionTitle =>
+      'Najbolja transkripcija u klasi';
 
   @override
   String get paywallTrialChipDetails => 'Hvata više detalja';
@@ -13371,22 +13952,28 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallTrialChipJargon => 'Poznaje vaš žargon i imena';
 
   @override
-  String get paywallTrialSlideSpeakersTitle => 'Imena govornika, automatski detektovana';
+  String get paywallTrialSlideSpeakersTitle =>
+      'Imena govornika, automatski detektovana';
 
   @override
-  String get paywallTrialSlideAskTitle => 'Neograničena pitanja, kroz svaki razgovor';
+  String get paywallTrialSlideAskTitle =>
+      'Neograničena pitanja, kroz svaki razgovor';
 
   @override
-  String get paywallTrialBubbleFollowUp => 'Napišite prateći email sa ovog sastanka.';
+  String get paywallTrialBubbleFollowUp =>
+      'Napišite prateći email sa ovog sastanka.';
 
   @override
-  String get paywallTrialBubbleConflicts => 'Ima li sukoba sa onim što je John rekao u utorak?';
+  String get paywallTrialBubbleConflicts =>
+      'Ima li sukoba sa onim što je John rekao u utorak?';
 
   @override
-  String get paywallTrialBubbleBlockers => 'Pronađite sve što bi nas moglo usporiti.';
+  String get paywallTrialBubbleBlockers =>
+      'Pronađite sve što bi nas moglo usporiti.';
 
   @override
-  String get paywallTrialSlideAppsTitle => 'Radi sa vašim omiljenim aplikacijama';
+  String get paywallTrialSlideAppsTitle =>
+      'Radi sa vašim omiljenim aplikacijama';
 
   @override
   String get paywallTrialTodayTitle => 'Danas';
@@ -13410,7 +13997,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialEndsBody => 'Probno razdoblje ističe. Bit ćete naplaćeni osim ako ne otkažete.';
+  String get paywallTrialEndsBody =>
+      'Probno razdoblje ističe. Bit ćete naplaćeni osim ako ne otkažete.';
 
   @override
   String get paywallTrialFeatureModels => 'Najnoviji AI modeli';
@@ -13438,7 +14026,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallTrialSecondary => 'Nastavite sa besplatnim planom';
 
   @override
-  String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez kazni.';
+  String get paywallTrialCancelNote =>
+      'Otkažite bilo kada. Bez naknada, bez kazni.';
 
   @override
   String paywallTrialStarted(int days) {
@@ -13452,7 +14041,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get connectAnAgent => 'Povežite agenta';
 
   @override
-  String get connectAnAgentSubtitle => 'Preuzmite upit za postavljanje za Claude, ChatGPT, Codex ili bilo kojeg agenta';
+  String get connectAnAgentSubtitle =>
+      'Preuzmite upit za postavljanje za Claude, ChatGPT, Codex ili bilo kojeg agenta';
 
   @override
   String syncCardSyncingAmount(String amount) {
@@ -13544,7 +14134,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get chatAppsOnWaitlist => 'Na listi čekanja ste';
 
   @override
-  String get chatAppsWaitlistJoined => 'Na listi čekanja ste. Javit ćemo vam kad bude mjesta.';
+  String get chatAppsWaitlistJoined =>
+      'Na listi čekanja ste. Javit ćemo vam kad bude mjesta.';
 
   @override
   String onboardingActCongratsTitle(String name) {
@@ -13565,7 +14156,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingActDemoTitle => 'Ručak sa Sam';
 
   @override
-  String get onboardingActDictateBody => 'Recite to na svoj način. Omi će se pobrinuti za ostalo.';
+  String get onboardingActDictateBody =>
+      'Recite to na svoj način. Omi će se pobrinuti za ostalo.';
 
   @override
   String get onboardingActDictateBodyOmi => 'Samo pričajte. Vaš Omi sluša.';
@@ -13593,16 +14185,19 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingActMicBody => 'Da vas Omi čuje kad mu se obratite.';
 
   @override
-  String get onboardingActMicFallbackBody => 'Omi još ne šalje zvuk. Za sada koristite telefon.';
+  String get onboardingActMicFallbackBody =>
+      'Omi još ne šalje zvuk. Za sada koristite telefon.';
 
   @override
   String get onboardingActMicTitle => 'Omi treba vaš mikrofon';
 
   @override
-  String get onboardingActNoAudioOmi => 'Ne čujemo Omi. Provjerite je li uključen i blizu.';
+  String get onboardingActNoAudioOmi =>
+      'Ne čujemo Omi. Provjerite je li uključen i blizu.';
 
   @override
-  String get onboardingActNoAudioPhone => 'Još vas ne čujemo. Pokušajte govoriti malo glasnije.';
+  String get onboardingActNoAudioPhone =>
+      'Još vas ne čujemo. Pokušajte govoriti malo glasnije.';
 
   @override
   String get onboardingActNotesLabel => 'Vaš dan, ukratko';
@@ -13632,7 +14227,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingConnectOmi => 'Povežite Omi';
 
   @override
-  String get onboardingConnectTapToConnect => 'Dodirnite svoj Omi da se povežete.';
+  String get onboardingConnectTapToConnect =>
+      'Dodirnite svoj Omi da se povežete.';
 
   @override
   String get onboardingNoOmiYet => 'Još nemate Omi?';
@@ -13717,10 +14313,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get attentionSummaryFailed => 'Ovaj razgovor nije bilo moguće sažeti';
 
   @override
-  String get connectAgentHeadline => 'Koristite svoju Omi memoriju u ChatGPT-u i svojim AI agentima';
+  String get connectAgentHeadline =>
+      'Koristite svoju Omi memoriju u ChatGPT-u i svojim AI agentima';
 
   @override
-  String get connectAgentIntro => 'Povežite se jednom. Zatim ih pitajte o svojim razgovorima, uspomenama i zadacima.';
+  String get connectAgentIntro =>
+      'Povežite se jednom. Zatim ih pitajte o svojim razgovorima, uspomenama i zadacima.';
 
   @override
   String get connectAgentOneTap => 'Jednim dodirom';
@@ -13763,13 +14361,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get connectChatGptStepOpen => 'Otvaramo Omi u ChatGPT-u';
 
   @override
-  String get connectChatGptStepOpenBody => 'ChatGPT se otvara direktno na stranici aplikacije Omi.';
+  String get connectChatGptStepOpenBody =>
+      'ChatGPT se otvara direktno na stranici aplikacije Omi.';
 
   @override
-  String get connectChatGptStepApprove => 'Dodirnite „Poveži“, zatim se prijavite u Omi';
+  String get connectChatGptStepApprove =>
+      'Dodirnite „Poveži“, zatim se prijavite u Omi';
 
   @override
-  String get connectChatGptStepApproveBody => 'Koristite isti račun koji koristite ovdje.';
+  String get connectChatGptStepApproveBody =>
+      'Koristite isti račun koji koristite ovdje.';
 
   @override
   String get connectChatGptStepReturn => 'Vratite se u Omi';
@@ -13787,13 +14388,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get tryAskingChatGpt => 'Pokušajte pitati ChatGPT';
 
   @override
-  String get tryAskingChatGptFooter => 'Dodirnite jedno da otvorite ChatGPT s već upisanim pitanjem.';
+  String get tryAskingChatGptFooter =>
+      'Dodirnite jedno da otvorite ChatGPT s već upisanim pitanjem.';
 
   @override
-  String get chatGptExampleMeetings => 'Na šta sam pristao na jučerašnjim sastancima?';
+  String get chatGptExampleMeetings =>
+      'Na šta sam pristao na jučerašnjim sastancima?';
 
   @override
-  String get chatGptExampleTasks => 'Pretvori moje otvorene Omi zadatke u plan za ovu sedmicu.';
+  String get chatGptExampleTasks =>
+      'Pretvori moje otvorene Omi zadatke u plan za ovu sedmicu.';
 
   @override
   String get chatGptExampleGoals => 'Šta Omi zna o mojim ciljevima?';
@@ -13805,7 +14409,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get disconnectChatGptQuestion => 'Isključiti ChatGPT?';
 
   @override
-  String get disconnectChatGptMessage => 'ChatGPT više neće moći čitati vaše Omi uspomene, razgovore ni zadatke.';
+  String get disconnectChatGptMessage =>
+      'ChatGPT više neće moći čitati vaše Omi uspomene, razgovore ni zadatke.';
 
   @override
   String connectAgentNamed(String name) {
@@ -13818,7 +14423,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get connectAgentGenericPromptSubtitle => 'Zalijepite jedan prompt. Vaš agent postavlja Omi na svom računaru.';
+  String get connectAgentGenericPromptSubtitle =>
+      'Zalijepite jedan prompt. Vaš agent postavlja Omi na svom računaru.';
 
   @override
   String connectAgentKeyCreated(String name) {
@@ -13833,7 +14439,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get connectAgentPreparing => 'Pravimo ključ i sigurni link…';
 
   @override
-  String get connectAgentPrepareFailed => 'Nije moguće napraviti ključ. Provjerite vezu i pokušajte ponovo.';
+  String get connectAgentPrepareFailed =>
+      'Nije moguće napraviti ključ. Provjerite vezu i pokušajte ponovo.';
 
   @override
   String get copyPrompt => 'Kopiraj prompt';
@@ -13872,7 +14479,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get askYourQuestion => 'Vaše pitanje';
 
   @override
-  String get askSuggestFollowUp => 'Napiši nacrt e-maila za praćenje na osnovu ovog razgovora.';
+  String get askSuggestFollowUp =>
+      'Napiši nacrt e-maila za praćenje na osnovu ovog razgovora.';
 
   @override
   String get askSuggestCommitments => 'Šta sam obećao u ovom razgovoru?';
@@ -13887,13 +14495,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String get copyForAnyApp => 'Kopiraj za bilo koju aplikaciju';
 
   @override
-  String get askConnectChatGptFirst => 'Povežite ChatGPT jednom da biste ga pitali o svojim razgovorima.';
+  String get askConnectChatGptFirst =>
+      'Povežite ChatGPT jednom da biste ga pitali o svojim razgovorima.';
 
   @override
   String get reconnect => 'Ponovo poveži';
 
   @override
-  String get chatGptNeedsReconnect => 'Potreban je dodatni pristup. Ponovo poveži da popraviš.';
+  String get chatGptNeedsReconnect =>
+      'Potreban je dodatni pristup. Ponovo poveži da popraviš.';
 
   @override
   String get connectAgentWaiting => 'Čeka se da agent upotrijebi svoj ključ';
@@ -13907,7 +14517,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryNotSummarizedYet => 'Još nije sažeto';
 
   @override
-  String get summaryEmptyStateBody => 'Omi može ovaj razgovor pretvoriti u pregled, ključne tačke i zadatke.';
+  String get summaryEmptyStateBody =>
+      'Omi može ovaj razgovor pretvoriti u pregled, ključne tačke i zadatke.';
 
   @override
   String get summaryWithOmi => 'Sažmi pomoću Omi';
@@ -13948,10 +14559,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryUseForNewConversations => 'Postavi kao moj zadani';
 
   @override
-  String get summaryTemplatesLoadFailed => 'Nije moguće učitati vaše šablone. Omi i dalje radi.';
+  String get summaryTemplatesLoadFailed =>
+      'Nije moguće učitati vaše šablone. Omi i dalje radi.';
 
   @override
-  String get summaryNoTemplatesYet => 'Još niste dodali nijedan šablon. Pregledajte neke ili napravite vlastiti.';
+  String get summaryNoTemplatesYet =>
+      'Još niste dodali nijedan šablon. Pregledajte neke ili napravite vlastiti.';
 
   @override
   String summarySummarizingWith(String name) {
@@ -13964,7 +14577,8 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get summaryTemplateFailedBody => 'Šablon nije vratio sažetak za ovaj razgovor.';
+  String get summaryTemplateFailedBody =>
+      'Šablon nije vratio sažetak za ovaj razgovor.';
 
   @override
   String get summaryWithOmiInstead => 'Ipak sažmi pomoću Omi';
@@ -13973,7 +14587,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryBusyTitle => 'Obrada je još u toku';
 
   @override
-  String get summaryBusyBody => 'Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kada bude gotov.';
+  String get summaryBusyBody =>
+      'Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kada bude gotov.';
 
   @override
   String get summaryCheckAgain => 'Provjeri ponovo';
@@ -13989,7 +14604,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryFailedTitle => 'Sažimanje nije uspjelo';
 
   @override
-  String get summaryFailedBody => 'Nešto je pošlo po zlu prilikom sažimanja ovog razgovora.';
+  String get summaryFailedBody =>
+      'Nešto je pošlo po zlu prilikom sažimanja ovog razgovora.';
 
   @override
   String get noContentToDisplay => 'Nema sadržaja za prikaz';
@@ -14001,7 +14617,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceAtCapTitle => 'Dostigli ste ovomjesečno ograničenje';
 
   @override
-  String get onDeviceAtCapBody => 'Omi i dalje snima. Odaberite kako će se prepisivati ostatak mjeseca.';
+  String get onDeviceAtCapBody =>
+      'Omi i dalje snima. Odaberite kako će se prepisivati ostatak mjeseca.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
@@ -14018,10 +14635,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Radi dok se telefon puni.';
 
   @override
-  String get onDeviceUpgradeBody => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
+  String get onDeviceUpgradeBody =>
+      'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
 
   @override
-  String get onDeviceAtCapFooter => 'Ništa se ne gubi ni u jednom slučaju. Ovo možete promijeniti u Postavke › Prepis.';
+  String get onDeviceAtCapFooter =>
+      'Ništa se ne gubi ni u jednom slučaju. Ovo možete promijeniti u Postavke › Prepis.';
 
   @override
   String onDeviceStepOf(int step, int total) {
@@ -14073,10 +14692,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceModelUnsupported => 'Još nije dostupno na ovom telefonu';
 
   @override
-  String get onDeviceSetupKeepRecording => 'Nastavite snimati dok se preuzima. Ništa ne čeka na ovo.';
+  String get onDeviceSetupKeepRecording =>
+      'Nastavite snimati dok se preuzima. Ništa ne čeka na ovo.';
 
   @override
-  String get onDeviceSetupAudioStays => 'Zvuk ostaje na vašem telefonu dok se ne prepiše.';
+  String get onDeviceSetupAudioStays =>
+      'Zvuk ostaje na vašem telefonu dok se ne prepiše.';
 
   @override
   String get onDeviceWifiOnly => 'Preuzimaj samo putem Wi-Fi mreže';
@@ -14097,7 +14718,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceScheduleCharging => 'Tokom punjenja';
 
   @override
-  String get onDeviceScheduleChargingBody => 'Prepisi se pojave nakon priključivanja na punjač, obično preko noći.';
+  String get onDeviceScheduleChargingBody =>
+      'Prepisi se pojave nakon priključivanja na punjač, obično preko noći.';
 
   @override
   String get onDeviceBatteryAlmostNone => 'Baterija: gotovo ništa';
@@ -14118,7 +14740,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceScheduleLive => 'Dok govorite';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Redovno transkribuje dok je Omi otvoren.';
+  String get onDeviceScheduleLiveBody =>
+      'Redovno transkribuje dok je Omi otvoren.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -14135,10 +14758,12 @@ class AppLocalizationsBs extends AppLocalizations {
       'Bit će spremni kada priključite telefon na punjač. Snimanje se nastavlja normalno.';
 
   @override
-  String get onDeviceQueueHoursBody => 'Omi sustiže svakih nekoliko sati. Snimanje se nastavlja normalno.';
+  String get onDeviceQueueHoursBody =>
+      'Omi sustiže svakih nekoliko sati. Snimanje se nastavlja normalno.';
 
   @override
-  String get onDeviceQueueLowBatteryBody => 'Čeka se punjač jer je baterija slaba. Snimanje se nastavlja normalno.';
+  String get onDeviceQueueLowBatteryBody =>
+      'Čeka se punjač jer je baterija slaba. Snimanje se nastavlja normalno.';
 
   @override
   String get onDeviceTranscribeNow => 'Prepiši sada';
@@ -14165,7 +14790,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceTranscribedOnPhone => 'Prepisano na ovom telefonu';
 
   @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Prepisano i sažeto na ovom iPhoneu';
+  String get onDeviceTranscribedSummarizedOnIphone =>
+      'Prepisano i sažeto na ovom iPhoneu';
 
   @override
   String get onDeviceSummarizedByCloud => 'Sažeo Omi Cloud';
@@ -14178,13 +14804,16 @@ class AppLocalizationsBs extends AppLocalizations {
       'Dostigli ste ovomjesečno ograničenje, pa je Omi ovo transkribovao na vašem telefonu.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'Odabrali ste transkripciju na ovom telefonu da uštedite korištenje.';
+  String get onDeviceWhySavingLiveHours =>
+      'Odabrali ste transkripciju na ovom telefonu da uštedite korištenje.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Sažetak je također napravljen na ovom iPhoneu.';
+  String get onDeviceWhySummaryOnPhone =>
+      'Sažetak je također napravljen na ovom iPhoneu.';
 
   @override
-  String get onDeviceWhyNoSummary => 'Sve čuvate na ovom telefonu, pa nema sažetka.';
+  String get onDeviceWhyNoSummary =>
+      'Sve čuvate na ovom telefonu, pa nema sažetka.';
 
   @override
   String get onDeviceWhyCloudTitle => 'Zašto je Omi Cloud napisao ovaj sažetak';
@@ -14201,7 +14830,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ponovi s Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
+  String get onDeviceRedoHint =>
+      'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceKeepEverything => 'Čuvaj sve na ovom telefonu';
@@ -14228,7 +14858,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Uvijek transkribuj na ovom telefonu';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Štedi vaše korištenje. Bez oznaka govornika.';
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Štedi vaše korištenje. Bez oznaka govornika.';
 
   @override
   String get onDeviceOnThisPhone => 'Na ovom telefonu';
@@ -14250,7 +14881,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceRemove => 'Ukloni';
 
   @override
-  String get onDeviceFinishSetupTitle => 'Završite postavljanje da vidite prepise';
+  String get onDeviceFinishSetupTitle =>
+      'Završite postavljanje da vidite prepise';
 
   @override
   String get onDeviceFinishSetupBody =>
@@ -14266,7 +14898,8 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ovaj telefon još ne može pokrenuti govorni model. Zvuk ostaje sačuvan dok se korištenje ne resetuje ili dok ne nadogradite.';
 
   @override
-  String get onDeviceEntrySubtitle => 'Kada dostignete ograničenje, transkribujte na ovom telefonu';
+  String get onDeviceEntrySubtitle =>
+      'Kada dostignete ograničenje, transkribujte na ovom telefonu';
 
   @override
   String onDeviceMeterLineShort(int percent, String reset) {
@@ -14310,7 +14943,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get heldAudioLiveTitle => 'Transkripcija u oblaku je pauzirana';
 
   @override
-  String get heldAudioLiveBody => 'Dostigli ste limit za ovaj mjesec. Omi nastavlja snimanje.';
+  String get heldAudioLiveBody =>
+      'Dostigli ste limit za ovaj mjesec. Omi nastavlja snimanje.';
 
   @override
   String heldAudioRecordedSinceLimit(int minutes) {
@@ -14352,7 +14986,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get heldAudioRecovering => 'Transkribujemo vaše snimke na čekanju';
 
   @override
-  String get processingPaused => 'Obrada je pauzirana. Dostigli ste limit za ovaj mjesec.';
+  String get processingPaused =>
+      'Obrada je pauzirana. Dostigli ste limit za ovaj mjesec.';
 
   @override
   String get processingStored =>

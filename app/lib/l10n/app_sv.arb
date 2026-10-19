@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Testa liveinspelning, att ställa en fråga och genvägen med dubbeltryck.",
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "quoteJumpToTime": "Gå till {duration}",
-    "quoteMoreTimestamps": "+{count} till",
+    "quoteShowSources": "Visa källor",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
     "latest": "Senaste",
     "flashFirmware": "Installera firmware",

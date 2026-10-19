@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'conversation_quote_timestamps.dart';
+import 'conversation_section_sources.dart';
 import 'conversation_markdown_widget.dart';
 
 /// First-party notes retain section provenance; editing still addresses the complete summary.
+///
+/// Each heading is its own row so the section's sources control sits beside it instead of under
+/// the prose. The row keeps the 44pt touch target with or without the control, so every heading
+/// lines up the same whether or not its section has resolvable sources.
 class NoteSectionsSliver extends StatelessWidget {
   final List<Section> sections;
   final List<TranscriptSegment> transcriptSegments;
@@ -20,22 +24,44 @@ class NoteSectionsSliver extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverMainAxisGroup(slivers: [
       for (var index = 0; index < sections.length; index++) ...[
-        ConversationMarkdownSliver(
-          content: sections[index].heading.trim().isEmpty
-              ? sections[index].bodyMarkdown
-              : '## ${sections[index].heading}\n\n${sections[index].bodyMarkdown}',
-          onDoubleTap: onDoubleTap,
-        ),
-        if (onOpenSource != null && (sections[index].sourceSegmentIds ?? []).isNotEmpty)
+        if (sections[index].heading.trim().isNotEmpty)
           SliverToBoxAdapter(
-            child: ConversationQuoteTimestamps(
-              key: ValueKey(Object.hash(index, Object.hashAll(sections[index].sourceSegmentIds ?? []))),
-              sourceIDs: sections[index].sourceSegmentIds ?? [],
-              transcriptSegments: transcriptSegments,
-              onOpenSource: onOpenSource!,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTap: onDoubleTap,
+              child: Padding(
+                // conversationMarkdownHeaderPadding's 26pt above, less the touch target's own slack.
+                padding: const EdgeInsets.only(top: 15),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(sections[index].heading.trim(), style: OmiType.headline.copyWith(height: 1.3)),
+                        ),
+                      ),
+                      if (onOpenSource != null)
+                        Transform.translate(
+                          // Align the glyph, not the touch target, with the prose's trailing edge.
+                          offset: const Offset(OmiSpacing.xs, 0),
+                          child: ConversationSectionSourcesButton(
+                            key: ValueKey(Object.hash(index, Object.hashAll(sections[index].sourceSegmentIds ?? []))),
+                            heading: sections[index].heading,
+                            sourceIDs: sections[index].sourceSegmentIds ?? [],
+                            transcriptSegments: transcriptSegments,
+                            onOpenSource: onOpenSource!,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
+        ConversationMarkdownSliver(content: sections[index].bodyMarkdown, onDoubleTap: onDoubleTap),
+        const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
       ],
     ]);
   }

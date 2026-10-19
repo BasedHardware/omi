@@ -3043,7 +3043,7 @@
     "deviceOnboardingIntroSubtitle": "Experimente a transcrição ao vivo, fazer uma pergunta e o atalho de toque duplo.",
     "deviceOnboardingIntroDuration": "Cerca de 1 minuto",
     "quoteJumpToTime": "Ir para {duration}",
-    "quoteMoreTimestamps": "+{count} mais",
+    "quoteShowSources": "Mostrar fontes",
     "jumpToLatestMessage": "Ir para a mensagem mais recente",
     "latest": "Mais recente",
     "flashFirmware": "Gravar firmware",

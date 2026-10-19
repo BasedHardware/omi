@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "లైవ్ ట్రాన్స్‌క్రిప్షన్, ప్రశ్న అడగడం మరియు డబుల్-ట్యాప్ షార్ట్‌కట్‌ను ప్రయత్నించండి.",
     "deviceOnboardingIntroDuration": "సుమారు 1 నిమిషం",
     "quoteJumpToTime": "{duration}కి వెళ్లండి",
-    "quoteMoreTimestamps": "+మరో {count}",
+    "quoteShowSources": "మూలాలను చూపించు",
     "jumpToLatestMessage": "తాజా సందేశానికి వెళ్ళు",
     "latest": "తాజా",
     "flashFirmware": "ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి",

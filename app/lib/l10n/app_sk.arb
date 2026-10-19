@@ -3008,7 +3008,7 @@
     "deviceOnboardingIntroSubtitle": "Vyskúšajte živý prepis, položte otázku a skratku dvojitým ťuknutím.",
     "deviceOnboardingIntroDuration": "Približne 1 minúta",
     "quoteJumpToTime": "Prejsť na {duration}",
-    "quoteMoreTimestamps": "+{count} ďalších",
+    "quoteShowSources": "Zobraziť zdroje",
     "jumpToLatestMessage": "Prejsť na najnovšiu správu",
     "latest": "Najnovšia",
     "flashFirmware": "Nahrať firmvér",

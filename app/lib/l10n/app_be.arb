@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "Паспрабуйце жывую расшыфроўку, пытанне і хуткі доступ двайным дотыкам.",
     "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
     "quoteJumpToTime": "Перайсці да {duration}",
-    "quoteMoreTimestamps": "+ яшчэ {count}",
+    "quoteShowSources": "Паказаць крыніцы",
     "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
     "latest": "Апошні",
     "flashFirmware": "Усталяваць прашыўку",

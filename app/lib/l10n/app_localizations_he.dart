@@ -27,7 +27,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteConversationTitle => 'מחיקת שיחה?';
 
   @override
-  String get deleteConversationMessage => 'פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו.';
+  String get deleteConversationMessage =>
+      'פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו.';
 
   @override
   String get confirm => 'אישור';
@@ -87,10 +88,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get failedToUpdateStarred => 'כשל בעדכון מצב כוכב.';
 
   @override
-  String get conversationUrlNotShared => 'לא ניתן היה לשתף את כתובת ה-URL של השיחה.';
+  String get conversationUrlNotShared =>
+      'לא ניתן היה לשתף את כתובת ה-URL של השיחה.';
 
   @override
-  String get errorProcessingConversation => 'שגיאה בעיבוד השיחה. אנא נסה שוב מאוחר יותר.';
+  String get errorProcessingConversation =>
+      'שגיאה בעיבוד השיחה. אנא נסה שוב מאוחר יותר.';
 
   @override
   String get noInternetConnection => 'אין חיבור לאינטרנט';
@@ -154,7 +157,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleting => 'מוחק…';
 
   @override
-  String get pleaseCompleteAuthentication => 'אנא השלם אימות בדפדפן שלך. לאחר שתסיים, חזור לאפליקציה.';
+  String get pleaseCompleteAuthentication =>
+      'אנא השלם אימות בדפדפן שלך. לאחר שתסיים, חזור לאפליקציה.';
 
   @override
   String get failedToStartAuthentication => 'כשל בהתחלת אימות';
@@ -235,7 +239,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noStarredConversations => 'אין שיחות מכוכבות';
 
   @override
-  String get starConversationHint => 'כדי להוסיף כוכב לשיחה, פתח אותה והקש על אייקון הכוכב בכותרת.';
+  String get starConversationHint =>
+      'כדי להוסיף כוכב לשיחה, פתח אותה והקש על אייקון הכוכב בכותרת.';
 
   @override
   String get searchConversations => 'חפש שיחות';
@@ -293,7 +298,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get clearChat => 'נקה צ\'ט';
 
   @override
-  String get clearChatConfirm => 'כל ההודעות בצ\'אט הזה יימחקו. לא ניתן לבטל זאת.';
+  String get clearChatConfirm =>
+      'כל ההודעות בצ\'אט הזה יימחקו. לא ניתן לבטל זאת.';
 
   @override
   String get maxFilesLimit => 'אתה יכול להעלות רק 4 קבצים בכל פעם';
@@ -323,7 +329,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get installedApps => 'אפליקציות מותקנות';
 
   @override
-  String get unableToFetchApps => 'לא ניתן להביא אפליקציות :(\n\nבדוק את חיבור האינטרנט שלך ונסה שוב.';
+  String get unableToFetchApps =>
+      'לא ניתן להביא אפליקציות :(\n\nבדוק את חיבור האינטרנט שלך ונסה שוב.';
 
   @override
   String get aboutOmi => 'על Omi';
@@ -344,7 +351,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteAccountTitle => 'מחיקת חשבון';
 
   @override
-  String get deleteAccountConfirm => 'האם אתה בטוח שברצונך למחוק את החשבון שלך?';
+  String get deleteAccountConfirm =>
+      'האם אתה בטוח שברצונך למחוק את החשבון שלך?';
 
   @override
   String get cannotBeUndone => 'לא ניתן לבטל זאת.';
@@ -377,7 +385,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get goBack => 'חזור';
 
   @override
-  String get checkBoxToConfirm => 'סמן את התיבה כדי לאשר שאתה מבין שמחיקת החשבון שלך היא קבע ובלתי הפיכה.';
+  String get checkBoxToConfirm =>
+      'סמן את התיבה כדי לאשר שאתה מבין שמחיקת החשבון שלך היא קבע ובלתי הפיכה.';
 
   @override
   String get profile => 'פרופיל';
@@ -425,7 +434,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSync => 'סנכרון אוטומטי';
 
   @override
-  String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
+  String get autoSyncDescription =>
+      'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
   String get omiButtonActions => 'פעולות כפתור Omi';
@@ -473,10 +483,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appAccess => 'גישה אפליקציה';
 
   @override
-  String get appAccessDesc => 'האפליקציות הבאות יכולות לגשת לנתונים שלך. הקש על אפליקציה כדי לנהל את ההרשאות שלה.';
+  String get appAccessDesc =>
+      'האפליקציות הבאות יכולות לגשת לנתונים שלך. הקש על אפליקציה כדי לנהל את ההרשאות שלה.';
 
   @override
-  String get noAppsExternalAccess => 'אף אפליקציה מותקנת אין גישה חיצונית לנתונים שלך.';
+  String get noAppsExternalAccess =>
+      'אף אפליקציה מותקנת אין גישה חיצונית לנתונים שלך.';
 
   @override
   String get deviceName => 'שם המכשיר';
@@ -544,7 +556,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceNotConnected => 'מכשיר לא מחובר';
 
   @override
-  String get connectDeviceMessage => 'התחבר לעצמך Omi כדי לגשת\nלהגדרות מכשיר וקילוף';
+  String get connectDeviceMessage =>
+      'התחבר לעצמך Omi כדי לגשת\nלהגדרות מכשיר וקילוף';
 
   @override
   String get deviceInfoSection => 'מידע מכשיר';
@@ -644,7 +657,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get conversationTimeout => 'תגבול זמן שיחה';
 
   @override
-  String get conversationTimeoutConfig => 'כמה זמן Omi ממתין בשקט לפני שהוא מסיים שיחה';
+  String get conversationTimeoutConfig =>
+      'כמה זמן Omi ממתין בשקט לפני שהוא מסיים שיחה';
 
   @override
   String get importData => 'ייבוא נתונים';
@@ -686,7 +700,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noActivityYet => 'אין פעילות עדיין';
 
   @override
-  String get startConversationToSeeInsights => 'התחל שיחה עם Omi\nכדי לראות את תובנות השימוש שלך כאן.';
+  String get startConversationToSeeInsights =>
+      'התחל שיחה עם Omi\nכדי לראות את תובנות השימוש שלך כאן.';
 
   @override
   String get listening => 'הקשבה';
@@ -737,7 +752,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get shareStatsMessage => 'שיתוף הסטטיסטיקה שלי של Omi! (omi.me - העוזר AI שלך שתמיד פועל)';
+  String get shareStatsMessage =>
+      'שיתוף הסטטיסטיקה שלי של Omi! (omi.me - העוזר AI שלך שתמיד פועל)';
 
   @override
   String get sharePeriodToday => 'היום, Omi עשה:';
@@ -948,7 +964,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get shortConversationThreshold => 'סף שיחה קצרה';
 
   @override
-  String get shortConversationThresholdSubtitle => 'שיחות קצרות מזה יוסתרו אלא אם יתאפשר למעלה';
+  String get shortConversationThresholdSubtitle =>
+      'שיחות קצרות מזה יוסתרו אלא אם יתאפשר למעלה';
 
   @override
   String get durationThreshold => 'סף משך זמן';
@@ -980,10 +997,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get comingSoon => 'בקרוב';
 
   @override
-  String get integrationsFooter => 'חבר את האפליקציות שלך כדי לצפות בנתונים ובמדדים בצ\'ט.';
+  String get integrationsFooter =>
+      'חבר את האפליקציות שלך כדי לצפות בנתונים ובמדדים בצ\'ט.';
 
   @override
-  String get completeAuthInBrowser => 'אנא השלם אימות בדפדפן שלך. לאחר שתסיים, חזור לאפליקציה.';
+  String get completeAuthInBrowser =>
+      'אנא השלם אימות בדפדפן שלך. לאחר שתסיים, חזור לאפליקציה.';
 
   @override
   String failedToStartAuth(String appName) {
@@ -1043,22 +1062,26 @@ class AppLocalizationsHe extends AppLocalizations {
   String get needYourPermission => 'אנחנו צריכים את ההרשאה שלך';
 
   @override
-  String get alreadyGavePermission => 'כבר נתת לנו הרשאה לשמור את ההקלטות שלך. הנה תזכורת למה אנחנו צריכים את זה:';
+  String get alreadyGavePermission =>
+      'כבר נתת לנו הרשאה לשמור את ההקלטות שלך. הנה תזכורת למה אנחנו צריכים את זה:';
 
   @override
-  String get wouldLikePermission => 'היינו רוצים את ההרשאה שלך לשמור את הקלטות הקול שלך. הנה למה:';
+  String get wouldLikePermission =>
+      'היינו רוצים את ההרשאה שלך לשמור את הקלטות הקול שלך. הנה למה:';
 
   @override
   String get improveSpeechProfile => 'שפר את פרופיל הדיבור שלך';
 
   @override
-  String get improveSpeechProfileDesc => 'אנחנו משתמשים בהקלטות כדי להכשיר עוד ולשפר את פרופיל הדיבור האישי שלך.';
+  String get improveSpeechProfileDesc =>
+      'אנחנו משתמשים בהקלטות כדי להכשיר עוד ולשפר את פרופיל הדיבור האישי שלך.';
 
   @override
   String get trainFamilyProfiles => 'הדרך פרופילים לחברים ולמשפחה';
 
   @override
-  String get trainFamilyProfilesDesc => 'ההקלטות שלך עוזרות לנו להכיר ולהקים פרופילים לחברים ולמשפחה שלך.';
+  String get trainFamilyProfilesDesc =>
+      'ההקלטות שלך עוזרות לנו להכיר ולהקים פרופילים לחברים ולמשפחה שלך.';
 
   @override
   String get enhanceTranscriptAccuracy => 'שפר את דיוק התמלול';
@@ -1095,7 +1118,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get permissionRevokedTitle => 'הרשאה בוטלה';
 
   @override
-  String get permissionRevokedMessage => 'האם אתה רוצה שנמחוק גם את כל ההקלטות הקיימות שלך?';
+  String get permissionRevokedMessage =>
+      'האם אתה רוצה שנמחוק גם את כל ההקלטות הקיימות שלך?';
 
   @override
   String get yes => 'כן';
@@ -1137,13 +1161,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get showMeetingsMenuBar => 'הצג פגישות קרובות בסרגל התפריטים';
 
   @override
-  String get showMeetingsMenuBarDesc => 'הצג את הפגישה הבאה שלך והזמן עד שהיא תתחיל בסרגל התפריטים של macOS';
+  String get showMeetingsMenuBarDesc =>
+      'הצג את הפגישה הבאה שלך והזמן עד שהיא תתחיל בסרגל התפריטים של macOS';
 
   @override
   String get showEventsNoParticipants => 'הצג אירועים ללא משתתפים';
 
   @override
-  String get showEventsNoParticipantsDesc => 'כשמופעל, Coming Up מציג אירועים ללא משתתפים או קישור וידאו.';
+  String get showEventsNoParticipantsDesc =>
+      'כשמופעל, Coming Up מציג אירועים ללא משתתפים או קישור וידאו.';
 
   @override
   String get yourMeetings => 'הפגישות שלך';
@@ -1184,7 +1210,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noProjectsInWorkspace => 'לא נמצאו פרויקטים בworkspace זה';
 
   @override
-  String get conversationTimeoutDesc => 'בחר כמה זמן להמתין בשקט לפני סיום אוטומטי של שיחה:';
+  String get conversationTimeoutDesc =>
+      'בחר כמה זמן להמתין בשקט לפני סיום אוטומטי של שיחה:';
 
   @override
   String get timeout2Minutes => '2 דקות';
@@ -1217,7 +1244,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get timeout4HoursDesc => 'סיים שיחה לאחר 4 שעות של שקט';
 
   @override
-  String get conversationEndAfterHours => 'שיחות יסתיימו כעת לאחר 4 שעות של שקט';
+  String get conversationEndAfterHours =>
+      'שיחות יסתיימו כעת לאחר 4 שעות של שקט';
 
   @override
   String conversationEndAfterMinutes(int minutes) {
@@ -1228,10 +1256,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tellUsPrimaryLanguage => 'ספר לנו מהי שפתך העיקרית';
 
   @override
-  String get languageForTranscription => 'Omi משתמש בשפה הזו לתמלולים, לסיכומים ולזיכרונות.';
+  String get languageForTranscription =>
+      'Omi משתמש בשפה הזו לתמלולים, לסיכומים ולזיכרונות.';
 
   @override
-  String get singleLanguageModeInfo => 'מצב שפה יחידה מופעל. תרגום מבוטל לדיוק גבוה יותר.';
+  String get singleLanguageModeInfo =>
+      'מצב שפה יחידה מופעל. תרגום מבוטל לדיוק גבוה יותר.';
 
   @override
   String get searchLanguageHint => 'חפש שפה לפי שם או קוד';
@@ -1359,7 +1389,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get configureSettings => 'הגדר הגדרות';
 
   @override
-  String get completeAuthBrowser => 'בבקשה השלם אימות בדפדפן שלך. לאחר סיום, חזור לאפליקציה.';
+  String get completeAuthBrowser =>
+      'בבקשה השלם אימות בדפדפן שלך. לאחר סיום, חזור לאפליקציה.';
 
   @override
   String failedToStartAppAuth(String appName) {
@@ -1408,7 +1439,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get bringYourOwn => 'הביא שלך';
 
   @override
-  String get payYourSttProvider => 'חינם ב-Omi. אתה משלם ישירות לספק התמלול שלך.';
+  String get payYourSttProvider =>
+      'חינם ב-Omi. אתה משלם ישירות לספק התמלול שלך.';
 
   @override
   String get freeMinutesMonth => '300 דקות חינם לחודש כלולות. בלתי מוגבל עם ';
@@ -1495,7 +1527,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get enterApiKey => 'הזן את API key שלך';
 
   @override
-  String get storedLocallyNeverShared => 'נשמר בטלפון הזה. נשלח רק לספק התמלול שלך.';
+  String get storedLocallyNeverShared =>
+      'נשמר בטלפון הזה. נשלח רק לספק התמלול שלך.';
 
   @override
   String get host => 'Host';
@@ -1528,7 +1561,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get logsCopied => 'יומנים הועתקו';
 
   @override
-  String get noLogsYet => 'אין עדיין יומנים. הקלט משהו כדי לראות בקשות לספק התמלול שלך.';
+  String get noLogsYet =>
+      'אין עדיין יומנים. הקלט משהו כדי לראות בקשות לספק התמלול שלך.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
@@ -1675,7 +1709,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get enableBluetooth => 'הפעל Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Omi זקוק ל-Bluetooth כדי להתחבר לציוד הלביש שלך. בבקשה הפעל Bluetooth ונסה שנית.';
+  String get bluetoothNeeded =>
+      'Omi זקוק ל-Bluetooth כדי להתחבר לציוד הלביש שלך. בבקשה הפעל Bluetooth ונסה שנית.';
 
   @override
   String get contactSupport => 'יצור קשר עם תמיכה?';
@@ -1690,31 +1725,36 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundActivity => 'פעילות רקע';
 
   @override
-  String get backgroundActivityDesc => 'כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.';
+  String get backgroundActivityDesc =>
+      'כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.';
 
   @override
   String get locationAccess => 'גישה למיקום';
 
   @override
-  String get locationAccessDesc => 'כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.';
+  String get locationAccessDesc =>
+      'כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.';
 
   @override
   String get notifications => 'הודעות';
 
   @override
-  String get notificationsDesc => 'כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.';
+  String get notificationsDesc =>
+      'כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.';
 
   @override
   String get locationServiceDisabled => 'שירות מיקום מושבת';
 
   @override
-  String get locationServiceDisabledDesc => 'שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.';
+  String get locationServiceDisabledDesc =>
+      'שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.';
 
   @override
   String get backgroundLocationDenied => 'גישת מיקום רקע נדחתה';
 
   @override
-  String get backgroundLocationDeniedDesc => 'בבקשה עבור להגדרות המכשיר וגדר הרשאת מיקום ל-\"תמיד אפשר\"';
+  String get backgroundLocationDeniedDesc =>
+      'בבקשה עבור להגדרות המכשיר וגדר הרשאת מיקום ל-\"תמיד אפשר\"';
 
   @override
   String get lovingOmi => 'אוהב את Omi?';
@@ -1723,7 +1763,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get maybeLater => 'אולי מאוחר יותר';
 
   @override
-  String get speechProfileIntro => 'Omi צריך ללמוד את המטרות שלך ואת הקול שלך. תוכל לשנות את זה מאוחר יותר.';
+  String get speechProfileIntro =>
+      'Omi צריך ללמוד את המטרות שלך ואת הקול שלך. תוכל לשנות את זה מאוחר יותר.';
 
   @override
   String get getStarted => 'התחל';
@@ -1741,34 +1782,41 @@ class AppLocalizationsHe extends AppLocalizations {
   String get connectionError => 'שגיאת חיבור';
 
   @override
-  String get connectionErrorDesc => 'החיבור לשרת נכשל. בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית.';
+  String get connectionErrorDesc =>
+      'החיבור לשרת נכשל. בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית.';
 
   @override
   String get invalidRecordingMultipleSpeakers => 'הקלטה לא תקפה בוגדה';
 
   @override
-  String get multipleSpeakersDesc => 'נראה שיש כמה דוברים בהקלטה. בבקשה ודא שאתה במקום שקט וחזור על הניסיון.';
+  String get multipleSpeakersDesc =>
+      'נראה שיש כמה דוברים בהקלטה. בבקשה ודא שאתה במקום שקט וחזור על הניסיון.';
 
   @override
-  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+  String get discardedOnlyRecording =>
+      'That recording was too short or empty to keep.';
 
   @override
-  String get tooShortDesc => 'אין מספיק דיבור בוגדה. בבקשה תדבר יותר וחזור על הניסיון.';
+  String get tooShortDesc =>
+      'אין מספיק דיבור בוגדה. בבקשה תדבר יותר וחזור על הניסיון.';
 
   @override
-  String get invalidRecordingDesc => 'בבקשה ודא שאתה מדבר לפחות 5 שניות ולא יותר מ-90.';
+  String get invalidRecordingDesc =>
+      'בבקשה ודא שאתה מדבר לפחות 5 שניות ולא יותר מ-90.';
 
   @override
   String get areYouThere => 'אתה שם?';
 
   @override
-  String get noSpeechDesc => 'לא יכלנו לזהות דיבור. בבקשה ודא שאתה מדבר לפחות 10 שניות ולא יותר מ-3 דקות.';
+  String get noSpeechDesc =>
+      'לא יכלנו לזהות דיבור. בבקשה ודא שאתה מדבר לפחות 10 שניות ולא יותר מ-3 דקות.';
 
   @override
   String get connectionLost => 'חיבור אבד';
 
   @override
-  String get connectionLostDesc => 'החיבור קטע. בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית.';
+  String get connectionLostDesc =>
+      'החיבור קטע. בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית.';
 
   @override
   String get tryAgain => 'נסה שנית';
@@ -1811,7 +1859,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – בן הלוויה בינה מלאכותית שלך';
 
   @override
-  String get captureEveryMoment => 'Omi מקליט את השיחות שלך וכותב\nעבורך את הסיכום והמשימות.';
+  String get captureEveryMoment =>
+      'Omi מקליט את השיחות שלך וכותב\nעבורך את הסיכום והמשימות.';
 
   @override
   String get appleWatchSetup => 'הגדרת Apple Watch';
@@ -1823,7 +1872,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get microphonePermission => 'הרשאת מיקרופון';
 
   @override
-  String get permissionGrantedNow => 'הרשאה ניתנה! עכשיו:\n\nפתח את אפליקציית Omi בשעון שלך וטפוק \"המשך\" למטה';
+  String get permissionGrantedNow =>
+      'הרשאה ניתנה! עכשיו:\n\nפתח את אפליקציית Omi בשעון שלך וטפוק \"המשך\" למטה';
 
   @override
   String get needMicrophonePermission =>
@@ -1860,7 +1910,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get selectPrimaryLanguage => 'בחר את שפתך העיקרית';
 
   @override
-  String get languageBenefits => 'Omi משתמש בשפה הזו לתמלולים, לסיכומים ולזיכרונות.';
+  String get languageBenefits =>
+      'Omi משתמש בשפה הזו לתמלולים, לסיכומים ולזיכרונות.';
 
   @override
   String get whatsYourPrimaryLanguage => 'מה שפתך העיקרית?';
@@ -1872,7 +1923,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get actionItemsTitle => 'משימות';
 
   @override
-  String get actionItemsDescription => 'טפוק לעריכה • לחיצה ארוכה לבחירה • החלק לפעולות';
+  String get actionItemsDescription =>
+      'טפוק לעריכה • לחיצה ארוכה לבחירה • החלק לפעולות';
 
   @override
   String get tabToDo => 'עסקים לעשות';
@@ -1965,7 +2017,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryDeleted => 'זכרון מחוק';
 
   @override
-  String get memoryHistoryPartial => 'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
+  String get memoryHistoryPartial =>
+      'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
 
   @override
   String get memoryHistory => 'היסטוריה';
@@ -2157,10 +2210,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get translationNotice => 'הודעת תרגום';
 
   @override
-  String get translationNoticeMessage => 'Omi תורגם שיחות לשפתך העיקרית. עדכן זאת בכל עת בהגדרות → פרופילים.';
+  String get translationNoticeMessage =>
+      'Omi תורגם שיחות לשפתך העיקרית. עדכן זאת בכל עת בהגדרות → פרופילים.';
 
   @override
-  String get pleaseCheckInternetConnection => 'בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית';
+  String get pleaseCheckInternetConnection =>
+      'בבקשה בדוק את חיבור האינטרנט שלך ונסה שנית';
 
   @override
   String get pleaseSelectReason => 'בבקשה בחר סיבה';
@@ -2177,7 +2232,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get conversationCannotBeMerged => 'לא ניתן למזג שיחה זו (נעולה או כבר מתמזגת)';
+  String get conversationCannotBeMerged =>
+      'לא ניתן למזג שיחה זו (נעולה או כבר מתמזגת)';
 
   @override
   String get pleaseEnterFolderName => 'בבקשה הזן שם תיקייה';
@@ -2210,7 +2266,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryCopiedToClipboard => 'הסיכום הועתק ללוח';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'לא ניתן היה לשתף את כתובת ה-URL של השיחה.';
+  String get conversationUrlCouldNotBeShared =>
+      'לא ניתן היה לשתף את כתובת ה-URL של השיחה.';
 
   @override
   String get urlCopiedToClipboard => 'כתובת ה-URL הועתקה ללוח';
@@ -2361,7 +2418,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get createKeyToGetStarted => 'צור מפתח כדי להתחיל';
 
   @override
-  String get setWhenConversationsAutoEnd => 'כמה זמן Omi ממתין בשקט לפני שהוא מסיים שיחה';
+  String get setWhenConversationsAutoEnd =>
+      'כמה זמן Omi ממתין בשקט לפני שהוא מסיים שיחה';
 
   @override
   String get importDataFromOtherSources => 'ייבא נתונים ממקורות אחרים';
@@ -2414,10 +2472,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get goalTracker => 'עוקב יעדים';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'עקוב אחר היעדים האישיים שלך בעמוד הבית';
+  String get trackPersonalGoalsOnHomepage =>
+      'עקוב אחר היעדים האישיים שלך בעמוד הבית';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => 'תיאור המשימה לא יכול להיות ריק';
+  String get actionItemDescriptionCannotBeEmpty =>
+      'תיאור המשימה לא יכול להיות ריק';
 
   @override
   String get saved => 'נשמר';
@@ -2468,7 +2528,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get howDoesItWork => 'איך זה עובד?';
 
   @override
-  String get sdCardSyncDescription => 'סנכרון כרטיס SD יייצא את הזיכרונות שלך מכרטיס ה-SD לאפליקציה';
+  String get sdCardSyncDescription =>
+      'סנכרון כרטיס SD יייצא את הזיכרונות שלך מכרטיס ה-SD לאפליקציה';
 
   @override
   String get checksForAudioFiles => 'בדוק קבצי שמע בכרטיס ה-SD';
@@ -2565,7 +2626,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get showAll => 'הצג הכל';
 
   @override
-  String get noTasksForToday => 'אין משימות להיום.\nבקש מ-Omi משימות נוספות או צור באופן ידני.';
+  String get noTasksForToday =>
+      'אין משימות להיום.\nבקש מ-Omi משימות נוספות או צור באופן ידני.';
 
   @override
   String get dailyScore => 'ניקוד יומי';
@@ -2604,7 +2666,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noTasksYet => 'אין משימות עדיין';
 
   @override
-  String get tasksFromConversationsWillAppear => 'משימות מהשיחות שלך יופיעו כאן.\nלחץ צור כדי להוסיף אחת באופן ידני.';
+  String get tasksFromConversationsWillAppear =>
+      'משימות מהשיחות שלך יופיעו כאן.\nלחץ צור כדי להוסיף אחת באופן ידני.';
 
   @override
   String get monthJan => 'ינו';
@@ -2661,7 +2724,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteActionItem => 'מחק משימה';
 
   @override
-  String get deleteActionItemConfirmation => 'למחוק את המשימה הזו? לא ניתן לבטל זאת.';
+  String get deleteActionItemConfirmation =>
+      'למחוק את המשימה הזו? לא ניתן לבטל זאת.';
 
   @override
   String get enterActionItemDescription => 'הזן תיאור משימה';
@@ -2697,13 +2761,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unableToLoadApps => 'לא ניתן לטעון אפליקציות';
 
   @override
-  String get tryAdjustingSearchTermsOrFilters => 'נסה להתאים מחדש את תנאי החיפוש או המסננים';
+  String get tryAdjustingSearchTermsOrFilters =>
+      'נסה להתאים מחדש את תנאי החיפוש או המסננים';
 
   @override
   String get checkBackLaterForNewApps => 'בדוק מאוחר יותר לאפליקציות חדשות';
 
   @override
-  String get pleaseCheckInternetConnectionAndTryAgain => 'בדוק את חיבור האינטרנט שלך ונסה שוב';
+  String get pleaseCheckInternetConnectionAndTryAgain =>
+      'בדוק את חיבור האינטרנט שלך ונסה שוב';
 
   @override
   String get createNewApp => 'צור אפליקציה חדשה';
@@ -2736,13 +2802,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatPrompt => 'הנושא של צ\'אט';
 
   @override
-  String get chatPromptPlaceholder => 'אתה אפליקציה נהדרת, העבודה שלך היא להגיב לשאילתות המשתמש ולהרגיש אותם בטוב…';
+  String get chatPromptPlaceholder =>
+      'אתה אפליקציה נהדרת, העבודה שלך היא להגיב לשאילתות המשתמש ולהרגיש אותם בטוב…';
 
   @override
   String get conversationPrompt => 'הנושא של שיחה';
 
   @override
-  String get conversationPromptPlaceholder => 'אתה אפליקציה נהדרת, תינתן לך תמלול וסיכום של שיחה…';
+  String get conversationPromptPlaceholder =>
+      'אתה אפליקציה נהדרת, תינתן לך תמלול וסיכום של שיחה…';
 
   @override
   String get notificationScopes => 'טווחי הודעות';
@@ -2754,7 +2822,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get makeMyAppPublic => 'הפוך את האפליקציה שלי לציבורית';
 
   @override
-  String get submitAppTermsAgreement => 'בהגשת אפליקציה זו, אני מסכים לתנאי השירות ולמדיניות הפרטיות של Omi AI';
+  String get submitAppTermsAgreement =>
+      'בהגשת אפליקציה זו, אני מסכים לתנאי השירות ולמדיניות הפרטיות של Omi AI';
 
   @override
   String get submitApp => 'הגש אפליקציה';
@@ -2763,7 +2832,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get needHelpGettingStarted => 'צריך עזרה כדי להתחיל?';
 
   @override
-  String get clickHereForAppBuildingGuides => 'לחץ כאן לקבלת מדריכי בנייה אפליקציה ותיעוד';
+  String get clickHereForAppBuildingGuides =>
+      'לחץ כאן לקבלת מדריכי בנייה אפליקציה ותיעוד';
 
   @override
   String get submitAppQuestion => 'להגיש אפליקציה?';
@@ -2780,7 +2850,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get startEarning => 'התחל להרוויח! 💰';
 
   @override
-  String get connectStripeOrPayPal => 'חבר את Stripe או PayPal כדי לקבל תשלומים עבור האפליקציה שלך.';
+  String get connectStripeOrPayPal =>
+      'חבר את Stripe או PayPal כדי לקבל תשלומים עבור האפליקציה שלך.';
 
   @override
   String get connectNow => 'התחבר עכשיו';
@@ -2805,13 +2876,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get installApp => 'התקן אפליקציה';
 
   @override
-  String get betaTesterNotice => 'אתה בדוקה בטא עבור אפליקציה זו. היא עדיין לא ציבורית. היא תהיה ציבורית לאחר אישור.';
+  String get betaTesterNotice =>
+      'אתה בדוקה בטא עבור אפליקציה זו. היא עדיין לא ציבורית. היא תהיה ציבורית לאחר אישור.';
 
   @override
-  String get appUnderReviewOwner => 'האפליקציה שלך בבדיקה וגלויה רק לך. היא תהיה ציבורית לאחר אישור.';
+  String get appUnderReviewOwner =>
+      'האפליקציה שלך בבדיקה וגלויה רק לך. היא תהיה ציבורית לאחר אישור.';
 
   @override
-  String get appRejectedNotice => 'האפליקציה שלך נדחתה. אנא עדכן את פרטי האפליקציה והגש מחדש לבדיקה.';
+  String get appRejectedNotice =>
+      'האפליקציה שלך נדחתה. אנא עדכן את פרטי האפליקציה והגש מחדש לבדיקה.';
 
   @override
   String get setupSteps => 'שלבי הגדרה';
@@ -2846,7 +2920,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get errorActivatingApp => 'שגיאה בהפעלת האפליקציה';
 
   @override
-  String get integrationSetupRequired => 'אם זו אפליקציית שילוב, ודא שהגדרה הושלמה.';
+  String get integrationSetupRequired =>
+      'אם זו אפליקציית שילוב, ודא שהגדרה הושלמה.';
 
   @override
   String get installed => 'מותקן';
@@ -3020,7 +3095,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get report => 'דווח';
 
   @override
-  String get microphonePermissionRequired => 'הרשאת מיקרופון נדרשת לביצוע שיחות';
+  String get microphonePermissionRequired =>
+      'הרשאת מיקרופון נדרשת לביצוע שיחות';
 
   @override
   String get microphonePermissionDenied =>
@@ -3076,7 +3152,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noTranscriptMessage => 'לשיחה זו אין תמלול.';
 
   @override
-  String get conversationUrlCouldNotBeGenerated => 'לא ניתן היה ליצור כתובת URL של שיחה.';
+  String get conversationUrlCouldNotBeGenerated =>
+      'לא ניתן היה ליצור כתובת URL של שיחה.';
 
   @override
   String get failedToGenerateConversationLink => 'יצירת קישור שיחה נכשלה';
@@ -3103,7 +3180,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tryAdjustingSearchTerms => 'נסה להתאים מחדש את תנאי החיפוש';
 
   @override
-  String get starConversationsToFindQuickly => 'סמן שיחות בכוכב כדי למצוא אותן במהירות כאן';
+  String get starConversationsToFindQuickly =>
+      'סמן שיחות בכוכב כדי למצוא אותן במהירות כאן';
 
   @override
   String noConversationsOnDate(String date) {
@@ -3171,13 +3249,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get public => 'ציבורי';
 
   @override
-  String get failedToSaveCheckConnection => 'השמירה נכשלה. אנא בדוק את החיבור שלך.';
+  String get failedToSaveCheckConnection =>
+      'השמירה נכשלה. אנא בדוק את החיבור שלך.';
 
   @override
   String get createMemory => 'צור זיכרון';
 
   @override
-  String get deleteMemoryConfirmation => 'למחוק את הזיכרון הזה? לא ניתן לבטל זאת.';
+  String get deleteMemoryConfirmation =>
+      'למחוק את הזיכרון הזה? לא ניתן לבטל זאת.';
 
   @override
   String get makePrivate => 'הפוך לפרטי';
@@ -3192,7 +3272,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get makeAllMemoriesPublic => 'הפוך את כל הזיכרונות לציבוריים';
 
   @override
-  String get permanentlyRemoveAllMemories => 'הסר באופן קבוע את כל הזיכרונות מ-Omi';
+  String get permanentlyRemoveAllMemories =>
+      'הסר באופן קבוע את כל הזיכרונות מ-Omi';
 
   @override
   String get allMemoriesAreNowPrivate => 'כל הזיכרונות פרטיים כעת';
@@ -3288,7 +3369,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recordAudioConversations => 'הקלט שיחות אודיו';
 
   @override
-  String get microphoneAccessDescription => 'Omi צריכה גישה למיקרופון כדי להקליט את השיחות שלך ולספק עתודות.';
+  String get microphoneAccessDescription =>
+      'Omi צריכה גישה למיקרופון כדי להקליט את השיחות שלך ולספק עתודות.';
 
   @override
   String get screenRecording => 'הקלטת מסך';
@@ -3297,7 +3379,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureSystemAudioFromMeetings => 'תפוס אודיו מערכת מפגישות';
 
   @override
-  String get screenRecordingDescription => 'Omi זקוקה להרשאת הקלטת מסך כדי לתפוס אודיו מערכת מהפגישות בדפדפן שלך.';
+  String get screenRecordingDescription =>
+      'Omi זקוקה להרשאת הקלטת מסך כדי לתפוס אודיו מערכת מהפגישות בדפדפן שלך.';
 
   @override
   String get accessibility => 'נגישות';
@@ -3355,7 +3438,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get preferences => 'העדפות';
 
   @override
-  String get helpImproveOmiBySharing => 'עזור לשפר את Omi בשיתוף נתוני ניתוח מאומתות';
+  String get helpImproveOmiBySharing =>
+      'עזור לשפר את Omi בשיתוף נתוני ניתוח מאומתות';
 
   @override
   String get deleteAccount => 'מחק חשבון';
@@ -3373,10 +3457,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get exportConversations => 'ייצא שיחות';
 
   @override
-  String get exportAllConversationsToJson => 'ייצא את כל השיחות שלך לקובץ JSON.';
+  String get exportAllConversationsToJson =>
+      'ייצא את כל השיחות שלך לקובץ JSON.';
 
   @override
-  String get conversationsExportStarted => 'ייצוא שיחות החל. זה עשוי לקחת כמה שניות, אנא המתן.';
+  String get conversationsExportStarted =>
+      'ייצוא שיחות החל. זה עשוי לקחת כמה שניות, אנא המתן.';
 
   @override
   String get mcpDescription =>
@@ -3397,10 +3483,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get advancedSettings => 'הגדרות מתקדמות';
 
   @override
-  String get triggersWhenNewConversationCreated => 'מופעל כאשר נוצרת שיחה חדשה.';
+  String get triggersWhenNewConversationCreated =>
+      'מופעל כאשר נוצרת שיחה חדשה.';
 
   @override
-  String get triggersWhenNewTranscriptReceived => 'מופעל כאשר מתקבלת עתודה חדשה.';
+  String get triggersWhenNewTranscriptReceived =>
+      'מופעל כאשר מתקבלת עתודה חדשה.';
 
   @override
   String get realtimeAudioBytes => 'בתים אודיו בזמן אמת';
@@ -3415,25 +3503,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String get triggersWhenDaySummaryGenerated => 'מופעל כאשר מתבצע סיכום יום.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'נסה את התכונות הניסיוניות העדכניות מקבוצת Omi.';
+  String get tryLatestExperimentalFeatures =>
+      'נסה את התכונות הניסיוניות העדכניות מקבוצת Omi.';
 
   @override
   String get transcriptionServiceDiagnosticStatus => 'מצב אבחון של שירות תמלול';
 
   @override
-  String get enableDetailedDiagnosticMessages => 'הפעל הודעות אבחון מפורטות משירות התמלול';
+  String get enableDetailedDiagnosticMessages =>
+      'הפעל הודעות אבחון מפורטות משירות התמלול';
 
   @override
-  String get autoCreateAndTagNewSpeakers => 'צור וציין בעלי קול חדשים באופן אוטומטי';
+  String get autoCreateAndTagNewSpeakers =>
+      'צור וציין בעלי קול חדשים באופן אוטומטי';
 
   @override
-  String get automaticallyCreateNewPerson => 'צור באופן אוטומטי אדם חדש כאשר שם מזוהה בעתודה.';
+  String get automaticallyCreateNewPerson =>
+      'צור באופן אוטומטי אדם חדש כאשר שם מזוהה בעתודה.';
 
   @override
   String get pilotFeatures => 'תכונות חלוציות';
 
   @override
-  String get pilotFeaturesDescription => 'התכונות הללו הן בדיקות וללא התחייבות לתמיכה.';
+  String get pilotFeaturesDescription =>
+      'התכונות הללו הן בדיקות וללא התחייבות לתמיכה.';
 
   @override
   String get suggestFollowUpQuestion => 'הצע שאלת המשך';
@@ -3451,7 +3544,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get auto => 'אוטומטי';
 
   @override
-  String get noSummaryForApp => 'אין סיכום זמין עבור אפליקציה זו. נסה אפליקציה אחרת לקבלת תוצאות טובות יותר.';
+  String get noSummaryForApp =>
+      'אין סיכום זמין עבור אפליקציה זו. נסה אפליקציה אחרת לקבלת תוצאות טובות יותר.';
 
   @override
   String get tryAnotherApp => 'נסה אפליקציה אחרת';
@@ -3485,10 +3579,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'תן לOmi לבחור את האפליקציה הטובה ביותר באופן אוטומטי';
+  String get letOmiChooseAutomatically =>
+      'תן לOmi לבחור את האפליקציה הטובה ביותר באופן אוטומטי';
 
   @override
-  String get deleteConversationConfirmation => 'למחוק את השיחה הזו? לא ניתן לבטל זאת.';
+  String get deleteConversationConfirmation =>
+      'למחוק את השיחה הזו? לא ניתן לבטל זאת.';
 
   @override
   String get conversationDeleted => 'השיחה נמחקה';
@@ -3500,10 +3596,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get editConversation => 'ערוך שיחה';
 
   @override
-  String get conversationLinkCopiedToClipboard => 'קישור השיחה הועתק ללוח העריכה';
+  String get conversationLinkCopiedToClipboard =>
+      'קישור השיחה הועתק ללוח העריכה';
 
   @override
-  String get conversationTranscriptCopiedToClipboard => 'עתודת השיחה הועתקה ללוח העריכה';
+  String get conversationTranscriptCopiedToClipboard =>
+      'עתודת השיחה הועתקה ללוח העריכה';
 
   @override
   String get editConversationDialogTitle => 'ערוך שיחה';
@@ -3518,7 +3616,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get enterConversationTitle => 'הזן כותרת שיחה…';
 
   @override
-  String get conversationTitleUpdatedSuccessfully => 'כותרת השיחה עודכנה בהצלחה';
+  String get conversationTitleUpdatedSuccessfully =>
+      'כותרת השיחה עודכנה בהצלחה';
 
   @override
   String get failedToUpdateConversationTitle => 'עדכון כותרת השיחה נכשל';
@@ -3595,13 +3694,15 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get clickPlayToResumeOrStop => 'לחץ על הפעלה כדי להמשיך או עצור כדי לסיים';
+  String get clickPlayToResumeOrStop =>
+      'לחץ על הפעלה כדי להמשיך או עצור כדי לסיים';
 
   @override
   String get settingUpSystemAudioCapture => 'הגדרה של לכידת אודיו מערכת';
 
   @override
-  String get clickToBeginRecordingSystemAudio => 'לחץ כדי להתחיל הקלטת אודיו מערכת';
+  String get clickToBeginRecordingSystemAudio =>
+      'לחץ כדי להתחיל הקלטת אודיו מערכת';
 
   @override
   String get you => 'אתה';
@@ -3686,7 +3787,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get dailySummaryTitle => 'סיכום יומי';
 
   @override
-  String get dailySummaryDescription => 'קבל סיכום מותאם אישית של שיחות היום שלך שהועבר כהודעה.';
+  String get dailySummaryDescription =>
+      'קבל סיכום מותאם אישית של שיחות היום שלך שהועבר כהודעה.';
 
   @override
   String get deliveryTime => 'זמן הגשה';
@@ -3710,13 +3812,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get showMeetingsInMenuBar => 'הצג פגישות בשורת התפריטים';
 
   @override
-  String get displayUpcomingMeetingsDescription => 'הצג פגישות קרובות בשורת התפריטים';
+  String get displayUpcomingMeetingsDescription =>
+      'הצג פגישות קרובות בשורת התפריטים';
 
   @override
   String get showEventsWithoutParticipants => 'הצג אירועים ללא משתתפים';
 
   @override
-  String get includePersonalEventsDescription => 'כלול אירועים אישיים ללא משתתפים';
+  String get includePersonalEventsDescription =>
+      'כלול אירועים אישיים ללא משתתפים';
 
   @override
   String get upcomingMeetings => 'פגישות קרובות';
@@ -3728,7 +3832,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get shortcuts => 'קיצורים';
 
   @override
-  String get shortcutChangeInstruction => 'לחץ על קיצור כדי לשנות אותו. לחץ Escape כדי לבטל.';
+  String get shortcutChangeInstruction =>
+      'לחץ על קיצור כדי לשנות אותו. לחץ Escape כדי לבטל.';
 
   @override
   String get importDataDescription => 'ייבא נתונים ממקורות אחרים';
@@ -3782,7 +3887,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get termsAndPrivacyPolicy => 'תנאים ומדיניות פרטיות';
 
   @override
-  String get helpsDiagnoseIssuesAutoDeletes => 'עוזר לאבחן בעיות. מחיקה אוטומטית לאחר 3 ימים.';
+  String get helpsDiagnoseIssuesAutoDeletes =>
+      'עוזר לאבחן בעיות. מחיקה אוטומטית לאחר 3 ימים.';
 
   @override
   String get manageYourApp => 'נהל את האפליקציה שלך';
@@ -3797,7 +3903,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get updateAppQuestion => 'עדכן אפליקציה?';
 
   @override
-  String get updateAppConfirmation => 'השינויים יפורסמו לאחר בדיקה של הצוות שלנו.';
+  String get updateAppConfirmation =>
+      'השינויים יפורסמו לאחר בדיקה של הצוות שלנו.';
 
   @override
   String get updateApp => 'עדכן אפליקציה';
@@ -3824,7 +3931,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get no => 'לא';
 
   @override
-  String get subscriptionCancelledSuccessfully => 'המנוי בוטל בהצלחה. הוא יישאר פעיל עד סוף תקופת החיוב הנוכחית.';
+  String get subscriptionCancelledSuccessfully =>
+      'המנוי בוטל בהצלחה. הוא יישאר פעיל עד סוף תקופת החיוב הנוכחית.';
 
   @override
   String get failedToCancelSubscription => 'ביטול המנוי נכשל. אנא נסה שוב.';
@@ -3860,7 +3968,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'בטל מנוי?';
 
   @override
-  String get cancelSubscriptionConfirmation => 'תהיה לך גישה מתמשכת עד סוף תקופת החיוב הנוכחית.';
+  String get cancelSubscriptionConfirmation =>
+      'תהיה לך גישה מתמשכת עד סוף תקופת החיוב הנוכחית.';
 
   @override
   String get cancelSubscriptionButton => 'בטל מנוי';
@@ -3869,13 +3978,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cancelling => 'ביטול…';
 
   @override
-  String get betaTesterMessage => 'אתה בודק בטא עבור אפליקציה זו. היא עדיין לא ציבורית. היא תהיה ציבורית לאחר אישור.';
+  String get betaTesterMessage =>
+      'אתה בודק בטא עבור אפליקציה זו. היא עדיין לא ציבורית. היא תהיה ציבורית לאחר אישור.';
 
   @override
-  String get appUnderReviewMessage => 'האפליקציה שלך נמצאת בבדיקה וגלויה רק לך. היא תהיה ציבורית לאחר אישור.';
+  String get appUnderReviewMessage =>
+      'האפליקציה שלך נמצאת בבדיקה וגלויה רק לך. היא תהיה ציבורית לאחר אישור.';
 
   @override
-  String get appRejectedMessage => 'האפליקציה שלך נדחתה. אנא עדכן את פרטי האפליקציה והגש מחדש לבדיקה.';
+  String get appRejectedMessage =>
+      'האפליקציה שלך נדחתה. אנא עדכן את פרטי האפליקציה והגש מחדש לבדיקה.';
 
   @override
   String get invalidIntegrationUrl => 'כתובת URL של שילוב לא חוקית';
@@ -3884,7 +3996,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tapToComplete => 'לחץ כדי להשלים';
 
   @override
-  String get invalidSetupInstructionsUrl => 'כתובת URL של הוראות הגדרה לא חוקית';
+  String get invalidSetupInstructionsUrl =>
+      'כתובת URL של הוראות הגדרה לא חוקית';
 
   @override
   String get pushToTalk => 'דחוף לדבר';
@@ -3926,7 +4039,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get anonymousUser => 'משתמש אנונימי';
 
   @override
-  String get issueActivatingApp => 'היתה בעיה בהפעלת האפליקציה הזו. אנא נסה שוב.';
+  String get issueActivatingApp =>
+      'היתה בעיה בהפעלת האפליקציה הזו. אנא נסה שוב.';
 
   @override
   String get dataAccessNoticeDescription =>
@@ -3996,7 +4110,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get permissionDeniedForAppleReminders => 'הרשאה נדחתה ל-Apple Reminders';
+  String get permissionDeniedForAppleReminders =>
+      'הרשאה נדחתה ל-Apple Reminders';
 
   @override
   String failedToCreateApiKey(String error) {
@@ -4031,7 +4146,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get copyToClipboard => 'העתק ללוח העריכה';
 
   @override
-  String get pleaseCopyKeyNow => 'אנא העתק אותו כעת וכתוב אותו למקום בטוח כלשהו.';
+  String get pleaseCopyKeyNow =>
+      'אנא העתק אותו כעת וכתוב אותו למקום בטוח כלשהו.';
 
   @override
   String get willNotSeeAgain => 'לא תוכל לראות זאת שוב.';
@@ -4043,7 +4159,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get revokeApiKeyQuestion => 'בטל מפתח API?';
 
   @override
-  String get revokeApiKeyWarning => 'אפליקציות שמשתמשות במפתח הזה יאבדו גישה ל-API. לא ניתן לבטל זאת.';
+  String get revokeApiKeyWarning =>
+      'אפליקציות שמשתמשות במפתח הזה יאבדו גישה ל-API. לא ניתן לבטל זאת.';
 
   @override
   String get revoke => 'בטל';
@@ -4129,7 +4246,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get keyCreated => 'מפתח נוצר';
 
   @override
-  String get keyCreatedMessage => 'המפתח החדש שלך נוצר. אנא העתק אותו כעת. לא תוכל לראות זאת שוב.';
+  String get keyCreatedMessage =>
+      'המפתח החדש שלך נוצר. אנא העתק אותו כעת. לא תוכל לראות זאת שוב.';
 
   @override
   String get keyWord => 'מפתח';
@@ -4142,7 +4260,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'היישומים המותקנים הבאים כוללים שילובים חיצוניים ויכולים לגשת לנתונים שלך, כגון שיחות וזיכרונות.';
 
   @override
-  String get noExternalAppsHaveAccess => 'לאיזה אפליקציות חיצוניות אין גישה לנתונים שלך.';
+  String get noExternalAppsHaveAccess =>
+      'לאיזה אפליקציות חיצוניות אין גישה לנתונים שלך.';
 
   @override
   String get maximumSecurityE2ee => 'אבטחה מקסימלית (E2EE)';
@@ -4151,16 +4270,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get importantTradeoffs => 'סחר חשוב:';
 
   @override
-  String get e2eeTradeoff1 => '• ייתכן שחלק מהתכונות כמו שילובי אפליקציות חיצוניות יהיו מובטלות.';
+  String get e2eeTradeoff1 =>
+      '• ייתכן שחלק מהתכונות כמו שילובי אפליקציות חיצוניות יהיו מובטלות.';
 
   @override
-  String get e2eeTradeoff2 => '• אם תאבד את הסיסמה שלך, לא ניתן לשחזר את הנתונים שלך.';
+  String get e2eeTradeoff2 =>
+      '• אם תאבד את הסיסמה שלך, לא ניתן לשחזר את הנתונים שלך.';
 
   @override
   String get featureComingSoon => 'התכונה הזו בקרוב!';
 
   @override
-  String get migrationInProgressMessage => 'הגירה מתנהלת. לא תוכל לשנות את רמת ההגנה עד שזה יוסיף.';
+  String get migrationInProgressMessage =>
+      'הגירה מתנהלת. לא תוכל לשנות את רמת ההגנה עד שזה יוסיף.';
 
   @override
   String get migrationFailed => 'הגירה נכשלה';
@@ -4182,7 +4304,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get endToEndEncryption => 'הצפנה מקצה לקצה';
 
   @override
-  String get dataAlwaysEncrypted => 'ללא קשר לרמה, הנתונים שלך תמיד מוצפנים במנוחה ובתנועה.';
+  String get dataAlwaysEncrypted =>
+      'ללא קשר לרמה, הנתונים שלך תמיד מוצפנים במנוחה ובתנועה.';
 
   @override
   String get readOnlyScope => 'קריאה בלבד';
@@ -4227,7 +4350,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get permissionsLabel => 'הרשאות';
 
   @override
-  String get permissionsInfoNote => 'R = קריאה, W = כתיבה. ברירת המחדל היא קריאה בלבד אם לא נבחר דבר.';
+  String get permissionsInfoNote =>
+      'R = קריאה, W = כתיבה. ברירת המחדל היא קריאה בלבד אם לא נבחר דבר.';
 
   @override
   String get developerApi => 'API מפתח';
@@ -4247,22 +4371,26 @@ class AppLocalizationsHe extends AppLocalizations {
   String get trainingDataProgram => 'תוכנית נתוני הדרכה';
 
   @override
-  String get getOmiUnlimitedFree => 'קבל Omi Unlimited בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
+  String get getOmiUnlimitedFree =>
+      'קבל Omi Unlimited בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
 
   @override
-  String get trainingDataBullets => '• הנתונים שלך עוזרים לשפר את מודלי ה-AI\n• רק נתונים לא רגישים משותפים';
+  String get trainingDataBullets =>
+      '• הנתונים שלך עוזרים לשפר את מודלי ה-AI\n• רק נתונים לא רגישים משותפים';
 
   @override
   String get learnMoreAtOmiTraining => 'למד עוד בכתובת omi.me/training';
 
   @override
-  String get agreeToContributeData => 'אני מבין ומסכים לתרום את הנתונים שלי לאימון AI';
+  String get agreeToContributeData =>
+      'אני מבין ומסכים לתרום את הנתונים שלי לאימון AI';
 
   @override
   String get submitRequest => 'הגש בקשה';
 
   @override
-  String get thankYouRequestUnderReview => 'תודה! הבקשה שלך נמצאת בבדיקה. אנחנו נודיע לך לאחר אישור.';
+  String get thankYouRequestUnderReview =>
+      'תודה! הבקשה שלך נמצאת בבדיקה. אנחנו נודיע לך לאחר אישור.';
 
   @override
   String planRemainsActiveUntil(String date) {
@@ -4282,13 +4410,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get switchedToOnDevice => 'עבר לתמלול על ההתקן';
 
   @override
-  String get couldNotSwitchToFreePlan => 'לא ניתן לעבור לתוכנית חינם. אנא נסה שוב.';
+  String get couldNotSwitchToFreePlan =>
+      'לא ניתן לעבור לתוכנית חינם. אנא נסה שוב.';
 
   @override
   String get couldNotLoadPlans => 'לא ניתן לטעון תוכניות זמינות. אנא נסה שוב.';
 
   @override
-  String get selectedPlanNotAvailable => 'התוכנית שנבחרה אינה זמינה. אנא נסה שוב.';
+  String get selectedPlanNotAvailable =>
+      'התוכנית שנבחרה אינה זמינה. אנא נסה שוב.';
 
   @override
   String get upgradeToAnnualPlan => 'שדרוג לתוכנית שנתית';
@@ -4297,16 +4427,20 @@ class AppLocalizationsHe extends AppLocalizations {
   String get importantBillingInfo => 'מידע תשלום חשוב:';
 
   @override
-  String get monthlyPlanContinues => 'תוכניתך החודשית הנוכחית תמשיך עד סוף תקופת החיוב שלך';
+  String get monthlyPlanContinues =>
+      'תוכניתך החודשית הנוכחית תמשיך עד סוף תקופת החיוב שלך';
 
   @override
-  String get paymentMethodCharged => 'שיטת התשלום הקיימת שלך תחויב באופן אוטומטי כאשר התוכנית החודשית שלך תסתיים';
+  String get paymentMethodCharged =>
+      'שיטת התשלום הקיימת שלך תחויב באופן אוטומטי כאשר התוכנית החודשית שלך תסתיים';
 
   @override
-  String get annualSubscriptionStarts => 'המנוי השנתי שלך ל-12 חודשים יתחיל באופן אוטומטי לאחר החיוב';
+  String get annualSubscriptionStarts =>
+      'המנוי השנתי שלך ל-12 חודשים יתחיל באופן אוטומטי לאחר החיוב';
 
   @override
-  String get thirteenMonthsCoverage => 'תקבל 13 חודשים של כיסוי בסך הכל (חודש נוכחי + 12 חודשים שנתיים)';
+  String get thirteenMonthsCoverage =>
+      'תקבל 13 חודשים של כיסוי בסך הכל (חודש נוכחי + 12 חודשים שנתיים)';
 
   @override
   String get confirmUpgrade => 'אשר שדרוג';
@@ -4350,7 +4484,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get annualPlanStartsAutomatically => 'התוכנית השנתית שלך תתחיל באופן אוטומטי כאשר התוכנית החודשית שלך תסתיים.';
+  String get annualPlanStartsAutomatically =>
+      'התוכנית השנתית שלך תתחיל באופן אוטומטי כאשר התוכנית החודשית שלך תסתיים.';
 
   @override
   String yourPlanWillRenewOn(String plan, String date) {
@@ -4375,7 +4510,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get youreOnAnnualPlan => 'אתה ב-Annual Plan';
 
   @override
-  String get alreadyBestValuePlan => 'כבר יש לך את התוכנית בעלת הערך הטוב ביותר. אין צורך בשינויים.';
+  String get alreadyBestValuePlan =>
+      'כבר יש לך את התוכנית בעלת הערך הטוב ביותר. אין צורך בשינויים.';
 
   @override
   String get unableToLoadPlans => 'לא ניתן לטעון תוכניות';
@@ -4390,13 +4526,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get continueText => 'המשך';
 
   @override
-  String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
+  String get resubscribeFirstToChangePlans =>
+      'הירשמו מחדש קודם כדי לשנות תוכנית.';
 
   @override
   String get resubscribe => 'הירשם מחדש';
 
   @override
-  String get couldNotOpenPaymentSettings => 'לא ניתן לפתוח הגדרות תשלום. אנא נסה שוב.';
+  String get couldNotOpenPaymentSettings =>
+      'לא ניתן לפתוח הגדרות תשלום. אנא נסה שוב.';
 
   @override
   String get managePaymentMethod => 'נהל שיטת תשלום';
@@ -4451,7 +4589,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummaryCheckConversations => 'נכשל בהפקת סיכום. ודא שיש לך שיחות ליום זה.';
+  String get failedToGenerateSummaryCheckConversations =>
+      'נכשל בהפקת סיכום. ודא שיש לך שיחות ליום זה.';
 
   @override
   String get summaryNotFound => 'סיכום לא נמצא';
@@ -4478,7 +4617,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => 'תרשים הידע נמחק בהצלחה';
 
   @override
-  String get exportStartedMayTakeFewSeconds => 'ייצוא החל. זה עשוי לקחת כמה שניות…';
+  String get exportStartedMayTakeFewSeconds =>
+      'ייצוא החל. זה עשוי לקחת כמה שניות…';
 
   @override
   String get configureDailySummaryDigest => 'הגדר את תקציר המשימות היומי שלך';
@@ -4494,7 +4634,10 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ו-is $triggerDescription.';
   }
 
@@ -4504,7 +4647,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get noSpecificDataAccessConfigured => 'אין גישת נתונים ספציפית מוגדרת.';
+  String get noSpecificDataAccessConfigured =>
+      'אין גישת נתונים ספציפית מוגדרת.';
 
   @override
   String get basicPlanDescription => '300 דקות פרימיום + בלתי מוגבל במכשיר';
@@ -4548,7 +4692,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'מחק את כל שיחות Limitless?';
 
   @override
-  String get deleteAllLimitlessWarning => 'כל השיחות שיובאו מ-Limitless יימחקו. לא ניתן לבטל זאת.';
+  String get deleteAllLimitlessWarning =>
+      'כל השיחות שיובאו מ-Limitless יימחקו. לא ניתן לבטל זאת.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4659,10 +4804,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get storeAudioOnCloud => 'אחסן אודיו בענן';
 
   @override
-  String get cloudStorageDialogMessage => 'הקלטות ההזמנה שלך תאוחסנה בפרטי אחסון ענן כפי שאתה מדבר.';
+  String get cloudStorageDialogMessage =>
+      'הקלטות ההזמנה שלך תאוחסנה בפרטי אחסון ענן כפי שאתה מדבר.';
 
   @override
-  String get storeAudioCloudDescription => 'מעלה את ההקלטות שלך בזמן שאתה מדבר, כדי שתוכל להשמיע אותן מאוחר יותר.';
+  String get storeAudioCloudDescription =>
+      'מעלה את ההקלטות שלך בזמן שאתה מדבר, כדי שתוכל להשמיע אותן מאוחר יותר.';
 
   @override
   String get downloadingFirmware => 'הורדת Firmware';
@@ -4671,7 +4818,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get installingFirmware => 'התקנת Firmware';
 
   @override
-  String get firmwareUpdateWarning => 'אל תסגור את האפליקציה או תכבה את המכשיר. זה עלול לפגוע במכשיר שלך.';
+  String get firmwareUpdateWarning =>
+      'אל תסגור את האפליקציה או תכבה את המכשיר. זה עלול לפגוע במכשיר שלך.';
 
   @override
   String get firmwareUpdated => 'Firmware עודכן';
@@ -4715,7 +4863,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get payments => 'תשלומים';
 
   @override
-  String get connectPaymentMethodInfo => 'חבר שיטת תשלום למטה כדי להתחיל לקבל כסף לאפליקציות שלך.';
+  String get connectPaymentMethodInfo =>
+      'חבר שיטת תשלום למטה כדי להתחיל לקבל כסף לאפליקציות שלך.';
 
   @override
   String get selectedPaymentMethod => 'שיטת תשלום שנבחרה';
@@ -4736,34 +4885,40 @@ class AppLocalizationsHe extends AppLocalizations {
   String get setActive => 'הגדר כפעיל';
 
   @override
-  String get getPaidThroughStripe => 'קבל כסף עבור מכירות האפליקציה שלך דרך Stripe';
+  String get getPaidThroughStripe =>
+      'קבל כסף עבור מכירות האפליקציה שלך דרך Stripe';
 
   @override
   String get monthlyPayouts => 'תשלומים חודשיים';
 
   @override
-  String get monthlyPayoutsDescription => 'קבל תשלומים חודשיים ישירות לחשבון שלך כאשר תגיע ל-\$10 בהכנסות';
+  String get monthlyPayoutsDescription =>
+      'קבל תשלומים חודשיים ישירות לחשבון שלך כאשר תגיע ל-\$10 בהכנסות';
 
   @override
   String get secureAndReliable => 'בטוח ואמין';
 
   @override
-  String get stripeSecureDescription => 'Stripe מבטיח העברות בטוחות וזמניות של הכנסות האפליקציה שלך';
+  String get stripeSecureDescription =>
+      'Stripe מבטיח העברות בטוחות וזמניות של הכנסות האפליקציה שלך';
 
   @override
   String get selectYourCountry => 'בחר את המדינה שלך';
 
   @override
-  String get countrySelectionPermanent => 'בחירת המדינה שלך היא קבועה ולא ניתן לשנות אותה מאוחר יותר.';
+  String get countrySelectionPermanent =>
+      'בחירת המדינה שלך היא קבועה ולא ניתן לשנות אותה מאוחר יותר.';
 
   @override
-  String get byClickingConnectNow => 'על ידי לחיצה על \"Connect Now\" אתה מסכים ל-';
+  String get byClickingConnectNow =>
+      'על ידי לחיצה על \"Connect Now\" אתה מסכים ל-';
 
   @override
   String get stripeConnectedAccountAgreement => 'הסכם Stripe Connected Account';
 
   @override
-  String get errorConnectingToStripe => 'שגיאה בחיבור ל-Stripe! אנא נסה שוב מאוחר יותר.';
+  String get errorConnectingToStripe =>
+      'שגיאה בחיבור ל-Stripe! אנא נסה שוב מאוחר יותר.';
 
   @override
   String get connectingYourStripeAccount => 'חיבור חשבון Stripe שלך';
@@ -4789,7 +4944,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get updateStripeDetails => 'עדכן פרטי Stripe';
 
   @override
-  String get errorUpdatingStripeDetails => 'שגיאה בעדכון פרטי Stripe! אנא נסה שוב מאוחר יותר.';
+  String get errorUpdatingStripeDetails =>
+      'שגיאה בעדכון פרטי Stripe! אנא נסה שוב מאוחר יותר.';
 
   @override
   String get updatePayPal => 'עדכן PayPal';
@@ -4801,7 +4957,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get updatePayPalAccountDetails => 'עדכן את פרטי חשבון PayPal שלך';
 
   @override
-  String get connectPayPalToReceivePayments => 'חבר את חשבון PayPal שלך כדי להתחיל לקבל תשלומים עבור האפליקציות שלך';
+  String get connectPayPalToReceivePayments =>
+      'חבר את חשבון PayPal שלך כדי להתחיל לקבל תשלומים עבור האפליקציות שלך';
 
   @override
   String get paypalEmail => 'אימייל PayPal';
@@ -4810,7 +4967,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paypalMeLink => 'קישור PayPal.me';
 
   @override
-  String get stripeRecommendation => 'אם Stripe זמין במדינתך, אנחנו ממליצים בחום להשתמש בו לתשלומים מהירים וקלים יותר.';
+  String get stripeRecommendation =>
+      'אם Stripe זמין במדינתך, אנחנו ממליצים בחום להשתמש בו לתשלומים מהירים וקלים יותר.';
 
   @override
   String get updatePayPalDetails => 'עדכן פרטי PayPal';
@@ -4887,7 +5045,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get loadingYourRecording => 'טוען את ההקלטה שלך…';
 
   @override
-  String get photoDiscardedMessage => 'התמונה זו הושלכה מכיוון שלא הייתה משמעותית.';
+  String get photoDiscardedMessage =>
+      'התמונה זו הושלכה מכיוון שלא הייתה משמעותית.';
 
   @override
   String get analyzing => 'בנתוח…';
@@ -4926,7 +5085,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appleWatchConnectedSuccessfully => 'Apple Watch מחובר בהצלחה!';
 
   @override
-  String get appleWatchNotReachable => 'Apple Watch עדיין לא זמין. אנא ודא שאפליקציית Omi פתוחה בשעון שלך.';
+  String get appleWatchNotReachable =>
+      'Apple Watch עדיין לא זמין. אנא ודא שאפליקציית Omi פתוחה בשעון שלך.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -4943,7 +5103,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get finishedConversation => 'סיימת שיחה?';
 
   @override
-  String get stopRecordingConfirmation => 'לעצור את ההקלטה ולסכם את השיחה עכשיו?';
+  String get stopRecordingConfirmation =>
+      'לעצור את ההקלטה ולסכם את השיחה עכשיו?';
 
   @override
   String get conversationEndsManually => 'שיחה תסתיים רק ידנית.';
@@ -5010,7 +5171,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get welcomeBackSimple => 'ברוך השוב';
 
   @override
-  String get addVocabularyDescription => 'הוסף מילים שOmi צריך לזהות במהלך תמלול.';
+  String get addVocabularyDescription =>
+      'הוסף מילים שOmi צריך לזהות במהלך תמלול.';
 
   @override
   String get enterWordsCommaSeparated => 'הזן מילים (מופרדות בפסיקים)';
@@ -5351,19 +5513,23 @@ class AppLocalizationsHe extends AppLocalizations {
   String get multipleSpeakersDetected => 'זוהו דוברים מרובים';
 
   @override
-  String get multipleSpeakersDescription => 'נראה שיש מדברים מרובים בהקלטה. אנא ודא שאתה במקום שקט ונסה שוב.';
+  String get multipleSpeakersDescription =>
+      'נראה שיש מדברים מרובים בהקלטה. אנא ודא שאתה במקום שקט ונסה שוב.';
 
   @override
   String get invalidRecordingDetected => 'זוהתה הקלטה לא חוקית';
 
   @override
-  String get notEnoughSpeechDescription => 'אין מספיק דיבור שזוהה. אנא דבר יותר ונסה שוב.';
+  String get notEnoughSpeechDescription =>
+      'אין מספיק דיבור שזוהה. אנא דבר יותר ונסה שוב.';
 
   @override
-  String get speechDurationDescription => 'אנא וודא שאתה מדבר לפחות 5 שניות ולא יותר מ-90.';
+  String get speechDurationDescription =>
+      'אנא וודא שאתה מדבר לפחות 5 שניות ולא יותר מ-90.';
 
   @override
-  String get connectionLostDescription => 'החיבור הופרע. אנא בדוק את חיבור האינטרנט שלך ונסה שוב.';
+  String get connectionLostDescription =>
+      'החיבור הופרע. אנא בדוק את חיבור האינטרנט שלך ונסה שוב.';
 
   @override
   String get howToTakeGoodSample => 'איך לקחת דגימה טובה?';
@@ -5373,7 +5539,8 @@ class AppLocalizationsHe extends AppLocalizations {
       '1. וודא שאתה במקום שקט.\n2. דבר בבירור ובטבעיות.\n3. וודא שהמכשיר שלך נמצא במצבו הטבעי, על הצוואר שלך.\n\nלאחר יצירתה, תוכל תמיד לשפר אותה או לעשות אותה שוב.';
 
   @override
-  String get noDeviceConnectedUseMic => 'אין מכשיר מחובר. יהיה שימוש במיקרופון הטלפון.';
+  String get noDeviceConnectedUseMic =>
+      'אין מכשיר מחובר. יהיה שימוש במיקרופון הטלפון.';
 
   @override
   String get doItAgain => 'בצע זאת שוב';
@@ -5388,7 +5555,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get keepGoingGreat => 'המשך, אתה עושה מצוין';
 
   @override
-  String get somethingWentWrongTryAgain => 'משהו השתבש! אנא נסה שוב מאוחר יותר.';
+  String get somethingWentWrongTryAgain =>
+      'משהו השתבש! אנא נסה שוב מאוחר יותר.';
 
   @override
   String get uploadingVoiceProfile => 'העלאת פרופיל הקול שלך…';
@@ -5412,7 +5580,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get notificationFrequency => 'תדירות הודעות';
 
   @override
-  String get controlNotificationFrequency => 'שלוט בתדירות של הודעות Omi פרואקטיביות שלך.';
+  String get controlNotificationFrequency =>
+      'שלוט בתדירות של הודעות Omi פרואקטיביות שלך.';
 
   @override
   String get yourScore => 'הניקוד שלך';
@@ -5437,7 +5606,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'הניקוד היומי שלך מבוסס על השלמת משימות. השלם את המשימות שלך כדי לשפר את הניקוד שלך!';
 
   @override
-  String get notificationFrequencyDescription => 'שלוט בתדירות של הודעות ותזכורות פרואקטיביות של Omi.';
+  String get notificationFrequencyDescription =>
+      'שלוט בתדירות של הודעות ותזכורות פרואקטיביות של Omi.';
 
   @override
   String get sliderOff => 'כבוי';
@@ -5451,7 +5621,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummary => 'איתור ישן. ודא שיש לך שיחות לאותו יום.';
+  String get failedToGenerateSummary =>
+      'איתור ישן. ודא שיש לך שיחות לאותו יום.';
 
   @override
   String get recap => 'סיכום';
@@ -5527,7 +5698,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get selectApp => 'בחר אפליקציה';
 
   @override
-  String get noChatAppsEnabled => 'אין אפליקציות צ\'אט מופעלות.\nהקש \"הפעל אפליקציות\" כדי להוסיף חלקן.';
+  String get noChatAppsEnabled =>
+      'אין אפליקציות צ\'אט מופעלות.\nהקש \"הפעל אפליקציות\" כדי להוסיף חלקן.';
 
   @override
   String get disable => 'בטל';
@@ -5545,7 +5717,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'עקוב אחר היעדים האישיים שלך בעמוד הבית';
+  String get trackYourGoalsOnHomepage =>
+      'עקוב אחר היעדים האישיים שלך בעמוד הבית';
 
   @override
   String get deleteRecording => 'מחק הקלטה';
@@ -5580,7 +5753,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cancelSync => 'ביטול סנכרון';
 
   @override
-  String get cancelSyncMessage => 'נתונים שהורדו כבר יישמרו. אתה יכול להמשיך מאוחר יותר.';
+  String get cancelSyncMessage =>
+      'נתונים שהורדו כבר יישמרו. אתה יכול להמשיך מאוחר יותר.';
 
   @override
   String get syncCancelled => 'סנכרון בוטל';
@@ -5641,7 +5815,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recordings => 'הקלטות';
 
   @override
-  String get enableRemindersAccess => 'אנא הפעל גישה לתזכורות בהגדרות כדי להשתמש בתזכורות Apple';
+  String get enableRemindersAccess =>
+      'אנא הפעל גישה לתזכורות בהגדרות כדי להשתמש בתזכורות Apple';
 
   @override
   String todayAtTime(String time) {
@@ -5675,7 +5850,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summarizingConversation => 'סיכום השיחה…\nזה אולי יקח כמה שניות';
 
   @override
-  String get resummarizingConversation => 'סיכום מחדש של השיחה…\nזה אולי יקח כמה שניות';
+  String get resummarizingConversation =>
+      'סיכום מחדש של השיחה…\nזה אולי יקח כמה שניות';
 
   @override
   String get nothingInterestingRetry => 'לא נמצא כלום מעניין,\nרוצה לנסות שוב?';
@@ -5696,7 +5872,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get webhookUrlNotSet => 'כתובת URL של Webhook לא הוגדרה';
 
   @override
-  String get setWebhookUrlInSettings => 'אנא הגדר את כתובת ה-Webhook בהגדרות המפתח כדי להשתמש בתכונה זו.';
+  String get setWebhookUrlInSettings =>
+      'אנא הגדר את כתובת ה-Webhook בהגדרות המפתח כדי להשתמש בתכונה זו.';
 
   @override
   String get sendWebUrl => 'שלח כתובת אינטרנט';
@@ -5711,7 +5888,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get debugModeDetected => 'זוהה מצב ניפוי בעיות';
 
   @override
-  String get performanceReduced => 'ביצועים מופחתים פי 5-10. השתמש במצב Release.';
+  String get performanceReduced =>
+      'ביצועים מופחתים פי 5-10. השתמש במצב Release.';
 
   @override
   String autoClosingInSeconds(int seconds) {
@@ -5728,13 +5906,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceNotCompatible => 'המכשיר לא תואם';
 
   @override
-  String get deviceRequirements => 'המכשיר שלך אינו עומד בדרישות עבור תמלול On-Device.';
+  String get deviceRequirements =>
+      'המכשיר שלך אינו עומד בדרישות עבור תמלול On-Device.';
 
   @override
-  String get willLikelyCrash => 'הפעלת זה כנראה תגרום לאפליקציה להתרסק או להקפיא.';
+  String get willLikelyCrash =>
+      'הפעלת זה כנראה תגרום לאפליקציה להתרסק או להקפיא.';
 
   @override
-  String get transcriptionSlowerLessAccurate => 'התמלול יהיה הרבה יותר איטי ופחות מדויק.';
+  String get transcriptionSlowerLessAccurate =>
+      'התמלול יהיה הרבה יותר איטי ופחות מדויק.';
 
   @override
   String get proceedAnyway => 'המשך בכל זאת';
@@ -5764,19 +5945,22 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceMayWarmUp => 'המכשיר אולי יתחמם בשימוש מורחב.';
 
   @override
-  String get speedAccuracyLower => 'המהירות והדיוק אולי יהיו נמוכים יותר מדגמים Cloud.';
+  String get speedAccuracyLower =>
+      'המהירות והדיוק אולי יהיו נמוכים יותר מדגמים Cloud.';
 
   @override
   String get cloudProvider => 'ספק ענן';
 
   @override
-  String get premiumMinutesInfo => '300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה.';
+  String get premiumMinutesInfo =>
+      '300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה.';
 
   @override
   String get viewUsage => 'הצג שימוש';
 
   @override
-  String get localProcessingInfo => 'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
+  String get localProcessingInfo =>
+      'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
 
   @override
   String get model => 'דגם';
@@ -5792,7 +5976,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get usingNativeIosSpeech => 'שימוש בזיהוי דיבור iOS מקומי';
 
   @override
-  String get noModelDownloadRequired => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
+  String get noModelDownloadRequired =>
+      'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
 
   @override
   String get modelReady => 'דגם מוכן';
@@ -5837,10 +6022,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceNotCompatibleTitle => 'המכשיר לא תואם';
 
   @override
-  String get deviceNotMeetRequirements => 'המכשיר שלך אינו עומד בדרישות עבור תמלול On-Device.';
+  String get deviceNotMeetRequirements =>
+      'המכשיר שלך אינו עומד בדרישות עבור תמלול On-Device.';
 
   @override
-  String get transcriptionSlowerOnDevice => 'תמלול On-device אולי יהיה איטי יותר במכשיר זה.';
+  String get transcriptionSlowerOnDevice =>
+      'תמלול On-device אולי יהיה איטי יותר במכשיר זה.';
 
   @override
   String get computationallyIntensive => 'תמלול On-Device הוא עתיר חישובים.';
@@ -5849,10 +6036,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryDrainSignificantly => 'זליגת הסוללה תגדל משמעותית.';
 
   @override
-  String get premiumMinutesMonth => '300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה. ';
+  String get premiumMinutesMonth =>
+      '300 דקות פרימיום בחודש. בחר „על המכשיר” לתמלול חינמי ללא הגבלה. ';
 
   @override
-  String get audioProcessedLocally => 'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
+  String get audioProcessedLocally =>
+      'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
 
   @override
   String get languageLabel => 'שפה';
@@ -5865,7 +6054,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'דגם זה גדול ועלול להתרסק או לרוץ לאט מאוד במכשירים ניידים.\n\n\"small\" או \"base\" מומלץ.';
 
   @override
-  String get nativeEngineNoDownload => 'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
+  String get nativeEngineNoDownload =>
+      'מנוע הדיבור המקומי של המכשיר שלך יהיה בשימוש. הורדת דגם אינה נדרשת.';
 
   @override
   String modelReadyWithName(String model) {
@@ -5901,7 +6091,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'התמלול החי של Omi בנוי לשיחות בזמן אמת ומציין מי אמר מה.';
+  String get omiTranscriptionOptimized =>
+      'התמלול החי של Omi בנוי לשיחות בזמן אמת ומציין מי אמר מה.';
 
   @override
   String get reset => 'איפוס';
@@ -5962,19 +6153,23 @@ class AppLocalizationsHe extends AppLocalizations {
   String get permissionTypeTrigger => 'הפעל';
 
   @override
-  String get permissionDescReadConversations => 'אפליקציה זו יכולה לגשת לשיחות שלך.';
+  String get permissionDescReadConversations =>
+      'אפליקציה זו יכולה לגשת לשיחות שלך.';
 
   @override
-  String get permissionDescReadMemories => 'אפליקציה זו יכולה לגשת לזיכרונות שלך.';
+  String get permissionDescReadMemories =>
+      'אפליקציה זו יכולה לגשת לזיכרונות שלך.';
 
   @override
   String get permissionDescReadTasks => 'אפליקציה זו יכולה לגשת למשימות שלך.';
 
   @override
-  String get permissionDescCreateConversations => 'אפליקציה זו יכולה ליצור שיחות חדשות.';
+  String get permissionDescCreateConversations =>
+      'אפליקציה זו יכולה ליצור שיחות חדשות.';
 
   @override
-  String get permissionDescCreateMemories => 'אפליקציה זו יכולה ליצור זיכרונות חדשים.';
+  String get permissionDescCreateMemories =>
+      'אפליקציה זו יכולה ליצור זיכרונות חדשים.';
 
   @override
   String get realtimeListening => 'האזנה בזמן אמת';
@@ -5989,7 +6184,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get writeReviewOptional => 'כתוב ביקורת (אופציונלי)';
 
   @override
-  String get setupQuestionsIntro => 'עזור לנו לשפר את Omi על ידי מענה לכמה שאלות. 🫶 💜';
+  String get setupQuestionsIntro =>
+      'עזור לנו לשפר את Omi על ידי מענה לכמה שאלות. 🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. מה אתה עושה?';
@@ -6076,7 +6272,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get enterPasswordError => 'אנא הזן את הסיסמה שלך';
 
   @override
-  String get passwordMinLengthError => 'הסיסמה חייבת להיות בעלת אורך של לפחות 8 תווים';
+  String get passwordMinLengthError =>
+      'הסיסמה חייבת להיות בעלת אורך של לפחות 8 תווים';
 
   @override
   String get signInSuccess => 'התחברות בהצלחה!';
@@ -6118,10 +6315,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noKnowledgeGraphYet => 'אין גרף ידע עדיין';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => 'בנייה של גרף הידע שלך מזיכרונות…';
+  String get buildingKnowledgeGraphFromMemories =>
+      'בנייה של גרף הידע שלך מזיכרונות…';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'גרף הידע שלך יבנה באופן אוטומטי כשאתה יוצר זיכרונות חדשים.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'גרף הידע שלך יבנה באופן אוטומטי כשאתה יוצר זיכרונות חדשים.';
 
   @override
   String get buildGraphButton => 'בנה גרף';
@@ -6156,7 +6355,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noChangesInReview => 'אין שינויים בביקורת כדי לעדכן.';
 
   @override
-  String get cantRateWithoutInternet => 'לא ניתן לדרג אפליקציה ללא חיבור אינטרנט.';
+  String get cantRateWithoutInternet =>
+      'לא ניתן לדרג אפליקציה ללא חיבור אינטרנט.';
 
   @override
   String get appAnalytics => 'ניתוח אפליקציות';
@@ -6312,7 +6512,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get shareViaSms => 'שתף דרך SMS';
 
   @override
-  String get selectContactsToShareSummary => 'בחר אנשי קשר כדי לשתף את סיכום השיחה שלך';
+  String get selectContactsToShareSummary =>
+      'בחר אנשי קשר כדי לשתף את סיכום השיחה שלך';
 
   @override
   String get searchContactsHint => 'חפש אנשי קשר';
@@ -6342,10 +6543,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get contactsPermissionRequired => 'נדרשת הרשאת אנשי קשר';
 
   @override
-  String get contactsPermissionRequiredForSms => 'הרשאת אנשי קשר נדרשת לשיתוף דרך SMS';
+  String get contactsPermissionRequiredForSms =>
+      'הרשאת אנשי קשר נדרשת לשיתוף דרך SMS';
 
   @override
-  String get grantContactsPermissionForSms => 'אנא תן הרשאת אנשי קשר כדי לשתף דרך SMS';
+  String get grantContactsPermissionForSms =>
+      'אנא תן הרשאת אנשי קשר כדי לשתף דרך SMS';
 
   @override
   String get noContactsWithPhoneNumbers => 'לא נמצאו אנשי קשר עם מספרי טלפון';
@@ -6357,10 +6560,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get failedToLoadContacts => 'איתור בטעינת אנשי קשר';
 
   @override
-  String get failedToPrepareConversationForSharing => 'איתור בהכנת השיחה לשיתוף. אנא נסה שוב.';
+  String get failedToPrepareConversationForSharing =>
+      'איתור בהכנת השיחה לשיתוף. אנא נסה שוב.';
 
   @override
-  String get couldNotOpenSmsApp => 'לא הצליח לפתוח את אפליקציית SMS. אנא נסה שוב.';
+  String get couldNotOpenSmsApp =>
+      'לא הצליח לפתוח את אפליקציית SMS. אנא נסה שוב.';
 
   @override
   String heresWhatWeDiscussed(String link) {
@@ -6409,7 +6614,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transferRequired => 'העברה נדרשת';
 
   @override
-  String get downloadingAudioFromSdCard => 'הורדה של אודיו מכרטיס ה-SD של המכשיר שלך';
+  String get downloadingAudioFromSdCard =>
+      'הורדה של אודיו מכרטיס ה-SD של המכשיר שלך';
 
   @override
   String get transferRequiredDescription =>
@@ -6470,7 +6676,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get statusUnprocessed => 'לא מעובד';
 
   @override
-  String get transferCompleteMessage => 'ההעברה הושלמה! אתה יכול כעת להשמיע הקלטה זו.';
+  String get transferCompleteMessage =>
+      'ההעברה הושלמה! אתה יכול כעת להשמיע הקלטה זו.';
 
   @override
   String transferFailedMessage(String error) {
@@ -6511,13 +6718,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryFullyChargedTitle => 'Omi טעון לגמרי';
 
   @override
-  String get batteryFullyChargedBody => 'מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!';
+  String get batteryFullyChargedBody =>
+      'מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'התקן Omi שלך התנתק';
 
   @override
-  String get deviceDisconnectedNotificationBody => 'אנא התחבר מחדש כדי להמשיך להשתמש ב-Omi שלך.';
+  String get deviceDisconnectedNotificationBody =>
+      'אנא התחבר מחדש כדי להמשיך להשתמש ב-Omi שלך.';
 
   @override
   String get firmwareUpdateAvailable => 'עדכון קושחה זמין';
@@ -6534,13 +6743,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appDeletedSuccessfully => 'האפליקציה נמחקה בהצלחה';
 
   @override
-  String get appDeleteFailed => 'כישלון במחיקת האפליקציה. אנא נסה שוב מאוחר יותר.';
+  String get appDeleteFailed =>
+      'כישלון במחיקת האפליקציה. אנא נסה שוב מאוחר יותר.';
 
   @override
-  String get appVisibilityChangedSuccessfully => 'שינוי הנראות של האפליקציה בוצע בהצלחה. זה עלול להימשך כמה דקות.';
+  String get appVisibilityChangedSuccessfully =>
+      'שינוי הנראות של האפליקציה בוצע בהצלחה. זה עלול להימשך כמה דקות.';
 
   @override
-  String get errorActivatingAppIntegration => 'שגיאה בהפעלת האפליקציה. אם זו אפליקציית אינטגרציה, וודא שההגדרה הושלמה.';
+  String get errorActivatingAppIntegration =>
+      'שגיאה בהפעלת האפליקציה. אם זו אפליקציית אינטגרציה, וודא שההגדרה הושלמה.';
 
   @override
   String get errorUpdatingAppStatus => 'אירעה שגיאה בעדכון סטטוס האפליקציה.';
@@ -6608,7 +6820,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get importantConversationTitle => 'שיחה חשובה';
 
   @override
-  String get importantConversationBody => 'זה עתה הייתה לך שיחה חשובה. הקש כדי לשתף את הסיכום עם אחרים.';
+  String get importantConversationBody =>
+      'זה עתה הייתה לך שיחה חשובה. הקש כדי לשתף את הסיכום עם אחרים.';
 
   @override
   String get templateName => 'שם תבנית';
@@ -6620,13 +6833,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get nameMustBeAtLeast3Characters => 'השם חייב להיות לפחות 3 תווים';
 
   @override
-  String get conversationPromptHint => 'למשל, חלץ משימות, החלטות שהתקבלו ותובנות עיקריות מהשיחה שסופקה.';
+  String get conversationPromptHint =>
+      'למשל, חלץ משימות, החלטות שהתקבלו ותובנות עיקריות מהשיחה שסופקה.';
 
   @override
   String get pleaseEnterAppPrompt => 'אנא הזן הנחיה עבור האפליקציה שלך';
 
   @override
-  String get promptMustBeAtLeast10Characters => 'ההנחיה חייבת להיות לפחות 10 תווים';
+  String get promptMustBeAtLeast10Characters =>
+      'ההנחיה חייבת להיות לפחות 10 תווים';
 
   @override
   String get anyoneCanDiscoverTemplate => 'כל אחד יכול לגלות את התבנית שלך';
@@ -6653,13 +6868,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get failedToCreateApp => 'כישלון ביצירת אפליקציה. אנא נסה שוב.';
 
   @override
-  String get addAppSelectCoreCapability => 'אנא בחר עוד יכולת ליבה אחת עבור האפליקציה שלך כדי להמשיך';
+  String get addAppSelectCoreCapability =>
+      'אנא בחר עוד יכולת ליבה אחת עבור האפליקציה שלך כדי להמשיך';
 
   @override
-  String get addAppSelectPaymentPlan => 'אנא בחר תוכנית תשלום והזן מחיר עבור האפליקציה שלך';
+  String get addAppSelectPaymentPlan =>
+      'אנא בחר תוכנית תשלום והזן מחיר עבור האפליקציה שלך';
 
   @override
-  String get addAppSelectCapability => 'אנא בחר לפחות יכולת אחת עבור האפליקציה שלך';
+  String get addAppSelectCapability =>
+      'אנא בחר לפחות יכולת אחת עבור האפליקציה שלך';
 
   @override
   String get addAppSelectLogo => 'אנא בחר לוגו עבור האפליקציה שלך';
@@ -6668,13 +6886,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get addAppEnterChatPrompt => 'אנא הזן הנחיית צ\'אט עבור האפליקציה שלך';
 
   @override
-  String get addAppEnterConversationPrompt => 'אנא הזן הנחיית שיחה עבור האפליקציה שלך';
+  String get addAppEnterConversationPrompt =>
+      'אנא הזן הנחיית שיחה עבור האפליקציה שלך';
 
   @override
-  String get addAppSelectTriggerEvent => 'אנא בחר אירוע טריגר עבור האפליקציה שלך';
+  String get addAppSelectTriggerEvent =>
+      'אנא בחר אירוע טריגר עבור האפליקציה שלך';
 
   @override
-  String get addAppEnterWebhookUrl => 'אנא הזן כתובת webhook עבור האפליקציה שלך';
+  String get addAppEnterWebhookUrl =>
+      'אנא הזן כתובת webhook עבור האפליקציה שלך';
 
   @override
   String get addAppSelectCategory => 'אנא בחר קטגוריה עבור האפליקציה שלך';
@@ -6686,7 +6907,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get addAppUpdatedSuccess => 'אפליקציה עודכנה בהצלחה 🚀';
 
   @override
-  String get addAppUpdateFailed => 'כישלון בעדכון אפליקציה. אנא נסה שוב מאוחר יותר';
+  String get addAppUpdateFailed =>
+      'כישלון בעדכון אפליקציה. אנא נסה שוב מאוחר יותר';
 
   @override
   String get addAppSubmittedSuccess => 'אפליקציה הוגשה בהצלחה 🚀';
@@ -6702,10 +6924,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get addAppPhotosPermissionDenied => 'הרשאת תמונות נדחתה. אנא אפשר גישה לתמונות כדי לבחור תמונה';
+  String get addAppPhotosPermissionDenied =>
+      'הרשאת תמונות נדחתה. אנא אפשר גישה לתמונות כדי לבחור תמונה';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'שגיאה בבחירת תמונה. אנא נסה שוב.';
+  String get addAppErrorSelectingImageRetry =>
+      'שגיאה בבחירת תמונה. אנא נסה שוב.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
@@ -6713,22 +6937,28 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'שגיאה בבחירת תמונה ממוזערת. אנא נסה שוב.';
+  String get addAppErrorSelectingThumbnailRetry =>
+      'שגיאה בבחירת תמונה ממוזערת. אנא נסה שוב.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'לא ניתן לבחור יכולות אחרות עם Persona';
+  String get addAppCapabilityConflictWithPersona =>
+      'לא ניתן לבחור יכולות אחרות עם Persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'לא ניתן לבחור Persona עם יכולות אחרות';
+  String get addAppPersonaConflictWithCapabilities =>
+      'לא ניתן לבחור Persona עם יכולות אחרות';
 
   @override
-  String get paymentFailedToFetchCountries => 'כישלון בטעינת מדינות נתמכות. אנא נסה שוב מאוחר יותר.';
+  String get paymentFailedToFetchCountries =>
+      'כישלון בטעינת מדינות נתמכות. אנא נסה שוב מאוחר יותר.';
 
   @override
-  String get paymentFailedToSetDefault => 'כישלון בהגדרת שיטת תשלום ברירת מחדל. אנא נסה שוב מאוחר יותר.';
+  String get paymentFailedToSetDefault =>
+      'כישלון בהגדרת שיטת תשלום ברירת מחדל. אנא נסה שוב מאוחר יותר.';
 
   @override
-  String get paymentFailedToSavePaypal => 'כישלון בשמירת פרטי PayPal. אנא נסה שוב מאוחר יותר.';
+  String get paymentFailedToSavePaypal =>
+      'כישלון בשמירת פרטי PayPal. אנא נסה שוב מאוחר יותר.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -6811,19 +7041,24 @@ class AppLocalizationsHe extends AppLocalizations {
       'שדרוג זמין! תוכנית החודשית שלך נמשכת עד סוף תקופת החיוב שלך, ואז עוברת אוטומטית לתשנתי.';
 
   @override
-  String get couldNotSchedulePlanChange => 'לא היתה אפשרות לתזמן שינוי תוכנית. אנא נסה שוב.';
+  String get couldNotSchedulePlanChange =>
+      'לא היתה אפשרות לתזמן שינוי תוכנית. אנא נסה שוב.';
 
   @override
-  String get subscriptionReactivatedDefault => 'המנוי שלך הופעל מחדש! לא חיוב כעת - תחויב בסוף התקופה הנוכחית שלך.';
+  String get subscriptionReactivatedDefault =>
+      'המנוי שלך הופעל מחדש! לא חיוב כעת - תחויב בסוף התקופה הנוכחית שלך.';
 
   @override
-  String get subscriptionSuccessfulCharged => 'המנוי הצליח! חויבת עבור תקופת החיוב החדשה.';
+  String get subscriptionSuccessfulCharged =>
+      'המנוי הצליח! חויבת עבור תקופת החיוב החדשה.';
 
   @override
-  String get couldNotProcessSubscription => 'לא היתה אפשרות לעבד את המנוי. אנא נסה שוב.';
+  String get couldNotProcessSubscription =>
+      'לא היתה אפשרות לעבד את המנוי. אנא נסה שוב.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'לא היתה אפשרות להשיק דף שדרוג. אנא נסה שוב.';
+  String get couldNotLaunchUpgradePage =>
+      'לא היתה אפשרות להשיק דף שדרוג. אנא נסה שוב.';
 
   @override
   String get transcriptionJsonPlaceholder => 'הדבק את תצורת ה-JSON שלך כאן…';
@@ -6919,25 +7154,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String get successfullyConnectedTodoist => 'התחבר בהצלחה לـ Todoist!';
 
   @override
-  String get failedToConnectTodoistRetry => 'כישלון בחיבור לـ Todoist. אנא נסה שוב.';
+  String get failedToConnectTodoistRetry =>
+      'כישלון בחיבור לـ Todoist. אנא נסה שוב.';
 
   @override
   String get successfullyConnectedAsana => 'התחבר בהצלחה לـ Asana!';
 
   @override
-  String get failedToConnectAsanaRetry => 'כישלון בחיבור לـ Asana. אנא נסה שוב.';
+  String get failedToConnectAsanaRetry =>
+      'כישלון בחיבור לـ Asana. אנא נסה שוב.';
 
   @override
-  String get successfullyConnectedGoogleTasks => 'התחבר בהצלחה לـ Google Tasks!';
+  String get successfullyConnectedGoogleTasks =>
+      'התחבר בהצלחה לـ Google Tasks!';
 
   @override
-  String get failedToConnectGoogleTasksRetry => 'כישלון בחיבור לـ Google Tasks. אנא נסה שוב.';
+  String get failedToConnectGoogleTasksRetry =>
+      'כישלון בחיבור לـ Google Tasks. אנא נסה שוב.';
 
   @override
   String get successfullyConnectedClickUp => 'התחבר בהצלחה לـ ClickUp!';
 
   @override
-  String get failedToConnectClickUpRetry => 'כישלון בחיבור לـ ClickUp. אנא נסה שוב.';
+  String get failedToConnectClickUpRetry =>
+      'כישלון בחיבור לـ ClickUp. אנא נסה שוב.';
 
   @override
   String get successfullyConnectedNotion => 'התחבר בהצלחה לـ Notion!';
@@ -6964,19 +7204,23 @@ class AppLocalizationsHe extends AppLocalizations {
   String get failedToRefreshGitHubStatus => 'כישלון בחידוש סטטוס חיבור GitHub.';
 
   @override
-  String get authFailedToSignInWithGoogle => 'כישלון בכניסה עם Google, אנא נסה שוב.';
+  String get authFailedToSignInWithGoogle =>
+      'כישלון בכניסה עם Google, אנא נסה שוב.';
 
   @override
   String get authenticationFailed => 'האימות נכשל. אנא נסה שוב.';
 
   @override
-  String get authFailedToSignInWithApple => 'כישלון בכניסה עם Apple, אנא נסה שוב.';
+  String get authFailedToSignInWithApple =>
+      'כישלון בכניסה עם Apple, אנא נסה שוב.';
 
   @override
-  String get authFailedToRetrieveToken => 'כישלון בשליפת אסימון firebase, אנא נסה שוב.';
+  String get authFailedToRetrieveToken =>
+      'כישלון בשליפת אסימון firebase, אנא נסה שוב.';
 
   @override
-  String get authUnexpectedErrorFirebase => 'שגיאה בלתי צפויה בעת הכניסה, שגיאת Firebase, אנא נסה שוב.';
+  String get authUnexpectedErrorFirebase =>
+      'שגיאה בלתי צפויה בעת הכניסה, שגיאת Firebase, אנא נסה שוב.';
 
   @override
   String get authUnexpectedError => 'שגיאה בלתי צפויה בעת הכניסה, אנא נסה שוב';
@@ -6988,10 +7232,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get authFailedToLinkApple => 'כישלון בקישור עם Apple, אנא נסה שוב.';
 
   @override
-  String get onboardingBluetoothRequired => 'הרשאת Bluetooth נדרשת כדי להתחבר להתקן שלך.';
+  String get onboardingBluetoothRequired =>
+      'הרשאת Bluetooth נדרשת כדי להתחבר להתקן שלך.';
 
   @override
-  String get onboardingBluetoothDeniedSystemPrefs => 'הרשאת Bluetooth נדחתה. אנא הגרם הרשאה בהעדפות מערכת.';
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'הרשאת Bluetooth נדחתה. אנא הגרם הרשאה בהעדפות מערכת.';
 
   @override
   String onboardingBluetoothStatusCheckPrefs(String status) {
@@ -7004,10 +7250,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingNotificationDeniedSystemPrefs => 'הרשאת התראות נדחתה. אנא הגרם הרשאה בהעדפות מערכת.';
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'הרשאת התראות נדחתה. אנא הגרם הרשאה בהעדפות מערכת.';
 
   @override
-  String get onboardingNotificationDeniedNotifications => 'הרשאת התראות נדחתה. אנא הגרם הרשאה בהעדפות מערכת > התראות.';
+  String get onboardingNotificationDeniedNotifications =>
+      'הרשאת התראות נדחתה. אנא הגרם הרשאה בהעדפות מערכת > התראות.';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
@@ -7020,7 +7268,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingLocationGrantInSettings => 'אנא הגרם הרשאת מיקום בהגדרות > פרטיות וביטחון > שירותי מיקום';
+  String get onboardingLocationGrantInSettings =>
+      'אנא הגרם הרשאת מיקום בהגדרות > פרטיות וביטחון > שירותי מיקום';
 
   @override
   String get onboardingMicrophoneRequired => 'הרשאת מיקרופון נדרשת להקלטה.';
@@ -7040,7 +7289,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'הרשאת צילום מסך נדרשת להקלטת אודיו מערכת.';
+  String get onboardingScreenCaptureRequired =>
+      'הרשאת צילום מסך נדרשת להקלטת אודיו מערכת.';
 
   @override
   String get onboardingScreenCaptureDenied =>
@@ -7057,7 +7307,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingAccessibilityRequired => 'הרשאת נגישות נדרשת לאתר פגישות דפדפן.';
+  String get onboardingAccessibilityRequired =>
+      'הרשאת נגישות נדרשת לאתר פגישות דפדפן.';
 
   @override
   String onboardingAccessibilityStatusCheckPrefs(String status) {
@@ -7073,7 +7324,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get msgCameraNotAvailable => 'צילום מצלמה אינו זמין בפלטפורמה זו';
 
   @override
-  String get msgCameraPermissionDenied => 'הרשאת מצלמה נדחתה. אנא אפשר גישה למצלמה';
+  String get msgCameraPermissionDenied =>
+      'הרשאת מצלמה נדחתה. אנא אפשר גישה למצלמה';
 
   @override
   String msgCameraAccessError(String error) {
@@ -7097,7 +7349,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get msgPhotosPermissionDenied => 'הרשאת תמונות נדחתה. אנא אפשר גישה לתמונות לבחירת תמונות';
+  String get msgPhotosPermissionDenied =>
+      'הרשאת תמונות נדחתה. אנא אפשר גישה לתמונות לבחירת תמונות';
 
   @override
   String get msgSelectImagesGenericError => 'שגיאה בבחירת תמונות. אנא נסה שוב.';
@@ -7114,7 +7367,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get msgSelectFilesGenericError => 'שגיאה בבחירת קבצים. אנא נסה שוב.';
 
   @override
-  String get msgUploadFileFailed => 'כישלון בהעלאת קובץ, אנא נסה שוב מאוחר יותר';
+  String get msgUploadFileFailed =>
+      'כישלון בהעלאת קובץ, אנא נסה שוב מאוחר יותר';
 
   @override
   String get msgReadingMemories => 'קריאה של הזיכרונות שלך…';
@@ -7139,25 +7393,32 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureMicrophonePermissionRequired => 'הרשאת מיקרופון נדרשת';
 
   @override
-  String get captureMicrophonePermissionInSystemPreferences => 'הגרם הרשאת מיקרופון בהעדפות מערכת';
+  String get captureMicrophonePermissionInSystemPreferences =>
+      'הגרם הרשאת מיקרופון בהעדפות מערכת';
 
   @override
-  String get captureScreenRecordingPermissionRequired => 'הרשאת צילום מסך נדרשת';
+  String get captureScreenRecordingPermissionRequired =>
+      'הרשאת צילום מסך נדרשת';
 
   @override
-  String get captureDisplayDetectionFailed => 'זיהוי תצוגה נכשל. ההקלטה הופסקה.';
+  String get captureDisplayDetectionFailed =>
+      'זיהוי תצוגה נכשל. ההקלטה הופסקה.';
 
   @override
-  String get devModeInvalidAudioBytesWebhookUrl => 'כתובת webhook של בתים אודיו לא תקפה';
+  String get devModeInvalidAudioBytesWebhookUrl =>
+      'כתובת webhook של בתים אודיו לא תקפה';
 
   @override
-  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'כתובת webhook של תמלול בזמן אמת לא תקפה';
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'כתובת webhook של תמלול בזמן אמת לא תקפה';
 
   @override
-  String get devModeInvalidConversationCreatedWebhookUrl => 'כתובת webhook של שיחה שנוצרה לא תקפה';
+  String get devModeInvalidConversationCreatedWebhookUrl =>
+      'כתובת webhook של שיחה שנוצרה לא תקפה';
 
   @override
-  String get devModeInvalidDaySummaryWebhookUrl => 'כתובת webhook של סיכום יום לא תקפה';
+  String get devModeInvalidDaySummaryWebhookUrl =>
+      'כתובת webhook של סיכום יום לא תקפה';
 
   @override
   String get devModeSettingsSaved => 'הגדרות שמורות!';
@@ -7307,7 +7568,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noDailyRecapsYet => 'אין סיכומים יומיים עדיין';
 
   @override
-  String get dailyRecapsDescription => 'הסיכומים היומיים שלך יופיעו כאן לאחר שייווצרו';
+  String get dailyRecapsDescription =>
+      'הסיכומים היומיים שלך יופיעו כאן לאחר שייווצרו';
 
   @override
   String largeTimeGapDetected(String gap) {
@@ -7589,7 +7851,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get audioPlaybackUnavailable => 'קובץ אודיו אינו זמין להשמעה';
 
   @override
-  String get audioPlaybackFailed => 'לא היתה אפשרות להשמיע אודיו. ייתכן שהקובץ פגום או חסר.';
+  String get audioPlaybackFailed =>
+      'לא היתה אפשרות להשמיע אודיו. ייתכן שהקובץ פגום או חסר.';
 
   @override
   String get connectionGuide => 'מדריך חיבור';
@@ -7610,31 +7873,36 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pairingTitleOmi => 'הפעל את Omi';
 
   @override
-  String get pairingDescOmi => 'לחץ וחזיק על ההתקן עד שהוא רועד כדי להפעיל אותו.';
+  String get pairingDescOmi =>
+      'לחץ וחזיק על ההתקן עד שהוא רועד כדי להפעיל אותו.';
 
   @override
   String get pairingTitleOmiDevkit => 'הכנס את Omi DevKit למצב זיווג';
 
   @override
-  String get pairingDescOmiDevkit => 'לחץ על הכפתור פעם אחת כדי להפעיל. ה-LED יהבהב בסגול כשהוא במצב זיווג.';
+  String get pairingDescOmiDevkit =>
+      'לחץ על הכפתור פעם אחת כדי להפעיל. ה-LED יהבהב בסגול כשהוא במצב זיווג.';
 
   @override
   String get pairingTitleOmiGlass => 'הפעל את Omi Glass';
 
   @override
-  String get pairingDescOmiGlass => 'הפעל על ידי לחיצה על הכפתור הצדדי לשך 3 שניות.';
+  String get pairingDescOmiGlass =>
+      'הפעל על ידי לחיצה על הכפתור הצדדי לשך 3 שניות.';
 
   @override
   String get pairingTitlePlaudNote => 'הכנס את Plaud Note למצב זיווג';
 
   @override
-  String get pairingDescPlaudNote => 'לחץ וחזיק את הכפתור הצדדי לשך 2 שניות. ה-LED האדום יהבהב כשהוא מוכן לזיווג.';
+  String get pairingDescPlaudNote =>
+      'לחץ וחזיק את הכפתור הצדדי לשך 2 שניות. ה-LED האדום יהבהב כשהוא מוכן לזיווג.';
 
   @override
   String get pairingTitleBee => 'הכנס את Bee למצב זיווג';
 
   @override
-  String get pairingDescBee => 'לחץ על הכפתור 5 פעמים ברצף. האור יתחיל להבהב בכחול וירוק.';
+  String get pairingDescBee =>
+      'לחץ על הכפתור 5 פעמים ברצף. האור יתחיל להבהב בכחול וירוק.';
 
   @override
   String get pairingTitleLimitless => 'הכנס את Limitless למצב זיווג';
@@ -7647,25 +7915,29 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pairingTitleFriendPendant => 'הכנס את Friend Pendant למצב זיווג';
 
   @override
-  String get pairingDescFriendPendant => 'לחץ על הכפתור על התליון כדי להפעיל אותו. הוא יכנס למצב זיווג באופן אוטומטי.';
+  String get pairingDescFriendPendant =>
+      'לחץ על הכפתור על התליון כדי להפעיל אותו. הוא יכנס למצב זיווג באופן אוטומטי.';
 
   @override
   String get pairingTitleFieldy => 'הכנס את Fieldy למצב זיווג';
 
   @override
-  String get pairingDescFieldy => 'לחץ וחזיק על ההתקן עד שהאור מופיע כדי להפעיל אותו.';
+  String get pairingDescFieldy =>
+      'לחץ וחזיק על ההתקן עד שהאור מופיע כדי להפעיל אותו.';
 
   @override
   String get pairingTitleAppleWatch => 'חבר Apple Watch';
 
   @override
-  String get pairingDescAppleWatch => 'התקן ופתח את אפליקציית Omi ב-Apple Watch שלך, לאחר מכן הקש על חיבור באפליקציה.';
+  String get pairingDescAppleWatch =>
+      'התקן ופתח את אפליקציית Omi ב-Apple Watch שלך, לאחר מכן הקש על חיבור באפליקציה.';
 
   @override
   String get pairingTitleNeoOne => 'הכנס את Neo One למצב זיווג';
 
   @override
-  String get pairingDescNeoOne => 'לחץ וחזיק את כפתור ההפעלה עד שה-LED הבהב. ההתקן יהיה ניתן גילוי.';
+  String get pairingDescNeoOne =>
+      'לחץ וחזיק את כפתור ההפעלה עד שה-LED הבהב. ההתקן יהיה ניתן גילוי.';
 
   @override
   String get downloadingFromDevice => 'הורד מהתקן';
@@ -7735,7 +8007,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get wifiConfiguration => 'תצורת WiFi';
 
   @override
-  String get wifiConfigurationSubtitle => 'הזן את אישורי ה-WiFi שלך כדי לאפשר להתקן להוריד את ה-firmware.';
+  String get wifiConfigurationSubtitle =>
+      'הזן את אישורי ה-WiFi שלך כדי לאפשר להתקן להוריד את ה-firmware.';
 
   @override
   String get networkNameSsid => 'שם רשת (SSID)';
@@ -7753,7 +8026,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingWhatIKnowAboutYouTitle => 'זה מה שאני יודע עלייך';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'מפה זו מתעדכנת כש-Omi לומד מהשיחות שלך.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'מפה זו מתעדכנת כש-Omi לומד מהשיחות שלך.';
 
   @override
   String get apiEnvironment => 'סביבת API';
@@ -7783,7 +8057,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'שלב בדיקה עלול להיות בעל באגים, ביצועים לא עקביים, וניתן שיאבדו נתונים. השתמש רק לבדיקה.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'נשמר. סגור ופתח מחדש את האפליקציה כדי להחיל.';
+  String get apiEnvSavedRestartRequired =>
+      'נשמר. סגור ופתח מחדש את האפליקציה כדי להחיל.';
 
   @override
   String get shared => 'משותף';
@@ -7831,7 +8106,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneGetStarted => 'התחל';
 
   @override
-  String get callRecordingConsentDisclaimer => 'הקלטת שיחה עלולה לדרוש הסכמה בתחום המשפטי שלך';
+  String get callRecordingConsentDisclaimer =>
+      'הקלטת שיחה עלולה לדרוש הסכמה בתחום המשפטי שלך';
 
   @override
   String get enterYourNumber => 'הזן את המספר שלך';
@@ -7945,7 +8221,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get yourVerifiedNumbers => 'המספרים המאומתים שלך';
 
   @override
-  String get verifiedNumbersDescription => 'כאשר אתה מתקשר למישהו, הם יראו את המספר הזה בטלפון שלהם';
+  String get verifiedNumbersDescription =>
+      'כאשר אתה מתקשר למישהו, הם יראו את המספר הזה בטלפון שלהם';
 
   @override
   String get noVerifiedNumbers => 'אין מספרים מאומתים';
@@ -7988,7 +8265,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get callAlreadyInProgress => 'שיחה כבר בעיצומה';
 
   @override
-  String get failedToGetCallToken => 'כישלון בקבלת טוקן שיחה. אמת את מספר הטלפון שלך תחילה.';
+  String get failedToGetCallToken =>
+      'כישלון בקבלת טוקן שיחה. אמת את מספר הטלפון שלך תחילה.';
 
   @override
   String get failedToInitializeCallService => 'כישלון בהאתחלת שירות שיחה';
@@ -8019,7 +8297,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneCallsUpsellFeature2 => 'סיכומי שיחות ומשימות אוטומטיים';
 
   @override
-  String get phoneCallsUpsellFeature3 => 'מקבלים רואים את המספר האמיתי שלך, לא אחד אקראי';
+  String get phoneCallsUpsellFeature3 =>
+      'מקבלים רואים את המספר האמיתי שלך, לא אחד אקראי';
 
   @override
   String get phoneCallsUpgradeButton => 'שדרג ל-Unlimited';
@@ -8034,7 +8313,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteSyncedFiles => 'מחק הקלטות מסונכרנות';
 
   @override
-  String get deleteSyncedFilesMessage => 'הקלטות אלה כבר סונכרנו לטלפון שלך. לא ניתן לבטל פעולה זו.';
+  String get deleteSyncedFilesMessage =>
+      'הקלטות אלה כבר סונכרנו לטלפון שלך. לא ניתן לבטל פעולה זו.';
 
   @override
   String get syncedFilesDeleted => 'הקלטות מסונכרנות נמחקו';
@@ -8046,7 +8326,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deletePendingFiles => 'מחק הקלטות בהמתנה';
 
   @override
-  String get deletePendingFilesWarning => 'הקלטות אלה לא סונכרנו לטלפון שלך ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.';
+  String get deletePendingFilesWarning =>
+      'הקלטות אלה לא סונכרנו לטלפון שלך ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.';
 
   @override
   String get pendingFilesDeleted => 'הקלטות בהמתנה נמחקו';
@@ -8091,7 +8372,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get fairUsePolicy => 'שימוש הוגן';
 
   @override
-  String get fairUseLoadError => 'לא היתה אפשרות לטעון את מצב השימוש ההוגן. אנא נסה שוב.';
+  String get fairUseLoadError =>
+      'לא היתה אפשרות לטעון את מצב השימוש ההוגן. אנא נסה שוב.';
 
   @override
   String get fairUseStatusNormal => 'השימוש שלך בטווח עד הגבול הרגיל.';
@@ -8152,7 +8434,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionPaused => 'הקלטה, התחברות מחדש';
 
   @override
-  String get transcriptionPausedReconnecting => 'עדיין מקליט — התחברות מחדש לתמלול…';
+  String get transcriptionPausedReconnecting =>
+      'עדיין מקליט — התחברות מחדש לתמלול…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8190,10 +8473,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noSyncedRecordings => 'עדיין אין הקלטות מסונכרנות';
 
   @override
-  String get recordingsSyncAutomatically => 'הקלטות מסתנכרנות באופן אוטומטי — לא נדרשת פעולה.';
+  String get recordingsSyncAutomatically =>
+      'הקלטות מסתנכרנות באופן אוטומטי — לא נדרשת פעולה.';
 
   @override
-  String get filesDownloadedUploadedNextTime => 'קבצים שכבר הורדו יועלו בפעם הבאה.';
+  String get filesDownloadedUploadedNextTime =>
+      'קבצים שכבר הורדו יועלו בפעם הבאה.';
 
   @override
   String nConversationsCreated(int count) {
@@ -8223,10 +8508,12 @@ class AppLocalizationsHe extends AppLocalizations {
       'כאשר Omi מתחבר מחדש, הקלטות מועברות באופן אוטומטי לטלפון שלך כאזור החזקה זמני לפני העלאה.';
 
   @override
-  String get cloudStorageDesc => 'לאחר העלאה, ההקלטות שלך מעובדות ותמלולות. שיחות יהיו זמינות תוך דקה.';
+  String get cloudStorageDesc =>
+      'לאחר העלאה, ההקלטות שלך מעובדות ותמלולות. שיחות יהיו זמינות תוך דקה.';
 
   @override
-  String get tipKeepPhoneNearby => 'שמור את הטלפון שלך בקרבת מקום לסנכרון מהיר יותר';
+  String get tipKeepPhoneNearby =>
+      'שמור את הטלפון שלך בקרבת מקום לסנכרון מהיר יותר';
 
   @override
   String get tipStableInternet => 'אינטרנט יציב מאיץ העלאות לענן';
@@ -8251,13 +8538,15 @@ class AppLocalizationsHe extends AppLocalizations {
       'Omi משתמש בהרשאות אלה כדי להתחבר למכשיר שלך, להקליט שמע, להמשיך לפעול ברקע, לשלוח תזכורות ולרשום איפה התקיימו השיחות.';
 
   @override
-  String get permissionsRequiredDescription => 'Omi זקוק לכמה הרשאות כדי לפעול כראוי. אנא הענק אותן כדי להמשיך.';
+  String get permissionsRequiredDescription =>
+      'Omi זקוק לכמה הרשאות כדי לפעול כראוי. אנא הענק אותן כדי להמשיך.';
 
   @override
   String get permissionsSetupTitle => 'קבל את החוויה הטובה ביותר';
 
   @override
-  String get permissionsChangeAnytime => 'אתה יכול לשנות את אלה בכל עת בהגדרות > הרשאות';
+  String get permissionsChangeAnytime =>
+      'אתה יכול לשנות את אלה בכל עת בהגדרות > הרשאות';
 
   @override
   String get location => 'מיקום';
@@ -8302,7 +8591,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get justAMoment => 'רגע בלבד';
 
   @override
-  String get cancelConsequencesSubtitle => 'אנחנו ממליצים בחום לחקור את האפשרויות האחרות שלך במקום לבטל.';
+  String get cancelConsequencesSubtitle =>
+      'אנחנו ממליצים בחום לחקור את האפשרויות האחרות שלך במקום לבטל.';
 
   @override
   String cancelBillingPeriodInfo(String date) {
@@ -8313,13 +8603,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get ifYouCancel => 'אם אתה מבטל:';
 
   @override
-  String get cancelConsequenceNoAccess => 'לא יהיה לך גישה unlimited בסוף תקופת החיוב שלך.';
+  String get cancelConsequenceNoAccess =>
+      'לא יהיה לך גישה unlimited בסוף תקופת החיוב שלך.';
 
   @override
   String get cancelConsequenceBattery => '7x יותר שימוש בסוללה (עיבוד התקן)';
 
   @override
-  String get cancelConsequenceQuality => '30% איכות תמלול נמוכה יותר (מודלים התקן)';
+  String get cancelConsequenceQuality =>
+      '30% איכות תמלול נמוכה יותר (מודלים התקן)';
 
   @override
   String get cancelConsequenceDelay => 'עיכוב עיבוד של 5-7 שניות (מודלים התקן)';
@@ -8352,22 +8644,27 @@ class AppLocalizationsHe extends AppLocalizations {
   String get feedbackTitleNotUsing => 'מה יגרום לך להשתמש ב-Omi יותר?';
 
   @override
-  String get feedbackSubtitleTooExpensive => 'המשוב שלך עוזר לנו למצוא את האיזון הנכון.';
+  String get feedbackSubtitleTooExpensive =>
+      'המשוב שלך עוזר לנו למצוא את האיזון הנכון.';
 
   @override
-  String get feedbackSubtitleMissingFeatures => 'אנחנו תמיד בונים — זה עוזר לנו לעדכן עדיפויות.';
+  String get feedbackSubtitleMissingFeatures =>
+      'אנחנו תמיד בונים — זה עוזר לנו לעדכן עדיפויות.';
 
   @override
   String get feedbackSubtitleAudioQuality => 'היינו רוצים להבין מה השתבש.';
 
   @override
-  String get feedbackSubtitleBatteryDrain => 'זה עוזר לצוות החומרה שלנו להשתפר.';
+  String get feedbackSubtitleBatteryDrain =>
+      'זה עוזר לצוות החומרה שלנו להשתפר.';
 
   @override
-  String get feedbackSubtitleFoundAlternative => 'היינו רוצים ללמוד מה תפסת את עיניך.';
+  String get feedbackSubtitleFoundAlternative =>
+      'היינו רוצים ללמוד מה תפסת את עיניך.';
 
   @override
-  String get feedbackSubtitleNotUsing => 'אנחנו רוצים להפוך את Omi לשימושי יותר עבורך.';
+  String get feedbackSubtitleNotUsing =>
+      'אנחנו רוצים להפוך את Omi לשימושי יותר עבורך.';
 
   @override
   String get deviceDiagnostics => 'אבחון התקן';
@@ -8484,7 +8781,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get fetchingStableFirmware => 'מביא את ה-firmware היציב העדכני ביותר…';
 
   @override
-  String get noStableFirmwareFound => 'לא הצלחנו למצוא גרסת firmware יציבה להתקן שלך.';
+  String get noStableFirmwareFound =>
+      'לא הצלחנו למצוא גרסת firmware יציבה להתקן שלך.';
 
   @override
   String get installStableFirmware => 'התקן Firmware יציב';
@@ -8521,10 +8819,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get listeningTranscriptWillAppear => 'מאזין… התמלול יופיע כאן.';
 
   @override
-  String get recordingOfflineTranscriptWillCatchUp => 'מקליט במצב לא מקוון — התמלול יושלם כשתחזור לרשת.';
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'מקליט במצב לא מקוון — התמלול יושלם כשתחזור לרשת.';
 
   @override
-  String get transcriptionUnavailableRecordingSaved => 'התמלול אינו זמין — ההקלטה ממשיכה והאודיו שלך נשמר.';
+  String get transcriptionUnavailableRecordingSaved =>
+      'התמלול אינו זמין — ההקלטה ממשיכה והאודיו שלך נשמר.';
 
   @override
   String get capturing => 'מתבצעת הקלטה';
@@ -8539,7 +8839,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get enableLocationTitle => 'הפעל מיקום';
 
   @override
-  String get enableLocationDescription => 'הרשאת מיקום נדרשת כדי למצוא התקני Bluetooth בקרבת מקום.';
+  String get enableLocationDescription =>
+      'הרשאת מיקום נדרשת כדי למצוא התקני Bluetooth בקרבת מקום.';
 
   @override
   String get voiceRecordingFound => 'הקלטה נמצאה';
@@ -8597,19 +8898,22 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appleHealthFeatureChatTitle => 'צ\'אט על הבריאות שלך';
 
   @override
-  String get appleHealthFeatureChatDesc => 'שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.';
+  String get appleHealthFeatureChatDesc =>
+      'שאל את Omi על הצעדים, השינה, הדופק והאימונים שלך.';
 
   @override
   String get appleHealthFeatureReadOnlyTitle => 'גישת קריאה בלבד';
 
   @override
-  String get appleHealthFeatureReadOnlyDesc => 'Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.';
+  String get appleHealthFeatureReadOnlyDesc =>
+      'Omi לעולם לא כותב ל-Apple Health ולא משנה את הנתונים שלך.';
 
   @override
   String get appleHealthFeatureSecureTitle => 'סנכרון מאובטח';
 
   @override
-  String get appleHealthFeatureSecureDesc => 'נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.';
+  String get appleHealthFeatureSecureDesc =>
+      'נתוני Apple Health שלך מסונכרנים באופן פרטי לחשבון Omi.';
 
   @override
   String get appleHealthDeniedTitle => 'הגישה ל-Apple Health נדחתה';
@@ -8622,7 +8926,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteFlowReasonTitle => 'למה אתה עוזב?';
 
   @override
-  String get deleteFlowReasonSubtitle => 'המשוב שלך עוזר לנו לשפר את Omi עבור כולם.';
+  String get deleteFlowReasonSubtitle =>
+      'המשוב שלך עוזר לנו לשפר את Omi עבור כולם.';
 
   @override
   String get deleteReasonPrivacy => 'חששות פרטיות';
@@ -8652,19 +8957,22 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteFlowFeedbackSubtitle => 'מה היה גורם ל-Omi לעבוד עבורך?';
 
   @override
-  String get deleteFlowFeedbackHint => 'אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.';
+  String get deleteFlowFeedbackHint =>
+      'אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.';
 
   @override
   String get deleteFlowConfirmTitle => 'למחוק את החשבון שלך?';
 
   @override
-  String get deleteFlowConfirmSubtitle => 'לא ניתן לבטל פעולה זו, גם לא על ידי התמיכה.';
+  String get deleteFlowConfirmSubtitle =>
+      'לא ניתן לבטל פעולה זו, גם לא על ידי התמיכה.';
 
   @override
   String get deleteConsequenceSubscription => 'כל מנוי פעיל יבוטל.';
 
   @override
-  String get deleteConsequenceNoRecovery => 'לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.';
+  String get deleteConsequenceNoRecovery =>
+      'לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.';
 
   @override
   String get deleteTypeToConfirm => 'הקלד DELETE לאישור';
@@ -8792,7 +9100,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 
   @override
-  String get chatQuotaExceededReply => 'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
+  String get chatQuotaExceededReply =>
+      'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
 
   @override
   String get voiceResponseAudio => 'קרא את תגובת Omi בקול';
@@ -8840,7 +9149,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recordWithPhoneMic => 'הקלט עם מיקרופון הטלפון';
 
   @override
-  String get recordWithPhoneMicSubtitle => 'הקלטה ותמלול עם המיקרופון של הטלפון הזה';
+  String get recordWithPhoneMicSubtitle =>
+      'הקלטה ותמלול עם המיקרופון של הטלפון הזה';
 
   @override
   String get phoneCall => 'שיחת טלפון';
@@ -8903,7 +9213,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteRecapConfirmTitle => 'למחוק את הסיכום הזה?';
 
   @override
-  String get deleteRecapConfirmBody => 'הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.';
+  String get deleteRecapConfirmBody =>
+      'הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.';
 
   @override
   String get deleteRecapAction => 'מחק';
@@ -8912,7 +9223,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recapDeletedSnackbar => 'הסיכום נמחק';
 
   @override
-  String get recapDeleteFailed => 'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
+  String get recapDeleteFailed =>
+      'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
 
   @override
   String get syncStatusBackedUp => 'גובה';
@@ -9006,7 +9318,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncStepBackedUpDesc => 'תמצא אותה תחת שיחות';
 
   @override
-  String get syncFailureFootnote => 'אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.';
+  String get syncFailureFootnote =>
+      'אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.';
 
   @override
   String get syncStatusConversationCreated => 'השיחה נוצרה';
@@ -9040,19 +9353,24 @@ class AppLocalizationsHe extends AppLocalizations {
   String get morePaymentMethodsComingSoon => 'אמצעי תשלום נוספים בקרוב';
 
   @override
-  String get syncProcessingBackgroundHint => 'התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.';
+  String get syncProcessingBackgroundHint =>
+      'התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.';
 
   @override
-  String get syncCardRateLimited => 'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
+  String get syncCardRateLimited =>
+      'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
 
   @override
-  String get syncCardThrottlePaused => 'הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית';
+  String get syncCardThrottlePaused =>
+      'הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית';
 
   @override
-  String get syncCardBackendBusy => 'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
+  String get syncCardBackendBusy =>
+      'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
 
   @override
-  String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
+  String get unableToDetermineFirmwareVersion =>
+      'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
 
   @override
   String get promoCode => 'קוד קידום';
@@ -9067,7 +9385,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundModeTitle => 'מצב רקע';
 
   @override
-  String get backgroundModeDescription => 'השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.';
+  String get backgroundModeDescription =>
+      'השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.';
 
   @override
   String get backgroundModeUnavailable =>
@@ -9080,13 +9399,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get recapRegeneratedSnackbar => 'הסיכום נוצר מחדש';
 
   @override
-  String get recapRegenerateFailed => 'לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.';
+  String get recapRegenerateFailed =>
+      'לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.';
 
   @override
-  String get recapRegenerateCooldown => 'אנא המתן מספר שניות לפני יצירה מחודשת.';
+  String get recapRegenerateCooldown =>
+      'אנא המתן מספר שניות לפני יצירה מחודשת.';
 
   @override
-  String get recapRegenerateNoConversations => 'אין שיחות לסיכום עבור היום הזה.';
+  String get recapRegenerateNoConversations =>
+      'אין שיחות לסיכום עבור היום הזה.';
 
   @override
   String get syncCustomSttWarningTitle => 'הסנכרון משתמש בתמלול של Omi';
@@ -9099,7 +9421,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcribeLaterTitle => 'תמלול מאוחר יותר';
 
   @override
-  String get transcribeLaterDescription => 'הקליטו עכשיו ותמללו מתי שתרצו. עד אז האודיו נשאר בטלפון שלכם.';
+  String get transcribeLaterDescription =>
+      'הקליטו עכשיו ותמללו מתי שתרצו. עד אז האודיו נשאר בטלפון שלכם.';
 
   @override
   String get transcribeLaterNote =>
@@ -9119,7 +9442,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureModeLiveDescription => 'תמלול בזמן אמת תוך כדי דיבור.';
 
   @override
-  String get captureModeLaterDescription => 'שמרו את האודיו עכשיו ותמללו מתי שתרצו.';
+  String get captureModeLaterDescription =>
+      'שמרו את האודיו עכשיו ותמללו מתי שתרצו.';
 
   @override
   String get unmute => 'בטל השתקה';
@@ -9155,7 +9479,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'דברו אל ה-Omi שלכם';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'אמרו כמה מילים וצפו בהן מופיעות בזמן אמת';
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'אמרו כמה מילים וצפו בהן מופיעות בזמן אמת';
 
   @override
   String get deviceOnboardingGoodJob => 'כל הכבוד!';
@@ -9167,7 +9492,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingAskQuestionTitle => 'שאלו את Omi שאלה';
 
   @override
-  String get deviceOnboardingAskQuestionSubtitle => 'לחצו על הכפתור פעם אחת, אמרו את השאלה, ואז לחצו שוב כשתסיימו';
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'לחצו על הכפתור פעם אחת, אמרו את השאלה, ואז לחצו שוב כשתסיימו';
 
   @override
   String get deviceOnboardingProcessingQuestion => 'מעבד את השאלה שלכם…';
@@ -9185,10 +9511,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingTurnOffSubtitle => 'החזיקו את הכפתור למשך 3 שניות';
 
   @override
-  String get deviceOnboardingTurnOnSubtitle => 'לחצו על הכפתור כדי להפעיל אותו מחדש';
+  String get deviceOnboardingTurnOnSubtitle =>
+      'לחצו על הכפתור כדי להפעיל אותו מחדש';
 
   @override
-  String get deviceOnboardingHoldButtonHint => 'החזיקו את הכפתור בחוזקה עד שהנורית תכבה';
+  String get deviceOnboardingHoldButtonHint =>
+      'החזיקו את הכפתור בחוזקה עד שהנורית תכבה';
 
   @override
   String get deviceOnboardingStatusConnected => 'מחובר';
@@ -9209,7 +9537,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingEndConversation => 'סיום שיחה';
 
   @override
-  String get deviceOnboardingEndConversationDesc => 'שמירה וסיום של השיחה הנוכחית';
+  String get deviceOnboardingEndConversationDesc =>
+      'שמירה וסיום של השיחה הנוכחית';
 
   @override
   String get deviceOnboardingMuteUnmute => 'השתקה / ביטול השתקה';
@@ -9224,10 +9553,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingStarConversationDesc => 'סימון השיחה כחשובה';
 
   @override
-  String get deviceOnboardingSingleTapHint => 'זו הייתה הקשה אחת — נסו להקיש פעמיים במהירות!';
+  String get deviceOnboardingSingleTapHint =>
+      'זו הייתה הקשה אחת — נסו להקיש פעמיים במהירות!';
 
   @override
-  String get deviceOnboardingTryDoubleTap => 'נסו עכשיו! הקישו פעמיים על ה-Omi שלכם';
+  String get deviceOnboardingTryDoubleTap =>
+      'נסו עכשיו! הקישו פעמיים על ה-Omi שלכם';
 
   @override
   String get deviceOnboardingContinue => 'המשך';
@@ -9239,7 +9570,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingIntroTitle => 'הכירו את ה-Omi שלכם';
 
   @override
-  String get deviceOnboardingIntroSubtitle => 'נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.';
+  String get deviceOnboardingIntroSubtitle =>
+      'נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.';
 
   @override
   String get deviceOnboardingIntroDuration => 'כדקה אחת';
@@ -9250,9 +9582,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count נוספים';
-  }
+  String get quoteShowSources => 'הצגת מקורות';
 
   @override
   String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';
@@ -9267,7 +9597,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pendantRecordingTitle => 'מקליט על התליון';
 
   @override
-  String get pendantRecordingNote => 'התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.';
+  String get pendantRecordingNote =>
+      'התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.';
 
   @override
   String get pendantSyncingRecordings => 'מסנכרן הקלטות מהתליון שלך…';
@@ -9278,7 +9609,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get pendantStorageAlmostFull => 'אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.';
+  String get pendantStorageAlmostFull =>
+      'אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.';
 
   @override
   String get connectRayBanMeta => 'חבר את Ray-Ban Meta';
@@ -9291,7 +9623,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get raybanMetaOpenMetaAI => 'התחבר דרך Meta AI';
 
   @override
-  String get raybanMetaWaitingForMetaAI => 'סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.';
+  String get raybanMetaWaitingForMetaAI =>
+      'סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.';
 
   @override
   String get raybanMetaCheckAgain => 'בדוק שוב';
@@ -9314,7 +9647,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'גרסה זו של Omi יכולה להשתמש במיקרופון המשקפיים שלך באמצעות Bluetooth. לכידת תמונות דורשת את גרסת המפתחים של Meta עבור Omi.';
 
   @override
-  String get raybanMetaMusicPauseNote => 'המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.';
+  String get raybanMetaMusicPauseNote =>
+      'המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.';
 
   @override
   String get raybanMetaContinue => 'המשך';
@@ -9361,10 +9695,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
+  String get deviceStorageNearlyFull =>
+      'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
 
   @override
-  String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
+  String get phoneMicOfflineFallbackMessage =>
+      'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
 
   @override
   String get dataEncryptedBanner =>
@@ -9416,7 +9752,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceModelDownloadFailed => 'הורדת המודל נכשלה';
 
   @override
-  String get onDeviceModelDownloadFailedDesc => 'הורדת מודל Whisper נכשלה. נסה שנית.';
+  String get onDeviceModelDownloadFailedDesc =>
+      'הורדת מודל Whisper נכשלה. נסה שנית.';
 
   @override
   String get onDeviceModelDownloadSuccess => 'המודל הורד';
@@ -9497,7 +9834,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get googleCalendarNotConnected => 'Google Calendar אינו מחובר';
 
   @override
-  String get googleCalendarConnectPrompt => 'חבר את Google Calendar כדי לקשר שיחות לאירועי יומן.';
+  String get googleCalendarConnectPrompt =>
+      'חבר את Google Calendar כדי לקשר שיחות לאירועי יומן.';
 
   @override
   String linkedToEvent(String title) {
@@ -9527,14 +9865,16 @@ class AppLocalizationsHe extends AppLocalizations {
       'בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.';
 
   @override
-  String get rayBanMetaMicPickerEmpty => 'לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.';
+  String get rayBanMetaMicPickerEmpty =>
+      'לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
       'לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.';
 
   @override
-  String get rayBanMetaMicPickerConnectError => 'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
+  String get rayBanMetaMicPickerConnectError =>
+      'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
 
   @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
@@ -9571,10 +9911,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get freemiumLimitsIntro => 'Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:';
+  String get freemiumLimitsIntro =>
+      'Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:';
 
   @override
-  String get downgradeLimitDelayNotRealTime => 'עיכוב של 5-7 שניות (לא בזמן אמת)';
+  String get downgradeLimitDelayNotRealTime =>
+      'עיכוב של 5-7 שניות (לא בזמן אמת)';
 
   @override
   String get downgradeToFreemiumAction => 'מעבר לגרסה החינמית';
@@ -9592,13 +9934,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get accountCutoverUpdateRequiredTitle => 'נדרש עדכון';
 
   @override
-  String get accountCutoverUpdateRequiredMessage => 'התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.';
+  String get accountCutoverUpdateRequiredMessage =>
+      'התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.';
 
   @override
   String get accountCutoverMigrationInProgressTitle => 'העברה בתהליך';
 
   @override
-  String get accountCutoverMigrationInProgressMessage => 'החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.';
+  String get accountCutoverMigrationInProgressMessage =>
+      'החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.';
 
   @override
   String get accountCutoverMigrationRollbackMessage =>
@@ -9632,13 +9976,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appDisabledTitle => 'האפליקציה הזו מושבתת ולא ניתן להתקין אותה.';
 
   @override
-  String get appDisabledWebhookFailures => 'נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.';
+  String get appDisabledWebhookFailures =>
+      'נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.';
 
   @override
   String get appDisabledGeneric => 'היא הושבתה על ידי Omi.';
 
   @override
-  String get appDisabledOwnerHint => 'תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.';
+  String get appDisabledOwnerHint =>
+      'תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.';
 
   @override
   String get appReEnable => 'הפעל מחדש';
@@ -9647,7 +9993,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appReEnableFailedTitle => 'ההפעלה מחדש נכשלה';
 
   @override
-  String get appReEnableFailedBody => 'לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.';
+  String get appReEnableFailedBody =>
+      'לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.';
 
   @override
   String appDisabledOn(String date) {
@@ -9697,7 +10044,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 
   @override
-  String get tapPlusToStartRecording => 'הקישו על כפתור ההקלטה כדי להתחיל להקליט';
+  String get tapPlusToStartRecording =>
+      'הקישו על כפתור ההקלטה כדי להתחיל להקליט';
 
   @override
   String get chatBlockTask => 'משימה';
@@ -9749,13 +10097,15 @@ class AppLocalizationsHe extends AppLocalizations {
       'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
 
   @override
-  String get speechProfileEnrollmentPrompt => 'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
+  String get speechProfileEnrollmentPrompt =>
+      'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
 
   @override
   String get home => 'בית';
 
   @override
-  String get failedToUpdateBaselineStatus => 'לא ניתן לעדכן את הזיכרון הזה. נסה שוב.';
+  String get failedToUpdateBaselineStatus =>
+      'לא ניתן לעדכן את הזיכרון הזה. נסה שוב.';
 
   @override
   String get unstarConversation => 'הסרת כוכב מהשיחה';
@@ -9771,124 +10121,123 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String guidedVoiceExperience(String part) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'unavailable': 'Voice transcription is unavailable right now. Type your answer instead.',
-        'type': 'Type Your Answer Instead',
-        'typing': 'Your answer',
-        'heard': 'Here\'s what I heard',
-        'transcribing': 'Got it, transcribing…',
-        'confirm': 'Use This Answer',
-        'answer': 'Save Answer',
-        'retry': 'Try Speaking Again',
-        'title': 'Here\'s what I\'ll remember',
-        'question': 'What should I focus on this week?',
-        'fallback': 'I’ll use these to help you.',
-        'thinking': 'Thinking about your answers…',
-        'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
-        'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
-        'retryTranscription': 'Retry transcription',
-        'namePrompt': 'My name is ___, and I usually ___.',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'unavailable':
+          'Voice transcription is unavailable right now. Type your answer instead.',
+      'type': 'Type Your Answer Instead',
+      'typing': 'Your answer',
+      'heard': 'Here\'s what I heard',
+      'transcribing': 'Got it, transcribing…',
+      'confirm': 'Use This Answer',
+      'answer': 'Save Answer',
+      'retry': 'Try Speaking Again',
+      'title': 'Here\'s what I\'ll remember',
+      'question': 'What should I focus on this week?',
+      'fallback': 'I’ll use these to help you.',
+      'thinking': 'Thinking about your answers…',
+      'failed':
+          'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
+      'engine':
+          'The microphone couldn\'t start. Try again or type your answer instead.',
+      'retryTranscription': 'Retry transcription',
+      'namePrompt': 'My name is ___, and I usually ___.',
+      'other': '',
+    });
     return '$_temp0';
   }
 
   @override
   String voiceIntroduction(String part) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'title': 'Let Omi get to know you',
-        'intro':
-            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
-        'hint': 'Say the whole sentence and finish it in your own words.',
-        'name': 'My name is ___, and I spend most of my time ___.',
-        'work': 'Right now, I am working on ___.',
-        'enjoy': 'Outside of that, I really enjoy ___.',
-        'food': 'My favorite food is ___.',
-        'remember': 'Something I would like help remembering is ___.',
-        'day': 'A good day for me includes ___.',
-        'another': 'Try Another Prompt',
-        'start': 'Start Speaking',
-        'skipPrompt': 'Skip Question',
-        'captured': 'Voice sample captured',
-        'silence': 'Take your time. Speak toward your phone microphone.',
-        'audio': 'Audio detected',
-        'review': 'Here is what I heard',
-        'reviewHint': 'Uncheck anything you don\'t want saved.',
-        'saveVoice': 'Save Voice Profile',
-        'savingVoice': 'Saving your voice profile…',
-        'savedVoice': 'Voice profile saved',
-        'voiceLater': 'Set Up My Voice Later',
-        'keep': 'Save Selected Answers',
-        'without': 'Continue Without Saving Answers',
-        'savedMemories': 'Your memories are saved',
-        'short': 'We need a little more audio. Add one more sentence; your earlier answers are safe.',
-        'addSample': 'Add Another Sentence',
-        'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
-        'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
-        'noMemories': 'You can tell Omi more about yourself whenever you like.',
-        'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
-        'goalPrompt': 'Right now my number one goal is to ___.',
-        'savedGoal': 'Your goal is saved',
-        'goalError':
-            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
-        'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
-        'voiceUnavailable':
-            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
-        'saveFinish': 'Save and Finish',
-        'retryRemaining': 'Retry Remaining',
-        'saveHint': 'Saves your voice profile and checked answers.',
-        'savedAll': 'Your introduction is saved.',
-        'continueSaved': 'Continue With What Is Saved',
-        'reviewAnswers': 'Review Answers',
-        'originalGoal': 'Use Original Wording',
-        'savingAnswers': 'Saving your answers…',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'title': 'Let Omi get to know you',
+      'intro':
+          'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+      'hint': 'Say the whole sentence and finish it in your own words.',
+      'name': 'My name is ___, and I spend most of my time ___.',
+      'work': 'Right now, I am working on ___.',
+      'enjoy': 'Outside of that, I really enjoy ___.',
+      'food': 'My favorite food is ___.',
+      'remember': 'Something I would like help remembering is ___.',
+      'day': 'A good day for me includes ___.',
+      'another': 'Try Another Prompt',
+      'start': 'Start Speaking',
+      'skipPrompt': 'Skip Question',
+      'captured': 'Voice sample captured',
+      'silence': 'Take your time. Speak toward your phone microphone.',
+      'audio': 'Audio detected',
+      'review': 'Here is what I heard',
+      'reviewHint': 'Uncheck anything you don\'t want saved.',
+      'saveVoice': 'Save Voice Profile',
+      'savingVoice': 'Saving your voice profile…',
+      'savedVoice': 'Voice profile saved',
+      'voiceLater': 'Set Up My Voice Later',
+      'keep': 'Save Selected Answers',
+      'without': 'Continue Without Saving Answers',
+      'savedMemories': 'Your memories are saved',
+      'short':
+          'We need a little more audio. Add one more sentence; your earlier answers are safe.',
+      'addSample': 'Add Another Sentence',
+      'uploadError':
+          'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
+      'memoryError':
+          'Some answers could not be saved. Saved items are safe; retry to save the rest.',
+      'transcriptionError':
+          'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
+      'noMemories': 'You can tell Omi more about yourself whenever you like.',
+      'voiceOnlyHint':
+          'You can skip any personal prompt and talk about something else.',
+      'goalPrompt': 'Right now my number one goal is to ___.',
+      'savedGoal': 'Your goal is saved',
+      'goalError':
+          'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+      'goalLong':
+          'Shorten your goal to 500 characters or fewer, then try again.',
+      'voiceUnavailable':
+          'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+      'saveFinish': 'Save and Finish',
+      'retryRemaining': 'Retry Remaining',
+      'saveHint': 'Saves your voice profile and checked answers.',
+      'savedAll': 'Your introduction is saved.',
+      'continueSaved': 'Continue With What Is Saved',
+      'reviewAnswers': 'Review Answers',
+      'originalGoal': 'Use Original Wording',
+      'savingAnswers': 'Saving your answers…',
+      'other': '',
+    });
     return '$_temp0';
   }
 
   @override
   String voiceRecognitionStatus(String status) {
-    String _temp0 = intl.Intl.selectLogic(
-      status,
-      {
-        'ready': 'הקול מוכן לזיהוי',
-        'saved_sample_awaiting_embedding': 'הדגימה נשמרה; עדיין נדרש עיבוד קול',
-        'not_learned': 'הקול לא נלמד',
-        'other': 'מצב הקול אינו ידוע',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(status, {
+      'ready': 'הקול מוכן לזיהוי',
+      'saved_sample_awaiting_embedding': 'הדגימה נשמרה; עדיין נדרש עיבוד קול',
+      'not_learned': 'הקול לא נלמד',
+      'other': 'מצב הקול אינו ידוע',
+    });
     return '$_temp0';
   }
 
   @override
-  String get tagSpeakerIncludingLaterSpeech => 'תייג גם דיבור מאוחר יותר של הדובר הזה';
+  String get tagSpeakerIncludingLaterSpeech =>
+      'תייג גם דיבור מאוחר יותר של הדובר הזה';
 
   @override
   String get updateSummaryWithNewNames => 'עדכן את הסיכום עם השמות החדשים';
 
   @override
-  String get syncStatusUnsupportedAudio => 'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
+  String get syncStatusUnsupportedAudio =>
+      'לא ניתן לקרוא את האודיו — אי אפשר לסנכרן';
 
   @override
   String chatStarterPrompt(String kind) {
-    String _temp0 = intl.Intl.selectLogic(
-      kind,
-      {
-        'capabilities': 'מה אפשר לעשות בשבילי?',
-        'goal': 'עזור לי להגדיר מטרה',
-        'activity': 'סכם את הפעילות האחרונה שלי',
-        'improve': 'איך אוכל להשתפר?',
-        'other': '',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'capabilities': 'מה אפשר לעשות בשבילי?',
+      'goal': 'עזור לי להגדיר מטרה',
+      'activity': 'סכם את הפעילות האחרונה שלי',
+      'improve': 'איך אוכל להשתפר?',
+      'other': '',
+    });
     return '$_temp0';
   }
 
@@ -9931,7 +10280,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deleteConversationsMessage => 'פעולה זו תמחק גם את הזיכרונות, המשימות וקבצי האודיו שלהן.';
+  String get deleteConversationsMessage =>
+      'פעולה זו תמחק גם את הזיכרונות, המשימות וקבצי האודיו שלהן.';
 
   @override
   String conversationsDeletedCount(int count) {
@@ -10019,7 +10369,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get newMemoryTitle => 'זיכרון חדש';
 
   @override
-  String get memoryReadOnlyHint => 'הזיכרון הזה נשמר כהיסטוריה ואי אפשר לערוך אותו.';
+  String get memoryReadOnlyHint =>
+      'הזיכרון הזה נשמר כהיסטוריה ואי אפשר לערוך אותו.';
 
   @override
   String get openConversation => 'פתיחת השיחה';
@@ -10061,7 +10412,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get goalDeleted => 'היעד נמחק';
 
   @override
-  String get sharedTasksAcceptFailed => 'לא ניתן לקבל את המשימות האלה. ייתכן שכבר קיבלת את השיתוף הזה.';
+  String get sharedTasksAcceptFailed =>
+      'לא ניתן לקבל את המשימות האלה. ייתכן שכבר קיבלת את השיתוף הזה.';
 
   @override
   String get pausePlayback => 'השהיה';
@@ -10193,10 +10545,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get identifySpeaker => 'זיהוי דובר';
 
   @override
-  String get couldNotLoadCheckout => 'לא ניתן היה לטעון את דף התשלום. בדקו את החיבור ונסו שוב.';
+  String get couldNotLoadCheckout =>
+      'לא ניתן היה לטעון את דף התשלום. בדקו את החיבור ונסו שוב.';
 
   @override
-  String get phoneFreeCallLimitReached => 'הגעת למגבלת השיחות החינמיות החודשית. היא תתאפס בחודש הבא.';
+  String get phoneFreeCallLimitReached =>
+      'הגעת למגבלת השיחות החינמיות החודשית. היא תתאפס בחודש הבא.';
 
   @override
   String get couldNotLoadImportHistory => 'לא ניתן לטעון את היסטוריית הייבוא';
@@ -10217,7 +10571,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneNoVerifiedNumbersTitle => 'אין מספרים מאומתים';
 
   @override
-  String get phoneNoVerifiedNumbersMessage => 'אמת את המספר שלך כדי להתקשר דרך Omi.';
+  String get phoneNoVerifiedNumbersMessage =>
+      'אמת את המספר שלך כדי להתקשר דרך Omi.';
 
   @override
   String get phoneDeleteNumberFailed => 'לא ניתן למחוק את המספר';
@@ -10344,7 +10699,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get vadGate => 'שער VAD';
 
   @override
-  String get vadGateDescription => 'מדלג על שמע שקט לפני התמלול כדי להפחית עלויות.';
+  String get vadGateDescription =>
+      'מדלג על שמע שקט לפני התמלול כדי להפחית עלויות.';
 
   @override
   String get flashCustomFirmware => 'צריבת קושחה מותאמת';
@@ -10377,7 +10733,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get keepSubscription => 'השארת המינוי';
 
   @override
-  String get couldNotLoadPage => 'לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.';
+  String get couldNotLoadPage =>
+      'לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.';
 
   @override
   String leaveFlowStepOf(int current, int total) {
@@ -10385,7 +10742,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get sharedTasksLinkExpired => 'המשימות המשותפות האלה לא נמצאו או שתוקף הקישור פג.';
+  String get sharedTasksLinkExpired =>
+      'המשימות המשותפות האלה לא נמצאו או שתוקף הקישור פג.';
 
   @override
   String get sharedTasksUnknownSender => 'מישהו';
@@ -10397,7 +10755,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get permissionAllowed => 'מאושר';
 
   @override
-  String get permissionBlockedHint => 'כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.';
+  String get permissionBlockedHint =>
+      'כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.';
 
   @override
   String get useDifferentAccount => 'שימוש בחשבון אחר';
@@ -10408,10 +10767,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingCompleteMessage => 'השאר את Omi פועל כמה ימים. השיחות, הזיכרונות והמשימות שלך יתחילו להתמלא.';
+  String get onboardingCompleteMessage =>
+      'השאר את Omi פועל כמה ימים. השיחות, הזיכרונות והמשימות שלך יתחילו להתמלא.';
 
   @override
-  String get cantFindDeviceHint => 'לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.';
+  String get cantFindDeviceHint =>
+      'לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.';
 
   @override
   String get scanAgain => 'חיפוש מחדש';
@@ -10439,7 +10800,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceConnecting => 'מתחבר…';
 
   @override
-  String get recordOptionsTip => 'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
+  String get recordOptionsTip =>
+      'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
 
   @override
   String get firmwareUpdateFailedTitle => 'העדכון נכשל';
@@ -10469,13 +10831,15 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get otaUpdateUnavailable => 'העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.';
+  String get otaUpdateUnavailable =>
+      'העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.';
 
   @override
   String get otaStarting => 'מתחיל בעדכון…';
 
   @override
-  String get otaStartFailed => 'לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.';
+  String get otaStartFailed =>
+      'לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.';
 
   @override
   String otaRebooting(String deviceName) {
@@ -10489,7 +10853,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cancelUpdate => 'ביטול העדכון';
 
   @override
-  String get otaKeepNearby => 'במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.';
+  String get otaKeepNearby =>
+      'במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.';
 
   @override
   String get otaWifiConnecting => 'מתחבר ל-Wi-Fi…';
@@ -10498,13 +10863,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get otaWifiConnected => 'מחובר ל-Wi-Fi';
 
   @override
-  String get otaWifiFailed => 'לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.';
+  String get otaWifiFailed =>
+      'לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.';
 
   @override
-  String get otaDownloadFailed => 'הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.';
+  String get otaDownloadFailed =>
+      'הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.';
 
   @override
-  String get otaInstallFailed => 'ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.';
+  String get otaInstallFailed =>
+      'ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.';
 
   @override
   String otaUpdatedMessage(String deviceName) {
@@ -10524,7 +10892,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get startupFailedTitle => 'לא ניתן היה להפעיל את Omi';
 
   @override
-  String get startupFailedMessage => 'משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.';
+  String get startupFailedMessage =>
+      'משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.';
 
   @override
   String get startupFailedConfigMessage =>
@@ -10534,7 +10903,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get discardRecordingTitle => 'לבטל את ההקלטה?';
 
   @override
-  String get discardRecordingMessage => 'דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.';
+  String get discardRecordingMessage =>
+      'דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.';
 
   @override
   String get keepRecording => 'המשך הקלטה';
@@ -10587,7 +10957,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appOptions => 'אפשרויות האפליקציה';
 
   @override
-  String get cancelSubscriptionKeepAccessMessage => 'הגישה תישאר עד סוף תקופת החיוב הנוכחית.';
+  String get cancelSubscriptionKeepAccessMessage =>
+      'הגישה תישאר עד סוף תקופת החיוב הנוכחית.';
 
   @override
   String get chatSendMessage => 'שליחת הודעה';
@@ -10816,7 +11187,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get conversationDeveloperTools => 'כלי מפתחים בשיחות';
 
   @override
-  String get conversationDeveloperToolsDescription => 'הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה';
+  String get conversationDeveloperToolsDescription =>
+      'הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה';
 
   @override
   String participantsSummary(String name, int count) {
@@ -10878,7 +11250,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptSaveVoicesTitle => 'לזכור את הקולות של אנשים שתתנו להם שם';
+  String get speakerTagPromptSaveVoicesTitle =>
+      'לזכור את הקולות של אנשים שתתנו להם שם';
 
   @override
   String get speakerTagPromptSaveVoicesBody =>
@@ -10900,7 +11273,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get voiceSettingsAskToTag => 'בקשו ממני לתייג קולות';
 
   @override
-  String get voiceSettingsAskToTagSubtitle => 'מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם';
+  String get voiceSettingsAskToTagSubtitle =>
+      'מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם';
 
   @override
   String get voiceSettingsSaveOthersSubtitle =>
@@ -10950,7 +11324,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get finish => 'סיום';
 
   @override
-  String get pendantPausedResumesWhenYouFinish => 'התליון מושהה · ימשיך כשתסיימו';
+  String get pendantPausedResumesWhenYouFinish =>
+      'התליון מושהה · ימשיך כשתסיימו';
 
   @override
   String get pendantIsListeningTitle => 'התליון שלכם מאזין';
@@ -10983,13 +11358,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureRecoveryBanner => 'Omi לא שולח שמע — הקישו כדי להתחבר מחדש';
 
   @override
-  String get phoneRecordingBlockedByPendantBatch => 'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
+  String get phoneRecordingBlockedByPendantBatch =>
+      'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
 
   @override
   String get captureNotTranscribing => 'אין תמלול';
 
   @override
-  String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
+  String get captureAudioSavedTranscribesLater =>
+      'השמע נשמר, יתומלל מאוחר יותר';
 
   @override
   String get captureBannerTryReconnect => 'נסה להתחבר מחדש';
@@ -11008,10 +11385,12 @@ class AppLocalizationsHe extends AppLocalizations {
       'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
 
   @override
-  String get captureLinkStalledTranscribesLater => 'חיבור האודיו נקטע — התמלול יימשך כשיחזור';
+  String get captureLinkStalledTranscribesLater =>
+      'חיבור האודיו נקטע — התמלול יימשך כשיחזור';
 
   @override
-  String get captureIngressNeedsReconnect => 'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
+  String get captureIngressNeedsReconnect =>
+      'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
 
   @override
   String get captureIngressNeedsReconnectExplanation =>
@@ -11056,13 +11435,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingVoiceReplyTitle => 'האזינו לתשובות של Omi';
 
   @override
-  String get deviceOnboardingVoiceReplySample => 'הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.';
+  String get deviceOnboardingVoiceReplySample =>
+      'הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.';
 
   @override
   String get deviceOnboardingAllSetTitle => 'הכול מוכן';
 
   @override
-  String get deviceOnboardingAllSetSubtitle => 'יש להקיש על שורה כדי לבדוק או לשנות אותה.';
+  String get deviceOnboardingAllSetSubtitle =>
+      'יש להקיש על שורה כדי לבדוק או לשנות אותה.';
 
   @override
   String get deviceOnboardingAllSetSinglePressBadge => '1×';
@@ -11078,7 +11459,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceOnboardingVoiceReplyPreviewIdle => 'שמע את תשובתך האחרונה';
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewPlaying => 'מנגן את התשובה האחרונה שלך...';
+  String get deviceOnboardingVoiceReplyPreviewPlaying =>
+      'מנגן את התשובה האחרונה שלך...';
 
   @override
   String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
@@ -11086,23 +11468,28 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'דרך הרמקול של הטלפון';
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker =>
+      'דרך הרמקול של הטלפון';
 
   @override
-  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'דרך פלט האודיו הנוכחי';
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput =>
+      'דרך פלט האודיו הנוכחי';
 
   @override
-  String get deviceOnboardingVoiceReplyOffDescription => 'התשובות נשארות על המסך. שום דבר לא נאמר.';
+  String get deviceOnboardingVoiceReplyOffDescription =>
+      'התשובות נשארות על המסך. שום דבר לא נאמר.';
 
   @override
   String get deviceOnboardingVoiceReplyHeadphonesDescription =>
       'פרטי. מדבר רק דרך AirPods, Bluetooth או אוזניות קוויות.';
 
   @override
-  String get deviceOnboardingVoiceReplyAlwaysDescription => 'משתמש ברמקול הטלפון כאשר אין אוזניות מחוברות.';
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'משתמש ברמקול הטלפון כאשר אין אוזניות מחוברות.';
 
   @override
-  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ישתוק. התשובות עדיין מופיעות באפליקציה.';
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi ישתוק. התשובות עדיין מופיעות באפליקציה.';
 
   @override
   String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
@@ -11110,7 +11497,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'לא מחוברות אוזניות. Omi נשאר שקט עד שתחבר כמה.';
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'לא מחוברות אוזניות. Omi נשאר שקט עד שתחבר כמה.';
 
   @override
   String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
@@ -11118,15 +11506,23 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'מתנגן בקול רם דרך רמקול הטלפון.';
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'מתנגן בקול רם דרך רמקול הטלפון.';
 
   @override
-  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+  String deviceOnboardingVoiceReplySettingsHint(
+    String settings,
+    String voiceResponse,
+  ) {
     return 'אתה יכול לשנות זאת בכל עת בטלפון $settings › $voiceResponse';
   }
 
   @override
-  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+  String deviceOnboardingAllSetReplayHint(
+    String settings,
+    String deviceSettings,
+    String deviceTutorial,
+  ) {
     return 'הפעל מחדש את הסיור הזה בכל עת ב-$settings › $deviceSettings › $deviceTutorial';
   }
 
@@ -11214,7 +11610,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceDiagnosticsTicket => 'Support ticket code';
 
   @override
-  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+  String get deviceDiagnosticsUploadFailed =>
+      'Could not send diagnostics to support. Please try again.';
 
   @override
   String get feedbackGiveFeedback => 'Give feedback';
@@ -11253,7 +11650,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
 
   @override
-  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+  String get feedbackReasonRecordingFragmentedOrDuplicated =>
+      'Fragmented or duplicated';
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
@@ -11416,7 +11814,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteMeetingScreenshotTitle => 'למחוק את צילום המסך?';
 
   @override
-  String get deleteMeetingScreenshotMessage => 'צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.';
+  String get deleteMeetingScreenshotMessage =>
+      'צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.';
 
   @override
   String get conversationSummaryFailed => 'יצירת הסיכום נכשלה';
@@ -11713,7 +12112,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get cleanUpBannerBody => 'ברובם שמות ששמעו לא נכון. עבור עליהם ומחק את אלה שאינם אמיתיים.';
+  String get cleanUpBannerBody =>
+      'ברובם שמות ששמעו לא נכון. עבור עליהם ומחק את אלה שאינם אמיתיים.';
 
   @override
   String get reviewAction => 'סקירה';
@@ -11765,7 +12165,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cleanUpNothingMessage => 'כרגע Omi בטוח לגבי כולם.';
 
   @override
-  String get selectAllSkipsPinned => '\"בחר הכול\" מדלג על אנשים מוצמדים. מחק אותם אחד־אחד מהדף שלהם.';
+  String get selectAllSkipsPinned =>
+      '\"בחר הכול\" מדלג על אנשים מוצמדים. מחק אותם אחד־אחד מהדף שלהם.';
 
   @override
   String get pinnedNotSelectable => 'מוצמד, לא ניתן לבחירה';
@@ -11774,7 +12175,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get ignoredVoicesTitle => 'קולות שהתעלמו מהם';
 
   @override
-  String get ignoredVoicesSubtitle => 'טלוויזיה, פודקאסטים וקולות אחרים שסימנת \"לא אדם\"';
+  String get ignoredVoicesSubtitle =>
+      'טלוויזיה, פודקאסטים וקולות אחרים שסימנת \"לא אדם\"';
 
   @override
   String get ignoredVoicesEmpty => 'אין קולות שהתעלמו מהם';
@@ -11818,10 +12220,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get speakerTagPromptHintIdentify => 'התשובה שלך עוזרת ל-Omi לזהות את הקול הזה בפעם הבאה.';
+  String get speakerTagPromptHintIdentify =>
+      'התשובה שלך עוזרת ל-Omi לזהות את הקול הזה בפעם הבאה.';
 
   @override
-  String get speakerTagPromptHintOwner => 'התשובה שלך מתייגת רק את הקטע שהושמע.';
+  String get speakerTagPromptHintOwner =>
+      'התשובה שלך מתייגת רק את הקטע שהושמע.';
 
   @override
   String speakerTagPromptSavedAs(String name) {
@@ -11901,16 +12305,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get updateAvailableTitle => 'יש עדכון זמין';
 
   @override
-  String get updateAvailableMessage => 'גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.';
+  String get updateAvailableMessage =>
+      'גרסה חדשה של Omi מוכנה, עם תיקונים ושיפורים.';
 
   @override
   String get updateRequiredTitle => 'נדרש עדכון';
 
   @override
-  String get updateRequiredMessage => 'הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.';
+  String get updateRequiredMessage =>
+      'הגרסה הזו של Omi כבר לא נתמכת. יש לעדכן כדי להמשיך להקליט ולסנכרן.';
 
   @override
-  String get exportingAllData => 'מייצא את הנתונים שלך… השאירו את Omi פתוח; חשבונות גדולים עשויים לקחת מספר דקות.';
+  String get exportingAllData =>
+      'מייצא את הנתונים שלך… השאירו את Omi פתוח; חשבונות גדולים עשויים לקחת מספר דקות.';
 
   @override
   String transcriptSpeakerCount(int count) {
@@ -11949,29 +12356,23 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String speakerLabelVoiceStatus(String state) {
-    String _temp0 = intl.Intl.selectLogic(
-      state,
-      {
-        'learned': 'הקול נלמד',
-        'pending': 'לומד את הקול…',
-        'disabled': 'שמירת קול כבויה',
-        'other': 'הקול עדיין לא נלמד',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'learned': 'הקול נלמד',
+      'pending': 'לומד את הקול…',
+      'disabled': 'שמירת קול כבויה',
+      'other': 'הקול עדיין לא נלמד',
+    });
     return '$_temp0';
   }
 
   @override
   String speakerLabelVoiceDetail(String state, String name) {
-    String _temp0 = intl.Intl.selectLogic(
-      state,
-      {
-        'learned': 'Omi יזהה את $name בפעם הבאה.',
-        'pending': 'זה לוקח כמה שניות.',
-        'disabled': 'הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את $name.',
-        'other': 'Omi צריך עוד דיבור ברור של $name וימשיך לנסות.',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(state, {
+      'learned': 'Omi יזהה את $name בפעם הבאה.',
+      'pending': 'זה לוקח כמה שניות.',
+      'disabled': 'הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את $name.',
+      'other': 'Omi צריך עוד דיבור ברור של $name וימשיך לנסות.',
+    });
     return '$_temp0';
   }
 
@@ -11988,18 +12389,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String speakerLabelText(String part, String name) {
-    String _temp0 = intl.Intl.selectLogic(
-      part,
-      {
-        'likely': 'סביר',
-        'soundsLike': 'נשמע כמו $name',
-        'notPerson': 'לא $name',
-        'alsoTitle': 'האם זה גם $name?',
-        'alsoBody': 'Omi מצא את אותו קול בשיחות קודמות.',
-        'confirmed': 'אישרת את התווית הזו',
-        'other': 'סקירה',
-      },
-    );
+    String _temp0 = intl.Intl.selectLogic(part, {
+      'likely': 'סביר',
+      'soundsLike': 'נשמע כמו $name',
+      'notPerson': 'לא $name',
+      'alsoTitle': 'האם זה גם $name?',
+      'alsoBody': 'Omi מצא את אותו קול בשיחות קודמות.',
+      'confirmed': 'אישרת את התווית הזו',
+      'other': 'סקירה',
+    });
     return '$_temp0';
   }
 
@@ -12085,7 +12483,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatReplyNotSignedIn => 'לא התחברת. התחבר ונסה שוב.';
 
   @override
-  String get chatAppsLoadFailed => 'לא ניתן לטעון את אפליקציות הצ\'אט. נסה שוב.';
+  String get chatAppsLoadFailed =>
+      'לא ניתן לטעון את אפליקציות הצ\'אט. נסה שוב.';
 
   @override
   String get assistantVoiceSettingsTitle => 'קול';
@@ -12094,13 +12493,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get assistantVoice => 'קול העוזר';
 
   @override
-  String get voiceSharedAcrossDevices => 'בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.';
+  String get voiceSharedAcrossDevices =>
+      'בחירת הקול שלך משותפת בין הנייד לשולחן העבודה.';
 
   @override
   String get readChatRepliesAloud => 'קריאת תשובות צ\'אט בקול';
 
   @override
-  String get readChatRepliesAloudDescription => 'מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.';
+  String get readChatRepliesAloudDescription =>
+      'מדבר רק כאשר \"תגובה קולית\" מאפשרת זאת.';
 
   @override
   String get voicePreviewSample => 'היי, אני Omi. זה הקול שלי.';
@@ -12135,7 +12536,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingConversationProgress => 'מעבד את השיחה…';
 
   @override
-  String get conversationProcessingFailedMessage => 'לא ניתן היה לעבד את השיחה הזו.';
+  String get conversationProcessingFailedMessage =>
+      'לא ניתן היה לעבד את השיחה הזו.';
 
   @override
   String get waitForReprocessing => 'המתן לסיום העיבוד מחדש.';
@@ -12144,7 +12546,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unnamedSpeakerLabel => 'דובר';
 
   @override
-  String get unresolvedSpeakersNotice => 'תוויות הדוברים עשויות לא להתאים בין ההקלטות בשיחה הזו.';
+  String get unresolvedSpeakersNotice =>
+      'תוויות הדוברים עשויות לא להתאים בין ההקלטות בשיחה הזו.';
 
   @override
   String get unresolvedSpeakersTitle => 'על תוויות הדוברים';
@@ -12224,10 +12627,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get importTranscriptFiles => 'קובצי תמלול';
 
   @override
-  String get importTranscriptFilesDescription => 'בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם';
+  String get importTranscriptFilesDescription =>
+      'בחר תמלולים בפורמט SRT, VTT או TXT, או קובץ ZIP שמכיל אותם';
 
   @override
-  String get importTooManyAttempts => 'יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.';
+  String get importTooManyAttempts =>
+      'יותר מדי ייבואים כרגע. נסו שוב מאוחר יותר.';
 
   @override
   String get importFileTooLarge => 'הקובץ גדול מדי לייבוא.';
@@ -12363,7 +12768,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewChangeRemoved => 'הוסר מהרשימה הפעילה';
 
   @override
-  String get reviewChangesIntro => 'מה ש-Omi שינה בעצמו ב-30 הימים האחרונים. בטל כל דבר שנראה שגוי.';
+  String get reviewChangesIntro =>
+      'מה ש-Omi שינה בעצמו ב-30 הימים האחרונים. בטל כל דבר שנראה שגוי.';
 
   @override
   String get reviewChangeUndone => 'בוטל. Omi לא יחזור על זה בעצמו.';
@@ -12372,13 +12778,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewChangeFailed => 'לא ניתן היה לעדכן שינוי זה. נסה שוב.';
 
   @override
-  String get reviewChangesLoadFailed => 'לא ניתן היה לטעון את השינויים האחרונים.';
+  String get reviewChangesLoadFailed =>
+      'לא ניתן היה לטעון את השינויים האחרונים.';
 
   @override
   String get reviewNoChangesTitle => 'עדיין אין שינויים';
 
   @override
-  String get reviewNoChangesBody => 'כש-Omi מסדר את ההערות שלך, השינויים יופיעו כאן.';
+  String get reviewNoChangesBody =>
+      'כש-Omi מסדר את ההערות שלך, השינויים יופיעו כאן.';
 
   @override
   String get reviewChangesSectionTerms => 'שמות ומונחים';
@@ -12505,7 +12913,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'מצב תצוגה מקדימה: Dream מראה מה היה משנה, אבל שום דבר בחשבון שלך לא משתנה בינתיים.';
 
   @override
-  String get dreamReportLiveBanner => 'Dream מחיל את השינויים האלה בעצמו. אפשר לבטל כל אחד מהם בשינויים אחרונים.';
+  String get dreamReportLiveBanner =>
+      'Dream מחיל את השינויים האלה בעצמו. אפשר לבטל כל אחד מהם בשינויים אחרונים.';
 
   @override
   String get dreamReportRunNow => 'הפעל עכשיו';
@@ -12529,7 +12938,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get dreamReportEmptyTitle => 'עדיין אין הרצות';
 
   @override
-  String get dreamReportEmptyBody => 'Dream בודק מה השתנה בחשבון שלך בערך פעם בשעה.';
+  String get dreamReportEmptyBody =>
+      'Dream בודק מה השתנה בחשבון שלך בערך פעם בשעה.';
 
   @override
   String get dreamReportScheduled => 'מתוזמן';
@@ -12645,7 +13055,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get speakerTagPromptExcerptSaved => 'התשובה נשמרה עבור קטע זה.';
 
   @override
-  String get pinPersonDescription => 'אנשים מוצמדים נשארים בראש רשימת האנשים שלך ואינם מוסרים על ידי ניקוי.';
+  String get pinPersonDescription =>
+      'אנשים מוצמדים נשארים בראש רשימת האנשים שלך ואינם מוסרים על ידי ניקוי.';
 
   @override
   String get chatAppsProblemFailed => 'משהו השתבש. נסו שוב.';
@@ -12664,7 +13075,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get chatAppsWaitlistConfirmed => 'תודה. WhatsApp יופיע כאן כשיהיה מוכן.';
+  String get chatAppsWaitlistConfirmed =>
+      'תודה. WhatsApp יופיע כאן כשיהיה מוכן.';
 
   @override
   String get chatAppsUseTelegramForNow => 'השתמש ב-Telegram בינתיים';
@@ -12692,7 +13104,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get chatAppsConnectTelegramMessage => 'Omi יפתח את Telegram עם קישור פרטי שמיועד רק לכם.';
+  String get chatAppsConnectTelegramMessage =>
+      'Omi יפתח את Telegram עם קישור פרטי שמיועד רק לכם.';
 
   @override
   String get chatAppsOpenMessages => 'פתח את הודעות';
@@ -12703,14 +13116,16 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get chatAppsPrivateMemoriesSubtitle => 'בריאות, כסף וכל דבר שסימנתם כפרטי נשארים מחוץ לאפליקציות הצ\'אט.';
+  String get chatAppsPrivateMemoriesSubtitle =>
+      'בריאות, כסף וכל דבר שסימנתם כפרטי נשארים מחוץ לאפליקציות הצ\'אט.';
 
   @override
   String get chatAppsConnectIMessageMessage =>
       'שלחו ל-Omi הודעה אחת מהמספר שבו אתם רוצים להשתמש. הקוד שבה מקשר את המספר לחשבון שלכם.';
 
   @override
-  String get chatAppsWhatsAppMessage => 'אנחנו עובדים על הבאת Omi ל-WhatsApp. הוא יופיע כאן כשיהיה מוכן.';
+  String get chatAppsWhatsAppMessage =>
+      'אנחנו עובדים על הבאת Omi ל-WhatsApp. הוא יופיע כאן כשיהיה מוכן.';
 
   @override
   String chatAppsNoChatsMessage(String app) {
@@ -12737,13 +13152,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsProPerkContext => 'Omi זוכר הקשר בכל אפליקציה';
 
   @override
-  String get chatAppsWhatsAppMeantime => 'Telegram ו-iMessage עובדים כבר היום, עם אותם זכרונות ומשימות.';
+  String get chatAppsWhatsAppMeantime =>
+      'Telegram ו-iMessage עובדים כבר היום, עם אותם זכרונות ומשימות.';
 
   @override
   String get chatAppsComingLater => 'יגיע בהמשך';
 
   @override
-  String get chatAppsProblemRateLimited => 'יותר מדי ניסיונות. המתינו דקה ונסו שוב.';
+  String get chatAppsProblemRateLimited =>
+      'יותר מדי ניסיונות. המתינו דקה ונסו שוב.';
 
   @override
   String get chatAppsMessage => 'הודעה';
@@ -12807,7 +13224,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsLink => 'קישור';
 
   @override
-  String get chatAppsNeverMessagesOthers => 'אף פעם לא שולח הודעות לאנשים אחרים בשמכם';
+  String get chatAppsNeverMessagesOthers =>
+      'אף פעם לא שולח הודעות לאנשים אחרים בשמכם';
 
   @override
   String get chatAppsNotConnectedTitle => 'לא מחובר';
@@ -12817,7 +13235,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'הצ\'אטים שלכם עם Omi נשמרים גם ב-Telegram. Omi עונה רק לכם, אף פעם לא לאנשים אחרים, ואפשר לנתק בכל זמן.';
 
   @override
-  String get chatAppsProblemOffline => 'אתם במצב לא מקוון. בדקו את החיבור ונסו שוב.';
+  String get chatAppsProblemOffline =>
+      'אתם במצב לא מקוון. בדקו את החיבור ונסו שוב.';
 
   @override
   String get chatAppsIMessageSubtitle => 'שלחו הודעה ל-Omi ממספר הטלפון שלכם';
@@ -12829,13 +13248,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsConnectTelegramTitle => 'חיבור Telegram';
 
   @override
-  String get chatAppsInsightsSubtitle => 'אפשרו ל-Omi לשלוח לכם כאן סיכום או תובנה.';
+  String get chatAppsInsightsSubtitle =>
+      'אפשרו ל-Omi לשלוח לכם כאן סיכום או תובנה.';
 
   @override
   String get chatAppsTelegramWaiting => 'ממתין שתקישו על התחל ב-Telegram…';
 
   @override
-  String get chatAppsEntrySubtitle => 'דברו עם Omi מהאפליקציות שאתם משתמשים בהן כל יום.';
+  String get chatAppsEntrySubtitle =>
+      'דברו עם Omi מהאפליקציות שאתם משתמשים בהן כל יום.';
 
   @override
   String chatAppsConnectedAs(String handle) {
@@ -12849,7 +13270,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsConnectIMessageTitle => 'שלחו הודעה ל-Omi כדי להתחבר';
 
   @override
-  String get chatAppsWaitingMessage => 'שלחו את ההודעה באפליקציית הודעות. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
+  String get chatAppsWaitingMessage =>
+      'שלחו את ההודעה באפליקציית הודעות. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.';
 
   @override
   String get chatAppsShowInApp => 'הצג את הצ\'אטים האלה באפליקציית Omi';
@@ -12875,7 +13297,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsNotConnectedMessage => 'אפליקציית הצ\'אט הזו נותקה.';
 
   @override
-  String get chatAppsRepliesOnlyNote => 'Omi עונה רק לכם. הוא אף פעם לא כותב ראשון.';
+  String get chatAppsRepliesOnlyNote =>
+      'Omi עונה רק לכם. הוא אף פעם לא כותב ראשון.';
 
   @override
   String chatAppsDisconnectFooter(String app) {
@@ -12911,7 +13334,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsCodeExpiredTitle => 'פג תוקף הקוד';
 
   @override
-  String get chatAppsProblemUnavailable => 'אפליקציות צ\'אט עדיין לא זמינות בחשבון שלכם.';
+  String get chatAppsProblemUnavailable =>
+      'אפליקציות צ\'אט עדיין לא זמינות בחשבון שלכם.';
 
   @override
   String get chatAppsWhatOmiDoes => 'מה Omi עושה באפליקציות צ\'אט';
@@ -12940,7 +13364,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsTelegramStepOpen => 'הקישו למטה על פתח את Telegram';
 
   @override
-  String get chatAppsShowInAppOn => 'פועל: הם יופיעו באפליקציית Omi כצ\'אטים לקריאה בלבד.';
+  String get chatAppsShowInAppOn =>
+      'פועל: הם יופיעו באפליקציית Omi כצ\'אטים לקריאה בלבד.';
 
   @override
   String chatAppsDisconnectChannel(String app) {
@@ -12967,7 +13392,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsContactsApp => 'אנשי קשר';
 
   @override
-  String get chatAppsCodeNote => 'הקוד תקף לשימוש חד-פעמי ופג תוקף בעוד 10 דקות.';
+  String get chatAppsCodeNote =>
+      'הקוד תקף לשימוש חד-פעמי ופג תוקף בעוד 10 דקות.';
 
   @override
   String get chatAppsMoreComing => 'עוד אפליקציות בדרך.';
@@ -12990,7 +13416,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get chatAppsLinkExpired => 'הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.';
+  String get chatAppsLinkExpired =>
+      'הקישור פג תוקף. הקישו על פתח את Telegram כדי לקבל קישור חדש.';
 
   @override
   String chatAppsIMessageTo(String address) {
@@ -13036,7 +13463,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewProposalSuggested => 'מוצע';
 
   @override
-  String get reviewProposalConflict => 'זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.';
+  String get reviewProposalConflict =>
+      'זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.';
 
   @override
   String itemLinkListTitle(int count) {
@@ -13054,7 +13482,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallRecommended => 'מומלץ';
 
   @override
-  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+  String get paywallNoPlans =>
+      'Plans aren\'t available right now. Try again in a minute.';
 
   @override
   String get paywallOtherPlans => 'הצג את כל התוכניות';
@@ -13075,7 +13504,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallManageBilling => 'Manage billing';
 
   @override
-  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+  String get paywallLoadError =>
+      'Couldn\'t load plans. Check your connection and try again.';
 
   @override
   String get paywallPlans => 'Plans';
@@ -13084,7 +13514,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
-  String get firstCaptureDescription => 'Choose how you want to capture your first conversation.';
+  String get firstCaptureDescription =>
+      'Choose how you want to capture your first conversation.';
 
   @override
   String get firstCaptureOmi => 'I Have an Omi';
@@ -13099,7 +13530,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firstCaptureConnectTitle => 'חבר את Omi שלך';
 
   @override
-  String get firstCaptureConnectDescription => 'חבר את Omi כדי לתעד שיחות ללא ידיים, כל היום.';
+  String get firstCaptureConnectDescription =>
+      'חבר את Omi כדי לתעד שיחות ללא ידיים, כל היום.';
 
   @override
   String get firstCaptureConnect => 'חבר את Omi שלי';
@@ -13136,7 +13568,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firstCaptureResult => 'Your first conversation';
 
   @override
-  String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
+  String get firstCaptureEmpty =>
+      'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
   String get watchCaptureTitle => 'Record from your Apple Watch';
@@ -13145,19 +13578,23 @@ class AppLocalizationsHe extends AppLocalizations {
   String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
 
   @override
-  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+  String get watchCaptureRecord =>
+      'Tap Record. Allow microphone access if asked.';
 
   @override
   String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
 
   @override
-  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+  String get pairingBluetoothOff =>
+      'Turn on Bluetooth on your phone, then try again.';
 
   @override
-  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+  String get pairingBluetoothPermission =>
+      'Allow Bluetooth access for Omi in Settings, then try again.';
 
   @override
-  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+  String get pairingNearbyPermission =>
+      'Allow Nearby devices access for Omi in Settings, then try again.';
 
   @override
   String get pairingLocationPermission =>
@@ -13168,7 +13605,8 @@ class AppLocalizationsHe extends AppLocalizations {
       'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
 
   @override
-  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+  String get pairingBondRecovery =>
+      'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
 
   @override
   String get pairingHowTo => 'How to pair';
@@ -13200,7 +13638,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firstCaptureShortTitle => 'Finish This Recording?';
 
   @override
-  String get firstCaptureShortWarning => 'A few more sentences help Omi understand you. About 30 seconds is ideal.';
+  String get firstCaptureShortWarning =>
+      'A few more sentences help Omi understand you. About 30 seconds is ideal.';
 
   @override
   String get firstCaptureCancelTitle => 'Leave This Recording?';
@@ -13222,10 +13661,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallTrialHeadline => 'כך עובד הניסיון החינמי שלך.';
 
   @override
-  String get paywallTrialSlideSummariesTitle => 'סיכומים ללא הגבלה, נשמרים לנצח';
+  String get paywallTrialSlideSummariesTitle =>
+      'סיכומים ללא הגבלה, נשמרים לנצח';
 
   @override
-  String get paywallTrialSlideSummariesBody => 'כל שיחה הופכת לסיכום ברור עם צעדים הבאים, כך ששום דבר לא יתפספס.';
+  String get paywallTrialSlideSummariesBody =>
+      'כל שיחה הופכת לסיכום ברור עם צעדים הבאים, כך ששום דבר לא יתפספס.';
 
   @override
   String get paywallTrialSlideTranscriptionTitle => 'תמלול מהשורה הראשונה';
@@ -13255,7 +13696,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallTrialBubbleFollowUp => 'נסח אימייל מעקב מהפגישה הזו.';
 
   @override
-  String get paywallTrialBubbleConflicts => 'יש סתירות למה שג\'ון אמר ביום שלישי?';
+  String get paywallTrialBubbleConflicts =>
+      'יש סתירות למה שג\'ון אמר ביום שלישי?';
 
   @override
   String get paywallTrialBubbleBlockers => 'מצא כל דבר שיכול להאט אותנו.';
@@ -13327,7 +13769,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get connectAnAgent => 'חיבור סוכן';
 
   @override
-  String get connectAnAgentSubtitle => 'קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן';
+  String get connectAnAgentSubtitle =>
+      'קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן';
 
   @override
   String syncCardSyncingAmount(String amount) {
@@ -13419,7 +13862,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsOnWaitlist => 'את/ה ברשימת ההמתנה';
 
   @override
-  String get chatAppsWaitlistJoined => 'את/ה ברשימת ההמתנה. נעדכן כשיתפנה מקום.';
+  String get chatAppsWaitlistJoined =>
+      'את/ה ברשימת ההמתנה. נעדכן כשיתפנה מקום.';
 
   @override
   String onboardingActCongratsTitle(String name) {
@@ -13440,7 +13884,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingActDemoTitle => 'צהריים עם סאם';
 
   @override
-  String get onboardingActDictateBody => 'תגידו את זה בדרך שלכם. Omi ידאג לשאר.';
+  String get onboardingActDictateBody =>
+      'תגידו את זה בדרך שלכם. Omi ידאג לשאר.';
 
   @override
   String get onboardingActDictateBodyOmi => 'פשוט דבר. ה-Omi שלך מקשיב.';
@@ -13468,16 +13913,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingActMicBody => 'כדי ש-Omi ישמע אתכם כשאתם מדברים אליו.';
 
   @override
-  String get onboardingActMicFallbackBody => 'ה-Omi עדיין לא שולח שמע. בינתיים השתמש בטלפון.';
+  String get onboardingActMicFallbackBody =>
+      'ה-Omi עדיין לא שולח שמע. בינתיים השתמש בטלפון.';
 
   @override
   String get onboardingActMicTitle => 'Omi צריך את המיקרופון';
 
   @override
-  String get onboardingActNoAudioOmi => 'לא שומעים את ה-Omi. ודא שהוא דולק וקרוב.';
+  String get onboardingActNoAudioOmi =>
+      'לא שומעים את ה-Omi. ודא שהוא דולק וקרוב.';
 
   @override
-  String get onboardingActNoAudioPhone => 'עדיין לא שומעים אותך. נסה לדבר קצת יותר חזק.';
+  String get onboardingActNoAudioPhone =>
+      'עדיין לא שומעים אותך. נסה לדבר קצת יותר חזק.';
 
   @override
   String get onboardingActNotesLabel => 'היום שלך, בתמצית';
@@ -13592,10 +14040,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
 
   @override
-  String get connectAgentHeadline => 'השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם';
+  String get connectAgentHeadline =>
+      'השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם';
 
   @override
-  String get connectAgentIntro => 'מתחברים פעם אחת. אחר כך אפשר לשאול אותם על השיחות, הזיכרונות והמשימות שלכם.';
+  String get connectAgentIntro =>
+      'מתחברים פעם אחת. אחר כך אפשר לשאול אותם על השיחות, הזיכרונות והמשימות שלכם.';
 
   @override
   String get connectAgentOneTap => 'בהקשה אחת';
@@ -13631,25 +14081,29 @@ class AppLocalizationsHe extends AppLocalizations {
   String get connectChatGptTitle => 'חיבור ChatGPT';
 
   @override
-  String get connectChatGptSubtitle => 'לוקח כ-30 שניות. מאשרים בתוך ChatGPT, וזה עובד בטלפון ובמחשב.';
+  String get connectChatGptSubtitle =>
+      'לוקח כ-30 שניות. מאשרים בתוך ChatGPT, וזה עובד בטלפון ובמחשב.';
 
   @override
   String get connectChatGptStepOpen => 'אנחנו פותחים את Omi ב-ChatGPT';
 
   @override
-  String get connectChatGptStepOpenBody => 'ChatGPT נפתח ישירות בדף האפליקציה של Omi.';
+  String get connectChatGptStepOpenBody =>
+      'ChatGPT נפתח ישירות בדף האפליקציה של Omi.';
 
   @override
   String get connectChatGptStepApprove => 'הקישו על \"התחבר\" ואז התחברו ל-Omi';
 
   @override
-  String get connectChatGptStepApproveBody => 'השתמשו באותו חשבון שבו אתם משתמשים כאן.';
+  String get connectChatGptStepApproveBody =>
+      'השתמשו באותו חשבון שבו אתם משתמשים כאן.';
 
   @override
   String get connectChatGptStepReturn => 'חזרו ל-Omi';
 
   @override
-  String get connectChatGptStepReturnBody => 'אנחנו בודקים את החיבור באופן אוטומטי.';
+  String get connectChatGptStepReturnBody =>
+      'אנחנו בודקים את החיבור באופן אוטומטי.';
 
   @override
   String get openChatGpt => 'פתיחת ChatGPT';
@@ -13661,13 +14115,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get tryAskingChatGpt => 'נסו לשאול את ChatGPT';
 
   @override
-  String get tryAskingChatGptFooter => 'הקישו על אחת כדי לפתוח את ChatGPT כשהיא כבר כתובה.';
+  String get tryAskingChatGptFooter =>
+      'הקישו על אחת כדי לפתוח את ChatGPT כשהיא כבר כתובה.';
 
   @override
   String get chatGptExampleMeetings => 'על מה הסכמתי בפגישות של אתמול?';
 
   @override
-  String get chatGptExampleTasks => 'הפוך את המשימות הפתוחות שלי ב-Omi לתוכנית לשבוע הזה.';
+  String get chatGptExampleTasks =>
+      'הפוך את המשימות הפתוחות שלי ב-Omi לתוכנית לשבוע הזה.';
 
   @override
   String get chatGptExampleGoals => 'מה Omi יודע על המטרות שלי?';
@@ -13679,7 +14135,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get disconnectChatGptQuestion => 'לנתק את ChatGPT?';
 
   @override
-  String get disconnectChatGptMessage => 'ChatGPT לא יוכל עוד לקרוא את הזיכרונות, השיחות או המשימות שלכם ב-Omi.';
+  String get disconnectChatGptMessage =>
+      'ChatGPT לא יוכל עוד לקרוא את הזיכרונות, השיחות או המשימות שלכם ב-Omi.';
 
   @override
   String connectAgentNamed(String name) {
@@ -13692,7 +14149,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get connectAgentGenericPromptSubtitle => 'מדביקים הנחיה אחת. הסוכן שלכם מגדיר את Omi במחשב שלו.';
+  String get connectAgentGenericPromptSubtitle =>
+      'מדביקים הנחיה אחת. הסוכן שלכם מגדיר את Omi במחשב שלו.';
 
   @override
   String connectAgentKeyCreated(String name) {
@@ -13707,7 +14165,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get connectAgentPreparing => 'יוצרים מפתח וקישור מאובטח…';
 
   @override
-  String get connectAgentPrepareFailed => 'לא ניתן ליצור את המפתח. בדקו את החיבור ונסו שוב.';
+  String get connectAgentPrepareFailed =>
+      'לא ניתן ליצור את המפתח. בדקו את החיבור ונסו שוב.';
 
   @override
   String get copyPrompt => 'העתקת ההנחיה';
@@ -13761,7 +14220,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get copyForAnyApp => 'העתקה לכל אפליקציה';
 
   @override
-  String get askConnectChatGptFirst => 'חברו את ChatGPT פעם אחת כדי לשאול אותו על השיחות שלכם.';
+  String get askConnectChatGptFirst =>
+      'חברו את ChatGPT פעם אחת כדי לשאול אותו על השיחות שלכם.';
 
   @override
   String get reconnect => 'התחבר מחדש';
@@ -13781,7 +14241,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryNotSummarizedYet => 'עדיין לא סוכם';
 
   @override
-  String get summaryEmptyStateBody => 'Omi יכול להפוך את השיחה הזו לסקירה כללית, נקודות עיקריות ומשימות.';
+  String get summaryEmptyStateBody =>
+      'Omi יכול להפוך את השיחה הזו לסקירה כללית, נקודות עיקריות ומשימות.';
 
   @override
   String get summaryWithOmi => 'סיכום עם Omi';
@@ -13804,7 +14265,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summarySheetTitle => 'סיכום עם';
 
   @override
-  String get summaryOmiTemplateSubtitle => 'סקירה כללית, נקודות עיקריות ומשימות';
+  String get summaryOmiTemplateSubtitle =>
+      'סקירה כללית, נקודות עיקריות ומשימות';
 
   @override
   String get summaryYourTemplates => 'התבניות שלך';
@@ -13822,10 +14284,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryUseForNewConversations => 'הגדר כברירת המחדל שלי';
 
   @override
-  String get summaryTemplatesLoadFailed => 'לא ניתן היה לטעון את התבניות שלך. Omi עדיין עובד.';
+  String get summaryTemplatesLoadFailed =>
+      'לא ניתן היה לטעון את התבניות שלך. Omi עדיין עובד.';
 
   @override
-  String get summaryNoTemplatesYet => 'עדיין לא הוספת תבניות. אפשר לעיין בכמה או ליצור תבנית משלך.';
+  String get summaryNoTemplatesYet =>
+      'עדיין לא הוספת תבניות. אפשר לעיין בכמה או ליצור תבנית משלך.';
 
   @override
   String summarySummarizingWith(String name) {
@@ -13847,7 +14311,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryBusyTitle => 'העיבוד עדיין מתבצע';
 
   @override
-  String get summaryBusyBody => 'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
+  String get summaryBusyBody =>
+      'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
 
   @override
   String get summaryCheckAgain => 'בדיקה חוזרת';
@@ -13856,7 +14321,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryLimitTitle => 'הגעת למגבלת הסיכומים';
 
   @override
-  String get summaryLimitBody => 'יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.';
+  String get summaryLimitBody =>
+      'יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.';
 
   @override
   String get summaryFailedTitle => 'לא ניתן היה לסכם';
@@ -13868,13 +14334,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noContentToDisplay => 'אין תוכן להצגה';
 
   @override
-  String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
+  String get processingTakingLonger =>
+      'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
 
   @override
   String get onDeviceAtCapTitle => 'הגעת למכסה של החודש';
 
   @override
-  String get onDeviceAtCapBody => 'Omi עדיין מקליט. בחר איך לתמלל את שאר החודש.';
+  String get onDeviceAtCapBody =>
+      'Omi עדיין מקליט. בחר איך לתמלל את שאר החודש.';
 
   @override
   String onDeviceLiveHoursReturn(String date) {
@@ -13891,10 +14359,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'פועל בזמן שהטלפון נטען.';
 
   @override
-  String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceUpgradeBody =>
+      'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
-  String get onDeviceAtCapFooter => 'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
+  String get onDeviceAtCapFooter =>
+      'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
 
   @override
   String onDeviceStepOf(int step, int total) {
@@ -13946,10 +14416,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceModelUnsupported => 'עדיין לא זמין בטלפון הזה';
 
   @override
-  String get onDeviceSetupKeepRecording => 'אפשר להמשיך להקליט בזמן ההורדה. שום דבר לא מחכה לזה.';
+  String get onDeviceSetupKeepRecording =>
+      'אפשר להמשיך להקליט בזמן ההורדה. שום דבר לא מחכה לזה.';
 
   @override
-  String get onDeviceSetupAudioStays => 'האודיו נשאר בטלפון שלך עד שהוא מתומלל.';
+  String get onDeviceSetupAudioStays =>
+      'האודיו נשאר בטלפון שלך עד שהוא מתומלל.';
 
   @override
   String get onDeviceWifiOnly => 'הורדה ב-Wi-Fi בלבד';
@@ -13970,7 +14442,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceScheduleCharging => 'בזמן טעינה';
 
   @override
-  String get onDeviceScheduleChargingBody => 'התמלולים מופיעים אחרי שמחברים לטעינה, בדרך כלל במהלך הלילה.';
+  String get onDeviceScheduleChargingBody =>
+      'התמלולים מופיעים אחרי שמחברים לטעינה, בדרך כלל במהלך הלילה.';
 
   @override
   String get onDeviceBatteryAlmostNone => 'סוללה: כמעט כלום';
@@ -14004,13 +14477,16 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onDeviceQueueChargingBody => 'הן יהיו מוכנות אחרי שתחבר את הטלפון לטעינה. ההקלטה ממשיכה כרגיל.';
+  String get onDeviceQueueChargingBody =>
+      'הן יהיו מוכנות אחרי שתחבר את הטלפון לטעינה. ההקלטה ממשיכה כרגיל.';
 
   @override
-  String get onDeviceQueueHoursBody => 'Omi משלים את הפער כל כמה שעות. ההקלטה ממשיכה כרגיל.';
+  String get onDeviceQueueHoursBody =>
+      'Omi משלים את הפער כל כמה שעות. ההקלטה ממשיכה כרגיל.';
 
   @override
-  String get onDeviceQueueLowBatteryBody => 'ממתין למטען כי הסוללה חלשה. ההקלטה ממשיכה כרגיל.';
+  String get onDeviceQueueLowBatteryBody =>
+      'ממתין למטען כי הסוללה חלשה. ההקלטה ממשיכה כרגיל.';
 
   @override
   String get onDeviceTranscribeNow => 'תמלול עכשיו';
@@ -14037,7 +14513,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceTranscribedOnPhone => 'תומלל בטלפון הזה';
 
   @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'תומלל וסוכם ב-iPhone הזה';
+  String get onDeviceTranscribedSummarizedOnIphone =>
+      'תומלל וסוכם ב-iPhone הזה';
 
   @override
   String get onDeviceSummarizedByCloud => 'סוכם על ידי Omi Cloud';
@@ -14046,16 +14523,19 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceWhyPhoneTitle => 'למה זה נעשה בטלפון שלך';
 
   @override
-  String get onDeviceWhyLiveHoursUsed => 'הגעת למכסה של החודש, ולכן Omi תמלל את זה בטלפון שלך.';
+  String get onDeviceWhyLiveHoursUsed =>
+      'הגעת למכסה של החודש, ולכן Omi תמלל את זה בטלפון שלך.';
 
   @override
-  String get onDeviceWhySavingLiveHours => 'בחרת לתמלל בטלפון הזה כדי לחסוך שימוש.';
+  String get onDeviceWhySavingLiveHours =>
+      'בחרת לתמלל בטלפון הזה כדי לחסוך שימוש.';
 
   @override
   String get onDeviceWhySummaryOnPhone => 'גם הסיכום נכתב ב-iPhone הזה.';
 
   @override
-  String get onDeviceWhyNoSummary => 'אתה שומר הכול בטלפון הזה, ולכן אין סיכום.';
+  String get onDeviceWhyNoSummary =>
+      'אתה שומר הכול בטלפון הזה, ולכן אין סיכום.';
 
   @override
   String get onDeviceWhyCloudTitle => 'למה Omi Cloud כתב את הסיכום הזה';
@@ -14072,7 +14552,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceRedoHint =>
+      'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceKeepEverything => 'לשמור הכול בטלפון הזה';
@@ -14099,7 +14580,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'תמיד לתמלל בטלפון הזה';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'חוסך את השימוש. בלי תוויות דוברים.';
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'חוסך את השימוש. בלי תוויות דוברים.';
 
   @override
   String get onDeviceOnThisPhone => 'בטלפון הזה';
@@ -14114,7 +14596,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRemoveModelTitle => 'להסיר את מודל הדיבור?';
 
   @override
-  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתורידו אותו שוב או עד שהשימוש יתאפס.';
+  String get onDeviceRemoveModelMessage =>
+      'ההקלטות ימתינו בטלפון הזה עד שתורידו אותו שוב או עד שהשימוש יתאפס.';
 
   @override
   String get onDeviceRemove => 'הסרה';
@@ -14225,7 +14708,8 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingPaused => 'העיבוד הושהה. הגעת למגבלה של החודש.';
 
   @override
-  String get processingStored => 'ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.';
+  String get processingStored =>
+      'ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.';
 
   @override
   String processingWaiting(String duration, String percent) {
@@ -14238,7 +14722,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get processingNewestFirst => 'נעבד תחילה את ההקלטות החדשות ביותר עד לגבול המכסה הזמינה. השאר יישארו בהמתנה.';
+  String get processingNewestFirst =>
+      'נעבד תחילה את ההקלטות החדשות ביותר עד לגבול המכסה הזמינה. השאר יישארו בהמתנה.';
 
   @override
   String get processingAction => 'עיבוד הקלטות ממתינות';
