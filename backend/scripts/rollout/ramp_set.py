@@ -90,7 +90,7 @@ def main(argv: Sequence[str] | None = None, *, client_factory: Callable[..., Any
     project, database = args.project or project, args.database or database
     client = (client_factory or firestore.Client)(project=project, database=database)
     try:
-        document = store.read_ramp(firestore_client=client)
+        document = store.read_ramp(firestore_client=client, timeout=store.OPERATOR_READ_TIMEOUT_SECONDS)
     except Exception:
         print('ramp read failed; no SDK error is printed', file=sys.stderr)
         return 1
