@@ -131,29 +131,10 @@
         "scope",
         "hermetic-e2e",
         "listen-pusher-stack-gauntlet",
-        "sync-cloud-tasks-stack-gauntlet",
-        "replay-harness-phase0a-gauntlet"
+        "sync-cloud-tasks-stack-gauntlet"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "backend-hermetic-e2e.yml/replay-harness-phase0a-gauntlet": {
-      "budget_p50_minutes": 3,
-      "display_name": "Replay Harness Phase 0A Feasibility (advisory)",
-      "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 1,
-      "if": "needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "scope",
-      "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder; needs drop the Phase 0A replay harness job (legacy-retire C11)",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

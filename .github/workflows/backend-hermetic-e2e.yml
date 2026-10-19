@@ -331,88 +331,6 @@ jobs:
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
 
-  replay-harness-phase0a-gauntlet:
-    name: Replay Harness Phase 0A Feasibility (advisory)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: scope
-    if: needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: backend/.python-version
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
-        with:
-          # Exact version resolves locally; an unset version means "latest",
-          # which fetches the astral-sh/versions manifest and has hard-failed
-          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
-          version: "0.11.13"
-          enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
-
-      - name: Install backend dependencies in the gauntlet virtualenv
-        working-directory: backend
-        run: |
-          uv venv .venv
-          uv pip sync pylock.toml --python .venv/bin/python
-
-      - name: Set up Node.js for the Firestore emulator
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install pinned Firebase CLI dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Set up Java for the Firestore emulator
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Install Redis server
-        # The harness spawns its own `redis-server` binary per test on an
-        # ephemeral port (see backend/testing/*/run.py), so this needs the
-        # actual package installed, not a `services:` container.
-        #
-        # apt against the default Azure-mirror apt source on hosted runners
-        # can silently stall (connects but never completes the transfer)
-        # instead of failing, which previously let this step hang until the
-        # job's 20-minute timeout killed it with an opaque "operation was
-        # canceled". Bound each apt network attempt and retry a few times so
-        # a stalled mirror fails over quickly, and cap the step itself as a
-        # backstop.
-        timeout-minutes: 5
-        run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install --yes redis-server
-
-      - name: Run Phase 0A replay harness feasibility experiment
-        env:
-          # Fixed state root so failed-job evidence (logs/attestations) is retained
-          # at a known path for the failure step below.
-          OMI_REPLAY_STATE_ROOT: ${{ runner.temp }}/omi-replay-harness
-        run: npm run test:replay-harness-phase0a:emulator
-
-      - name: Show replay harness logs on failure
-        if: failure()
-        run: |
-          state_root="$RUNNER_TEMP/omi-replay-harness"
-          if [[ -d "$state_root" ]]; then
-            find "$state_root" -type f \( -name '*.log' -o -name 'attestation.json' \) -print -exec sh -c 'echo "===== $1 ====="; tail -n 160 "$1"' _ {} \;
-          else
-            echo "Replay harness state directory was not retained."
-          fi
-
   merge-gate:
     name: Backend Hermetic Merge Gate
     runs-on: ubuntu-latest
@@ -491,7 +409,7 @@ jobs:
 
   post-merge-failure-issues:
     name: Post-merge hermetic failure issues
-    needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet, replay-harness-phase0a-gauntlet]
+    needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
@@ -506,14 +424,13 @@ jobs:
           E2E: ${{ needs.hermetic-e2e.result }}
           LISTEN: ${{ needs.listen-pusher-stack-gauntlet.result }}
           SYNC: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
-          REPLAY: ${{ needs.replay-harness-phase0a-gauntlet.result }}
           SCOPE: ${{ needs.scope.result }}
           APPLIES: ${{ needs.scope.outputs.applies }}
         run: |
           set -euo pipefail
           [[ "$SCOPE" == success && "$APPLIES" == false ]] && exit 0
           failed=0
-          for spec in "Hermetic scope detection:$SCOPE" "Hermetic Backend E2E:$E2E" "Listen Pusher Stack Gauntlet:$LISTEN" "Sync Cloud Tasks Stack Gauntlet:$SYNC" "Replay Harness Phase 0A Feasibility:$REPLAY"; do
+          for spec in "Hermetic scope detection:$SCOPE" "Hermetic Backend E2E:$E2E" "Listen Pusher Stack Gauntlet:$LISTEN" "Sync Cloud Tasks Stack Gauntlet:$SYNC"; do
             suite="${spec%%:*}"
             result="${spec#*:}"
             [[ "$SCOPE" != success && "$result" == skipped ]] && continue

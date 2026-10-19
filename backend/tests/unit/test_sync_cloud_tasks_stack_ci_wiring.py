@@ -28,9 +28,7 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
 
     assert '  sync-cloud-tasks-stack-gauntlet:' in workflow
-    job = workflow.split('  sync-cloud-tasks-stack-gauntlet:\n', 1)[1].split(
-        '\n  replay-harness-phase0a-gauntlet:\n', 1
-    )[0]
+    job = workflow.split('  sync-cloud-tasks-stack-gauntlet:\n', 1)[1].split('\n  merge-gate:\n', 1)[0]
 
     assert 'timeout-minutes: 20' in job
     assert 'needs: scope' in job
