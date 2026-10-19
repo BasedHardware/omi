@@ -121,3 +121,19 @@ def get_retired_handle_ack(job_id: str, uid: str, *, firestore_client: Any = Non
             outcome='recovered',
         )
     return status
+
+
+def acknowledge_retired_handle(job_id: str, uid: str) -> dict[str, Any] | None:
+    """Route boundary: lookup errors fail open to the pre-existing 404, never a 5xx."""
+    try:
+        return get_retired_handle_ack(job_id, uid)
+    except Exception as error:
+        logger.error('event=sync_retired_handle_ack outcome=lookup_failed exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='retired_custody_ack',
+            to_mode='redis_status',
+            reason='unavailable',
+            outcome='degraded',
+        )
+        return None
