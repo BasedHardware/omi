@@ -108,10 +108,23 @@ fi
         operation = 'update' if inventory in {'present', 'present_short'} else 'create'
         assert calls[1].startswith(f'tasks queues {operation} batch-quarantine-recovery ')
         for option in [
-            '--max-concurrent-dispatches=4',
-            '--max-dispatches-per-second=4',
+            # 10-19 01:27Z raise; the 07:07Z train reset it to 4/4 and failed the 5% re-qualification.
+            '--max-concurrent-dispatches=16',
+            '--max-dispatches-per-second=8',
             '--max-attempts=5',
             '--min-backoff=5s',
             '--max-backoff=60s',
         ]:
             assert option in calls[1]
+
+
+def test_prod_integration_pins_the_ramp_recovery_dispatch_batch(monkeypatch):
+    """Set live to 64 during the 10-19 ramp; without the manifest value every train restores 16."""
+    import importlib
+
+    overlay = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+    env = overlay['overlay']['cloud_run']['services']['backend-integration']['env']
+    assert env['BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE']['value'] == '64'
+    batch_pipeline = importlib.import_module('config.batch_pipeline')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '64')
+    assert batch_pipeline.recovery_dispatch_batch_size() == 64  # within the code bound, not clamped back to 16

@@ -61,10 +61,14 @@ spec:
             - {name: BATCH_PIPELINE_WORKER_AUDIENCE, value: {{ .Values.worker.audience | quote }}}
             - {name: BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED, value: {{ .Values.worker.workerSilenceDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED, value: {{ .Values.worker.workerValidationDispositionEnabled | quote }}}
+            - {name: BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED, value: {{ .Values.worker.diarizeSpeechOnlyEnabled | quote }}}
+            - {name: BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED, value: {{ .Values.worker.shortSpeechSingleEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
+            # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
+            - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ .Values.worker.pipelineDepth | default 2 | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
@@ -81,6 +85,8 @@ spec:
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}
             - {name: BATCH_PIPELINE_PADDED_SECONDS, value: {{ .Values.worker.paddedSeconds | quote }}}
+            - {name: BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED, value: {{ .Values.worker.flightBatchingEnabled | quote }}}
+            - {name: BATCH_PIPELINE_FLIGHT_BATCH_SECONDS, value: {{ .Values.worker.flightBatchSeconds | quote }}}
             - name: ENCRYPTION_SECRET
               valueFrom:
                 secretKeyRef:

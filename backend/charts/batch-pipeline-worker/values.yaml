@@ -30,13 +30,24 @@ worker:
   apiUrl: ""
   audience: ""
   batchSize: 8
+  # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
+  pipelineDepth: 2
   unitSeconds: 3600
   paddedSeconds: 272
+  # Pack pyannote segmentation/embedding forwards across one flight's units.
+  # Dark until the L4 paired run passes (diarizer/batch_pipeline_flight_qualify.py).
+  flightBatchingEnabled: false
+  flightBatchSeconds: 1800
   emptyAsrRecoveryEnabled: false
   emptyAsrDispositionEnabled: false
   headPriorityEnabled: false
   workerSilenceDispositionEnabled: false
   workerValidationDispositionEnabled: true
+  # Ship-on speech-only diarization; false restores full-unit diarization.
+  diarizeSpeechOnlyEnabled: true
+  # Default off until a paired run on the prod pyannote revision qualifies it
+  # (see backend/diarizer/batch_pipeline_runtime.md).
+  shortSpeechSingleEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.

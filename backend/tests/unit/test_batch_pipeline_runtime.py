@@ -132,6 +132,39 @@ def test_supervision_drains_after_stop_before_readiness_closes():
     asyncio.run(check())
 
 
+def test_queue_sampler_stays_fresh_while_pump_is_inside_a_long_batch(monkeypatch):
+    monkeypatch.setattr(runtime, 'METRICS_SAMPLE_SECONDS', 0.01)
+
+    async def check():
+        state = runtime.RuntimeState()
+        stop = asyncio.Event()
+
+        class Pump:
+            samples = 0
+            failures = 0
+
+            async def sample_metrics(self):
+                self.samples += 1
+                if self.samples == 2:
+                    self.failures += 1
+                    raise RuntimeError('transient Firestore error')
+
+            async def run(self, signal):
+                # One long GPU batch: run_once never returns to refresh inline.
+                while self.samples < 4:
+                    await asyncio.sleep(0.005)
+                signal.set()
+
+        pump = Pump()
+        await asyncio.wait_for(runtime.supervise(pump, state, stop), 2)
+        assert pump.samples >= 4 and pump.failures == 1  # A failed sample does not stop sampling.
+        sampled = pump.samples
+        await asyncio.sleep(0.05)
+        assert pump.samples == sampled  # Sampler stops with supervision.
+
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('message', ['CUDA illegal memory access', 'CUDA out of memory', 'CUBLAS_STATUS_ALLOC_FAILED'])
 def test_fatal_cuda_requests_restart_after_quiescence(message):
     calls = []
@@ -226,6 +259,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
     monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
 
     class Pump:
         def __init__(self, scheduler, worker, **kwargs):
@@ -246,6 +280,18 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     state = runtime.RuntimeState()
     asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), state))
     assert not state.ready and captured['batch_size'] == 4
+    assert captured['flights'] == 2
+
+
+@pytest.mark.parametrize('raw,expected', [(None, 2), ('1', 1), ('4', 4), ('0', 2), ('9', 2), ('two', 2)])
+def test_worker_pipeline_depth_ships_on_and_one_restores_serial_pump(monkeypatch, raw, expected):
+    from config.batch_pipeline import worker_pipeline_depth
+
+    if raw is None:
+        monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raw)
+    assert worker_pipeline_depth() == expected
 
 
 def test_process_refuses_shared_live_before_model_startup(monkeypatch):

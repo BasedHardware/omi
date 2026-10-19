@@ -9335,9 +9335,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+مزید $count';
-  }
+  String get quoteShowSources => 'ذرائع دکھائیں';
 
   @override
   String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
@@ -11077,7 +11075,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openCall => 'کال کھولیں';
 
   @override
-  String get captureRecoveryBanner => 'Omi آڈیو نہیں بھیج رہا — دوبارہ منسلک ہونے کے لیے ٹیپ کریں';
+  String get captureRecoveryBannerTitle => 'Omi آڈیو نہیں بھیج رہا';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11088,6 +11086,23 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی';
+
+  @override
+  String get captureBannerTryReconnect => 'دوبارہ کنیکٹ کرنے کی کوشش کریں';
+
+  @override
+  String get captureBannerRetrySync => 'ہم وقت کرنے کی دوبارہ کوشش کریں';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'آپ کے Omi سے بلوٹوتھ کنکشن رکاوٹ کا شکار ہے، اس لیے آڈیو ایپ تک نہیں پہنچ رہا۔ Omi ڈیوائس پر ریکارڈنگ جاری رکھتا ہے اور کنکشن بحال ہوتے ہی سنک ہو جائے گا۔ دوبارہ کوشش کرنے سے کنکشن دوبارہ قائم ہوتا ہے؛ اگر یہ بار بار ناکام ہو، تو سیٹنگز > ڈیوائس میں اپنا ڈیوائس چیک کریں۔';
+
+  @override
+  String get captureIngressNeedsReconnect => 'آڈیو ایپ تک نہیں پہنچ رہا — اپنا Omi دوبارہ جوڑیں';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'ایپ اب Omi ڈیوائس سے آڈیو حاصل نہیں کر سکتی اور کنکشن خودکار طور پر بحال نہیں ہو سکا۔ ڈیوائس کو غیر منسلک کر کے دوبارہ جوڑیں — ڈیوائس کی ترتیبات سے، یا اسے بند کر کے چالو کر کے۔ ڈیوائس پر محفوظ آڈیو بعد میں سنک ہوگا۔';
 
   @override
   String get captureStillRecording => 'ریکارڈنگ جاری ہے';
@@ -13671,7 +13686,30 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityRetryAll => 'سب دوبارہ کوشش کریں';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'اسٹوریج کی جانچ ممکن نہیں';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'ریکارڈنگز روک دی گئی ہیں';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'اپ لوڈ رک گیا ہے';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز انتظار میں ہیں',
+      one: '1 ریکارڈنگ انتظار میں ہے',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
+
+  @override
+  String get activityAttentionSemantics => 'ایکٹیویٹی، توجہ درکار ہے';
 
   @override
   String get connectAgentHeadline => 'ChatGPT اور اپنے AI ایجنٹس میں اپنی Omi میموری استعمال کریں';
@@ -14353,6 +14391,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved آڈیو محفوظ ہوا، کل $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi پر ریکارڈنگ جاری ہے';
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

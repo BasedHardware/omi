@@ -1,0 +1,3 @@
+{
+  "change": "Transfer to Phone now works for recordings on an Omi with firmware 3.0.17 to 3.0.19, and a transfer that fails is no longer shown as complete"
+}

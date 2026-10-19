@@ -2278,7 +2278,7 @@ environments:
           STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'true'}
           STT_ROUTING_MODE: {category: rollout, value: 'on'}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
-          STT_ROUTING_ON_PERCENT: {category: rollout, value: '100'}
+          STT_ROUTING_ON_PERCENT: {category: rollout, value: '90'}
           STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
@@ -2470,7 +2470,6 @@ environments:
           MOBILE_STANDARD_BATCH_ENABLED: {value: 'true', category: rollout}
           MOBILE_STANDARD_BATCH_PERCENT: {value: '0', category: rollout}
           MOBILE_STANDARD_BATCH_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          SONIOX_IDLE_CLOSE_SECONDS: {value: '45', category: rollout}
           STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -3587,7 +3586,7 @@ environments:
               default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_BACKFILL_TASKS_QUEUE:
-              value: sync-backfill
+              value: sync-backfill-fresh
               category: reliability
             SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
@@ -3601,7 +3600,7 @@ environments:
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_TASKS_QUEUE:
-              value: sync-jobs
+              value: sync-jobs-fresh
               category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -3933,7 +3932,7 @@ environments:
               default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_BACKFILL_TASKS_QUEUE:
-              value: sync-backfill
+              value: sync-backfill-fresh
               category: reliability
             SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
@@ -3947,7 +3946,7 @@ environments:
               default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_TASKS_QUEUE:
-              value: sync-backfill
+              value: sync-backfill-fresh
               category: reliability
           provisional: true
           forbidden_env:
@@ -4150,6 +4149,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
               value: batch-quarantine-recovery
               category: reliability
+            BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+              value: '64'
+              category: reliability
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -4181,7 +4183,7 @@ environments:
               default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_QUEUE:
-              value: sync-jobs
+              value: sync-jobs-fresh
               category: reliability
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL

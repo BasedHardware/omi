@@ -14,6 +14,11 @@ VARIANTS = {
     'widened': ('burst_owner_serial_sequencer', {'per_owner_concurrency': 32}),
     'steady': ('mixed_fleet_steady', {}),
     'exhaustion': ('provider_exhaustion_window', {}),
+    # Diagnostic counterfactual only; the exhaustion baseline uses shipping defaults.
+    'exhaustion_former_rate': (
+        'provider_exhaustion_window',
+        {'overrides': {'flags': {'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'}}},
+    ),
     'stale': ('stale_finalize_targets', {}),
     'stale_no_purge': ('stale_finalize_targets', {'overrides': {'purge_on_fence': False}}),
     'privacy': ('privacy_blocked_users', {}),
@@ -49,12 +54,22 @@ def test_mixed_fleet_steady_passes_every_gate(samples):
     assert sample['sim']['max_paid_calls_per_segment'] <= 1
 
 
-def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine_tail(samples):
+def test_bounded_recovery_clears_exhaustion_tail_without_hiding_unrecovered_audio(samples):
     sample = samples['exhaustion']
     sim = sample['sim']
     assert sample['quarantine_projection_cohort_count'] >= 20  # above the gate's low-sample floor
-    assert sample['quarantine_projection_p95_seconds'] > 300
-    assert sample['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'
+    assert 0 < sample['quarantine_projection_p95_seconds'] < 300
+    # Main #22321 removes the dispatch bottleneck. A real modeled failed-held
+    # piece still fails the gate; faster scheduling must not imply full recovery.
+    assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
+    assert sim['recovery_states']['failed_held'] > 0
+    assert sample['unrecovered_quarantines'] == sim['recovery_states']['failed_held']
+    former = samples['exhaustion_former_rate']
+    assert former['quarantine_projection_p95_seconds'] > 300
+    assert former['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'
+    assert former['sim']['paid_fallback_calls'] == sim['paid_fallback_calls']
+    assert former['sim']['recovery_states'] == sim['recovery_states']
+    assert former['sim']['max_paid_calls_per_segment'] == 1
     # Every quarantine spent exactly one paid call (the durable intent is never reissued).
     assert sim['paid_fallback_calls'] == sample['quarantine_projection_cohort_count']
     assert sim['max_paid_calls_per_segment'] == 1

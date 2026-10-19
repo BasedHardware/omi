@@ -11,7 +11,7 @@ import wave
 import pytest
 
 from config.batch_pipeline import live_record_enabled_for
-from database.batch_pipeline_intake import admit
+from database.batch_pipeline_intake import AdmissionDisabled, admit
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
@@ -101,7 +101,8 @@ def test_concurrent_finalize_registration_and_replay_create_one_pending_obligati
     assert next(iter(store.rows.values()))['state'] == 'record_pending'
 
 
-def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypatch):
+@pytest.mark.parametrize('recorded_enabled', [True, False])
+def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypatch, recorded_enabled):
     store = MemoryStore()
     register_recording('synthetic', recording(), store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
@@ -125,7 +126,15 @@ def test_reserved_record_drains_after_rollback_and_cannot_rebind_to_wal(monkeypa
         record_origin=True,
         native_record=True,
     )
+    store.rows['jobs', segment]['policy'].update(
+        batch_enabled=recorded_enabled, source_role='reserve-role', final_pass_enabled=True
+    )
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    if not recorded_enabled:
+        with pytest.raises(AdmissionDisabled):
+            admit(store, [item], binding, 1, namespace='batch_pipeline_test_live')
+        assert store.rows['jobs', segment]['state'] == 'record_pending'
+        return
     result = admit(store, [item], binding, 1, namespace='batch_pipeline_test_live')
     assert result == {'outcome': 'batch', 'job_id': binding.job_id}
     assert admit(store, [item], binding, 2, namespace='batch_pipeline_test_live') == result

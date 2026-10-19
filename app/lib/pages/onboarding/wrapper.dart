@@ -506,6 +506,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<void> _prebuildKnowledgeGraph() async {
     try {
       final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      // Canonical graphs are derived on read, even when no relationships exist.
+      // Do not schedule the legacy mutation rejected by the canonical fence.
+      if (current['canonical'] == true) return;
       final nodes = current['nodes'] as List<dynamic>? ?? const [];
       final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
       if (hasGraph) return;

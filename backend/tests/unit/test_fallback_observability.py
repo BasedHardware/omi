@@ -165,6 +165,16 @@ def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
 
 
+def test_sync_budget_deferral_reasons_keep_their_exact_labels():
+    # The handler-budget deferral records these reasons; if they are not
+    # allowlisted they collapse to ``other`` and an uncertain replacement
+    # create becomes indistinguishable from a marker timeout in metrics.
+    assert fallback_mod.bucket_reason('enqueue_uncertain') == 'enqueue_uncertain'
+    assert fallback_mod.bucket_reason('marker_timeout') == 'marker_timeout'
+    assert fallback_mod.bucket_reason('acquire_unsettled') == 'acquire_unsettled'
+    assert fallback_mod.bucket_reason('marker_clear_failed') == 'marker_clear_failed'
+
+
 def test_web_search_security_reasons_keep_their_exact_labels():
     # The Anthropic web-search gate records these reasons; if they are not
     # allowlisted they all collapse to ``other`` and the security withhold
@@ -307,12 +317,12 @@ def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch
         component='stt_live_session',
         from_mode='parakeet',
         to_mode='soniox',
-        reason='capacity_full',
+        reason='replay_ring_overflow',
         outcome='recovered',
-        capacity_subtype='replay_ring_cap',
         replay_diagnostics=diagnostics,
     )
     labels, _ = counter.increments[0]
+    assert labels['reason'] == 'replay_ring_overflow'
     assert set(labels) == {'component', 'from_mode', 'to_mode', 'reason', 'outcome'}
     line = caplog.records[-1].message
     assert 'un_emitted_capture_seconds=86400.000' in line

@@ -9392,9 +9392,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+மேலும் $count';
-  }
+  String get quoteShowSources => 'மூலங்களைக் காட்டு';
 
   @override
   String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
@@ -11145,7 +11143,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openCall => 'அழைப்பைத் திறக்கவும்';
 
   @override
-  String get captureRecoveryBanner => 'Omi ஆடியோவை அனுப்பவில்லை — மீண்டும் இணைக்கத் தட்டவும்';
+  String get captureRecoveryBannerTitle => 'Omi ஆடியோவை அனுப்பவில்லை';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11156,6 +11154,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்';
+
+  @override
+  String get captureBannerTryReconnect => 'மீண்டும் இணைக்க முயற்சிக்கவும்';
+
+  @override
+  String get captureBannerRetrySync => 'ஒத்திசைவை மீண்டும் முயற்சிக்கவும்';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'உங்கள் Omi-உடனான புளூடூத் இணைப்பு தடைபட்டுள்ளது, எனவே ஆடியோ ஆப்பை அடையவில்லை. Omi சாதனத்தில் பதிவு செய்வதைத் தொடர்கிறது, இணைப்பு மீட்டமைக்கப்பட்டவுடன் ஒத்திசைக்கப்படும். மீண்டும் முயற்சிப்பது இணைப்பை மீண்டும் ஏற்படுத்தும்; தொடர்ந்து தோல்வியுற்றால், அமைப்புகள் > சாதனம் பகுதியில் உங்கள் சாதனத்தைச் சரிபார்க்கவும்.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'ஆடியோ ஆப்பை அடையவில்லை — உங்கள் Omi-ஐ மீண்டும் இணைக்கவும்';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'ஆப்பால் Omi சாதனத்திலிருந்து ஆடியோவை இனி பெற முடியவில்லை, இணைப்பை தானாக மீட்கவும் முடியவில்லை. சாதனத்தைத் துண்டித்து மீண்டும் இணைக்கவும் — சாதன அமைப்புகளிலிருந்து அல்லது அணைத்து மீண்டும் இயக்கி. சாதனத்தில் சேமிக்கப்பட்ட ஆடியோ பின்னர் ஒத்திசைக்கப்படும்.';
 
   @override
   String get captureStillRecording => 'இன்னும் பதிவாகிறது';
@@ -13750,7 +13765,30 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'சேமிப்பைச் சரிபார்க்க முடியவில்லை';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'பதிவுகள் இடைநிறுத்தப்பட்டன';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'பதிவேற்றம் நின்றுவிட்டது';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் காத்திருக்கின்றன',
+      one: '1 பதிவு காத்திருக்கிறது',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
+
+  @override
+  String get activityAttentionSemantics => 'ஆக்டிவிட்டி, கவனம் தேவை';
 
   @override
   String get connectAgentHeadline => 'ChatGPT மற்றும் உங்கள் AI ஏஜென்ட்களில் உங்கள் Omi நினைவகத்தைப் பயன்படுத்துங்கள்';
@@ -14438,6 +14476,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved ஆடியோ சேமிக்கப்பட்டது, மொத்தம் $total';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi-இல் பதிவு தொடர்கிறது';
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

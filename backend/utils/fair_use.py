@@ -412,7 +412,9 @@ def get_enforcement_stage(uid: str) -> str:
     except Exception:
         pass
 
-    state = fair_use_db.get_fair_use_state(uid)
+    # Live listen gates its restrict-stage DG budget on this stage alone, so apply
+    # the same restrict→throttle expiry that sync admission and /v1/fair-use/status use.
+    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
     stage = state.get('stage', 'none')
 
     # Cache for 60s

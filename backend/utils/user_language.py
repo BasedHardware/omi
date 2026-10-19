@@ -80,6 +80,7 @@ PRIMARY_LANGUAGE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ('mr', 'Marathi'),
     ('no', 'Norwegian'),
     ('fa', 'Persian'),
+    ('pa', 'Punjabi'),
     ('pl', 'Polish'),
     ('ro', 'Romanian'),
     ('sr', 'Serbian'),

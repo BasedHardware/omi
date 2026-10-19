@@ -40,13 +40,13 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
-    "<1m quarantined recovery:prepared",
+    "<30s quarantined recovery:prepared",
     "<5m purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [
-    "unfinished_at_end"
+    "held"
    ],
    "result_artifact": null,
    "result_transitions": []
@@ -73,6 +73,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -93,7 +97,7 @@
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-3",
+    "previous_segment_id": "seg-4",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 220.21,
@@ -119,11 +123,7 @@
    "owner": "owner-2",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
-    "held",
-    "unfinished_at_end",
-    "unfinished_at_end",
-    "unfinished_at_end"
+    "recovered"
    ],
    "result_artifact": {
     "audio_seconds": 220.21,
@@ -147,7 +147,7 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
-    "<1m quarantined recovery:prepared",
+    "<30s quarantined recovery:prepared",
     "<1m purged"
    ],
    "owner": "owner-1",
@@ -167,11 +167,14 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
+    "<30s quarantined recovery:prepared",
     "<1m purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
-   "recover_task_responses": [],
+   "recover_task_responses": [
+    "unfinished_at_end"
+   ],
    "result_artifact": null,
    "result_transitions": []
   },
@@ -184,11 +187,14 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
+    "<30s quarantined recovery:prepared",
     "<1m purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
-   "recover_task_responses": [],
+   "recover_task_responses": [
+    "unfinished_at_end"
+   ],
    "result_artifact": null,
    "result_transitions": []
   },
@@ -235,8 +241,7 @@
    "owner": "owner-1",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
-    "held"
+    "recovered"
    ],
    "result_artifact": null,
    "result_transitions": [
@@ -267,6 +272,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -284,10 +293,10 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
-    "late_capture": true,
-    "log_sequence": 2,
+    "late_capture": false,
+    "log_sequence": 1,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-4",
+    "previous_segment_id": null,
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 494.07,
@@ -304,7 +313,7 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
-    "<1m quarantined recovery:prepared",
+    "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
     "<5m result_ready recovery:recovered",
     "<5m committed recovery:recovered",
@@ -313,8 +322,7 @@
    "owner": "owner-2",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
-    "held"
+    "recovered"
    ],
    "result_artifact": {
     "audio_seconds": 494.07,
@@ -351,6 +359,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -369,9 +381,9 @@
    "final_result": {
     "conversation_id": "conv-2",
     "late_capture": false,
-    "log_sequence": 1,
+    "log_sequence": 2,
     "owner_id": "owner-2",
-    "previous_segment_id": null,
+    "previous_segment_id": "seg-3",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 328.42,
@@ -434,6 +446,10 @@
      "provider": "modulate"
     },
     "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -472,17 +488,15 @@
     "<1s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
-    "<15m quarantined recovery:running",
-    "<15m result_ready recovery:recovered",
-    "<15m committed recovery:recovered",
-    "<15m committed recovery:recovered client:completed"
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
    ],
    "owner": "owner-3",
    "paid_calls": 1,
    "recover_task_responses": [
-    "recovered",
-    "held",
-    "unfinished_at_end"
+    "recovered"
    ],
    "result_artifact": {
     "audio_seconds": 547.49,
@@ -493,8 +507,8 @@
     "words_provider": "legacy_sync"
    },
    "result_transitions": [
-    "<15m pending outcome:success",
-    "<15m completed outcome:success"
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
    ]
   },
   "seg-6": {
@@ -530,13 +544,13 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
-    "<5m quarantined recovery:prepared",
+    "<30s quarantined recovery:prepared",
     "<5m purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [
-    "unfinished_at_end"
+    "held"
    ],
    "result_artifact": null,
    "result_transitions": []
@@ -550,16 +564,22 @@
     "<1s ready",
     "<1s leased",
     "<30s quarantined recovery:held",
-    "<5m quarantined recovery:prepared",
+    "<30s quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
     "<5m purged"
    ],
    "owner": "owner-1",
-   "paid_calls": 0,
+   "paid_calls": 1,
    "recover_task_responses": [
-    "unfinished_at_end"
+    "recovered"
    ],
    "result_artifact": null,
-   "result_transitions": []
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m deleted"
+   ]
   }
  },
  "totals": {
@@ -567,16 +587,16 @@
    "asr_empty": 12,
    "excluded_privacy_blocked": 2,
    "purged_jobs": 8,
-   "recovery_held": 4,
-   "recovery_recovered": 6,
-   "recovery_tasks_enqueued": 18
+   "recovery_held": 2,
+   "recovery_recovered": 7,
+   "recovery_tasks_enqueued": 12
   },
   "job_states": {
    "committed": 4
   },
-  "paid_calls": 6,
+  "paid_calls": 7,
   "paid_outcomes": {
-   "recovered": 6
+   "recovered": 7
   },
   "recovery_states": {
    "recovered": 4
@@ -584,8 +604,8 @@
   "revision_drain": {
    "fire_and_forget:completed": 4,
    "fire_and_forget:stopped_at_horizon": 1,
-   "request_scoped:completed": 10,
-   "request_scoped:stopped_at_horizon": 8
+   "request_scoped:completed": 9,
+   "request_scoped:stopped_at_horizon": 3
   }
  },
  "uploads": [

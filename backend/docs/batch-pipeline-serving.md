@@ -14,6 +14,16 @@ secret and `BUCKET_BATCH_PIPELINE` durable artifact bucket. This bucket must not
 inherit the legacy syncing bucket's one-day lifecycle for pending objects.
 D's completion/deletion outboxes own removal; pending audio must survive backlog.
 
+With several serving instances, the periodic ticks (the supervisor and metrics
+scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
+quarantine discovery, lease recovery and the result-ready drain) on one instance
+per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
+gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+post-recovery drain always run. Every guarded step is already idempotent and
+transaction-fenced, so the lease saves reads and enqueues only. A lease-store
+error fails open to every instance running, and
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` restores that unconditionally.
+
 The GPU worker also needs explicit `BATCH_PIPELINE_API_URL` (HTTPS backend service base)
 and `BATCH_PIPELINE_WORKER_AUDIENCE`. A's Pump composes the Google service-OIDC
 client automatically for production-marked items; missing/unavailable policy
@@ -192,7 +202,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
@@ -535,3 +545,43 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+### Owner-chain wake after recovery
+
+`BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED` defaults to `true` (kill
+switch: `false` restores the generic sweep after recovery). A settled recovery
+re-enters the ordered merge and commits at its owner's log tail, behind that
+owner's unprojected rows, which the per-instance cursors may already have
+passed. Waiting for the assignment and follow-up cursors to come back around
+took 5–12 minutes for one backlog owner during the 5% ramp. After
+`/recover-quarantine` returns `recovered` or `reconciled`, the handler's
+reconcile now drains that owner's merge and walks the owner's result log from
+its `projection_watermark`, following `previous_segment_id` links (and erased
+receipts) in chain order. It stops at the first row whose assignment does not
+advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
+afterwards as before, and any error in the wake falls back to it.
+
+The walk is only a wakeup. Each row still passes the transactional predecessor,
+privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
+async projection, the persisted rows and their contents' persisted, not-ready
+siblings go to the front of the follow-up queue. The recovered unit's content
+goes first. The four-slot bound, segment claims and all-sibling completion
+fence are unchanged. The successor lookup is two equality filters ordered by
+`__name__` on `{namespace}_results`, which automatic single-field indexes serve.
+Two matches fail closed.
+
+## Per-unit policy snapshots
+
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

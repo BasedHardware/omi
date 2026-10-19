@@ -76,6 +76,10 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
+      "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
     }
   ]
 }

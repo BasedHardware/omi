@@ -9352,9 +9352,7 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ još $count';
-  }
+  String get quoteShowSources => 'Prikaži izvore';
 
   @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';
@@ -11100,7 +11098,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get openCall => 'Otvori poziv';
 
   @override
-  String get captureRecoveryBanner => 'Omi ne šalje zvuk — dodirnite za ponovno povezivanje';
+  String get captureRecoveryBannerTitle => 'Omi ne šalje zvuk';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11111,6 +11109,23 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Zvuk je spremljen, transkripcija kasnije';
+
+  @override
+  String get captureBannerTryReconnect => 'Pokušaj ponovno povezati';
+
+  @override
+  String get captureBannerRetrySync => 'Pokušaj ponovno sinkronizirati';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth veza s vašim Omijem je zastala, pa zvuk ne dolazi do aplikacije. Omi nastavlja snimati na uređaju i sinkronizirat će se kada se veza oporavi. Ponovni pokušaj ponovno uspostavlja vezu; ako i dalje ne uspijeva, provjerite uređaj u Postavke > Uređaj.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Audio ne stiže do aplikacije — ponovno povežite Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikacija više ne može primati audio s Omi uređaja i nije uspjela automatski vratiti vezu. Isključite i ponovo povežite uređaj — iz postavki uređaja ili ga isključite i uključite. Audio spremljen na uređaju sinkronizirat će se kasnije.';
 
   @override
   String get captureStillRecording => 'Snimanje se nastavlja';
@@ -13691,7 +13706,30 @@ class AppLocalizationsHr extends AppLocalizations {
   String get activityRetryAll => 'Pokušaj sve ponovno';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Pohranu nije moguće provjeriti';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Snimke su pauzirane';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Prijenos je zastao';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Čeka $count snimki',
+      one: 'Čeka 1 snimka',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Ovaj razgovor nije bilo moguće sažeti';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivnost, zahtijeva pažnju';
 
   @override
   String get connectAgentHeadline => 'Koristite svoju Omi memoriju u ChatGPT-u i svojim AI agentima';
@@ -14376,6 +14414,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Spremljeno $saved od $total zvuka';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi i dalje snima';
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

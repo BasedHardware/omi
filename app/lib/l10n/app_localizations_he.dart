@@ -9250,9 +9250,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count נוספים';
-  }
+  String get quoteShowSources => 'הצגת מקורות';
 
   @override
   String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';
@@ -10980,7 +10978,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get openCall => 'פתיחת השיחה';
 
   @override
-  String get captureRecoveryBanner => 'Omi לא שולח שמע — הקישו כדי להתחבר מחדש';
+  String get captureRecoveryBannerTitle => 'Omi לא שולח שמע';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
@@ -10990,6 +10988,23 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
+
+  @override
+  String get captureBannerTryReconnect => 'נסה להתחבר מחדש';
+
+  @override
+  String get captureBannerRetrySync => 'נסה שוב לסנכרן';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'האפליקציה כבר לא מצליחה לקבל אודיו ממכשיר ה-Omi ולא הצליחה לשחזר את החיבור אוטומטית. נתק וחבר מחדש את המכשיר — מהגדרות המכשיר או על ידי כיבוי והדלקה. אודיו שנשמר במכשיר יסונכרן מאוחר יותר.';
 
   @override
   String get captureStillRecording => 'עדיין מקליט';
@@ -13563,7 +13578,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityRetryAll => 'נסה הכול שוב';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'לא ניתן לבדוק את האחסון';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'ההקלטות מושהות';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'ההעלאה נתקעה';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות ממתינות',
+      one: 'הקלטה אחת ממתינה',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
+
+  @override
+  String get activityAttentionSemantics => 'פעילות, דורש תשומת לב';
 
   @override
   String get connectAgentHeadline => 'השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם';
@@ -14238,6 +14276,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'נשמרו $saved מתוך $total של אודיו';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi ממשיך להקליט';
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

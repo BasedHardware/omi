@@ -2,6 +2,26 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.507",
+      "date": "2026-10-19",
+      "changes": [
+        "Omi tools work again when Hermes is the agent",
+        "Summary sections drop the timestamp row under each section; a quiet icon beside the section opens the supporting transcript"
+      ]
+    },
+    {
+      "version": "0.12.506",
+      "date": "2026-10-19",
+      "changes": [
+        "Clear Chat now moves the main chat to the AI provider selected in Settings; before, the chat stayed on the provider it started with",
+        "Fixed a failed screen-history search through the local agent API and omi CLI being returned as a successful result",
+        "Fixed the local agent API reporting a failed SQL query as a successful result",
+        "Fixed completed and deleted tasks coming back in Tasks search results",
+        "Fixed adding or removing a custom vocabulary word erasing your other saved words when Settings had not loaded them yet",
+        "Fixed custom vocabulary changes that failed to save still showing as saved; Settings now puts the list back and shows an error"
+      ]
+    },
+    {
       "version": "0.12.505",
       "date": "2026-10-19",
       "changes": [
