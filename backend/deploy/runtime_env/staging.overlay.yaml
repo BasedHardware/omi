@@ -130,4 +130,12 @@ cloud_run:
     - MODULATE_API_KEY
 
 # A plain patch over the composed prod config, for staging-only values that are not covered above.
-overlay: {}
+overlay:
+  cloud_run:
+    services:
+      backend-integration:
+        env:
+          # Prod sets this on backend-integration through the ops layer (deploy/ops/prod.yaml, C4
+          # #22517), not runtime_env.yaml; ops/staging.yaml mirrors it. deploy.sh composes from
+          # runtime_env only, so staging carries prod's value here.
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
