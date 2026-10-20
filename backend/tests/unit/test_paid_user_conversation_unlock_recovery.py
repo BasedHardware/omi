@@ -185,6 +185,31 @@ def test_processing_backlog_still_requires_its_explicit_choice(monkeypatch):
     assert not updated and rows[CONV_LOCKED_1]['processing_deferred']
 
 
+def test_partial_page_write_failure_is_retryable_without_rewriting_restored_content(monkeypatch):
+    rows, updated, _ = _setup_mock_db(monkeypatch)
+    before = deepcopy(rows)
+    write = conversations_db.update_conversation
+
+    def fail_second(uid, cid, patch):
+        return False if cid == CONV_LOCKED_2 else write(uid, cid, patch)
+
+    monkeypatch.setattr(conversations_db, 'update_conversation', fail_second)
+    monkeypatch.setattr(
+        conversations_db, 'get_conversations_without_photos', lambda *a, **k: deepcopy(list(rows.values()))
+    )
+    with _http_client() as client:
+        assert client.get('/v1/conversations').status_code == 503
+        assert rows[CONV_LOCKED_1] == {**before[CONV_LOCKED_1], 'is_locked': False}
+        assert rows[CONV_LOCKED_2] == before[CONV_LOCKED_2]
+        monkeypatch.setattr(conversations_db, 'update_conversation', write)
+        response = client.get('/v1/conversations')
+        assert response.status_code == 200, response.text
+        assert all(not row['is_locked'] for row in response.json())
+    for cid, row in rows.items():
+        assert row == {**before[cid], 'is_locked': False}
+    assert set(updated) == {CONV_LOCKED_1, CONV_LOCKED_2}
+
+
 def _http_client():
     app = FastAPI()
     app.include_router(routes.router)
@@ -256,8 +281,9 @@ def test_free_user_accessing_locked_conversation_raises_402(monkeypatch):
     assert exc_info.value.detail == "A paid plan is required to access this conversation."
 
 
-def test_paid_user_within_allowance_heals_and_returns_conversation(monkeypatch):
-    mock_conversations, updated, _ = _setup_mock_db(monkeypatch, allowance_reason="plan_within_allowance", managed=True)
+@pytest.mark.parametrize('reason', ['plan_within_allowance', 'plan_unlimited', 'usage_budget_available'])
+def test_paid_user_within_allowance_heals_and_returns_conversation(monkeypatch, reason):
+    mock_conversations, updated, _ = _setup_mock_db(monkeypatch, allowance_reason=reason, managed=True)
 
     result = routes._get_valid_conversation_by_id(UID, CONV_LOCKED_1)
     assert result["id"] == CONV_LOCKED_1
