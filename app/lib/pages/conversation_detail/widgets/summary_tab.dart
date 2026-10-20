@@ -148,7 +148,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
-                        if (conversation != null && !_isEditing && !summarySelection.isApp)
+                        if (conversation != null &&
+                            !_isEditing &&
+                            !summarySelection.isApp &&
+                            !provider.isLoading &&
+                            !provider.loadingReprocessConversation)
                           SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
                       ]),
                     ),

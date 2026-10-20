@@ -1,4 +1,6 @@
 // Offline native acceptance target: real production composition and task UI, synthetic transport only.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 import 'package:provider/provider.dart';
@@ -31,7 +33,25 @@ Future<void> main() async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   Env.overrideApiBaseUrl('http://127.0.0.1:18965/');
-  final fixture = TaskDeliveryFixture();
+  final fixture = TaskDeliveryFixture()..expectedSummaryIndex = 3;
+  final summary = ServerConversation(
+    id: 'synthetic-conversation',
+    createdAt: DateTime.utc(2026, 10, 10),
+    source: ConversationSource.desktop,
+    status: ConversationStatus.completed,
+    transcriptSegments: [],
+    structured: Structured.fromJson({
+      'title': 'Project notes',
+      'overview': '',
+      'action_items': [
+        '',
+        null,
+        {'description': 'Invalid date', 'completed': false, 'due_at': 'bad-date'},
+        {'description': TaskDeliveryFixture.description, 'completed': false},
+      ],
+    }),
+  );
+  final cachedSummary = ServerConversation.fromJson(jsonDecode(jsonEncode(summary.toJson())));
   final provider = createProductionActionItemsProvider(send: fixture.send);
   await provider.ensureLoaded();
   OmiColors.active = OmiColors.forBrightness(Brightness.dark);
@@ -66,15 +86,7 @@ Future<void> main() async {
                               body: Padding(
                                   padding: const EdgeInsets.all(OmiSpacing.md),
                                   child: SummaryTaskRecovery(
-                                    conversation: ServerConversation(
-                                      id: 'synthetic-conversation',
-                                      createdAt: DateTime.utc(2026, 10, 10),
-                                      source: ConversationSource.desktop,
-                                      status: ConversationStatus.completed,
-                                      structured: Structured('Project notes', '')
-                                        ..actionItems = [ActionItem(TaskDeliveryFixture.description)],
-                                      transcriptSegments: [],
-                                    ),
+                                    conversation: cachedSummary,
                                   )),
                             ))),
                   ),

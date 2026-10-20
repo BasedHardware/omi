@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -157,4 +159,44 @@ void main() {
     expect(find.byType(TaskIntegrationsPage), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final cached in [false, true]) {
+    testWidgets('summary recovery uses stored row 3 after skipped rows (cached: $cached)', (tester) async {
+      final fixture = TaskDeliveryFixture()..expectedSummaryIndex = 3;
+      final provider = createProductionActionItemsProvider(send: fixture.send);
+      addTearDown(provider.dispose);
+      await provider.ensureLoaded();
+      var conversation = ServerConversation(
+        id: 'synthetic-conversation',
+        createdAt: DateTime.utc(2026, 9, 1),
+        source: ConversationSource.desktop,
+        status: ConversationStatus.completed,
+        transcriptSegments: [],
+        structured: Structured.fromJson({
+          'title': 'Project notes',
+          'overview': '',
+          'action_items': [
+            '',
+            null,
+            {'description': 'Bad date', 'completed': false, 'due_at': 'bad-date'},
+            {'description': TaskDeliveryFixture.description, 'completed': false},
+            {'description': 'Already completed', 'completed': true},
+          ],
+        }),
+      );
+      if (cached) conversation = ServerConversation.fromJson(jsonDecode(jsonEncode(conversation.toJson())));
+      await pump(tester, provider, SummaryTaskRecovery(conversation: conversation));
+      await tester.tap(find.byKey(const ValueKey('summary_add_tasks')));
+      await tester.pumpAndSettle();
+      expect(find.text('Already completed'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('summary_add_task_3')));
+      await tester.pumpAndSettle();
+      expect(provider.actionItems.single.id, 'synthetic-task');
+      final prepared = fixture.requests.singleWhere((r) => r.url.endsWith('/from-conversation'));
+      expect(jsonDecode(prepared.body)['action_item_index'], 3);
+      final accepted = fixture.requests.singleWhere((r) => r.url.endsWith('/accept'));
+      expect(jsonDecode(accepted.body)['summary_item']['action_item_index'], 3);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

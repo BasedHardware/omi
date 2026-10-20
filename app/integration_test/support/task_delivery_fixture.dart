@@ -11,6 +11,7 @@ class TaskDeliveryFixture {
   bool rejected = false;
   bool failHydration = false;
   bool projectSuggestion = false;
+  int? expectedSummaryIndex;
   int acceptCalls = 0;
   int generation = 7;
 
@@ -68,11 +69,21 @@ class TaskDeliveryFixture {
       case '/v1/candidates/control':
         return response({'account_generation': generation});
       case '/v1/candidates/from-conversation':
+        if (expectedSummaryIndex != null && jsonDecode(request.body)['action_item_index'] != expectedSummaryIndex) {
+          return response({}, 409);
+        }
         return response(candidate);
       case '/v1/candidates/synthetic-candidate/accept':
       case '/v1/candidates/synthetic-candidate/reject':
         if (request.headers['X-Account-Generation'] != '$generation') return response({}, 409);
         final accepting = uri.path.endsWith('/accept');
+        final summary = request.body.isEmpty ? null : jsonDecode(request.body)['summary_item'];
+        if (accepting &&
+            summary != null &&
+            expectedSummaryIndex != null &&
+            summary['action_item_index'] != expectedSummaryIndex) {
+          return response({}, 409);
+        }
         if (accepting) {
           acceptCalls++;
           accepted = true;

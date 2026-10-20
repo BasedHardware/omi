@@ -22,7 +22,8 @@ class SummaryTaskRecovery extends StatelessWidget {
         conversation.status != ConversationStatus.completed ||
         conversation.discarded ||
         conversation.isLocked ||
-        !conversation.structured.actionItems.any((item) => !item.completed && !item.deleted)) {
+        !conversation.structured.actionItems
+            .any((item) => !item.completed && !item.deleted && item.description.trim().isNotEmpty)) {
       return const SizedBox.shrink();
     }
     return Align(
@@ -58,14 +59,15 @@ class _SummaryTaskPicker extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final entry in conversation.structured.actionItems.indexed)
-              if (!entry.$2.completed && !entry.$2.deleted)
+              if (!entry.$2.completed && !entry.$2.deleted && entry.$2.description.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(entry.$2.description, style: OmiType.callout),
-                      if (controller.summarySaved(conversation.id, entry.$1, entry.$2.description))
+                      if (controller.summarySaved(
+                          conversation.id, entry.$2.sourceIndex ?? entry.$1, entry.$2.description))
                         Semantics(
                           liveRegion: true,
                           child: Text(context.l10n.sharedTasksAdded(1), style: OmiType.footnote),
@@ -74,13 +76,13 @@ class _SummaryTaskPicker extends StatelessWidget {
                         Align(
                           alignment: AlignmentDirectional.centerStart,
                           child: OmiButton.secondary(
-                            key: ValueKey('summary_add_task_${entry.$1}'),
+                            key: ValueKey('summary_add_task_${entry.$2.sourceIndex ?? entry.$1}'),
                             label: context.l10n.reviewAddTask,
                             size: OmiButtonSize.compact,
                             onPressed: () async {
                               final saved = await controller.addSummaryTask(
                                 conversation.id,
-                                entry.$1,
+                                entry.$2.sourceIndex ?? entry.$1,
                                 entry.$2.description,
                               );
                               if (!saved && context.mounted) {

@@ -29,6 +29,14 @@ excluded from phone summaries, locked/discarded conversations and app-result
 summaries. Phone extraction already has a direct writer and must not acquire a
 second unlinked creation path.
 
+The summary adapter records each valid row's original storage index before
+skipping malformed rows. Cache JSON retains that coordinate and completion /
+deletion state in object rows; older string caches still decode. The private
+cache coordinate stays out of generated wire models and task-write payloads.
+Fresh server rows use their actual array position. The recovery picker uses
+these stored coordinates for both preparation and acceptance, including after
+a full conversation cache round trip.
+
 Task Integrations keeps its Tasks header entry and gains a named overflow entry,
 a Settings → Integrations row, and a localized Settings search destination.
 
@@ -49,3 +57,6 @@ a Settings → Integrations row, and a localized Settings search destination.
 receipts, retries, stale reads and account reset. The offline native target is
 `integration_test/task_delivery_capture.dart`; it uses the real provider factory
 and widgets with a synthetic HTTP boundary, never customer credentials or data.
+Its cached summary has invalid leading rows, and the transport rejects any
+prepare/accept request that does not identify stored row 3. The schema and widget
+regressions cover both fresh and cached summaries.
