@@ -1,0 +1,107 @@
+import AVFoundation
+import AppKit
+import Foundation
+
+/// A chat video reduced on device to what the backend reads: still frames and the audio track.
+///
+/// Uploading a whole clip costs the user bandwidth and the backend a decode; the chat model only
+/// ever sees stills (`backend/utils/media/video_frames.py`). This samples the same candidate set
+/// the server would (at most 48 frames, at most 4 per second, longest edge 384 px) and exports
+/// the audio as AAC, for `POST /v2/files/video`.
+struct SampledChatVideo {
+  let frames: [Data]
+  let times: [Double]
+  let duration: Double
+  /// AAC (.m4a) audio track, or nil when the clip is silent.
+  let audio: Data?
+}
+
+enum ChatVideoSamplerError: Error, LocalizedError {
+  case noPicture
+  case noFrames
+
+  var errorDescription: String? {
+    switch self {
+    case .noPicture: return "That file has no video to read."
+    case .noFrames: return "Couldn't read frames from that video."
+    }
+  }
+}
+
+enum ChatVideoSampler {
+  static let maxFrames = 48
+  static let maxFramesPerSecond = 4.0
+  static let frameEdge: CGFloat = 384
+  /// Matches the backend's transcription cap (MAX_MEDIA_SECONDS).
+  static let maxAudioSeconds = 600.0
+
+  /// Evenly spaced sample times: at most `maxFramesPerSecond`, at most `maxFrames`.
+  static func sampleTimes(duration: Double) -> [Double] {
+    guard duration.isFinite, duration > 0 else { return [0] }
+    let step = max(duration / Double(maxFrames), 1 / maxFramesPerSecond)
+    var times: [Double] = []
+    var t = 0.0
+    while t < duration, times.count < maxFrames {
+      times.append((t * 100).rounded() / 100)
+      t += step
+    }
+    return times.isEmpty ? [0] : times
+  }
+
+  static func sample(url: URL) async throws -> SampledChatVideo {
+    let asset = AVURLAsset(url: url)
+    guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
+      throw ChatVideoSamplerError.noPicture
+    }
+    let duration = try await asset.load(.duration).seconds
+    let times = sampleTimes(duration: duration)
+
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: frameEdge, height: frameEdge)
+    // Nearby keyframes are fine: frames are already a quarter second or more apart.
+    let tolerance = CMTime(seconds: 0.1, preferredTimescale: 600)
+    generator.requestedTimeToleranceBefore = tolerance
+    generator.requestedTimeToleranceAfter = tolerance
+
+    var frames: [Data] = []
+    var kept: [Double] = []
+    let requested = times.map { CMTime(seconds: $0, preferredTimescale: 600) }
+    for await result in generator.images(for: requested) {
+      guard let image = try? result.image, let jpeg = jpegData(image) else { continue }
+      frames.append(jpeg)
+      kept.append(result.requestedTime.seconds)
+    }
+    guard !frames.isEmpty else { throw ChatVideoSamplerError.noFrames }
+    // The async sequence answers in request order; keep times ascending regardless.
+    let order = kept.indices.sorted { kept[$0] < kept[$1] }
+    let audio = try? await exportAudio(asset: asset, duration: duration)
+    return SampledChatVideo(
+      frames: order.map { frames[$0] },
+      times: order.map { (kept[$0] * 100).rounded() / 100 },
+      duration: duration.isFinite ? duration : (kept.max() ?? 0),
+      audio: audio
+    )
+  }
+
+  private static func jpegData(_ image: CGImage) -> Data? {
+    NSBitmapImageRep(cgImage: image).representation(
+      using: .jpeg, properties: [.compressionFactor: 0.75])
+  }
+
+  /// AAC export uses the macOS 15 async API; on macOS 14 the clip uploads as frames only.
+  private static func exportAudio(asset: AVURLAsset, duration: Double) async throws -> Data? {
+    guard #available(macOS 15, *) else { return nil }
+    guard try await !asset.loadTracks(withMediaType: .audio).isEmpty,
+      let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
+    else { return nil }
+    let output = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-chat-video-\(UUID().uuidString).m4a")
+    defer { try? FileManager.default.removeItem(at: output) }
+    session.timeRange = CMTimeRange(
+      start: .zero,
+      duration: CMTime(seconds: min(duration, maxAudioSeconds), preferredTimescale: 600))
+    try await session.export(to: output, as: .m4a)
+    return try Data(contentsOf: output)
+  }
+}

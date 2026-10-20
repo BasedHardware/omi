@@ -3702,6 +3702,11 @@ class ChatProvider: ObservableObject {
         })
       else { return }
 
+      if attachment.isVideo, let videoURL = attachment.localFileURL {
+        await self.uploadVideoAttachment(id: id, url: videoURL, fileName: attachment.fileName, appId: appId)
+        return
+      }
+
       // For non-image files we still need bytes — load them lazily here
       // (we skipped this at add-time to keep the UI responsive).
       let data: Data? =
@@ -3743,6 +3748,29 @@ class ChatProvider: ObservableObject {
             self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
           }
         }
+      }
+    }
+  }
+
+  /// A clip is sampled on device (frames + audio) so the whole file never uploads.
+  private func uploadVideoAttachment(id: String, url: URL, fileName: String, appId: String?) async {
+    do {
+      let video = try await ChatVideoSampler.sample(url: url)
+      let resp = try await APIClient.shared.uploadChatVideo(video, fileName: fileName, appId: appId)
+      guard let server = resp.first else { throw APIError.invalidResponse }
+      await MainActor.run {
+        if let idx = self.pendingAttachments.firstIndex(where: { $0.id == id }) {
+          self.pendingAttachments[idx].serverId = server.id
+          self.pendingAttachments[idx].thumbnailURL = server.thumbnail
+          if let mime = server.mimeType { self.pendingAttachments[idx].mimeType = mime }
+          if let name = server.name { self.pendingAttachments[idx].fileName = name }
+          self.pendingAttachments[idx].state = .uploaded
+        }
+      }
+    } catch {
+      logError("ChatProvider: video attachment upload failed", error: error)
+      await MainActor.run {
+        self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
       }
     }
   }
