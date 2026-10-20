@@ -1033,6 +1033,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   /// and a new one streams in its place. No-op unless [canRetryReply]. The caller owns
   /// [sendingMessage] the same way it does for a normal send.
   Future<void> retryFailedReply(ServerMessage message) async {
+    // A paused chat sends nothing, so removing the failed reply here would lose its Try Again and
+    // leave the composer the caller locked; keep both until the pause ends.
+    if (chatAtCap != null) {
+      setSendingMessage(false);
+      return;
+    }
     final failed = _failedReplies.remove(message);
     if (failed == null || !failed.canRetry) {
       // The failure was cleared (a refresh) between build and tap: nothing to resend, so release the
