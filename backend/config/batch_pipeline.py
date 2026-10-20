@@ -254,6 +254,37 @@ def projection_pending_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
 
 
+def owner_drain_enabled() -> bool:
+    """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def projection_index_deferred_enabled() -> bool:
+    """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED')
+
+
+PROJECTION_PREFETCH_DEFAULT = 4
+PROJECTION_PREFETCH_MAX = 8
+
+
+def projection_prefetch_depth() -> int:
+    """Ship-on read-ahead of an owner chain's immutable inputs; ``0`` is the kill switch.
+
+    Malformed or out-of-range values keep the default rather than silently
+    turning the read-ahead off.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_PROJECTION_PREFETCH', str(PROJECTION_PREFETCH_DEFAULT)))
+    except ValueError:
+        return PROJECTION_PREFETCH_DEFAULT
+    return value if 0 <= value <= PROJECTION_PREFETCH_MAX else PROJECTION_PREFETCH_DEFAULT
+
+
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
 WORKER_PIPELINE_DEPTH_MAX = 4
 

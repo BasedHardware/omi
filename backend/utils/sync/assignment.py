@@ -202,8 +202,13 @@ def assign_in_transaction(
     invalidate: Callable[[dict], None],
     full_ids: frozenset[str] = frozenset(),
     live_candidate_ids: tuple[str, ...] = (),
+    absorbed: list[str] | None = None,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
+
+    ``absorbed`` (optional, filled in place) receives the conversations this
+    plan newly turns into redirect donors, unlike the cumulative
+    ``sync_merged_from`` lineage.
 
     The user-level index document is read AND written by every intake, including
     the empty-index case. Concurrent jobs cannot both commit an absent target.
@@ -214,6 +219,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    if absorbed is not None:
+        absorbed.clear()
     incoming = deepcopy(incoming)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
@@ -745,6 +752,8 @@ def assign_in_transaction(
     for ancestor_id, patch in chosen.ancestor_updates.items():
         transaction.update(collection.document(ancestor_id), patch)
     index.write(result, set(matched) | {canonical})
+    if absorbed is not None:
+        absorbed[:] = sorted(cid for cid in matched if cid != canonical)
     if live_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.
         appended = bounded_span_seconds(survivors)
