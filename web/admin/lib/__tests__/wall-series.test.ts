@@ -393,9 +393,9 @@ describe("v3 series agree with the v2 snapshot", () => {
       Array.from({ length: from - to + 1 }, (_, i) =>
         isoDay(shiftDay(end, -from + i))
       );
-    // A book read falls back one day, so the first point is the day before
-    // the book starts; nothing is drawn (or zero) before it.
-    expect(days(f.revenue.arpmau)).toEqual(daily(21, 1));
+    // Each point uses the book snapshotted that day, so the first point is
+    // the book's first day; nothing is drawn (or zero) before it.
+    expect(days(f.revenue.arpmau)).toEqual(daily(20, 1));
     expect(days(f.health.costPerMau)).toEqual(daily(UNIT_DAYS, 2));
     // Every daily point has its own 30-day MAU read (seven offsets per read).
     for (const r of f.revenue.arpmau) expect(r.mau).toBeGreaterThan(0);
@@ -416,6 +416,27 @@ describe("v3 series agree with the v2 snapshot", () => {
         value: f.health.costPerMau.at(-1)?.costPerMau,
       },
     ]);
+  });
+
+  it("prices each day with that day's FinOps book and gaps a day without one", async () => {
+    const s = sources();
+    const hole = isoDay(shiftDay(end, -6));
+    s.finops = vi.fn(async () => ({
+      mrr: Object.fromEntries(
+        Object.entries(finopsMrr).filter(([day]) => day !== hole)
+      ),
+    }));
+    const wall = await computeWall(s, now);
+    const f = await all(wall, s);
+    const at = (rows: Row[], day: string) =>
+      rows.find((r) => String(r.date).slice(0, 10) === day);
+    expect(at(f.revenue.arpmau, hole)).toBeUndefined();
+    expect(at(f.health.cost, hole)?.revenuePerDay).toBeNull();
+    const day = isoDay(shiftDay(end, -5));
+    const book = finopsMrr[day].unlimited + finopsMrr[day].plus;
+    expect(at(f.health.cost, day)?.revenuePerDay).toBeCloseTo(book / 30.4375);
+    const point = at(f.revenue.arpmau, day)!;
+    expect(point.finopsArpmau).toBeCloseTo(book / (point.mau as number), 1);
   });
 
   it("shades the maturing span from each cohort line's last point to now", async () => {
@@ -1177,6 +1198,36 @@ describe("the snapshot is shared and never served cold as settled", () => {
     expect(compute).not.toHaveBeenCalled();
     expect(wall.refreshing).toBe(true);
     expect(wall.metrics.every((m) => m.value == null)).toBe(true);
+  });
+
+  it("keeps a finished partial snapshot unsettled and marks retained headline stats stale", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const partial: WallPayload = {
+      ...wall,
+      retryableFailures: 1,
+      metrics: wall.metrics.map((m) =>
+        m.id === "engagement.dau"
+          ? { ...m, stale: true, retainedSince: now.toISOString() }
+          : m
+      ),
+    };
+    const head = await seriesPayload(
+      "headline",
+      Promise.resolve(partial),
+      now,
+      s
+    );
+    expect(head.refreshing).toBe(true);
+    expect(String(head.frames.through[0].text)).toMatch(/ · 1 stat stale$/);
+    const settled = await seriesPayload(
+      "headline",
+      Promise.resolve(wall),
+      now,
+      s
+    );
+    expect(settled.refreshing).toBe(false);
+    expect(String(settled.frames.through[0].text)).not.toContain("stale");
   });
 
   it("keeps a failing source's previous metric, labelled stale, on every instance", async () => {

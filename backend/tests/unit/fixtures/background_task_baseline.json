@@ -183,13 +183,6 @@
       "why": "reviewed safe: circuit gauge refresh daemon; telemetry only"
     },
     {
-      "path": "utils/stt/soniox_runway.py",
-      "function": "meter_audio_seconds",
-      "kind": "loop.create_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed"
-    },
-    {
       "path": "utils/sync/pipeline.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",
