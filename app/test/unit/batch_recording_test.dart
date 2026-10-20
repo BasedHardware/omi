@@ -75,36 +75,30 @@ void main() {
       expect(info.secondsFromFrameCount(90000), 900);
       expect(info.secondsFromFrameCount(6000), 60);
     });
-
     test('fs320 frames are 20ms each', () {
       final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_fs320_16000_1_fs320_1735689600.bin')!;
       expect(info.secondsFromFrameCount(45000), 900);
     });
-
     test('is bounded to >= 1 second', () {
       final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_16000_1_fs160_1735689600.bin')!;
       expect(info.secondsFromFrameCount(0), 1);
     });
   });
-
   group('BatchRecordingInfo - edge cases and bounds for 100% coverage', () {
     test('estimateSeconds handles pcm16 codec properly and bounds to max 24h', () {
       final pcm16 = BatchRecordingInfo.fromFileName('audio_omi_pcm16_16000_1_fs160_1735689600.bin')!;
       // size that exceeds 24h: 32200 * 24 * 3600 = 2782080000
       expect(pcm16.estimateSeconds(3000000000), 24 * 3600);
     });
-
     test('estimateSeconds handles pcm8 codec properly and bounds to min 1s', () {
       final pcm8 = BatchRecordingInfo.fromFileName('audio_omi_pcm8_8000_1_fs160_1735689600.bin')!;
       // small size bounds to 1s
       expect(pcm8.estimateSeconds(10), 1);
     });
-
     test('estimateSeconds clamped to 24h for opus', () {
       final opus = BatchRecordingInfo.fromFileName('audio_omi_opus_16000_1_fs160_1735689600.bin')!;
       expect(opus.estimateSeconds(300000000), 24 * 3600);
     });
-
     test('secondsFromFrameCount handles zero sampleRate or frameSize', () {
       final badSampleRate = BatchRecordingInfo(
         timerStart: 1735689600,
@@ -113,7 +107,6 @@ void main() {
         sampleRate: 0,
       );
       expect(badSampleRate.secondsFromFrameCount(100), 1);
-
       final badFrameSize = BatchRecordingInfo(
         timerStart: 1735689600,
         codec: BleAudioCodec.opus,
@@ -122,7 +115,6 @@ void main() {
       );
       expect(badFrameSize.secondsFromFrameCount(100), 1);
     });
-
     test('secondsFromFrameCount clamped to 24h', () {
       final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_16000_1_fs160_1735689600.bin')!;
       // 10ms/frame, so 8,640,000 frames is 24h. Let's give 10,000,000 frames.
