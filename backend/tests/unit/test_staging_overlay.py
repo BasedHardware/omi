@@ -52,6 +52,22 @@ def test_staging_composes_and_passes_the_fence(composer):
     assert composer.staging_fence_errors(staging) == []
 
 
+def test_staging_sync_services_dispatch_through_cloud_tasks(composer):
+    # Prod sets these per service outside runtime_env.yaml. Inline sync dispatch makes the backfill
+    # lane fail closed (sync_backfill_dispatch_unavailable, upload 503) for owners not on batch.
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    mode = {name: config['env'].get('SYNC_DISPATCH_MODE', {}).get('value') for name, config in services.items()}
+    assert mode == {
+        'backend': None,
+        'backend-sync': 'cloud_tasks',
+        'backend-sync-backfill': 'cloud_tasks',
+        'backend-integration': None,
+    }
+    for config in services.values():
+        assert config['env']['ACCOUNT_DELETION_DISPATCH_MODE']['value'] == 'cloud_tasks'
+        assert config['env']['ACCOUNT_DELETION_TASKS_QUEUE']['value'].startswith('staging-')
+
+
 def test_staging_requires_the_redis_input(composer):
     with pytest.raises(composer.StagingComposeError, match='STAGING_REDIS_HOST'):
         composer.compose_staging(inputs={})

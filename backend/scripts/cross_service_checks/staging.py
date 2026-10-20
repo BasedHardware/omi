@@ -49,6 +49,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     # Prod live-service residue (set on prod services outside runtime_env.yaml) that the code
     # reads with os.environ[...]; staging sets prod's value explicitly.
     'SUBSCRIPTION_LAUNCH_DATE',
+    'SYNC_DISPATCH_MODE',
+    'ACCOUNT_DELETION_DISPATCH_MODE',
 )
 # Cloud Run flags that may differ: network placement and replica counts.
 STAGING_FLAG_ALLOWLIST: tuple[str, ...] = (

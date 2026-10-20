@@ -130,4 +130,23 @@ cloud_run:
     - MODULATE_API_KEY
 
 # A plain patch over the composed prod config, for staging-only values that are not covered above.
-overlay: {}
+# Prod live-service residue (set per service outside runtime_env.yaml; values read from prod on
+# ro-prod 2026-10-20). Without SYNC_DISPATCH_MODE the sync services run inline, and the backfill
+# lane fails closed with sync_backfill_dispatch_unavailable (503) whenever an owner is not on batch.
+overlay:
+  cloud_run:
+    services:
+      backend:
+        env:
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+      backend-sync:
+        env:
+          SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+      backend-sync-backfill:
+        env:
+          SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+      backend-integration:
+        env:
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
