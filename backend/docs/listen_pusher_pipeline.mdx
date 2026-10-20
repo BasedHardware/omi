@@ -3988,7 +3988,7 @@ not enabled by this producer alone; deploying the producer requires the backend-
 
 After connect preferences load, `TranscriptProcessor` construction binds the
 existing `LiveLanguageProfile.expected` to the coordinator. These are spoken-language
-priors, not reading preferences. `TRANSLATION_PROFILE_GATE_ENABLED=true` defers short
+priors, not reading preferences. The permanent profile gate defers short
 out-of-profile detections locally. Expected foreign detections require agreement
 between raw and filler-cleaned local reads; expected foreign clauses can still
 override an English-dominant mixed turn. A >=40-letter, >=0.95-confidence sample
@@ -4001,12 +4001,12 @@ unchanged foreign source text. Conversation changes discard queued work and prio
 The phone-call interpreter bypasses the profile admission gate to preserve short
 foreign replies; it still applies the output guard before writing a badge.
 
-`TRANSLATION_OUTPUT_GUARD_ENABLED=true` rejects empty/case-only rewrites and conservative
+The permanent output guard rejects empty/case-only rewrites and conservative
 near-copies before cache publication and segment persistence, including legacy cache hits.
 Token-multiset Dice >=0.80 requires independent target-output evidence and either English
 grammatical edits or separately confirmed target-language lexical edit spans. Foreign
 edits in mostly English text remain translatable. This is a bounded heuristic, not a
-semantic guarantee; either flag can be disabled independently for recall rollback.
+semantic guarantee; the live demand gate does not disable these quality filters.
 `omi_translation_decisions_total{target_lang,decision,reason}` records admission/guard
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.

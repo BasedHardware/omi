@@ -295,14 +295,6 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 5 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_UID_ALLOWLIST` | Explicit UIDs admitted to the Parakeet final-pass shadow; empty by default | backend | env | closed | — | '' (backend-listen (chart), gke/backend-listen); omi-release-probe (gke/pusher, pusher (chart)) | vi7SA9ckQCe4ccobWNxlbdcNdC23 (gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
-| `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_DEMAND_SHADOW_ENABLED` | Measure would-be demand admission without changing translation behavior | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_COHORT_PERCENT` | Percentage of eligible UIDs admitted to on-demand translation (100 = all eligible) | backend | env | closed | 100 | 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen) | 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_GEMINI_ENABLED` | Select Gemini-only viewed_v1 policy for admitted demand traffic | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_UID_ALLOWLIST` | Explicit UIDs admitted to on-demand translation; empty by default | backend | env | closed | '' | '' (backend-listen (chart), gke/backend-listen) | '' (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | undecided | 2026-10-28 | dazheng |
-| `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | undecided | 2026-10-28 | dazheng |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | off | 2026-11-08 | dazheng |
 | `client_telemetry_transport_shadow` | Default-off shadow transport mirroring client reliability telemetry to the frozen backend collector; PostHog stays the source of record until parity | macos | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-12 | dazheng |
 | `desktop-contextual-upsells` | macOS 80% budget nudge and exhausted-budget entry to the plans sheet (trigger=usage_budget); default off; requires desktop-plan-storefront | macos | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-13 | dazheng |
@@ -402,6 +394,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_RETIRED_HANDLE_ACK_ENABLED` | Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
+| `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | dazheng |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
@@ -646,8 +639,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_MINIMAL_REDRIVE_ENABLED` — Default on unless false; operator sync payloads with redrive_mode=minimal run Parakeet-only STT, attach-first targeting and one gpt-5-nano title per new row (fail: closed)
 - `SYNC_RETIRED_HANDLE_ACK_ENABLED` — Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners (fail: closed)
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
-- `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
-- `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 
 ## Not feature flags
@@ -726,6 +717,13 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `TRANSLATION_PROFILE_GATE_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_OUTPUT_GUARD_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_SHADOW_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-002 kill: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-005 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_GEMINI_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-004 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_COHORT_PERCENT` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_UID_ALLOWLIST` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
 | `FREE_TIER_EMERGENCY_STOP` | 2026-10-19 | No surviving backend consumer after memory-suppression retirement and ladder/client processing fold. |
 | `negative_feedback_remediation` | 2026-10-18 | David 2026-10-18, DEC-MEM-003: graduate negative-feedback remediation for all macOS users; retain only the permanent kill switch. |
 | `MEMORY_BELIEF_AUTOMATION_PAUSED` | 2026-10-18 | David 2026-10-18, DEC-MEM-001: remove belief-model admission, currency, and automation controls. |
