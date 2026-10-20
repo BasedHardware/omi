@@ -28,7 +28,7 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 import database.memories as memories_db
