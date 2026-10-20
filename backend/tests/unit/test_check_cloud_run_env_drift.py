@@ -523,6 +523,19 @@ def test_rendered_state_must_carry_every_checked_service(checker, tmp_path: Path
         checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=malformed)
 
 
+def test_rendered_state_env_member_must_be_a_list(checker, tmp_path: Path) -> None:
+    # A rendered service entry whose env member is missing, null, or not a list
+    # is not renderer output (the renderer always emits an env list); it must be
+    # rejected instead of silently re-sourcing expected values from the manifest.
+    manifest_path = _two_service_manifest(tmp_path)
+    no_env = tmp_path / 'no-env.json'
+    no_env.write_text(
+        json.dumps({'services': {'backend': {'env': []}, 'backend-sync': {'flags': {}}}}), encoding='utf-8'
+    )
+    with pytest.raises(ValueError, match="entry for service 'backend-sync' has no env list"):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=no_env)
+
+
 def test_rendered_state_drops_omitted_provisional_bindings(checker, tmp_path: Path) -> None:
     # The renderer omits a provisional env_var that was unset at deploy time; the
     # exact rendered state must not inherit that key as a name-only requirement.
@@ -1303,6 +1316,84 @@ def test_gke_envfrom_ref_identity_includes_optionality(checker) -> None:
     optional_true = run([{'configMapRef': {'name': cm_name, 'optional': True}}])
     assert optional_true.envfrom_mismatched_refs == (cm_name, f'{cm_name}?optional')
     assert optional_true.status == 'DRIFT'
+
+
+def test_gke_envfrom_reference_order_is_compared(checker) -> None:
+    # Thread: K8s resolves the last envFrom source when several export the same
+    # key, so swapping the order of two references changes the effective env.
+    # A set-based comparison sees the same refs and reports no drift. Both refs
+    # are opaque to the repository (no manifest entry), so the same-order case
+    # is INVENTORY; only the swap may turn it into DRIFT.
+    cm_a = 'fixture-config-a'
+    cm_b = 'fixture-config-b'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    def run(expected_order, live_order):
+        rendered = yaml.safe_dump_all(
+            [
+                {
+                    'kind': 'Deployment',
+                    'metadata': {'name': deployment},
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [
+                                    {
+                                        'name': 'pusher',
+                                        'env': serving_env,
+                                        'envFrom': [
+                                            {'configMapRef': {'name': expected_order[0]}},
+                                            {'configMapRef': {'name': expected_order[1]}},
+                                        ],
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            ]
+        )
+
+        def runner(argv, **_kwargs):
+            return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+        gke_state = {
+            'pusher': {
+                'deployment': {},
+                'replicasets': [
+                    _replicaset(
+                        f'{deployment}-a',
+                        deployment,
+                        2,
+                        serving_env,
+                        'pusher',
+                        envfrom=[
+                            {'configMapRef': {'name': live_order[0]}},
+                            {'configMapRef': {'name': live_order[1]}},
+                        ],
+                    )
+                ],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+        )
+        return result
+
+    # Same refs, same order: no drift (unresolvable refs degrade to INVENTORY).
+    same = run([cm_a, cm_b], [cm_a, cm_b])
+    assert same.error is None, same.error
+    assert same.status == 'INVENTORY', same
+    assert same.envfrom_mismatched_refs == ()
+    assert not same.has_drift
+    assert checker.exit_code((same,), strict=True) == 0
+    # Same refs, swapped order: the last source wins, so this is reference drift.
+    swapped = run([cm_a, cm_b], [cm_b, cm_a])
+    assert swapped.error is None, swapped.error
+    assert swapped.envfrom_mismatched_refs == (cm_a, cm_b)
+    assert swapped.status == 'DRIFT'
+    assert checker.exit_code((swapped,), strict=True) == 1
 
 
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:

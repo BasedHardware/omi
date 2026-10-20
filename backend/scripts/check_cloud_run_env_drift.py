@@ -418,6 +418,11 @@ def expected_cloud_run_env(
             # while the command claims to validate the exact renderer output.
             raise ValueError(f'Rendered state {rendered_state_path} has no valid entry for service {service_name!r}')
         rendered_service = render_backend_runtime_env._as_config_dict(raw_rendered) or {}
+        if rendered_state_path is not None and not isinstance(rendered_service.get('env'), list):
+            # The renderer emits an env list for every service; anything else is
+            # not renderer output, and consuming it would quietly re-source this
+            # service's expected values from the raw manifest.
+            raise ValueError(f'Rendered state {rendered_state_path} entry for service {service_name!r} has no env list')
         if rendered_service:
             # The rendered state is the exact deploy contract. A provisional
             # env_var binding the renderer omitted (unset at deploy time, or a
@@ -793,7 +798,9 @@ def read_gke_workload(
             if data is None:
                 continue
             for key, digest in _config_map_data_keys(data).items():
-                merged.setdefault(f'{prefix}{key}', digest)
+                # K8s precedence: when several envFrom sources export the same
+                # key, the last source wins — so later sources overwrite.
+                merged[f'{prefix}{key}'] = digest
         return merged
 
     live = LiveService()
@@ -887,13 +894,20 @@ def compare_service(
     envfrom_unproven: tuple[str, ...] = ()
     expected_ref_set = set(expected_envfrom_refs)
     if expected is not None:
-        # References are compared per serving target, never as a union: during a
-        # mixed rollout two ready ReplicaSets can disagree (one rebinding or
-        # dropping the ConfigMap, one still serving the previous spec), and a
-        # union of their references would hide that as equal.
+        # References are compared per serving target as ordered sequences, and
+        # never as a union: during a mixed rollout two ready ReplicaSets can
+        # disagree (one rebinding or dropping the ConfigMap, one still serving
+        # the previous spec), and a union of their references would hide that
+        # as equal. Order matters too — the K8s API resolves the last envFrom
+        # source when several export the same key, so a reordered reference
+        # list is a different effective environment.
         mismatched: set[str] = set()
         for target, _env_map in live.targets:
             mismatched |= set(target.envfrom_refs) ^ expected_ref_set
+            if list(target.envfrom_refs) != list(expected_envfrom_refs):
+                # A reordered or duplicate-bearing reference list: flag the
+                # union of both orders' identities so the report names the refs.
+                mismatched |= set(target.envfrom_refs) | expected_ref_set
         envfrom_mismatched = tuple(sorted(mismatched))
         envfrom_unresolved = tuple(
             sorted((set(live.envfrom_unresolved) | set(expected_envfrom_unresolved)) - mismatched)
