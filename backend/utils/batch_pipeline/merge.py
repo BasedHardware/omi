@@ -3,7 +3,7 @@
 import logging
 import time
 
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 
 from config.batch_pipeline import merge_head_wait_seconds
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -11,6 +11,7 @@ from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,19 @@ class OrderedMerge:
         if time.monotonic() < self._head_wait_retry_at:
             return 0.0
         return self.head_wait_seconds if self.head_wait_seconds is not None else merge_head_wait_seconds()
+
+    def _head_wait_unavailable(self) -> None:
+        self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+        logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
+        record_fallback(
+            component='firestore_read',
+            from_mode='head_wait',
+            to_mode='strict_order',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
     def commit_next(self, owner_id: str, now: float) -> dict | None:
         key = owner_key(owner_id)
@@ -131,30 +145,29 @@ class OrderedMerge:
             # The strict transaction issues no head-wait query. Probe outside
             # it so a blocked owner takes no extra transactional query lock;
             # only an expired wait opens a second, re-verifying transaction.
+            # Every early return below is strict order's result: the head is not ready.
             try:
                 waiter = self.store.longest_ready_pending(key)
-                if not waiter or now - waiter['ready_at'] < wait:
-                    return None
+            except FailedPrecondition:
+                return self._head_wait_unavailable()
+            except GoogleAPICallError as error:
+                # A transient probe read must not fail a drain strict order would finish.
+                logger.warning(
+                    'event=batch_merge outcome=head_wait_probe_retry source=%s exception_type=%s count=1',
+                    self.commit_source,
+                    type(error).__name__,
+                )
+                return None
+            if not waiter or now - waiter['ready_at'] < wait:
+                return None
+            try:
                 entry = self.store.run(lambda tx: commit(tx, waiter))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
                 return None
-            except (FailedPrecondition, HeadWaitUnavailable):
-                # The head is not ready, so strict order commits nothing either.
-                self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
-                logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
-                from utils.observability.fallback import record_fallback
-
-                record_fallback(
-                    component='firestore_read',
-                    from_mode='head_wait',
-                    to_mode='strict_order',
-                    reason='unavailable',
-                    outcome='degraded',
-                    log=logger,
-                )
-                return None
+            except HeadWaitUnavailable:
+                return self._head_wait_unavailable()
         if entry:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
