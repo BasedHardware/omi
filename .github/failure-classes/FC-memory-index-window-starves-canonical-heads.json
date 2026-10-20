@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-memory-index-window-starves-canonical-heads",
+  "violated_contract": "A merged-order memory list stream must keep emitting canonical heads after its historical window is exhausted: once every historical window is consumed, the merge loop raised MemoryIndexWindowLimit before take_canonical ran, so migrated accounts whose historical rows are all canonical_identity-suppressed received empty pages with a continuation cursor (reproduced as 8 consecutive empty pages for a 40-memory account at limit=5), which offset-paging clients render as an empty memories screen.",
+  "canonical_prevention": "On window-limit, expose the exhausted streams' lower bound and keep emitting canonical heads whose window_sort_key is at or newer than that bound; raise window_limited only when the canonical head is older than the bound or canonical is exhausted. Pin the contract with a suppressed-historical-plus-canonical page test, and keep invalid-cursor fallbacks on read_page(cursor=None) so cursor clients always receive a continuation instead of a silent truncation.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/memory_service.py",
+    "backend/tests/unit/test_fsr_wq5_index_window.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/memory_service.py",
+    "backend/database/memories.py",
+    "backend/routers/memories.py"
+  ],
+  "status": "open"
+}

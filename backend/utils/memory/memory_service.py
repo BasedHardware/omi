@@ -28,10 +28,18 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
+from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
+from utils.memory.index_window import (
+    MemoryIndexWindowLimit,
+    position_cursor,
+    validate_window_cursors,
+    window_sort_key,
+    peek_index_window,
+)
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -71,6 +79,7 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_get_all,
+    budgeted_stream_list,
     indexed_list_reads_enabled,
 )
 from utils.other.portability_read import check_portability_read
@@ -1113,6 +1122,36 @@ class HistoricalMemoryAdapter:
                 slots.append((record, scan_cursor))
         return slots
 
+    def read_index_window_scan_page(
+        self,
+        uid: str,
+        *,
+        kind: str,
+        limit: int,
+        cursor: str,
+        budget: Optional[ListReadBudget],
+        device_scope_request: Optional[DeviceScopeRequest],
+    ) -> Tuple[List[Tuple[Optional[HistoricalMemoryRecord], Tuple[datetime, str]]], bool]:
+        payloads, cursors, exhausted = memory_store_read(
+            memories_db.scan_memory_list_index_window,
+            uid,
+            order_field='updated_at' if kind == 'updated' else 'created_at',
+            limit=limit,
+            cursor=cursor,
+            budget=budget,
+            **self._firestore_kwargs(),
+        )
+        return (
+            self._adapt_scan_payloads(
+                uid,
+                payloads,
+                cursors,
+                device_scope_request=device_scope_request,
+                drop_updated_at_present=kind == 'created',
+            ),
+            exhausted,
+        )
+
     def read_updated_scan_page(
         self,
         uid: str,
@@ -1470,6 +1509,9 @@ class _HistoricalRawStream:
         self._service = service
         self._uid = uid
         self._kind = kind
+        self.window_scope = {'uid': uid, 'order': 'updated_at' if kind == 'updated' else 'created_at'}
+        self.index_window_enabled = firestore_read_levers.lever_enabled('memory_list_index_window', uid)
+        self._window_fetched = False
         self.scan_keyset = scan
         self.exhausted = bool(exhausted)
         self._budget = budget or _ScanRowBudget()
@@ -1490,6 +1532,8 @@ class _HistoricalRawStream:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
         self._budget.check()
+        if self.index_window_enabled and self._window_fetched:
+            raise MemoryIndexWindowLimit()
         start_after: Optional[Tuple[datetime, str]] = None
         if self.scan_keyset is not None:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
@@ -1499,24 +1543,44 @@ class _HistoricalRawStream:
             else self._service.history.read_created_scan_page
         )
         try:
-            raw_slots, stream_exhausted = reader(
-                self._uid,
-                limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
-                start_after=start_after,
-                device_scope_request=self._device_scope_request,
-                budget=self._rpc_budget,
-            )
+            if self.index_window_enabled:
+                token = self.scan_keyset.index_window_cursor if self.scan_keyset is not None else None
+                raw_slots, stream_exhausted = self._service.history.read_index_window_scan_page(
+                    self._uid,
+                    kind=self._kind,
+                    limit=self._page_limit,
+                    cursor=token or '',
+                    budget=self._rpc_budget,
+                    device_scope_request=self._device_scope_request,
+                )
+                self._window_fetched = True
+            else:
+                raw_slots, stream_exhausted = reader(
+                    self._uid,
+                    limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    start_after=start_after,
+                    device_scope_request=self._device_scope_request,
+                    budget=self._rpc_budget,
+                )
+            self._slots = [
+                (
+                    record,
+                    (
+                        StreamKeyset(
+                            updated_at_us=self._service.scan_cursor_to_stream_keyset(scan_cursor).updated_at_us,
+                            memory_id=scan_cursor[1],
+                            index_window_cursor=position_cursor(self._uid, self._kind, scan_cursor),
+                        )
+                        if self.index_window_enabled
+                        else self._service.scan_cursor_to_stream_keyset(scan_cursor)
+                    ),
+                )
+                for record, scan_cursor in raw_slots
+            ]
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        self._slots = [
-            (
-                record,
-                self._service.scan_cursor_to_stream_keyset(scan_cursor),
-            )
-            for record, scan_cursor in raw_slots
-        ]
         self._slot_index = 0
         self._slots_exhausted = stream_exhausted
         # Batch canonical status suppression once per chunk, never per row.
@@ -1640,10 +1704,14 @@ class _HistoricalCursorStream:
 
     @property
     def updated_exhausted(self) -> bool:
+        if self._updated.index_window_enabled:
+            return self._updated.exhausted
         return self._updated.exhausted and self._updated.peek() is None
 
     @property
     def created_exhausted(self) -> bool:
+        if self._created.index_window_enabled:
+            return self._created.exhausted
         return self._created.exhausted and self._created.peek() is None
 
     @property
@@ -1659,15 +1727,27 @@ class _HistoricalCursorStream:
         return self._updated.state_suppressed + self._created.state_suppressed
 
     def peek(self) -> Optional[MemoryDB]:
-        updated_memory = self._updated.peek()
-        created_memory = self._created.peek()
+        if self._updated.index_window_enabled:
+            updated_memory, updated_bound = peek_index_window(self._updated)
+            created_memory, created_bound = peek_index_window(self._created)
+            bounds = [bound for bound in (updated_bound, created_bound) if bound is not None]
+            if updated_bound is not None and (
+                created_memory is None or window_sort_key(created_memory) > updated_bound
+            ):
+                raise MemoryIndexWindowLimit(lower_bound=min(bounds))
+            if created_bound is not None and (
+                updated_memory is None or window_sort_key(updated_memory) > created_bound
+            ):
+                raise MemoryIndexWindowLimit(lower_bound=min(bounds))
+        else:
+            updated_memory = self._updated.peek()
+            created_memory = self._created.peek()
         if updated_memory is None and created_memory is None:
             self._peek_source = None
             return None
+        sort_key = window_sort_key if self._updated.index_window_enabled else self._service.memory_cursor_sort_key
         take_updated = created_memory is None or (
-            updated_memory is not None
-            and self._service.memory_cursor_sort_key(updated_memory)
-            <= self._service.memory_cursor_sort_key(created_memory)
+            updated_memory is not None and sort_key(updated_memory) <= sort_key(created_memory)
         )
         if take_updated:
             self._peek_source = "updated"
@@ -2410,6 +2490,10 @@ class MemoryService:
         client = self.db_client if self.db_client is not None else default_db_client
         get_all = getattr(client, "get_all", None)
         if callable(get_all):
+            if firestore_read_levers.lever_enabled('canonical_statuses_dedupe', uid) and callable(
+                getattr(client, 'collection', None)
+            ):
+                return self._canonical_statuses_by_query(uid, normalized_ids, budget=budget)
             collections = MemoryCollections(uid=uid)
             statuses: Dict[str, MemoryItemStatus] = {}
             # Item batch first. Override get_all runs only for the missing-item
@@ -2462,6 +2546,56 @@ class MemoryService:
                         statuses[memory_id] = self._present_override_status(override_snapshot)
             return statuses
         return {memory_id: status for memory_id in normalized_ids if (status := self._canonical_status(uid, memory_id))}
+
+    def _canonical_statuses_by_query(
+        self,
+        uid: str,
+        memory_ids: List[str],
+        *,
+        budget: Optional[ListReadBudget] = None,
+    ) -> Dict[str, MemoryItemStatus]:
+        """Amortize missing-document charges without retaining negative results.
+
+        Each document-name IN query has at most 30 alternatives (Firestore's
+        disjunction limit). An empty query bills one read for the whole batch,
+        instead of one NOT_FOUND read per ID. Both collections remain authority:
+        a missing item must still consult its historical suppression override.
+        No result survives this call, so mutations need no cache invalidation.
+        """
+        client = self.db_client if self.db_client is not None else default_db_client
+        collections = MemoryCollections(uid=uid)
+        statuses: Dict[str, MemoryItemStatus] = {}
+        for start in range(0, len(memory_ids), 30):
+            missing_ids = memory_ids[start : start + 30]
+            for collection, parse_status in (
+                (collections.memory_items, self._present_item_status),
+                (collections.memory_historical_overrides, self._present_override_status),
+            ):
+                if not missing_ids:
+                    break
+                refs = [client.document(f'{collection}/{memory_id}') for memory_id in missing_ids]
+                try:
+                    query = client.collection(collection).where(filter=FieldFilter('__name__', 'in', refs))
+                    snapshots = budgeted_stream_list(query, budget)
+                    if not snapshots and budget is not None:
+                        budget.charge(1)  # Empty-query billing floor.
+                except ListReadBudgetExhausted:
+                    raise
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+                by_path = self._snapshots_by_reference_path(snapshots)
+                expected_paths = {ref.path for ref in refs}
+                if by_path is None or not set(by_path).issubset(expected_paths):
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+                next_missing_ids: List[str] = []
+                for memory_id, ref in zip(missing_ids, refs):
+                    snapshot = by_path.get(ref.path)
+                    if getattr(snapshot, 'exists', False) is True:
+                        statuses[memory_id] = parse_status(snapshot)
+                    else:
+                        next_missing_ids.append(memory_id)
+                missing_ids = next_missing_ids
+        return statuses
 
     @staticmethod
     def _snapshots_by_reference_path(snapshots: Any) -> Optional[Dict[str, Any]]:
@@ -2967,6 +3101,11 @@ class MemoryService:
         midstream via the signed cursor claims. Canonical continuation uses a
         bounded Firestore keyset scan — never a full-set reload.
         """
+        sort_key = (
+            window_sort_key
+            if firestore_read_levers.lever_enabled('memory_list_index_window', uid)
+            else self.memory_cursor_sort_key
+        )
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
         temporal_view = 'released'
         # ``as_of`` is an explicit traversal anchor.  ``now`` remains the
@@ -3002,6 +3141,11 @@ class MemoryService:
             except UniversalListCursorError as exc:
                 raise HTTPException(status_code=400, detail=f"invalid_or_stale_cursor:{exc.reason}") from exc
             state = claims.state
+            if firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+                try:
+                    validate_window_cursors(state, uid)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:index_window') from exc
             if temporal_as_of is None and state.as_of:
                 try:
                     temporal_as_of = datetime.fromisoformat(state.as_of)
@@ -3067,6 +3211,7 @@ class MemoryService:
         canonical_kept = 0
         historical_kept = 0
         truncated = False
+        window_limited = False
         canonical_error: Optional[MemoryBackingStoreUnavailable] = None
 
         with batch_canonical_expiry_observations():
@@ -3096,6 +3241,17 @@ class MemoryService:
                             )
                     try:
                         historical_memory = historical.peek()
+                    except MemoryIndexWindowLimit as exc:
+                        # Canonical heads newer than every unseen historical
+                        # row remain safe after this request's raw windows end.
+                        if (
+                            canonical_memory is None
+                            or exc.lower_bound is None
+                            or window_sort_key(canonical_memory) > exc.lower_bound
+                        ):
+                            window_limited = True
+                            break
+                        historical_memory = None
                     except ListReadBudgetExhausted:
                         truncated = True
                         break
@@ -3110,9 +3266,7 @@ class MemoryService:
                     if canonical_memory is None and historical_memory is None:
                         break
                     take_canonical = historical_memory is None or (
-                        canonical_memory is not None
-                        and self.memory_cursor_sort_key(canonical_memory)
-                        <= self.memory_cursor_sort_key(historical_memory)
+                        canonical_memory is not None and sort_key(canonical_memory) <= sort_key(historical_memory)
                     )
                     if take_canonical:
                         assert canonical_memory is not None
@@ -3156,7 +3310,10 @@ class MemoryService:
         next_cursor = None
         if not truncated:
             try:
-                has_more = canonical.peek() is not None or historical.peek() is not None
+                try:
+                    has_more = window_limited or canonical.peek() is not None or historical.peek() is not None
+                except MemoryIndexWindowLimit:
+                    has_more = True
                 if has_more:
                     next_state = UniversalListCursorState(
                         uid=uid,
