@@ -161,3 +161,35 @@ def test_range_that_has_ended_still_walks_back_from_its_end(calendar_tools):
     first_window = calendar.requests[0]
     assert _parse_google_time(first_window["timeMax"]) == end
     assert _parse_google_time(first_window["timeMin"]) == end - timedelta(days=30)
+
+
+def test_mixed_naive_and_aware_event_starts_do_not_crash_the_sort(calendar_tools):
+    """A floating-time/ICS-imported event (naive ``dateTime``) alongside a normal
+    aware event used to raise TypeError when the >30-day walk-back sorted
+    ``events_with_time`` by start, since one key was offset-naive and the rest
+    (including the ``datetime.min`` fallback) were offset-aware.
+    """
+    end = _now_minute() - timedelta(hours=1)
+    start = end - timedelta(days=60)
+
+    naive_start = (end - timedelta(days=5)).replace(tzinfo=None)
+    naive_event = {
+        "id": "floating-time-import",
+        "summary": "Floating",
+        "start": {"dateTime": naive_start.isoformat()},
+        "end": {"dateTime": (naive_start + timedelta(minutes=30)).isoformat()},
+    }
+    aware_event = _event("Standup", end - timedelta(days=10))
+
+    async def _request(_method, _url, _access_token, params=None, body=None, allow_204=False):
+        return {"items": [naive_event, aware_event]}
+
+    calendar_tools.google_api_request = _request
+
+    result = asyncio.run(
+        calendar_tools.get_calendar_events_tool(start_date=start.isoformat(), end_date=end.isoformat())
+    )
+
+    assert "Floating" in result
+    assert "Standup" in result
+    assert result.index("Floating") < result.index("Standup")

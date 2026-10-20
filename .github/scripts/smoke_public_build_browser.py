@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Sequence
@@ -24,6 +26,7 @@ from check_public_build_contract import (
 
 DEFAULT_VIRTUAL_TIME_BUDGET_MS = 10_000
 MAX_BROWSER_STDERR_CHARS = 2_000
+BROWSER_VERSION_TIMEOUT_SECONDS = 5
 
 
 class BrowserSmokeError(RuntimeError):
@@ -97,12 +100,66 @@ def absolute_https_url(value: str) -> str:
 
 
 def browser_candidates(environment: dict[str, str] | None = None) -> tuple[str, ...]:
-    configured = (environment or os.environ).get("OMI_BROWSER_BIN", "").strip()
-    return tuple(
-        candidate
-        for candidate in (configured, "google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
-        if candidate
+    source = os.environ if environment is None else environment
+    configured = source.get("OMI_BROWSER_BIN", "").strip()
+    candidates = (
+        configured,
+        "chrome-headless-shell",
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
     )
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def _resolve_browser(browser: str, environment: dict[str, str] | None) -> str | None:
+    """Resolve one browser candidate through PATH, including explicit paths."""
+
+    path = environment.get("PATH") if environment is not None and "PATH" in environment else None
+    return shutil.which(browser, path=path)
+
+
+def _browser_version(browser: str) -> str | None:
+    """Return a single-line browser version, or None when it cannot be read."""
+
+    try:
+        result = subprocess.run(
+            [browser, "--version"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=BROWSER_VERSION_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    output = _captured_text(result.stdout) or _captured_text(getattr(result, "stderr", ""))
+    version = next((line.strip() for line in output.splitlines() if line.strip()), "")
+    return version.replace("\r", " ")[:300] or None
+
+
+def _available_browsers(environment: dict[str, str] | None) -> tuple[str, ...]:
+    """Resolve candidates and log each candidate's version once for this smoke."""
+
+    available: list[str] = []
+    version_by_path: dict[str, str | None] = {}
+    for candidate in browser_candidates(environment):
+        resolved = _resolve_browser(candidate, environment)
+        if resolved is None:
+            print(f"browser candidate: name={candidate} version=absent", file=sys.stderr)
+            continue
+        if resolved not in version_by_path:
+            version_by_path[resolved] = _browser_version(resolved)
+        version = version_by_path[resolved]
+        print(
+            f"browser candidate: name={candidate} path={resolved} "
+            f"version={version or 'unavailable'}",
+            file=sys.stderr,
+        )
+        if resolved not in available:
+            available.append(resolved)
+    return tuple(available)
 
 
 def render_candidate(
@@ -140,23 +197,32 @@ def _render_candidate_once(
     *, browser: str, base_url: str, timeout: int, virtual_time_budget_ms: int
 ) -> RenderedDocument:
     try:
-        result = subprocess.run(
-            [
-                browser,
-                "--headless=new",
-                "--no-sandbox",
-                "--disable-gpu",
-                f"--virtual-time-budget={virtual_time_budget_ms}",
-                "--dump-dom",
-                f"--timeout={timeout * 1000}",
-                base_url,
-            ],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout + BROWSER_EXIT_GRACE_SECONDS,
-        )
+        with tempfile.TemporaryDirectory(prefix="omi-public-build-browser-") as profile_dir:
+            result = subprocess.run(
+                [
+                    browser,
+                    "--headless=new",
+                    "--no-sandbox",
+                    "--disable-gpu",
+                    "--disable-crash-reporter",
+                    "--disable-breakpad",
+                    "--disable-component-update",
+                    "--disable-sync",
+                    "--disable-features=MediaSessionService,MediaRouter",
+                    "--no-first-run",
+                    "--disable-gpu-sandbox",
+                    f"--user-data-dir={profile_dir}",
+                    f"--virtual-time-budget={virtual_time_budget_ms}",
+                    "--dump-dom",
+                    f"--timeout={timeout * 1000}",
+                    base_url,
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout + BROWSER_EXIT_GRACE_SECONDS,
+            )
     except subprocess.TimeoutExpired as exc:
         raise BrowserSmokeError(
             "headless browser timed out rendering the candidate",
@@ -217,7 +283,8 @@ def smoke(
     if not wants_sha:
         sha = None
     errors: list[BrowserSmokeError] = []
-    for browser in browser_candidates(environment):
+    browsers = _available_browsers(environment)
+    for browser in browsers:
         try:
             document = render_candidate(
                 browser=browser,

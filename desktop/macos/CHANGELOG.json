@@ -2,6 +2,21 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.508",
+      "date": "2026-10-19",
+      "changes": [
+        "Screen task extraction now uses the privacy-approved Jev gate by default"
+      ]
+    },
+    {
+      "version": "0.12.507",
+      "date": "2026-10-19",
+      "changes": [
+        "Omi tools work again when Hermes is the agent",
+        "Summary sections drop the timestamp row under each section; a quiet icon beside the section opens the supporting transcript"
+      ]
+    },
+    {
       "version": "0.12.506",
       "date": "2026-10-19",
       "changes": [

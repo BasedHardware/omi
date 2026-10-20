@@ -1,7 +1,7 @@
 """Additive dispatch provenance, independent of root usage and unit projection."""
 
 from prometheus_client import Counter
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import execution_admission_configured as enabled
 import logging
 
 AUDIO_SECONDS = Counter(

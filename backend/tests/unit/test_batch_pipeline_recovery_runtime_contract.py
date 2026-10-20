@@ -116,3 +116,15 @@ fi
             '--max-backoff=60s',
         ]:
             assert option in calls[1]
+
+
+def test_prod_integration_pins_the_ramp_recovery_dispatch_batch(monkeypatch):
+    """Set live to 64 during the 10-19 ramp; without the manifest value every train restores 16."""
+    import importlib
+
+    overlay = yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())
+    env = overlay['overlay']['cloud_run']['services']['backend-integration']['env']
+    assert env['BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE']['value'] == '64'
+    batch_pipeline = importlib.import_module('config.batch_pipeline')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '64')
+    assert batch_pipeline.recovery_dispatch_batch_size() == 64  # within the code bound, not clamped back to 16

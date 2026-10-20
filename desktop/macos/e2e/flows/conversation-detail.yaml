@@ -18,8 +18,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/NoteCitationContract.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummaryProvenanceState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
-  # Summary composition; timestamp expansion/seeks are exercised in ConversationQuoteTimestampsTests.
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationQuoteTimestamps.swift
+  # Summary composition; per-section source navigation is exercised in ConversationSectionSourcesTests.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSectionSources.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/SummaryDocumentProse.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationPhotoGallery.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift

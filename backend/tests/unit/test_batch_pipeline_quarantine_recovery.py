@@ -13,6 +13,7 @@ from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from database.batch_pipeline_store import FirestoreStore
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
@@ -657,7 +658,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     from utils.batch_pipeline.serving import Serving
     from unittest.mock import AsyncMock
 
-    _, store, _, _, stt, recovery = setup
+    _, store, binding, _, stt, recovery = setup
     service = Serving(store, recovery=recovery)
     service.reconcile_async = AsyncMock()
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
@@ -669,7 +670,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
     assert stt.call_count == 1
-    service.reconcile_async.assert_awaited_once_with()
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
 
 
 @pytest.mark.parametrize('delivery_wins', [False, True])
@@ -1069,7 +1070,7 @@ def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
     module, enqueue = _wake_env(monkeypatch)
     client, store, binding, _, stt, recovery = setup
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
-    monkeypatch.setattr(module, 'sync_allowed', lambda *args: False)  # Allowance refuses the start.
+    monkeypatch.setattr(module, 'sync_allowed', lambda *args, **kwargs: False)  # Allowance refuses the start.
     service = Serving(store, recovery=recovery)
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
     app = FastAPI()

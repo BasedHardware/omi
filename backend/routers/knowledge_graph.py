@@ -1,4 +1,4 @@
-from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import importlib
 import sys
 from enum import Enum
@@ -302,7 +302,7 @@ async def extract_knowledge_graph(
     closed (502) instead of returning 200 with an empty graph, which a client cannot
     tell apart from a genuine "no entities" answer.
     """
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')

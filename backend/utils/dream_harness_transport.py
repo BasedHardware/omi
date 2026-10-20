@@ -1,6 +1,6 @@
 """One gateway tool/verifier turn; reserved policy and configured fallback stay gateway-owned."""
 
-from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 
 import json
 from typing import Any
@@ -217,7 +217,7 @@ async def model_turn(
     prior_message_count=0,
     cached_tokens_estimate=None,
 ):
-    if generated_compute_enabled() and not await run_blocking(
+    if generated_compute_configured() and not await run_blocking(
         db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
     ):
         raise CapacityWait('usage_budget_exhausted')

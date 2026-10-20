@@ -25,7 +25,7 @@ from utils.stt import (
     streaming as st,
     vad_gate,
 )
-from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.resilient_stream import ResilientAudio, trim_window_replay_to_anchor, window_replay_action
 from utils.observability.fallback import record_fallback
 from utils.observability.routing_cohort import COHORT_WINDOW_FIRST_TEXT, RoutingCohort, current_routing_cohort
 from utils.stt.live_metrics import (
@@ -36,6 +36,7 @@ from utils.stt.live_metrics import (
     WINDOW_REPLAY_SAFE_TRIMS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_STRANDED_FLUSHES,
+    NONWINDOW_REPLAY_SETTLES,
 )
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
@@ -1684,8 +1685,99 @@ async def test_blip_followed_by_fast_capture_silence_flushes_below_post_pace(mon
     await actual._drain_stt_sockets()
 
 
+def _drifted_fragment_response(*, placed):
+    # TDT places the fragment's words inside the silence envelope a stranded
+    # flush adds: past the real fragment duration, so they cannot be emitted.
+    def respond(_n, kwargs):
+        pcm = np.frombuffer(_posted_pcm(kwargs), dtype=np.int16)
+        onset = int(np.flatnonzero(pcm)[0]) / 16000
+        drift = {'text': 'Drift.', 'start': _wav_duration(kwargs) - 0.2, 'end': _wav_duration(kwargs) - 0.1}
+        return {'segments': ([{'text': 'Short', 'start': onset, 'end': onset + 0.02}] if placed else []) + [drift]}
+
+    return respond
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure', ['replay_ring_cap', 'first_text_deadline'])
+@pytest.mark.parametrize('settle,placed', [(True, False), (False, False), (True, True)])
+async def test_unplaceable_stranded_answer_settles_near_silent_ring_without_failover(monkeypatch, settle, placed):
+    # Prod 2026-10-19: after text, a short blip's stranded flush came back with
+    # text timestamped in its silence envelope. The anchor waited for a repost
+    # no job selected, so ~90s of near-silence overflowed the replay ring
+    # (posts_since_anchor=1, empty_posts=0, cut_pending=1, no POST in flight).
+    if not settle:
+        monkeypatch.setenv('PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', 'false')
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
+        monkeypatch, earlier_text=True
+    )
+    client.payloads = [client.payloads[0], _drifted_fragment_response(placed=placed), {'text': ''}]
+    raw = previous.raw
+    ring = actual._window_ring()
+    settled_before = WINDOW_STRANDED_FLUSHES.labels(outcome='settled_unplaced')._value.get()
+    blip_sample = sample
+    fragment_bytes = raw._received_bytes
+    for _ in range(5):
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 250)
+    assert len(client.requests) == 2 and raw.test_job_signals[-1][4]  # one stranded flush
+    assert [item['text'] for item in base.emitted] == ['Earlier.'] + (['Short'] if placed else [])
+    if not settle:
+        assert raw.has_untranscribed_speech()
+        snapshot = None
+        while actual.stt_socket is previous:
+            snapshot = ring.snapshot()
+            sample = await _settled_fragment_silence(actual, clock, sample, 250, settled=True)
+        assert raw.death_reason == 'replay_ring_overflow' and raw.capacity_subtype is None
+        diagnostics = raw.replay_lag_diagnostics
+        assert diagnostics.posts_since_anchor == 1 and diagnostics.empty_posts_since_anchor == 0
+        assert diagnostics.cut_pending and not diagnostics.post_in_flight
+        assert actual._pending_live_failover.reason == 'replay_ring_overflow'
+        # The ring protected the fragment to the end, but the failover replay
+        # is bounded to its recent tail: the legacy path loses a blip this old.
+        assert snapshot[0][0] <= blip_sample
+        assert len(callbacks) == 1 and not np.any(np.frombuffer(b''.join(replayed), dtype=np.int16))
+        await actual._drain_stt_sockets()
+        return
+    assert WINDOW_STRANDED_FLUSHES.labels(outcome='settled_unplaced')._value.get() == settled_before + 1
+    assert not raw.has_untranscribed_speech() and not raw._replay_cut_requested
+    # Settled like an answered-empty fragment: its PCM stays as TDT context and
+    # its capture stays replayable until the ring ages it out naturally.
+    if not placed:
+        assert raw._anchor_bytes <= fragment_bytes
+    assert ring.capture_bounds[0] < blip_sample + 5 * 640
+    sample = await _settled_fragment_silence(actual, clock, sample, 2400, settled=True)
+    assert actual.stt_socket is previous and not previous.is_connection_dead, raw.replay_lag_diagnostics
+    assert raw.death_reason is None and not replayed and not callbacks
+    assert ring.capture_bounds[1] - ring.capture_bounds[0] <= 90 * 16000
+    assert len(client.requests) == 2
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_unplaceable_stranded_fragment_is_reposted_as_context_with_next_speech(monkeypatch):
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
+        monkeypatch, earlier_text=True
+    )
+    client.payloads = [client.payloads[0], _drifted_fragment_response(placed=False), {'text': ''}]
+    raw = previous.raw
+    for _ in range(5):
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 250)
+    held_anchor = raw._anchor_bytes
+    raw._next_post = 0
+    for _ in range(5):
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+    sample = await _settled_fragment_silence(actual, clock, sample, 250)
+    assert len(client.requests) == 3
+    # The next stranded window starts at the held anchor: the unplaced
+    # fragment is decoded again with the new speech, never discarded.
+    assert raw.test_job_signals[-1][0] == held_anchor / (2 * 16000)
+    assert np.count_nonzero(np.frombuffer(_posted_pcm(client.requests[-1][1]), dtype=np.int16)) == 2 * 5 * 640
+    assert actual.stt_socket is previous and not replayed and not callbacks
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['replay_ring_overflow', 'first_text_deadline'])
 async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch, failure):
     monkeypatch.setattr('utils.stt.recovery_state.RECOVERY_EPISODE_SECONDS', 300.0)
     actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
@@ -1725,8 +1817,8 @@ async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch,
         unsent = bytes(640 * 2)
         sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
         assert actual.stt_socket is not previous
-        assert previous.raw.capacity_subtype == 'replay_ring_cap'
-    expected_reason = 'capacity_full' if failure == 'replay_ring_cap' else failure
+        assert previous.raw.capacity_subtype is None
+    expected_reason = failure
     assert previous.raw.death_reason == expected_reason
     assert actual._pending_live_failover.reason == expected_reason
     assert len(callbacks) == 1
@@ -2174,7 +2266,7 @@ async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow
         pytest.fail('scenario did not reproduce replay-ring overflow')
 
     diagnostics = raw.replay_lag_diagnostics
-    assert raw.capacity_subtype == 'replay_ring_cap'
+    assert raw.death_reason == 'replay_ring_overflow' and raw.capacity_subtype is None
     assert diagnostics.capture_seconds > 90
     assert 0 < diagnostics.admitted_seconds < diagnostics.capture_seconds / 2
     assert not diagnostics.post_in_flight and not diagnostics.pacing_wait
@@ -2195,7 +2287,7 @@ async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow
     # outcome line only when the replacement leg actually transcribes.
     assert actual._pending_live_failover.replay_lag_diagnostics is diagnostics
     callbacks[0]([{'speaker': 'speaker_0', 'text': 'Replacement.', 'start': 0, 'end': 1}])
-    lines = [r.message for r in caplog.records if 'subtype=replay_ring_cap' in r.message]
+    lines = [r.message for r in caplog.records if 'reason=replay_ring_overflow' in r.message]
     assert len(lines) == 1
     assert 'un_emitted_capture_seconds=' in lines[0] and 'vad_admitted_seconds=' in lines[0]
     assert 'posts_since_anchor=' in lines[0] and 'empty_posts_since_anchor=' in lines[0]
@@ -2328,7 +2420,7 @@ async def test_pacing_wait_with_capture_burst_reports_deferred_cut_and_exact_rep
         if actual.stt_socket is not previous:
             break
     diagnostics = raw.replay_lag_diagnostics
-    assert raw.capacity_subtype == 'replay_ring_cap'
+    assert raw.death_reason == 'replay_ring_overflow'
     assert diagnostics.pacing_wait and not diagnostics.post_in_flight
     assert diagnostics.cut_pending and diagnostics.posts_since_anchor == 0
     assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_pacing')._value.get() == skipped_before + 1
@@ -2384,13 +2476,13 @@ async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anch
     await _flush_capture(actual, pcm, 12 * 16000)
     assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_in_flight')._value.get() == before_deferred + 1
 
-    assert previous.raw.death_reason == 'capacity_full'
-    assert previous.capacity_subtype == 'replay_ring_cap'
+    assert previous.raw.death_reason == 'replay_ring_overflow'
+    assert previous.capacity_subtype is None
     assert previous.raw.replay_lag_diagnostics.post_in_flight
     assert previous.raw.replay_lag_diagnostics.posts_since_anchor == 1
     assert previous.raw.replay_lag_diagnostics.empty_posts_since_anchor == 0
-    assert actual._pending_live_failover.reason == 'capacity_full'
-    assert actual._pending_live_failover.capacity_subtype == 'replay_ring_cap'
+    assert actual._pending_live_failover.reason == 'replay_ring_overflow'
+    assert actual._pending_live_failover.capacity_subtype is None
     assert len(callbacks) == 1
     assert b''.join(replayed) == pcm[anchor * 2 :] + pcm + pcm
     client.release.set()
@@ -2543,8 +2635,8 @@ async def test_pending_window_post_overflow_replays_speech_before_next_chunk(mon
         await actual.stt_socket._task
 
     assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims
-    assert previous.raw.death_reason == 'capacity_full'
-    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert previous.raw.death_reason == 'replay_ring_overflow'
+    assert actual._pending_live_failover.reason == 'replay_ring_overflow'
     assert len(callbacks) == 1  # exactly one replacement leg
     assert b''.join(replayed) == pcm + next_speech
     assert base.emitted == []
@@ -3047,6 +3139,190 @@ async def test_non_window_vad_fails_open_and_honours_override(monkeypatch):
     managed = await LiveChainSession(recv).connect(16000)
     assert managed.gate is None
     assert managed.window is False
+
+
+class _QuietProvider:
+    """A connected non-window provider that never transcribes a VAD blip."""
+
+    def __init__(self):
+        self.is_connection_dead = False
+        self.death_reason = self.typed_death_reason = None
+        self.pending_output = False
+        self.sent = []
+
+    def send(self, data):
+        self.sent.append(data)
+        return True
+
+    def finish(self):
+        self.is_connection_dead = True
+
+    def finalize(self):
+        pass
+
+    def has_pending_provider_output(self):
+        return self.pending_output
+
+
+def _nonwindow_replay_leg(monkeypatch, service=st.STTService.soniox):
+    from utils.stt import live_session
+
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    raw = _QuietProvider()
+    leg = LiveLegSocket(raw, None, LiveChainSession(receiver()), service, 16000, False, False)
+    leg.enable_window_replay_tracking()
+    return leg, raw, ResilientAudio(16000, ring_seconds=90, strict_replay=True), clock
+
+
+def _stream_nonwindow(leg, ring, clock, seconds, speech):
+    """Feed one second per packet in real time; returns the failover second."""
+    pcm = b'\x01\x00' * 16000
+    for second in range(seconds):
+        clock[0] = float(second)
+        sample = second * 16000
+        if window_replay_action(ring, leg, pcm, sample) == 'failover':
+            return second
+        if speech(second):
+            assert leg.send(pcm, start_sample=sample)
+        ring.append(pcm, sample)
+    return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('service', [st.STTService.soniox, st.STTService.modulate])
+async def test_near_silent_nonwindow_leg_settles_at_ring_horizon(monkeypatch, service):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch, service)
+    before = NONWINDOW_REPLAY_SETTLES.labels(provider=service.value)._value.get()
+    # One VAD-positive cough the provider correctly ignores, then a quiet room.
+    assert _stream_nonwindow(leg, ring, clock, 240, speech=lambda second: second == 0) is None
+    assert not leg.is_connection_dead and leg.death_reason is None
+    assert not leg.has_untranscribed_speech()
+    first, end = ring.capture_bounds
+    assert end == 240 * 16000 and end - first <= 90 * 16000
+    assert NONWINDOW_REPLAY_SETTLES.labels(provider=service.value)._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_noise_without_text_keeps_only_the_ring_horizon(monkeypatch):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    before = NONWINDOW_REPLAY_SETTLES.labels(provider='soniox')._value.get()
+    # Continuous VAD-positive noise: the obligation survives but ages out at
+    # the ring horizon, exactly like answered-empty window capture.
+    assert _stream_nonwindow(leg, ring, clock, 200, speech=lambda _second: True) is None
+    first, end = ring.capture_bounds
+    assert leg.has_untranscribed_speech() and leg.window_replay_pending_sample() == first
+    assert end - first == 90 * 16000
+    assert NONWINDOW_REPLAY_SETTLES.labels(provider='soniox')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('speech', ['cough', 'continuous'])
+async def test_nonwindow_leg_with_pending_provider_output_still_fails_over(monkeypatch, caplog, speech):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    raw.pending_output = True  # The provider still owes text for received audio.
+    talking = (lambda second: second == 0) if speech == 'cough' else (lambda _second: True)
+    assert _stream_nonwindow(leg, ring, clock, 120, speech=talking) == 90
+    assert leg.is_connection_dead and leg.death_reason == 'replay_ring_overflow'
+    diagnostics = raw.replay_lag_diagnostics
+    assert diagnostics.leg == 'nonwindow' and diagnostics.provider_output_pending is True
+    assert diagnostics.text_segments == diagnostics.placed_text_segments == 0
+    assert diagnostics.speech_unemitted_seconds == (1.0 if speech == 'cough' else 90.0)
+    record_fallback(
+        component='stt_live_session',
+        from_mode='soniox',
+        to_mode='parakeet',
+        reason='replay_ring_overflow',
+        outcome='degraded',
+        replay_diagnostics=diagnostics,
+    )
+    line = [r.message for r in caplog.records if 'reason=replay_ring_overflow' in r.message][-1]
+    assert ' leg=nonwindow' in line and ' provider_output_pending=1' in line and ' text_segments=0' in line
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_settle_kill_switch_restores_overflow_failover(monkeypatch):
+    monkeypatch.setenv('LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED', 'false')
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    assert _stream_nonwindow(leg, ring, clock, 120, speech=lambda second: second == 0) == 90
+    assert leg.death_reason == 'replay_ring_overflow'
+
+
+@pytest.mark.asyncio
+async def test_nonwindow_settle_waits_for_recent_replay_sends(monkeypatch):
+    leg, raw, ring, clock = _nonwindow_replay_leg(monkeypatch)
+    pcm = b'\x01\x00' * 16000
+    # A replay burst sends 100 s of old capture in one instant; the provider
+    # has not had time to answer it even though it owes nothing yet.
+    for second in range(100):
+        assert leg.send(pcm, start_sample=second * 16000)
+    clock[0] = 1.0
+    assert not leg.window_replay_settle_through(10 * 16000)
+    assert leg.window_replay_pending_sample() == 0
+    clock[0] = 16.0
+    assert leg.window_replay_settle_through(10 * 16000)
+    assert leg.window_replay_pending_sample() == 10 * 16000
+    raw.is_connection_dead = True
+    assert not leg.window_replay_settle_through(20 * 16000)
+
+
+@pytest.mark.asyncio
+async def test_replay_scored_silent_by_replacement_vad_still_waits_for_grace(monkeypatch):
+    from utils.stt import live_session
+
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    raw = _QuietProvider()
+    silent = SimpleNamespace(audio_to_send=b'', is_speech=False, should_finalize=False, send_spans=())
+    gate = SimpleNamespace(
+        mode='active',
+        process_audio=lambda *a, **kw: silent,
+        consume_speech_ms_delta=lambda: 0,
+        remap_segments=lambda _s: None,
+    )
+    ring = ResilientAudio(16000, ring_seconds=90, strict_replay=True)
+    session = LiveChainSession(SimpleNamespace(**vars(receiver()), _window_ring=lambda: ring))
+    leg = LiveLegSocket(raw, gate, session, st.STTService.soniox, 16000, False, False)
+    pcm = b'\x01\x00' * 16000
+    # Window-origin replay at failover: this leg's VAD calls every span silent.
+    for second in range(100):
+        leg.replay_send(pcm, second * 16000)
+    assert leg.window_replay_pending_sample() == 0 and leg.has_untranscribed_speech()
+    clock[0] = 1.0
+    assert not leg.window_replay_settle_through(10 * 16000)
+    clock[0] = 16.0
+    assert leg.window_replay_settle_through(10 * 16000)
+
+
+@pytest.mark.asyncio
+async def test_modulate_utterances_carry_capture_end_and_advance_emitted(monkeypatch):
+    from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+
+    leg, _, _, _ = _nonwindow_replay_leg(monkeypatch, st.STTService.modulate)
+    pcm = b'\x01\x00' * 32000
+    timeline = CaptureTimeline(sample_rate=16000)
+    timeline.accept(pcm, 1000.0, 1.0)
+    epoch = ProviderEpochTranslator(timeline, 16000)
+    epoch.provider_label = 'modulate'
+    epoch.note_accepted(0, 32000)
+    assert leg.send(pcm, start_sample=0) and leg.has_untranscribed_speech()
+    translated = []
+
+    def deliver(segments):
+        translated.extend(epoch.translate(segments))
+        leg.note_selection_transcript(translated)
+
+    ws = AsyncMock()
+    modulate = st.SafeModulateSocket(ws, deliver, asyncio.get_running_loop())
+    modulate._recv_task.cancel()
+    modulate._send_task.cancel()
+    modulate._handle_partial_utterance({'text': 'hello', 'start_ms': 100})
+    assert modulate.has_pending_provider_output()
+    modulate._handle_utterance({'text': 'hello there', 'start_ms': 100, 'duration_ms': 1900})
+    assert not modulate.has_pending_provider_output()
+    assert translated[0]['_capture_end_sample'] == 32000
+    assert leg._emitted_capture_sample == 32000 and not leg.has_untranscribed_speech()
+    assert leg.window_replay_pending_sample() is None
 
 
 def _wav_duration(kwargs: dict, sample_rate: int = 16000) -> float:

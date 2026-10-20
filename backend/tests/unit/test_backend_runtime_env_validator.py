@@ -64,6 +64,9 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
+        {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
+        {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},

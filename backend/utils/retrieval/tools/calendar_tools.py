@@ -24,6 +24,7 @@ from models.calendar_mutation import (
     event_title as calendar_event_title,
     format_deleted_calendar_events,
 )
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.retrieval.tools.integration_base import (
@@ -645,24 +646,15 @@ async def get_calendar_events_tool(
                     search_end = search_start
                     months_back += 1
 
-                # Sort all events by start time (most recent first) and take max_results
+                # Sort all events by start time (most recent first) and take max_results.
+                # Timestamps come back as naive (floating-time/ICS-imported) or aware strings;
+                # coerce_utc_datetime normalizes both so the sort below never compares
+                # offset-naive against offset-aware datetimes.
                 events_with_time: List[Tuple[datetime, Dict[str, Any]]] = []
                 for event in all_events:
-                    start = event.get('start', {})
-                    if 'dateTime' in start:
-                        try:
-                            start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                            events_with_time.append((start_dt, event))
-                        except (ValueError, TypeError):
-                            events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
-                    elif 'date' in start:
-                        try:
-                            start_dt = datetime.fromisoformat(start['date'] + 'T00:00:00+00:00')
-                            events_with_time.append((start_dt, event))
-                        except (ValueError, TypeError):
-                            events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
-                    else:
-                        events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
+                    start = event.get('start') or {}
+                    start_dt = coerce_utc_datetime(start.get('dateTime') or start.get('date'))
+                    events_with_time.append((start_dt or datetime.min.replace(tzinfo=timezone.utc), event))
 
                 # Sort by start time descending (most recent first) and take max_results
                 events_with_time.sort(key=lambda x: x[0], reverse=True)

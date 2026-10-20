@@ -139,6 +139,35 @@ void main() {
     expect(find.text('2 recordings need attention'), findsOneWidget);
   });
 
+  testWidgets('a wearable source outlives its exhausted phone copy: the block shows the worse state', (tester) async {
+    // A device drain copies audio to the phone piece by piece; copy and source
+    // share the recording id. Here the phone copy exhausted its retries while
+    // the audio still sits on the wearable: the recording must read as needing
+    // attention (its worst part), never as merely syncing (its healthy part).
+    Wal drainPiece(DateTime start, int seconds, {WalStorage? original, int retries = 0}) => Wal(
+          timerStart: start.millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: seconds,
+          status: WalStatus.miss,
+          storage: original == null ? WalStorage.sdcard : WalStorage.disk,
+          originalStorage: original,
+          device: 'pendant',
+          retryCount: retries,
+        );
+    final start = DateTime(2026, 10, 18, 8);
+    await _pump(tester, [
+      drainPiece(start, 4 * 60, original: WalStorage.sdcard, retries: 3),
+      drainPiece(start, 4 * 60),
+    ]);
+
+    // One recording, shown once — as refused, not as waiting.
+    expect(_row('8:00 AM · 4m'), findsOneWidget);
+    expect(_headerLine(tester, '2026-10-18'), '1 recording · 4m · 1 needs attention');
+    expect(find.text('Failed — tap Retry'), findsOneWidget);
+    expect(find.text('1 recording need attention'), findsOneWidget);
+    expect(find.text('2 recordings need attention'), findsNothing);
+  });
+
   testWidgets('a day opens and folds on tap, and stays that way for the session', (tester) async {
     final wals = [
       _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),

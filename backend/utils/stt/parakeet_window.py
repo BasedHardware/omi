@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from config.policy import kill_switch
+from config.policy.listen import current_listen_policy
+
 import asyncio
 import logging
 import math
@@ -106,6 +109,14 @@ SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
 ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS = 3.0
 MAX_EMPTY_STREAK = 4
+
+
+def stranded_drift_settle_enabled() -> bool:
+    """Kill switch, default on: settle stranded answers whose text was unplaceable."""
+    policy = current_listen_policy.get()
+    return kill_switch(
+        'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED', policy_id=policy.policy_id if policy is not None else 'control'
+    )
 
 
 def _positive_float_env(name: str, default: float) -> float:
@@ -679,7 +690,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
-        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
+        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'}:
             self._typed_death_reason = reason
         # Observers must see the root cause before they see the dead latch.
         self._dead = True
@@ -910,8 +921,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._beyond_window_repost = None
         elif emitted:
             self._beyond_window_repost = None
-        if job.stranded_flush and not segments:
-            self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
+        # A stranded flush is the last POST this silence selects: its answer
+        # must settle capacity, or a held anchor waits for a repost that never
+        # comes and the near-silent capture ring overflows into failover. Text
+        # whose timestamps fell in the silence envelope cannot be placed, so
+        # settle it like an empty answer: context and replay are retained.
+        unplaced = bool(segments) and beyond_window and stranded_drift_settle_enabled()
+        if job.stranded_flush and unplaced:
+            WINDOW_STRANDED_FLUSHES.labels(outcome='settled_unplaced').inc()
+        if job.stranded_flush and (not segments or unplaced):
+            if not segments:
+                self._answered_empty_stranded_flushes = min(1000000, self._answered_empty_stranded_flushes + 1)
             # Successful empty decoding after a long silence settles capacity
             # only. Keep the POST anchor/PCM and replay copy for later context.
             self._accounted_speech_end = max(self._accounted_speech_end, job.end_bytes)
@@ -919,11 +939,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._answered_empty_span = (first, self._accounted_speech_end)
             self._answered_context_ends.append((job.end_bytes, self._capture_seconds))
             self._stranded_fragment_answered = not self._has_unanswered_speech()
-            new_anchor_bytes = None
+            if not emitted:
+                new_anchor_bytes = None
             if self._stranded_fragment_answered:
                 self._replay_cut_requested = False
                 if (
-                    not self._first_text_recorded
+                    not segments
+                    and not self._first_text_recorded
                     and self._capture_silence_seconds >= STRANDED_SILENCE_SECONDS
                     and self._deadline_speech_bytes < self._to_bytes(SHORT_SPEECH_EPISODE_SECONDS)
                     and self._answered_empty_speech_bytes < self._to_bytes(ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS)
