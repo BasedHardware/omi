@@ -47,9 +47,15 @@ struct os_memblock {
 };
 
 /* XXX: Change this structure so that we keep the first address in the pool? */
-/* XXX: add memory debug structure and associated code */
 /* XXX: Change how I coded the SLIST_HEAD here. It should be named:
    SLIST_HEAD(,os_memblock) mp_head; */
+
+#if MYNEWT_VAL(OS_MEMPOOL_CHECK)
+struct os_mempool_debug {
+    uint32_t omd_put_cnt;
+    uint32_t omd_get_cnt;
+};
+#endif
 
 /**
  * Memory pool
@@ -71,6 +77,9 @@ struct os_mempool {
     SLIST_HEAD(,os_memblock);
     /** Name for memory block */
     const char *name;
+#if MYNEWT_VAL(OS_MEMPOOL_CHECK)
+    struct os_mempool_debug mp_debug;
+#endif
 };
 
 /**
