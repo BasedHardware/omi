@@ -200,4 +200,3 @@ describe('muteReminder (#20215)', () => {
     expect(reminders[0].mutedMinutes).toBe(30)
   })
 })
-

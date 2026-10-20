@@ -147,7 +147,7 @@ export function createMuteReminderController(
     armed = true
     timerHandle = setTimer(() => {
       timerHandle = null
-      if (!armed || mutedSinceMs === null) return
+      if (!armed || mutedSinceMs === null || currentUrgency === 'off') return
       reminderCount += 1
       const elapsedMs = Math.max(currentIntervalMs, now() - mutedSinceMs)
       const mutedMinutes = Math.max(1, Math.round(elapsedMs / 60_000))
@@ -179,7 +179,6 @@ export function createMuteReminderController(
 
     const wasMonitoring = mutedSinceMs !== null
     const intervalChanged = nextIntervalMs !== currentIntervalMs
-    const urgencyChanged = urgency !== currentUrgency
 
     currentUrgency = urgency
     currentIntervalMs = nextIntervalMs
