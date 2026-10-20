@@ -20,8 +20,6 @@ from typing import Iterator
 
 from prometheus_client import Histogram
 
-from utils.observability.sync_phases import current_sync_lane
-
 CALLERS = (
     'app_proxy',
     'sync_fresh',
@@ -59,6 +57,10 @@ def current_parakeet_caller() -> str:
     explicit = _caller.get()
     if explicit is not None:
         return explicit
+    # Deferred: utils.chat imports this module, and router suites stub the
+    # utils.observability package without its sync_phases submodule.
+    from utils.observability.sync_phases import current_sync_lane
+
     lane = current_sync_lane()
     if lane is not None:
         return _SYNC_LANE_CALLERS.get(lane, 'sync_unknown')
