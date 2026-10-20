@@ -21,9 +21,11 @@ def normalize_live_stt_reason(*reasons: str | None, default: str = 'connection_l
     """
     for reason in reasons:
         if isinstance(reason, str) and reason in LIVE_STT_REASONS:
-            return reason
+            # Counted too (omi_reason_total only), so the family's unknown ratio is a
+            # share of all normalizations, not of the misses alone.
+            return reason_label(ReasonFamily.LIVE_STT, reason, LiveSttReason)
     if any(reason is not None for reason in reasons):
         # Behaviour-neutral: the label stays `default`; the miss is counted
-        # under family=live_stt (omi_reason_unknown_total).
+        # under family=live_stt (omi_reason_unknown_total and omi_reason_total).
         reason_label(ReasonFamily.LIVE_STT, next(reason for reason in reasons if reason is not None), LiveSttReason)
     return default if default in LIVE_STT_REASONS else 'connection_lost'

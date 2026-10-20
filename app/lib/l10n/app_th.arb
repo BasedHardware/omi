@@ -4023,6 +4023,7 @@
     "reviewProposalGeneric": "ใช้การแก้ไขที่แนะนำนี้ไหม",
     "reviewProposalApply": "ใช้",
     "reviewProposalSuggested": "ที่แนะนำ",
+    "reviewQuestionOutOfDate": "คำถามนี้ไม่เป็นปัจจุบันแล้ว จึงไม่มีการเปลี่ยนแปลงใดๆ",
     "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ",
     "itemLinkListTitle": "{count, plural, =0{ไม่มีรายการ} =1{1 รายการ} other{{count} รายการ}}",
     "paywallRecommended": "แนะนำ",

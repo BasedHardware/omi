@@ -281,6 +281,9 @@ class FallbackReason(StrEnum):
     POLICY = 'policy'
     DISPATCH_DISABLED = 'dispatch_disabled'
     BYOK = 'byok'
+    # main #22734/#22647 (sync 10)
+    SESSION_EXCLUDED = 'session_excluded'
+    RECOVERY_BUDGET = 'recovery_budget'
     MALFORMED_DOC = 'malformed_doc'
     AUTH_ERROR = 'auth_error'
     CONNECTION_ERROR = 'connection_error'

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import asdict, dataclass, replace
 from functools import lru_cache
 from typing import Any
+
+from config.policy.listen import disruption_gate
 
 # 10x 1,800 sessions/hour is 1,500 identities per five-minute window.
 HEALTHY_USERS = 2048
@@ -113,11 +114,7 @@ class GateState:
         return asdict(self)
 
 
-def gate_rate() -> float:
-    gate = float(os.getenv('STT_ROUTING_DISRUPTION_GATE', '0.08'))
-    if not math.isfinite(gate) or not 0 < gate < 1:
-        raise ValueError('disruption gate must be between 0 and 1')
-    return gate
+gate_rate = disruption_gate
 
 
 @lru_cache(maxsize=16)

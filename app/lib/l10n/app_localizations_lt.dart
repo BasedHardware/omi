@@ -13142,6 +13142,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewProposalSuggested => 'Siūloma';
 
   @override
+  String get reviewQuestionOutOfDate => 'Šis klausimas paseno, todėl niekas nepasikeitė.';
+
+  @override
   String get reviewProposalConflict => 'Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.';
 
   @override

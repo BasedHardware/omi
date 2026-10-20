@@ -7,8 +7,11 @@ keyword argument must be one of:
 - a string literal that follows the naming convention (``lower_snake``, <= 40 chars);
 - a member (or ``.value``) of a reason enum from ``utils.observability.reasons``
   (a class whose name ends in ``Reason``/``Outcome``/``Stage``/``Family``);
-- a call to ``reason_label(...)``, ``bounded_*(...)``/``_bounded_*(...)`` or
-  ``bucket_*(...)`` (which fold unknown input to ``unknown``/``other``);
+- a call to ``reason_label(...)`` or another helper in ``CLOSED_HELPERS``: an
+  explicit allowlist of functions reviewed to return a fixed vocabulary (folding
+  unknown input to ``unknown``/``other``). A call counts only when its name is
+  bound, by a local ``def`` or an import, to the allowlisted defining module; a
+  name prefix such as ``bounded_`` proves nothing (some return exception text);
 - a conditional or ``or`` of the above.
 
 Anything else (a bare variable, ``str(exc)``, an f-string, a dict lookup, ...)
@@ -55,7 +58,20 @@ LABEL_KEYWORDS = frozenset({'reason', 'outcome', 'provider', 'retry_class'})
 SKIPPED_TOP_LEVEL = frozenset({'tests', 'testing', 'scripts', '.venv', 'venv', 'node_modules', 'docs'})
 _LITERAL = re.compile(r'[a-z][a-z0-9_]{0,39}', re.ASCII)
 _ENUM_CLASS = re.compile(r'[A-Z]\w*(?:Reason|Outcome|Stage|Family)')
-_CLOSED_CALLS = ('reason_label', 'bounded_', '_bounded_', 'bucket_')
+# Helpers reviewed to return a fixed vocabulary, keyed by defining module. Add one only after
+# reading it: every return path must be a member of a closed set (or 'unknown'/'other').
+CLOSED_HELPERS = frozenset(
+    {
+        'utils.observability.reasons.reason_label',
+        'utils.stt.outcomes.bounded_provider',  # _KNOWN_PROVIDERS else 'unknown'
+        'utils.stt.stream_close.bounded_stream_close_provider',  # STT_STREAM_CLOSE_PROVIDERS else 'unknown'
+        'utils.stt.stream_close.bounded_stream_close_reason',  # STT_STREAM_CLOSE_REASONS else 'connection_lost'
+        'utils.sync.wal_audio_coverage_metrics.bounded_reason',  # REASONS else 'other'
+        'utils.sync.cap_hold_reservations._bounded_outcome',  # lane 8 cap-hold: OUTCOMES else 'unknown'
+        'utils.translation_core.metrics._bounded_provider',  # fixed provider set else 'other'
+        'utils.translation_core.metrics._bounded_reason',  # fixed skip-reason set else 'other'
+    }
+)
 
 
 def backend_modules() -> list[Path]:
@@ -68,24 +84,124 @@ def backend_modules() -> list[Path]:
     return paths
 
 
-def classify(node: ast.expr) -> str | None:
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+
+def _params(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> list[str]:
+    args = node.args
+    every = [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]
+    return [a.arg for a in every if a is not None]
+
+
+def _collect(nodes, records: dict[str, set[str | None]], module: str | None) -> bool:
+    """Record every binding made directly in one scope; return True on a star import.
+
+    Python resolves a name per scope, not per statement: a name bound anywhere in a scope is
+    local throughout it. Nested function, class and lambda bodies are their own scopes and are
+    not entered. ``module`` is set only for the module scope, where a ``def`` binds the
+    module's own qualified name; everywhere else a ``def`` or any non-import store binds
+    ``None`` (an unknown callable).
+    """
+    star = False
+    for node in nodes:
+        if node is None:  # kw_defaults holds None for keyword-only args without a default
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            records.setdefault(node.name, set()).add(f'{module}.{node.name}' if module else None)
+            star |= _collect([*node.decorator_list, *node.args.defaults, *node.args.kw_defaults], records, module)
+        elif isinstance(node, ast.ClassDef):
+            records.setdefault(node.name, set()).add(None)
+            star |= _collect([*node.decorator_list, *node.bases, *node.keywords], records, module)
+        elif isinstance(node, ast.Lambda):
+            star |= _collect([*node.args.defaults, *node.args.kw_defaults], records, module)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == '*':
+                    star = True
+                    continue
+                target = f'{node.module}.{alias.name}' if node.module and not node.level else None
+                records.setdefault(alias.asname or alias.name, set()).add(target)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split('.')[0]
+                target = alias.name if (alias.asname or '.' not in alias.name) else None
+                records.setdefault(local, set()).add(target)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            records.setdefault(node.id, set()).add(None)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                records.setdefault(name, set()).add(None)
+        else:
+            for name in (
+                (
+                    getattr(node, 'name', None)
+                    if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
+                    else None
+                ),
+                getattr(node, 'rest', None) if isinstance(node, ast.MatchMapping) else None,
+            ):
+                if isinstance(name, str):
+                    records.setdefault(name, set()).add(None)
+            star |= _collect(list(ast.iter_child_nodes(node)), records, module)
+    return star
+
+
+def _resolve(records: dict[str, set[str | None]], star: bool, outer: dict[str, str]) -> dict[str, str]:
+    """A name resolves only when every binding of it in the scope is the same import (fail closed)."""
+    if star:
+        return {}
+    out = dict(outer)
+    for name, targets in records.items():
+        if len(targets) == 1 and None not in targets:
+            out[name] = next(iter(targets))  # type: ignore[assignment]
+        else:
+            out.pop(name, None)
+    return out
+
+
+def bindings_for(tree: ast.Module, module: str) -> dict[str, str]:
+    """Module-scope bindings: imports and top-level ``def``s; any other store unbinds (fail closed)."""
+    records: dict[str, set[str | None]] = {}
+    star = _collect(tree.body, records, module)
+    return _resolve(records, star, {})
+
+
+def scope_bindings(node: ast.AST, outer: dict[str, str]) -> dict[str, str]:
+    """Bindings inside a function, lambda or class body, seen from ``outer``."""
+    records: dict[str, set[str | None]] = {}
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        for name in _params(node):
+            records.setdefault(name, set()).add(None)
+    body = node.body if isinstance(node.body, list) else [node.body]  # type: ignore[attr-defined]
+    star = _collect(body, records, None)
+    return _resolve(records, star, outer)
+
+
+def classify(node: ast.expr, bindings: dict[str, str] | None = None) -> str | None:
     """Return None when the argument is a closed vocabulary, else a short shape name."""
+    bindings = bindings or {}
     if isinstance(node, ast.Constant):
         if isinstance(node.value, str):
             return None if _LITERAL.fullmatch(node.value) else 'bad_literal'
         return 'non_string_constant'
     if isinstance(node, ast.IfExp):
-        return classify(node.body) or classify(node.orelse)
+        return classify(node.body, bindings) or classify(node.orelse, bindings)
     if isinstance(node, ast.BoolOp):
         for value in node.values:
-            shape = classify(value)
+            shape = classify(value, bindings)
             if shape is not None:
                 return shape
         return None
     if isinstance(node, ast.Call):
         func = node.func
-        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, 'id', '')
-        if name.startswith(_CLOSED_CALLS):
+        if isinstance(func, ast.Name):
+            name, target = func.id, bindings.get(func.id)
+        elif isinstance(func, ast.Attribute):
+            base = bindings.get(func.value.id) if isinstance(func.value, ast.Name) else None
+            name, target = func.attr, (f'{base}.{func.attr}' if base else None)
+        else:
+            name, target = '', None
+        if target in CLOSED_HELPERS:
             return None
         return f'call:{name or "?"}'
     if isinstance(node, ast.Attribute):
@@ -105,30 +221,41 @@ def classify(node: ast.expr) -> str | None:
 
 
 class _Visitor(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, bindings: dict[str, str]) -> None:
+        self.bindings = bindings  # names visible here
+        self.enclosing = bindings  # names a nested function sees (class scopes are skipped)
         self.scope: list[str] = []
         self.sites: Counter[tuple[str, str, str]] = Counter()
 
     def _enter(self, node: ast.AST) -> None:
-        self.scope.append(node.name)  # type: ignore[attr-defined]
+        saved = (self.bindings, self.enclosing)
+        if isinstance(node, ast.ClassDef):
+            self.bindings = scope_bindings(node, self.bindings)
+        else:
+            self.bindings = self.enclosing = scope_bindings(node, self.enclosing)
+        if not isinstance(node, ast.Lambda):
+            self.scope.append(node.name)  # type: ignore[attr-defined]
         self.generic_visit(node)
-        self.scope.pop()
+        if not isinstance(node, ast.Lambda):
+            self.scope.pop()
+        self.bindings, self.enclosing = saved
 
-    visit_ClassDef = visit_FunctionDef = visit_AsyncFunctionDef = _enter
+    visit_ClassDef = visit_FunctionDef = visit_AsyncFunctionDef = visit_Lambda = _enter
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Attribute) and node.func.attr == 'labels':
             for keyword in node.keywords:
                 if keyword.arg in LABEL_KEYWORDS:
-                    shape = classify(keyword.value)
+                    shape = classify(keyword.value, self.bindings)
                     if shape is not None:
                         self.sites[('.'.join(self.scope) or '<module>', keyword.arg, shape)] += 1
         self.generic_visit(node)
 
 
-def scan_source(source: str) -> Counter[tuple[str, str, str]]:
-    visitor = _Visitor()
-    visitor.visit(ast.parse(source))
+def scan_source(source: str, module: str = '<source>') -> Counter[tuple[str, str, str]]:
+    tree = ast.parse(source)
+    visitor = _Visitor(bindings_for(tree, module))
+    visitor.visit(tree)
     return visitor.sites
 
 
@@ -136,7 +263,8 @@ def scan() -> dict[tuple[str, str, str, str], int]:
     sites: dict[tuple[str, str, str, str], int] = {}
     for path in backend_modules():
         try:
-            counts = scan_source(path.read_text(encoding='utf-8'))
+            module = '.'.join(path.relative_to(BACKEND_DIR).with_suffix('').parts)
+            counts = scan_source(path.read_text(encoding='utf-8'), module)
         except SyntaxError:
             continue
         relative = path.relative_to(BACKEND_DIR).as_posix()
@@ -167,7 +295,7 @@ def test_label_arguments_match_debt_list(scanned):
         if count > allowed:
             problems.append(
                 f'NEW {_describe(key)} count {count} > debt {allowed}: pass a member of a reason enum '
-                f'(utils/observability/reasons.py) through reason_label(), or a bounded_*() helper.'
+                f'(utils/observability/reasons.py) through reason_label(), or a CLOSED_HELPERS helper.'
             )
     for key, entry in sorted(debt.items()):
         if scanned.get(key, 0) < entry['count']:
@@ -186,13 +314,17 @@ def test_every_debt_entry_has_a_reason():
 
 def test_classifier_accepts_closed_and_rejects_free_text():
     source = '''
+from utils.observability.reasons import reason_label
+from utils.stt.outcomes import bounded_provider
+import utils.stt.stream_close as close
+
 def f(exc, reason, family):
     A.labels(reason='timeout')
     A.labels(reason=LiveSttReason.TIMEOUT.value)
     A.labels(reason=RampReason.GATE_PASS)
     A.labels(outcome=reason_label(family, reason, LiveSttReason))
     A.labels(provider=bounded_provider(reason))
-    A.labels(reason=bucket_reason(reason))
+    A.labels(reason=close.bounded_stream_close_reason(reason))
     A.labels(outcome='ok' if reason else 'failed')
     A.labels(reason=reason)
     A.labels(reason=str(exc))
@@ -211,6 +343,95 @@ def f(exc, reason, family):
         ('f', 'reason', 'attribute'): 1,
         ('f', 'reason', 'subscript'): 1,
     }
+
+
+def test_classifier_rejects_prefix_named_helpers_outside_the_allowlist():
+    """`bounded_*`/`_bounded_*` is a naming habit, not a guarantee: these return exception text."""
+    source = '''
+from utils.sync.telemetry import bounded_exception_reason
+from utils.llm.gateway_error_contract import _bounded_error_text
+from utils.observability.reasons import reason_label_from_exc
+
+def _bounded_outcome(exc):
+    return str(exc)
+
+def f(exc):
+    A.labels(reason=bounded_exception_reason(exc))
+    A.labels(reason=_bounded_error_text(exc))
+    A.labels(reason=reason_label_from_exc(exc))
+    A.labels(outcome=_bounded_outcome(exc))
+    A.labels(reason=bucket_reason(exc))
+'''
+    assert dict(scan_source(source, 'utils.example')) == {
+        ('f', 'reason', 'call:bounded_exception_reason'): 1,
+        ('f', 'reason', 'call:_bounded_error_text'): 1,
+        ('f', 'reason', 'call:reason_label_from_exc'): 1,
+        ('f', 'outcome', 'call:_bounded_outcome'): 1,
+        ('f', 'reason', 'call:bucket_reason'): 1,
+    }
+    # The same local helper is closed only in its reviewed defining module.
+    assert not scan_source(source.replace('    A.labels(reason=', '    # '), 'utils.sync.cap_hold_reservations')
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        # import, then a nested def of the same name: the def wins at runtime
+        'def g(exc):\n    from utils.stt.outcomes import bounded_provider\n'
+        '    def bounded_provider(value):\n        return str(value)\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # nested def before the call, outer import
+        'def g(exc):\n    def bounded_provider(value):\n        return str(value)\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # parameter shadows the module import
+        'def g(bounded_provider):\n    A.labels(provider=bounded_provider(exc))\n',
+        # assignment anywhere in the function makes the name local
+        'def g(exc):\n    A.labels(provider=bounded_provider(exc))\n    bounded_provider = str\n',
+        # local import of a raw-text helper under the allowlisted name
+        'def g(exc):\n    from utils.sync.telemetry import bounded_exception_reason as bounded_provider\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # lambda parameter
+        'def g(exc):\n    f = lambda bounded_provider: A.labels(provider=bounded_provider(exc))\n',
+        # exception handler name
+        'def g(exc):\n    try:\n        pass\n    except Exception as bounded_provider:\n'
+        '        A.labels(provider=bounded_provider(exc))\n',
+        # module-level rebinding after the import
+        'bounded_provider = str\n\ndef g(exc):\n    A.labels(provider=bounded_provider(exc))\n',
+        # a star import may overwrite it
+        'from somewhere import *\n\ndef g(exc):\n    A.labels(provider=bounded_provider(exc))\n',
+    ],
+)
+def test_classifier_rejects_shadowed_closed_helpers(body):
+    source = 'from utils.stt.outcomes import bounded_provider\n\n' + body
+    assert dict(scan_source(source, 'utils.example')) == {('g', 'provider', 'call:bounded_provider'): 1}
+
+
+def test_classifier_resolves_unshadowed_closed_helpers_in_every_scope():
+    source = '''
+from utils.stt.outcomes import bounded_provider
+import utils.stt.stream_close as close
+
+class C:
+    label = 'x'
+
+    def m(self, exc):
+        A.labels(provider=bounded_provider(exc))
+
+def g(exc):
+    from utils.observability.reasons import reason_label
+    f = lambda value: A.labels(reason=close.bounded_stream_close_reason(value))
+    def inner(value):
+        A.labels(provider=bounded_provider(value), reason=reason_label(value))
+    A.labels(provider=bounded_provider(exc))
+'''
+    assert not scan_source(source, 'utils.example')
+
+
+def test_every_closed_helper_exists_where_the_allowlist_says():
+    for qualified in sorted(CLOSED_HELPERS):
+        module, _, name = qualified.rpartition('.')
+        tree = ast.parse((BACKEND_DIR / (module.replace('.', '/') + '.py')).read_text(encoding='utf-8'))
+        assert any(isinstance(node, ast.FunctionDef) and node.name == name for node in tree.body), qualified
 
 
 def test_reason_enums_follow_the_naming_convention():
@@ -258,6 +479,23 @@ def test_migrated_constants_are_unchanged_and_misses_are_counted():
     failure = RecoveryFailure('not_a_stage', 'not a reason')
     assert (failure.stage, failure.reason) == ('provider', 'operation_failed')
     assert count('recovery_failure') == recovery_before + 1
+
+
+def test_live_stt_unknown_ratio_counts_every_normalization():
+    """L14-1: hits feed omi_reason_total too, so a rare free-text fold is not a ratio of ~1."""
+
+    def sample(name: str) -> float:
+        return REGISTRY.get_sample_value(name, {'family': 'live_stt'}) or 0.0
+
+    total_before, unknown_before = sample('omi_reason_total'), sample('omi_reason_unknown_total')
+    assert normalize_live_stt_reason('timeout') == 'timeout'
+    assert (sample('omi_reason_total'), sample('omi_reason_unknown_total')) == (total_before + 1, unknown_before)
+    for _ in range(98):
+        normalize_live_stt_reason(None, 'connection_lost')
+    assert normalize_live_stt_reason(None, 'ws send closed: 1006') == 'connection_lost'
+    total, unknown = sample('omi_reason_total') - total_before, sample('omi_reason_unknown_total') - unknown_before
+    assert (total, unknown) == (100, 1)
+    assert unknown / total < 0.02
 
 
 def _write_debt() -> None:

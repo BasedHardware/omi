@@ -32,6 +32,15 @@ OWNER_CHAIN_LIMIT = 64
 OWNER_CHAIN_SECONDS = 30.0
 
 
+def fence_reason_field(error: BaseException) -> str:
+    """Bounded privacy-fence reason for an error log line; never IDs or text."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    if isinstance(error, BatchPrivacyBlocked):
+        return f' fence_reason={error.reason.value}'
+    return ''
+
+
 @contextmanager
 def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iterator[None]:
     """Static phase tokens only; never log bindings, payloads or exception text."""
@@ -44,10 +53,11 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
         yield
     except Exception as error:
         logger.info(
-            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s',
+            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s',
             phase,
             int((time.monotonic() - started) * 1000),
             type(error).__name__,
+            fence_reason_field(error),
         )
         raise
     else:
@@ -446,7 +456,9 @@ class Projector:
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
-                        'event=batch_projection action=assignment outcome=error exception_type=%s', type(error).__name__
+                        'event=batch_projection action=assignment outcome=error exception_type=%s%s',
+                        type(error).__name__,
+                        fence_reason_field(error),
                     )
                 raise
             if finish:
