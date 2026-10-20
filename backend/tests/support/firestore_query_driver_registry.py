@@ -173,6 +173,10 @@ BODY_DIGEST = {
     'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
     'database.memory_ledger._append_commit_with_builder_transaction': '56a25d5b0c29b9ba6b58ddc4fe5e5fe83a78b54cdf5964b92f3c54e83aef01a3',
     'database.memory_ledger._assert_legacy_commit_privacy_fences': '59596ea3da66dd82e55c7a08ad949ee894ba1a4fe7714f79ced320955ed22959',
+    # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
+    'database.jobstore.backfill._pages': '4d01001beb21934e2c90c5f89feb29949b9ba45f48ba6eaf232bb9edef0f8b62',
+    'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
+    'database.jobstore.backfill.backfill_table': '7343125da36150c4dffd51af0616f58bc622a9d0f83120bc7d9996f823fa52a3',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -3309,3 +3313,20 @@ _add(
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
+
+for _key, _reason in (
+    (
+        'database.jobstore.backfill._pages',
+        'Lane 12 A6 staging backfill (operator Cloud Run job, never serving): pages one batch collection '
+        'ordered by document id only (built-in single-field order, no filter, no composite index).',
+    ),
+    (
+        'database.jobstore.backfill.backfill_table',
+        'Lane 12 A6 staging backfill: consumes _pages; no query of its own.',
+    ),
+    (
+        'database.jobstore.backfill.backfill',
+        'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
+    ),
+):
+    _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
