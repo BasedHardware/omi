@@ -89,3 +89,35 @@ def test_local_storage_rejects_non_harness_and_traversal_paths(monkeypatch: pyte
     assert client is not None
     with pytest.raises(ValueError, match='Unsafe'):
         client.bucket('speech-profiles').blob('../escape')
+
+
+def test_local_download_refuses_destination_outside_owned_roots(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('utils.other.owned_paths.tempfile.gettempdir', lambda: str(tmp_path / 'system-temp'))
+    client = LocalStorageClient.from_env()
+    blob = client.bucket('profiles').blob('user.wav')
+    blob.upload_from_string(b'profile')
+    with pytest.raises(ValueError, match='outside owned scratch'):
+        blob.download_to_filename(str(tmp_path / 'private.wav'))
+    assert not (tmp_path / 'private.wav').exists()
+    destination = tmp_path / 'harness/export/profile.wav'
+    blob.download_to_filename(str(destination))
+    assert destination.read_bytes() == b'profile'
+
+
+def test_local_upload_refuses_source_outside_owned_roots(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr('utils.other.owned_paths.tempfile.gettempdir', lambda: str(tmp_path / 'system-temp'))
+    source = tmp_path / 'private.wav'
+    source.write_bytes(b'private')
+    client = LocalStorageClient.from_env()
+    blob = client.bucket('profiles').blob('user.wav')
+    with pytest.raises(ValueError, match='outside owned scratch'):
+        blob.upload_from_filename(str(source))
+    assert not blob.exists()
+    allowed = tmp_path / 'harness/profile.wav'
+    allowed.write_bytes(b'profile')
+    blob.upload_from_filename(str(allowed))
+    assert blob.download_as_bytes() == b'profile'

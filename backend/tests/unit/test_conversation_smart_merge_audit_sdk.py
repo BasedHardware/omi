@@ -25,7 +25,6 @@ from utils.conversations import smart_merge
 
 @pytest.fixture
 def sdk_world(monkeypatch):
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.setenv(config.SMART_MERGE_AUDIT_ENV, 'on')
     world = World(monkeypatch)
     client = OfflineFirestoreClient(project='synthetic-audit-test')

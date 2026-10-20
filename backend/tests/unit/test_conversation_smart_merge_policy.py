@@ -277,3 +277,12 @@ def test_fragment_segments_select_the_last_fragment_by_absolute_time():
     assert last.id == 'n'
     selected = policy.fragment_segments(merged, survivor_update['transcript_segments'], last)
     assert [s['id'] for s in selected] == [s['id'] for s in n_segments]
+
+
+def test_budget_waiting_conversations_never_merge_without_processing_consent():
+    waiting = _row('waiting', 0, 5, processing_deferred=True)
+    assert policy.new_conversation_skip(waiting, _segments(), capture_end=True) == 'conversation_not_eligible'
+    assert policy.predecessor_status_skip(waiting) == 'predecessor_not_completed'
+    waiting['processing_deferred'] = False
+    assert policy.new_conversation_skip(waiting, _segments(), capture_end=True) is None
+    assert policy.predecessor_status_skip(waiting) is None

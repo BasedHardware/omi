@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-citation-number-not-one-to-one-with-record",
+  "violated_contract": "A chat citation number must name exactly one collected record for the whole turn. Citation [k] resolves to the k-th card the turn collected, so a producer that numbers a record from the collector's length and appends its card later can give two records the same number when parallel tool calls run on separate threads, and a record returned by two tool calls gets two numbers and two cards. The answer then attaches the wrong or a duplicated source card, and those ids are persisted on the message.",
+  "canonical_prevention": "Number a record and append its card in one critical section over the turn's collector, keyed by record id so a record shown again keeps its first number. A behavioral test renders the same record from two reads and two records from concurrent reads, then checks that every shown number resolves to its own record.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_addressable_refs.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/tools/conversation_tools.py",
+    "backend/utils/chat_citations.py"
+  ],
+  "status": "open"
+}

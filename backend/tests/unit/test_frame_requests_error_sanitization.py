@@ -48,7 +48,6 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
             "services.conversation_frame_evidence",
             "utils.executors",
             "utils.integration_telemetry",
-            "utils.jit_rollout",
             "utils.other.endpoints",
             "utils.retrieval.frame_request_authority",
             "utils.retrieval.frame_request_storage",

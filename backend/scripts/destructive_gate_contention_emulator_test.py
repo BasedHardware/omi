@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "demo-omi-jit-qa")
+PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "demo-omi-isolated-tests")
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_gate_contention_emulator_test_key_32_bytes")
 

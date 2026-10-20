@@ -188,43 +188,60 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "STT_CAP_DISPATCH_ENFORCEMENT": "false",
+        "STT_CAP_DISPATCH_COHORT": "",
+        "STT_CAP_DISPATCH_LANES": "live",
+        "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
+        "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
+        "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",
+        "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": "false",
+        "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": "false",
+        "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": "false",
+        "DEMAND_PROCESSING_ENABLED": "false",
+        "DEMAND_PROCESSING_LAZY_ENABLED": "false",
+        "DEMAND_PROCESSING_TOOL_ENABLED": "false",
+        "DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED": "false",
+        "DEMAND_PROCESSING_UID_ALLOWLIST": "",
+        "DEMAND_PROCESSING_PERCENT": "0",
+        "PLAYBACK_ON_DEMAND_ENABLED": "false",
+        "REPEAT_WORK_REVISION_ENABLED": "false",
+        "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
+        "SYNC_POLL_BACKOFF_ENABLED": "false",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "false",
         "AUDIO_ARCHIVE_READ_ENABLED": "false",
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
         "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
         "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
-        "AUDIO_ARCHIVE_COALESCE_ENABLED": "false",
+        "AUDIO_ARCHIVE_COALESCE_ENABLED": "true",
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
-        "AUDIO_ARCHIVE_UID_ALLOWLIST": "",
+        "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
-        "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED": "true",
-        "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
-        "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
-        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
-        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
-        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
-        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
+        "DREAM_AGENT_ELIGIBILITY": "allowlist",
+        "DREAM_AGENT_UID_ALLOWLIST": "",
+        "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
-        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
         "OMI_SHAPED_AGENT_MODE": "on",
         "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
-        "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
-        "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
-        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
-        "CAPTURE_JEV_SHADOW_ENABLED": "true",
-        "CAPTURE_JEV_SHADOW_PERCENT": "0",
-        "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
-        "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
-        "FREE_TIER_LOCAL_PROCESSING": "true",
-        "FREE_TIER_EMERGENCY_STOP": "false",
+        "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+        "FSR_QUEUE_AGE_PUBLISHER": "0",
+        "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
+        "FSR_LEADER_LEASE_TTL_SECONDS": "0",
+        "DELETION_WIPE_RECONCILE_INTERVAL_SECONDS": "300",
+        "FSR_DELETION_NEGATIVE_TTL_SECONDS": "30",
+        "FSR_USAGE_MONTH_TTL_SECONDS": "60",
+        "FSR_SUBSCRIPTION_TTL_SECONDS": "60",
+        "FSR_SERVING_CONFIG_TTL_SECONDS": "60",
+        "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
+        "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
@@ -239,11 +256,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SONIOX_ORDERED_FINALIZE": "false",
         "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
-        "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED": "true",
-        "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
-        "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
-        "MEMORY_OWNER_JEV_FLIP_ENABLED": "true",
         "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
         "OMI_ENV_STAGE": "dev",
         "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
@@ -253,7 +266,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "PROACTIVITY_V2_POSTHOG_TOKEN": public_token,
         "PROACTIVITY_V2_POSTHOG_HOST": "https://us.posthog.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "modulate-velma-2,soniox,dg-nova-3,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,soniox,parakeet",
         "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
         "TRANSCRIPTION_SHADOW_ENABLED": "true",
         "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
@@ -305,15 +318,25 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
 
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
     assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
-    assert literals["CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["MEMORY_OWNER_JEV_SHADOW_PERCENT"] == "100"
-    assert literals["CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT"] == "0"
-    assert literals["CONVERSATION_RELEVANCE_JEV_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
-    assert "MEMORY_OWNER_JEV_FLIP_ENABLED" not in literals
+    for retired in (
+        "CONVERSATION_RELEVANCE_JEV_ENABLED",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT",
+        "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP",
+        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST",
+        "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT",
+        "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE",
+        "MEMORY_OWNER_JEV_FLIP_ENABLED",
+        "MEMORY_OWNER_JEV_FLIP_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_PERCENT",
+        "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP",
+        "DESKTOP_PENDANT_CALL_LINK_MODE",
+        "DESKTOP_PENDANT_CALL_LINK_PERCENT",
+    ):
+        assert retired not in literals
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "false"
     assert "DEEPGRAM_SELF_HOSTED_URL" not in literals
-    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
@@ -324,7 +347,7 @@ def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: Simpl
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'"
+        "expected 'modulate-velma-2,soniox,parakeet', got 'modulate-velma-2'"
     ]
 
 

@@ -114,7 +114,7 @@ def episode_static_instructions(format_instructions: str, legacy_static, *, incl
     text = text.replace(
         old_citations,
         """- For source_segment_ids, copy only the original source_ref of directly supporting speech items;
-  use [] for non-speech claims or external speech without original segment IDs. Keep all episode IDs
+  return an empty list for non-speech claims or external speech without original segment IDs. Keep all episode IDs
   and source IDs out of visible prose. Claim-level evidence_ids may reference any supporting source.""",
     )
     contract = EPISODE_CONTRACT

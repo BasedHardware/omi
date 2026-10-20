@@ -5,6 +5,7 @@ generate a reply without any turn landing in the owner's chat history.
 """
 
 import sys
+import pytest
 from types import ModuleType
 from unittest.mock import MagicMock
 
@@ -63,6 +64,28 @@ def _make_chat_client(stream_impl):
     return TestClient(app, raise_server_exceptions=False), chat_module, generation_module, saved
 
 
+@pytest.fixture
+def make_chat_client():
+    # Isolate fresh router/schema construction in setup, retaining real requests.
+    holder = {}
+
+    async def dispatch(*args, **kwargs):
+        async for event in holder['stream'](*args, **kwargs):
+            yield event
+
+    built = _make_chat_client(dispatch)
+
+    def bind(stream):
+        holder['stream'] = stream
+        return built
+
+    try:
+        yield bind
+    finally:
+        if sys.modules.get('routers.chat') is built[1]:
+            harness.cleanup(built[3])
+
+
 def _answering_stream(recorded):
     async def _stream(uid, messages, app=None, **kwargs):
         recorded['uid'] = uid
@@ -94,9 +117,9 @@ def _raising_stream():
     return _stream
 
 
-def test_generate_reply_does_not_write_any_turn_to_chat_history():
+def test_generate_reply_does_not_write_any_turn_to_chat_history(make_chat_client):
     recorded = {}
-    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
+    client, chat_module, generation_module, saved = make_chat_client(_answering_stream(recorded))
     try:
         response = client.post(
             '/v2/chat/generate-reply',
@@ -130,8 +153,8 @@ def test_generate_reply_does_not_write_any_turn_to_chat_history():
         harness.cleanup(saved)
 
 
-def test_generate_reply_maps_raised_stream_failures_to_the_error_contract():
-    client, chat_module, generation_module, saved = _make_chat_client(_raising_stream())
+def test_generate_reply_maps_raised_stream_failures_to_the_error_contract(make_chat_client):
+    client, chat_module, generation_module, saved = make_chat_client(_raising_stream())
     try:
         response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
 
@@ -144,9 +167,9 @@ def test_generate_reply_maps_raised_stream_failures_to_the_error_contract():
         harness.cleanup(saved)
 
 
-def test_generate_reply_rejects_an_unavailable_requested_app():
+def test_generate_reply_rejects_an_unavailable_requested_app(make_chat_client):
     recorded = {}
-    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
+    client, chat_module, generation_module, saved = make_chat_client(_answering_stream(recorded))
     try:
         generation_module.get_available_app_by_id.return_value = None
 
@@ -164,12 +187,12 @@ def test_generate_reply_rejects_an_unavailable_requested_app():
         harness.cleanup(saved)
 
 
-def test_generate_reply_removes_conversation_citations_from_external_drafts():
+def test_generate_reply_removes_conversation_citations_from_external_drafts(make_chat_client):
     async def cited_stream(uid, messages, app=None, **kwargs):
         kwargs['callback_data']['answer'] = 'Friday works[1]. Bring the notes[12].'
         yield ''
 
-    client, chat_module, generation_module, saved = _make_chat_client(cited_stream)
+    client, chat_module, generation_module, saved = make_chat_client(cited_stream)
     try:
         response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
 
@@ -181,8 +204,8 @@ def test_generate_reply_removes_conversation_citations_from_external_drafts():
         harness.cleanup(saved)
 
 
-def test_generate_reply_never_returns_a_staged_error_answer_as_reply_text():
-    client, chat_module, generation_module, saved = _make_chat_client(_failing_stream())
+def test_generate_reply_never_returns_a_staged_error_answer_as_reply_text(make_chat_client):
+    client, chat_module, generation_module, saved = make_chat_client(_failing_stream())
     try:
         response = client.post('/v2/chat/generate-reply', json={'text': 'Draft a reply'})
 
@@ -196,10 +219,10 @@ def test_generate_reply_never_returns_a_staged_error_answer_as_reply_text():
         harness.cleanup(saved)
 
 
-def test_v2_messages_still_persists_the_human_turn():
+def test_v2_messages_still_persists_the_human_turn(make_chat_client):
     """Legacy principal: the existing chat endpoint keeps its persisting behavior."""
     recorded = {}
-    client, chat_module, generation_module, saved = _make_chat_client(_answering_stream(recorded))
+    client, chat_module, generation_module, saved = make_chat_client(_answering_stream(recorded))
     try:
         response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
 

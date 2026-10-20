@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_scope
 import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -435,7 +436,8 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+    with generated_compute_scope(uid):
+        vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
@@ -668,6 +670,8 @@ def _mentor_gate_debounce_skip_reason(
 
 def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
     # 1. Get frequency setting
+    if not generated_compute_allowed(uid, 'proactive_notification', allow_byok=False):
+        return None
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
         return None
@@ -763,6 +767,8 @@ def _process_proactive_notification(uid: str, app: App, data):
     ERROR level, which is the exact signature this guard used to emit for
     every no-notification webhook response in production.
     """
+    if not generated_compute_allowed(uid, 'app_integration'):
+        return None
     if not app.has_capability("proactive_notification"):
         logger.error(f"App {app.id} lacks proactive_notification capability {uid}")
         return None

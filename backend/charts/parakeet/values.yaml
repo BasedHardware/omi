@@ -111,6 +111,24 @@ prometheus-adapter:
   rules:
     default: false
     custom:
+      # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+      - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="live"}'
+        resources:
+          overrides:
+            namespace: {resource: namespace}
+            pod: {resource: pod}
+        name:
+          as: parakeet_live_queue_age_seconds
+        metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="live"}) by (<<.GroupBy>>)'
+      # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+      - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="backfill"}'
+        resources:
+          overrides:
+            namespace: {resource: namespace}
+            pod: {resource: pod}
+        name:
+          as: parakeet_backfill_queue_age_seconds
+        metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="backfill"}) by (<<.GroupBy>>)'
       - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
         resources:
           overrides:
@@ -153,6 +171,14 @@ prometheus-adapter:
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
+  # Opt-in: retain request/GPU scaling, omit the mixed-duration latency term.
+  # Qualify live latency under mixed load before enabling in production.
+  workloadOnly: false
+  # Dark until bounded-work image and adapter discovery qualify together.
+  demand:
+    enabled: false
+    liveQueueAgeSeconds: 0.75
+    backfillQueueAgeSeconds: 30
   enabled: false
   minReplicas: 1
   maxReplicas: 100

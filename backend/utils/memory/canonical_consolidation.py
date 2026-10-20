@@ -25,7 +25,6 @@ from utils.memory.canonical_required_processing import (
     commit_required_processing,
     is_pending_required_processing,
 )
-from utils.memory.belief_model import HALF_LIFE_DAYS_BY_CLASS, belief_model_enabled
 
 CONSOLIDATION_BY = "canonical_batched_consolidation"
 
@@ -149,7 +148,7 @@ def _ordered_route_evidence_ids(
 
 
 def _route_result_status(decision: ConsolidationAgentDecision) -> LifecycleState:
-    if decision.route == "reject" and not belief_model_enabled():
+    if decision.route == "reject":
         return LifecycleState.hidden
     return LifecycleState.active
 
@@ -377,9 +376,6 @@ def apply_consolidation_decision(
             quarantine=quarantine,
         ),
     }
-    if belief_model_enabled() and decision.route == "reject":
-        carried = getattr(decision, "belief_class", None)
-        patch_payload["belief_class"] = carried if carried in HALF_LIFE_DAYS_BY_CLASS else "meta_residue"
     mutation_identity = build_patch_mutation_identity(patch_payload)
     patch_payload["mutation_metadata"] = mutation_identity
     logical_payload["mutation_metadata"] = mutation_identity

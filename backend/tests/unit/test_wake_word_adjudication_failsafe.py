@@ -213,7 +213,12 @@ def test_public_broadcast_without_explicit_command_still_ignored():
 
 
 def test_kill_switch_is_declared_on_both_summary_pipeline_services():
-    composed = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy/runtime_env.yaml').read_text())
+    # Parse the full runtime manifest with the same safe semantics, without the
+    # pure-Python loader consuming the fast-unit CPU budget on busy CI runners.
+    composed = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'deploy/runtime_env.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
     for env_name, environment in composed['environments'].items():
         listen = environment['gke']['backend-listen']['env']['WAKE_WORD_ADJUDICATION_ENABLED']['value']
         backend = environment['cloud_run']['services']['backend']['env']['WAKE_WORD_ADJUDICATION_ENABLED']['value']

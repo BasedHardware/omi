@@ -257,5 +257,124 @@
       "impact": "infrastructure",
       "datasource_uid": "beuxmaq8oxhq8e"
     }
+  },
+  {
+    "uid": "omi-datasource-gmp",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Datasource health",
+    "title": "GMP - alert query path unavailable",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "max(up{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\"})",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "reduce",
+          "expression": "A",
+          "reducer": "last",
+          "refId": "B",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "type": "threshold",
+          "expression": "B",
+          "refId": "C",
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "lt",
+                "params": [
+                  1
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Alerting",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "GMP alert query path failed or returned no Cloud Run sentinel samples.",
+      "user_impact": "Monitoring coverage may be unavailable; this infrastructure signal does not prove a product outage.",
+      "scope": "Production Grafana datasource gmp-cloud-run through the internal Google frontend.",
+      "verification": "Run the exact canary query through Grafana; verify frontend readiness, Workload Identity and Google API query success, then confirm Telegram recovery.",
+      "safe_next_action": "Check datasource credentials, reachability and upstream readiness before intervention. Keep existing business alert state while queries recover.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "alert_identity": "omi-datasource-gmp",
+      "component": "monitoring",
+      "impact": "infrastructure",
+      "datasource_uid": "gmp-cloud-run"
+    }
   }
 ]

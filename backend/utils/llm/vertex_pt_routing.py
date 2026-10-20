@@ -1,30 +1,49 @@
 """Vertex Provisioned Throughput routing policy for company-paid Gemini text.
 
-Pure decision logic: reserved_generation_model selects the sole active order
-model for paid generation. Inactive or ambiguous orders use Luna at the gateway.
+Pure decision logic: managed_generation_action consumes the declarative inactive
+destinations and exclusive-order evidence. UNKNOWN retains old dedicated service;
+INACTIVE sends every non-Dream serving lane to the existing Luna route.
 Endpoint and legacy direct-routing helpers are retained for the BYOK boundary;
 the shared Gemini ladders below cannot serve company-paid generation. No I/O, no clock, no Redis —
 the proxy injects observations and owns every side effect, so every rule here
 is unit-testable without a network.
 
-Prices per 1M tokens (Vertex list, captured 2026-08-18):
+Prices per 1M tokens (Vertex global endpoint). The 2.5 Flash price is the
+Vertex AI Gemini 2.5 Standard tier verified 2026-10-18 at
+https://cloud.google.com/vertex-ai/generative-ai/pricing (the earlier figures
+were the Priority tier); the 3.1 Flash-Lite price matches the gateway card
+checked 2026-10-15. The 3.8 Flash entry is the scheduled standard rate
+effective 2027-01-01; its introductory rate through 2026-12-31 is half that
+amount. 2.5 Flash-Lite and 2.5 Pro keep the existing routing reference
+prices because the gateway table has no cards for those models.
 
     gemini-2.5-flash-lite   $0.10 in / $0.40 out
     gemini-3.1-flash-lite   $0.25 in / $1.50 out
     gemini-2.5-flash        $0.30 in / $2.50 out
     gemini-2.5-pro          $1.25 in / $10.00 out
+    gemini-3.8-flash        $1.50 in / $7.50 out (standard, from 2027-01-01)
 
 `gemini-3.1-flash-lite` is NOT the same price class as `gemini-2.5-flash-lite`
 (2.5x in / 3.75x out). It is cheaper than `gemini-2.5-flash` and far cheaper
-than `gemini-2.5-pro`. These historical prices explain the legacy shared
-ladder; they do not authorize company-paid generation on shared capacity.
+than `gemini-2.5-pro`. These prices explain the legacy shared ladder; they do
+not authorize company-paid generation on shared capacity.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from typing import Any
+import json
 
-from config.vertex_reservations import RESERVATIONS, State, policy
+from config.vertex_reservations import (
+    RESERVATIONS,
+    STATE_OVERRIDE_ENV,
+    State,
+    Action,
+    LUNA,
+    policy,
+    product_policy_lane,
+)
 
 # --- Provisioned Throughput orders ----------------------------------------
 # The prepaid model today: 5 GSU, us-central1, flat ~$290.32/day until
@@ -38,8 +57,8 @@ PT_MODEL_CURRENT = 'gemini-2.5-flash'
 PT_MODEL_TARGET = 'gemini-3.8-flash'
 
 # Overflow ladder, most-capable first. Overflow is always on-demand, so this is
-# also a cost ladder: 3.1-flash-lite ($1.50 out) beats 2.5-flash spillover
-# ($2.50 out); 2.5-flash-lite ($0.40 out) is the floor.
+# also a cost ladder: 3.1-flash-lite ($1.50 out) is first; 2.5-flash-lite
+# ($0.40 out) is the floor. Both are below the dedicated 2.5 Flash price.
 #
 # FC-degraded-fallback-consumes-protected-budget: overflow is resolved against
 # the LIVE PT model rather than pinned, so when the reservation migrates to
@@ -48,9 +67,9 @@ PT_MODEL_TARGET = 'gemini-3.8-flash'
 OVERFLOW_PREFERENCE = ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite')
 
 # --- Fallback chains -------------------------------------------------------
-# List price per 1M tokens (Vertex list, captured 2026-08-18). Declared here
-# so the cost direction of every chain is checkable rather than asserted in
-# prose. Embedding has no text-token price and no substitute, so it is absent.
+# Standard list price per 1M tokens (Vertex). Declared here so the cost
+# direction of every chain is checkable rather than asserted in prose.
+# Embedding has no text-token price and no substitute, so it is absent.
 PRICE_PER_MTOK_IN: dict[str, float] = {
     'gemini-2.5-flash-lite': 0.10,
     'gemini-3.1-flash-lite': 0.25,
@@ -339,6 +358,8 @@ def resolve_overflow_ladder(
                 f'overflow override {pinned!r} equals the provisioned model; '
                 'overflow must never consume the protected reservation'
             )
+        if pinned == PT_MODEL_CURRENT:
+            raise ValueError('2.5 Flash is dedicated-only, never a shared overflow')
         ladder: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='overflow model override'),)
     else:
         ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected and c not in protected_models)
@@ -391,6 +412,8 @@ def resolve_fallback_chain(
                 f'fallback override {pinned!r} equals the provisioned model; '
                 'fallback must never consume the protected reservation'
             )
+        if pinned == PT_MODEL_CURRENT:
+            raise ValueError('2.5 Flash is dedicated-only, never a shared fallback')
         chain: tuple[str, ...] = (company_paid_vertex_text_model(pinned, knob='fallback model override'),)
     else:
         chain = MODEL_FALLBACKS.get(head, ())
@@ -399,7 +422,11 @@ def resolve_fallback_chain(
             tuple(
                 rung
                 for rung in chain
-                if rung != protected and rung not in protected_models and rung != head and rung not in dead
+                if rung != PT_MODEL_CURRENT
+                and rung != protected
+                and rung not in protected_models
+                and rung != head
+                and rung not in dead
             ),
             head,
         ),
@@ -414,7 +441,12 @@ def request_type_for(*, model: str, pt_model: str) -> str:
     429 the caller can act on. Everything else is explicitly `shared` so it can
     never draw down the reservation.
     """
-    return REQUEST_TYPE_DEDICATED if _normalize(model) == _normalize(pt_model) else REQUEST_TYPE_SHARED
+    # No managed caller may ever spill the retiring 2.5 model to PayGo.
+    return (
+        REQUEST_TYPE_DEDICATED
+        if _normalize(model) == PT_MODEL_CURRENT or _normalize(model) == _normalize(pt_model)
+        else REQUEST_TYPE_SHARED
+    )
 
 
 def is_provisioned_capacity_exhausted(status: int, message: str) -> bool:
@@ -491,9 +523,9 @@ def desktop_text_lane_id(model: str) -> str | None:
 def desktop_serving_model(model: str, *, override: str = '') -> str:
     """The model that actually serves a company-paid desktop request for `model`.
 
-    Pro retains its inexpensive 3.1 Flash-Lite remap. Old Flash clients retain
-    2.5 Flash, changing only from dedicated to shared after the order moves.
-    Client-pinned Lite and new 3.8 requests serve their requested model.
+    Static compatibility anchor only; live managed routing must additionally
+    consume reservation evidence through managed_generation_action. The retiring
+    2.5 model is never eligible for shared capacity.
     """
     normalized = _normalize(model)
     if override:
@@ -563,12 +595,17 @@ def _legacy_tool_signature(content: object) -> object:
     return content
 
 
-def reservation_capacity(model: str, states: Mapping[str, State], *, override: str = '') -> str:
+def reservation_capacity(model: str, states: Mapping[str, State], *, override: str = '', lane: str = '') -> str:
     if override:
         company_paid_vertex_text_model(override, knob='pt model override')
         if model not in RESERVATIONS:
             return request_type_for(model=model, pt_model=override)
-    return policy(model, states.get(model, State.UNKNOWN)).kind
+    action = policy(model, states.get(model, State.UNKNOWN), lane=lane)
+    if model == PT_MODEL_CURRENT:
+        if action.kind in {'refuse', 'luna'}:
+            raise ValueError('2.5 Flash policy requires refusal or gateway Luna, never direct PayGo')
+        return REQUEST_TYPE_DEDICATED
+    return action.kind
 
 
 def protected_reservations(states: Mapping[str, State]) -> frozenset[str]:
@@ -584,6 +621,8 @@ def reservation_endpoint(model: str, env: Mapping[str, str]) -> tuple[str, str]:
 
 def recovery_action(model: str, capacity: str, status: int, message: str, *, overflow_enabled: bool) -> str:
     """One transport-independent policy; generic backpressure never buys a retry."""
+    if model == PT_MODEL_CURRENT:
+        return 'none'  # Managed recovery belongs to the gateway Luna route.
     spec = RESERVATIONS.get(model)
     capacity_error = is_provisioned_capacity_exhausted(status, message) or is_provisioned_capacity_absent(
         status, message
@@ -601,22 +640,66 @@ def recovery_action(model: str, capacity: str, status: int, message: str, *, ove
 
 
 RESERVED_CAPACITY_OPTION = 'reserved_capacity_only'
-LUNA_FALLBACK = {'provider': 'openai', 'model': 'gpt-6-luna'}
+LUNA_FALLBACK = {'provider': 'openai', 'model': LUNA.model}
+DESKTOP_LUNA_LANE_ID = 'omi:auto:desktop-luna'
 
 
-def reserved_generation_model(anchor: str, states: Mapping[str, State], *, override: str = '') -> str | None:
-    """Resolve a desktop alias to the active model of the exclusive Flash order.
+def cutover_states(
+    observed: Mapping[str, State], effective: Mapping[str, State], *, env: Mapping[str, str] | None = None
+) -> dict[str, State]:
+    """An old-model operator pin cannot reverse positive order-move evidence."""
+    states = dict(effective)
+    if observed.get(PT_MODEL_CURRENT) == State.INACTIVE:
+        states[PT_MODEL_CURRENT] = State.INACTIVE
+        # Undo only the legacy model pin's fabricated target inactivity.
+        # An explicit per-model target override can still stop target serving.
+        environment = env or {}
+        try:
+            overrides = json.loads(environment.get(STATE_OVERRIDE_ENV, '{}'))
+        except (ValueError, TypeError):
+            overrides = {}
+        explicit_target = overrides.get(PT_MODEL_TARGET) if isinstance(overrides, Mapping) else None
+        if explicit_target in {None, 'auto'}:
+            states[PT_MODEL_TARGET] = observed.get(PT_MODEL_TARGET, State.UNKNOWN)
+    elif observed.get(PT_MODEL_TARGET) == State.ACTIVE and observed.get(PT_MODEL_CURRENT) != State.ACTIVE:
+        # A live moved order remains exclusive even after old inactivity ages
+        # out. An old-model pin cannot fabricate positive old-order evidence.
+        states[PT_MODEL_CURRENT] = observed.get(PT_MODEL_CURRENT, State.UNKNOWN)
+        states[PT_MODEL_TARGET] = State.ACTIVE
+    return states
 
-    Unknown evidence never admits customer inference. Synthetic dedicated probes
-    remain responsible for discovery. Conflicting active models fail to Luna.
+
+def request_policy_lane(
+    request: Mapping[str, Any], *, platform: str | None, tag: str | None, feature: str | None = None
+) -> str:
+    metadata = request.get('_gateway_cache_policy')
+    gateway_lane = metadata.get('lane', '') if isinstance(metadata, Mapping) else ''
+    default = 'desktop_other' if str(gateway_lane).startswith('omi:auto:desktop-') else 'backend_other'
+    selected = tag if tag and tag != 'unknown' else feature
+    return product_policy_lane(platform or '', selected or '', default=default)
+
+
+def managed_generation_action(
+    anchor: str, states: Mapping[str, State], *, override: str = '', lane: str = 'desktop_other'
+) -> Action:
+    """Resolve paid aliases without shared Gemini. INACTIVE choices are table owned.
+
+    UNKNOWN old-order evidence keeps 2.5 dedicated until positive move evidence;
+    Dream has a separate, stricter admission and never calls this policy.
     """
-    anchor = _normalize(anchor)
-    if anchor not in DESKTOP_TEXT_LANES:
-        return None
+    if _normalize(anchor) not in DESKTOP_TEXT_LANES:
+        return LUNA
     if override and _normalize(override) not in RESERVATIONS:
         raise ValueError('OMI_VERTEX_PT_MODEL must name a declared reservation model')
-    order = RESERVATIONS[PT_MODEL_CURRENT].order
-    active = [m for m, spec in RESERVATIONS.items() if spec.order == order and states.get(m) == State.ACTIVE]
-    if len(active) != 1:
-        return None
-    return active[0]
+    old, target = states.get(PT_MODEL_CURRENT, State.UNKNOWN), states.get(PT_MODEL_TARGET, State.UNKNOWN)
+    if old == State.ACTIVE or (old == State.UNKNOWN and target != State.ACTIVE):
+        return Action('dedicated', PT_MODEL_CURRENT)
+    destination = policy(PT_MODEL_CURRENT, State.INACTIVE, lane=lane)
+    return destination if destination.kind == 'refuse' else LUNA
+
+
+def reserved_generation_model(
+    anchor: str, states: Mapping[str, State], *, override: str = '', lane: str = 'desktop_other'
+) -> str | None:
+    action = managed_generation_action(anchor, states, override=override, lane=lane)
+    return action.model if action.kind in {'dedicated', 'remap'} else None

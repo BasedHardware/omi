@@ -90,7 +90,20 @@ abstract final class SyncPendingWork {
 
   /// One pass over the unsorted index, stopping at the threshold: Home's row asks this on every
   /// SyncProvider notify, which streams progress during a sync.
+  /// Per WAL list: SyncProvider replaces the list whenever a status changes (see its partition
+  /// caches), and progress notifications reuse it, so a sync's ticks do not redo the scan.
+  static final Expando<(int, bool)> _backlogMemo = Expando('largeSyncBacklog');
+
   static bool isLargeBacklog(SyncProvider p) {
+    final wals = p.allWals;
+    final memo = _backlogMemo[wals];
+    if (memo != null && memo.$1 == wals.length) return memo.$2;
+    final large = _computeLargeBacklog(p);
+    _backlogMemo[wals] = (wals.length, large);
+    return large;
+  }
+
+  static bool _computeLargeBacklog(SyncProvider p) {
     var seconds = 0;
     for (final w in p.allWals) {
       if (w.status != WalStatus.uploaded) continue;
@@ -133,10 +146,16 @@ abstract final class SyncPendingWork {
 
 /// Opens the Offline Sync page the device settings open, behind the same gate:
 /// work that lives on a storage-less pendant has no Offline Sync screen.
-void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync}) {
+///
+/// [phoneLocal] bypasses that gate for the Activity page's capture rows: a
+/// phone-local problem (full phone disk, stalled phone upload) must reach the
+/// page even when unrelated device recordings wait on a disconnected wearable.
+/// The page still renders device rows read-only without the wearable, which is
+/// exactly what a phone problem needs.
+void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
   final moved = SyncPendingWork.movedIds(p);
   final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !moved.contains(w.id));
-  if (hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
+  if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
     showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
     return;
   }

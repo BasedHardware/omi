@@ -10,6 +10,7 @@ import ExternalData from '../external-data/external-data';
 
 interface TranscriptionProps {
   transcript: TranscriptSegment[];
+  sourceRequest?: { id: string; request: number } | null;
   externalData: ExternalDataType | null;
   people?: Person[];
   participants?: Participant[] | null;
@@ -17,6 +18,7 @@ interface TranscriptionProps {
 
 export default function Transcription({
   transcript,
+  sourceRequest,
   externalData,
   people,
   participants,
@@ -47,6 +49,7 @@ export default function Transcription({
             <TranscriptionSegment
               key={index}
               segment={segment}
+              sourceRequest={sourceRequest?.id === segment.id ? sourceRequest : null}
               displayName={resolveSpeaker(segment)}
             />
           ))}

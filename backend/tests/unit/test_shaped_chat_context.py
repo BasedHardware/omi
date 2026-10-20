@@ -3,15 +3,16 @@
 import asyncio
 import copy
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from database.chat_history_window import cache_aligned_history_limit
-from utils.messaging.context import assemble, prepare, refresh, SUMMARY_CHARS, DIGEST_CHARS
+from utils.messaging.context import assemble, prepare, refresh, DIGEST_CHARS
 from utils.messaging.projection import SurfaceRuntime
 from utils.messaging.contracts import Principal
 from utils.messaging import context as context_module
@@ -92,7 +93,7 @@ def test_window_is_bounded_and_has_current_user_last(count):
 class StateStore:
     def __init__(self, total=30):
         self.all = rows(total)
-        self.state = {'generation': 0, 'revision': 0}
+        self.state: dict[str, Any] = {'generation': 0, 'revision': 0}
         self.saves = []
 
     def assert_access(self, *args):
@@ -101,7 +102,10 @@ class StateStore:
     def load(self, *args):
         return copy.deepcopy(self.state)
 
-    def source_page(self, uid, session, before, cursor=None):
+    def load_for_turn(self, *args):
+        return self.load(*args)
+
+    def source_page(self, uid, session, before, cursor=None) -> tuple[list, dict | None, bool]:
         start = int(cursor['id']) + 1 if cursor else 0
         stop = int(before)
         result = self.all[start:stop]
@@ -126,7 +130,7 @@ def test_summary_only_changes_when_window_start_jumps_and_preserves_dropped_span
         first = await refresh('u', 's', [str(i) for i in range(13)], store=store, summary=summary)
         second = await refresh('u', 's', [str(i) for i in range(15)], store=store, summary=summary)
         assert first == second and not requests
-        jumped = await refresh('u', 's', [str(i) for i in range(8, 19)], store=store, summary=summary)
+        await refresh('u', 's', [str(i) for i in range(8, 19)], store=store, summary=summary)
         assert store.state['summary'] == 'Compact continuity'
         assert len(requests) == 1
         assert all('message ' + str(i) in requests[0] for i in range(8))
@@ -176,7 +180,7 @@ def test_long_bootstrap_retries_after_last_completed_page(monkeypatch):
         assert 'message 0' not in text
         return 'All earlier continuity'
 
-    result = asyncio.run(refresh('u', 's', ['8'], store=store, summary=retry))
+    asyncio.run(refresh('u', 's', ['8'], store=store, summary=retry))
     assert store.state['summary'] == 'All earlier continuity'
     assert store.state['anchor'] == '8' and store.state['cursor'] == {'id': '7'}
 
@@ -344,3 +348,75 @@ def test_real_shaped_runner_preserves_system_and_stable_history(monkeypatch, cha
     assert 'prompt_cache_breakpoint' in str(captures[0][1:-1])
     assert str(captures[0]).count('prompt_cache_breakpoint') == 2
     assert str(captures[1]).count('prompt_cache_breakpoint') == 2
+
+
+@pytest.mark.asyncio
+async def test_digest_latency_does_not_discard_ready_summary(monkeypatch):
+    # The old serial path timed out at 150ms and threw away this loaded summary.
+    async def blocking(executor, fn, *args):
+        await asyncio.sleep(0.11 if fn.__name__ == 'load_for_turn' else 0.065)
+        return fn(*args)
+
+    monkeypatch.setattr(context_module, 'run_blocking', blocking)
+    monkeypatch.setattr(context_module, 'recent_activity', lambda *a: [])
+    store = StateStore()
+    store.state['summary'] = 'Continuity survives'
+    result = await prepare('u', 's', ['0'], store=store)
+    assert result['summary'] == 'Continuity survives'
+
+
+@pytest.mark.asyncio
+async def test_digest_timeout_keeps_summary_and_logs_phase_without_exception_text(monkeypatch, caplog):
+    async def blocking(executor, fn, *args):
+        if fn.__name__ != 'load_for_turn':
+            await asyncio.sleep(1)
+        return fn(*args)
+
+    monkeypatch.setattr(context_module, 'run_blocking', blocking)
+    monkeypatch.setattr(context_module, 'recent_activity', lambda *a: [])
+    store = StateStore()
+    store.state['summary'] = 'Stored continuity'
+    result = await prepare('private-user', 'private-session', ['0'], store=store)
+    assert result == {'summary': 'Stored continuity', 'digest': ''}
+    assert 'phase=digest' in caplog.text and 'error_type=TimeoutError' in caplog.text
+    assert 'private-user' not in caplog.text and 'private-session' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_permission_guard_discards_digest_and_logs_code_site(monkeypatch, caplog):
+    class Removed(StateStore):
+        def load(self, *args):
+            raise PermissionError('private user data must never be logged')
+
+    monkeypatch.setattr(
+        context_module,
+        'recent_activity',
+        lambda *a: [{'created_at': datetime.now(timezone.utc), 'sender': 'human', 'text': 'private activity'}],
+    )
+    result = await prepare('u', 's', ['0'], store=Removed())
+    assert result == {'summary': '', 'digest': ''}
+    assert 'phase=summary_load' in caplog.text and 'error_type=PermissionError' in caplog.text
+    assert 'private user data' not in caplog.text
+
+
+def test_context_load_uses_guarded_snapshots_without_rereading(monkeypatch):
+    from database.chat_context import ChatContextStore
+    from unittest.mock import MagicMock
+
+    messaging = MagicMock()
+    store = ChatContextStore(messaging=messaging)
+    monkeypatch.setattr(
+        store, 'assert_access', lambda *a: ({'shaped_context_revision': 4}, {'chat_context_generation': 2})
+    )
+    assert store.load('u', 's') == {'generation': 2, 'revision': 4}
+    messaging.user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_malformed_digest_does_not_discard_summary(monkeypatch, caplog):
+    monkeypatch.setattr(context_module, 'recent_activity', lambda *a: [{'text': 'private malformed row'}])
+    store = StateStore()
+    store.state['summary'] = 'Stored continuity'
+    assert await prepare('u', 's', ['0'], store=store) == {'summary': 'Stored continuity', 'digest': ''}
+    assert 'phase=digest' in caplog.text and 'error_type=KeyError' in caplog.text
+    assert 'private malformed row' not in caplog.text

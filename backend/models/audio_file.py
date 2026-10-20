@@ -13,6 +13,7 @@ class ChunkSpan(BaseModel):
 
 class AudioFile(BaseModel):
     id: str = Field(description="Unique identifier for the audio file")
+    source_fingerprint: Optional[str] = None
     uid: str = Field(description="User ID who owns this audio file")
     conversation_id: str = Field(description="ID of the conversation this audio belongs to")
     chunk_timestamps: List[float] = Field(description="List of chunk timestamps (for on-demand merging)")

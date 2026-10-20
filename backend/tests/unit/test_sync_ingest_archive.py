@@ -299,6 +299,40 @@ async def test_retirement_parts_commit_before_minute_pcm_flush(monkeypatch, buck
     assert not archive.packs
 
 
+async def test_live_admission_is_session_stable_across_cohort_cache_expiry(monkeypatch):
+    """A TTL miss mid-connection must not drop archive packets (Codex P2)."""
+    calls = {'LIVE': 0}
+
+    def flapping(uid, phase):
+        if phase != 'LIVE':
+            return False
+        # First evaluation admits; later evaluations would consult an expired
+        # cache entry and miss until the refresh completes.
+        calls['LIVE'] += 1
+        return calls['LIVE'] == 1
+
+    monkeypatch.setattr('utils.other.live_audio_archive.admitted', flapping)
+    host = SimpleNamespace(
+        private_cloud_sync_enabled=True,
+        request=SimpleNamespace(
+            uid='owner',
+            codec='opus',
+            sample_rate=16000,
+            source='omi',
+            client_device_context=None,
+            websocket=SimpleNamespace(headers={}),
+        ),
+    )
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
+    archive = LiveAudioArchive(host)
+    await archive.append(b'run', 'conversation', 1000, 480000, decoded=b'\x00\x00' * 480000)
+    await archive.append(b'run', 'conversation', 1030, 480000, decoded=b'\x00\x00' * 480000)
+    await archive.close()
+    # Exactly one LIVE evaluation per connection, taken while warm.
+    assert calls['LIVE'] == 1
+    assert not archive.packs
+
+
 def test_merge_worker_cohort_and_rollback_keep_pending_audience(monkeypatch):
     enable(monkeypatch, 'SEPARATE_MERGE')
     monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://sync.example/v2/audio-merge-jobs/run')

@@ -150,6 +150,7 @@ def _coverage_env(monkeypatch, coverage_flag=None):
         'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     if coverage_flag is not None:
         monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', coverage_flag)
 
@@ -681,7 +682,7 @@ async def test_conflicting_envelope_abstains_whole_capture(coordinator, monkeypa
     assert len(state.vad_seen) == 1
     assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
     coverage_lines = [r.getMessage() for r in caplog.records if 'event=sync_wal_audio_coverage' in r.getMessage()]
-    assert any('outcome=abstained' in line for line in coverage_lines)
+    assert any('outcome=abstained reason=evidence' in line for line in coverage_lines)
 
 
 @pytest.mark.asyncio
@@ -1059,7 +1060,7 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
     base_ts = 1_760_000_000 + skew
     stem = f'audio_pcm16_{int(base_ts)}'
@@ -1336,7 +1337,7 @@ def test_receipt_only_full_coverage_preserves_the_wal_untouched(real_pipeline, m
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
     wav_path = tmp_path / f'{WAV_STEM}.wav'
     _write_labeled_wav(wav_path, range(10))
@@ -1382,7 +1383,21 @@ def _s1_spies(pipeline, monkeypatch):
     return SimpleNamespace(resolver_calls=resolver_calls, plan_calls=plan_calls)
 
 
+@pytest.fixture
+def s1_routing(coordinator, monkeypatch, tmp_path, lineage_switch):
+    # WAV construction and fake dependency wiring are setup, not coordinator CPU.
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', lineage_switch)
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
+    spies = _s1_spies(pipeline, monkeypatch)
+    return module, stubs, state, spies
+
+
 @pytest.mark.asyncio
+@pytest.mark.parametrize('lineage_switch', ['on', 'off'])
 @pytest.mark.parametrize(
     'claims',
     [
@@ -1406,16 +1421,11 @@ def _s1_spies(pipeline, monkeypatch):
         'nonmapping-list',
     ],
 )
-async def test_s1_required_keeps_pre_lineage_binding_without_claims(coordinator, monkeypatch, tmp_path, claims):
+async def test_s1_required_keeps_pre_lineage_binding_without_claims(s1_routing, tmp_path, claims, lineage_switch):
     """Default-on S1 gate: an admitted upload without a complete validated claim
     set keeps the pre-lineage whole-batch resolver and never reaches the
     per-segment planner — the identical route the lineage kill switch takes."""
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
-    spies = _s1_spies(pipeline, monkeypatch)
+    module, stubs, state, spies = s1_routing
     await _run_batch(module, stubs, tmp_path, claims=claims)
     assert spies.plan_calls == []
     assert spies.resolver_calls == [_WHOLE_BATCH_ARGS]
@@ -1423,18 +1433,7 @@ async def test_s1_required_keeps_pre_lineage_binding_without_claims(coordinator,
     assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
     assert len(state.processed) == 1
     assert state.outcomes[-1].value == 'success'
-    gated = (
-        list(state.vad_seen),
-        list(state.processed),
-        [outcome.value for outcome in state.outcomes],
-    )
-    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'off')
-    await _run_batch(module, stubs, tmp_path, claims=None)
-    assert spies.plan_calls == []
-    assert spies.resolver_calls == [_WHOLE_BATCH_ARGS] * 2
-    assert state.vad_seen == gated[0] * 2
-    assert state.processed == gated[1] * 2
-    assert [outcome.value for outcome in state.outcomes] == gated[2] * 2
+    assert [outcome.value for outcome in state.outcomes] == ['success']
 
 
 @pytest.mark.asyncio
@@ -1445,7 +1444,7 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
     monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)], frame_values=range(2))
     resolver_calls = []
     monkeypatch.setattr(
         pipeline,
@@ -1467,7 +1466,7 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
         return fake_process(path, uid, response, lock, errors, *args, **kwargs)
 
     pipeline.process_segment = tracking_process
-    await _run_batch(module, stubs, tmp_path)
+    await _run_batch(module, stubs, tmp_path, claims={BIN_NAME: _claim(frame_count=2)})
     assert resolver_calls == []
     assert len(planned) == 1
     assert len(planned[0]) == len(state.processed)

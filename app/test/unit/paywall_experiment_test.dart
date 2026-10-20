@@ -30,6 +30,13 @@ void main() {
       expect(PaywallExperiment.parse(variant: 'outline', payload: 'not json').variant, PaywallVariant.outline);
     });
 
+    test('trial reads the onboarding placement like outline', () {
+      expect(PaywallExperiment.parse(variant: 'trial').variant, PaywallVariant.trial);
+      expect(PaywallExperiment.parse(variant: 'trial').onboardingPaywall, isFalse);
+      expect(
+          PaywallExperiment.parse(variant: 'trial', payload: {'onboarding_paywall': true}).onboardingPaywall, isTrue);
+    });
+
     test('web needs an https URL, otherwise control', () {
       final ok = PaywallExperiment.parse(variant: 'web', payload: {'url': 'https://omi-paywall.vercel.app/'});
       expect(ok.variant, PaywallVariant.web);
@@ -184,6 +191,22 @@ void main() {
         {'id': 'price_u_y', 'plan_id': 'unlimited_v2', 'interval': 'year', 'unit_amount': 26991, 'currency': 'usd'},
       ],
     };
+
+    test('a pending cancellation offers the current price instead of Unlimited', () {
+      final offer = PaywallOffer.fromCatalog(
+        catalog,
+        cancelAtPeriodEnd: true,
+        currentPriceId: 'price_plus_m',
+      )!;
+      expect(offer.resubscribe, isTrue);
+      expect(offer.tierId, 'plus');
+      expect(offer.monthly!.priceId, 'price_plus_m');
+      expect(offer.yearly, isNull);
+      expect(
+        PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'missing'),
+        isNull,
+      );
+    });
 
     test('prefers the Unlimited tier and derives the yearly saving from its own prices', () {
       final offer = PaywallOffer.fromCatalog(catalog)!;

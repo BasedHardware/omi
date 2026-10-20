@@ -1,6 +1,7 @@
 """Vertex JSON Schema wire contract for real structured-output consumers."""
 
 from copy import deepcopy
+from contextvars import ContextVar
 import json
 
 import pytest
@@ -180,6 +181,7 @@ def test_optional_recursive_ref_remains_compact():
 def test_vertex_4xx_log_only_emits_sanitized_reason_class(capsys, message, reason):
 
     provider = VertexPTPolicyMixin()
+    provider._cache_context = ContextVar('schema_log_cache_context', default=None)
     provider._observe_attempt(
         ptr.PT_MODEL_CURRENT, 'dedicated', 400, json.dumps({'error': {'message': message}}).encode()
     )

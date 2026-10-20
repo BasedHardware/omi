@@ -109,6 +109,8 @@ _SYS_MODULE_NAMES = [
     "database.action_items",
     "database.notifications",
     "utils",
+    "utils.model_text",
+    "utils.user_clock",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -277,6 +279,8 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.messaging")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
@@ -464,7 +468,9 @@ del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):
-    return {"configurable": {"user_id": uid}}
+    # Chat turns always carry the resolved zone; without it DisplayClock would import the real
+    # database.notifications after the stubs above are restored.
+    return {"configurable": {"user_id": uid, "user_timezone": "UTC"}}
 
 
 # ===========================================================================

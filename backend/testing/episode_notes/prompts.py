@@ -1,7 +1,7 @@
 """Feed offline bundles through the production notes prompt builders."""
 
 from datetime import datetime
-from config.episode_writer import EpisodeWriterSettings
+from testing.episode_notes.settings import EpisodeEvalSettings
 
 from langchain_core.output_parsers import PydanticOutputParser
 
@@ -29,7 +29,10 @@ from utils.llm.episode_notes_prompts import (
     episode_static_instructions,
     episode_volatile_instructions,
 )
+
 from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+
+GENERATION_REVIEW_PROMPT = 'episode_generation_review_v1'
 
 CANDIDATE_MODEL = 'openai/gpt-6-luna'
 SCORING_MODEL = 'openai/gpt-6-sol'
@@ -75,7 +78,7 @@ def fixture_evidence_items(episode: EpisodeFixture) -> list[EvidenceItem]:
 
 
 def candidate_request(
-    episode: EpisodeFixture, arm: str, *, settings: EpisodeWriterSettings | None = None, items=None
+    episode: EpisodeFixture, arm: str, *, settings: EpisodeEvalSettings | None = None, items=None
 ) -> tuple[str, dict]:
     bundle = episode.evidence
     words = sum(len(item.content.split()) for item in bundle.transcript_segments)
@@ -97,7 +100,7 @@ def candidate_request(
         task_intelligence_capture=False,
     )
     if arm == 'episode':
-        settings = settings or EpisodeWriterSettings(selection='compact', claims=True)
+        settings = settings or EpisodeEvalSettings(claims=True)
         items = fixture_evidence_items(episode) if items is None else items
         volatile = episode_volatile_instructions(
             **common,

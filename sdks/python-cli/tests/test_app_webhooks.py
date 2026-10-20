@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import socket
@@ -401,6 +402,37 @@ def test_target_rejects_an_address_omi_will_not_deliver_to() -> None:
         assert not report.ok
         assert address in report.summary
         assert "never receives an event" in (report.detail or "")
+
+
+def test_target_rejects_a_non_public_address_in_its_ipv4_mapped_form() -> None:
+    # A dual-stack resolver can answer with ::ffff:a.b.c.d for the same host
+    # that returns a.b.c.d elsewhere. Omi refuses the delivery either way, so
+    # the check has to agree with itself whichever form it is handed.
+    for address in ("100.64.0.1", "::ffff:100.64.0.1"):
+        report = webhook_target.inspect_target("http://tailscale.test/webhook", resolver=lambda _: [address])
+        assert not report.ok, address
+        assert "non-public address" in report.summary
+        assert address in report.summary
+
+
+def test_target_names_an_ipv4_mapped_address_the_same_way_on_every_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Older Python releases (3.12.10, the Windows runner's, is one) print
+    # ::ffff:100.64.0.1 as ::ffff:6440:1. Give IPv6Address an all-hex str() so
+    # every runner sees what those releases do.
+    def hex_only(self: ipaddress.IPv6Address) -> str:
+        value = int(self)
+        return ":".join(f"{(value >> shift) & 0xFFFF:x}" for shift in range(112, -1, -16))
+
+    monkeypatch.setattr(ipaddress.IPv6Address, "__str__", hex_only)
+    assert str(ipaddress.ip_address("::ffff:100.64.0.1")) == "0:0:0:0:0:ffff:6440:1"
+
+    rejected = webhook_target.inspect_target("http://tailscale.test/webhook", resolver=lambda _: ["::ffff:100.64.0.1"])
+    assert not rejected.ok
+    assert rejected.summary == "tailscale.test resolves to a non-public address: ::ffff:100.64.0.1"
+
+    accepted = webhook_target.inspect_target("https://example.com/webhook", resolver=lambda _: ["::ffff:93.184.216.34"])
+    assert accepted.ok
+    assert accepted.summary == "example.com resolves to ::ffff:93.184.216.34"
 
 
 def test_target_rejects_a_scheme_and_a_host_omi_cannot_use() -> None:

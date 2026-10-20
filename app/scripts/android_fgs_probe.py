@@ -128,6 +128,11 @@ def main():
                     "dumpsys power | sed -n '/^Wake Locks:/,/^Suspend Blockers:/p'",
                 )
                 notifications = device("shell", "cmd", "notification", "list")
+                # Preserve the cleanup observations as well as survival logs.
+                # A failed assertion otherwise loses the state needed to tell
+                # a real leak from an emulator observation/timing problem.
+                for label, snapshot in [('services', services), ('power', power), ('notifications', notifications)]:
+                    (args.output / f"{round_number}-{mode}-{label}.log").write_text(snapshot + "\n")
                 passed = (
                     device("shell", "cat", "/proc/sys/kernel/random/boot_id") == boot_id
                     and active_verified

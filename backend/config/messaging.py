@@ -2,6 +2,8 @@
 
 import json
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 from urllib.parse import quote
 
 
@@ -45,7 +47,12 @@ def cohort_enabled(uid, channel=None):
     if channel is None:
         return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
     policy = channel_policy(channel)
-    return policy['enabled'] and (policy['cohort'] == '*' or uid in policy['cohort'])
+    cohort = policy['cohort']
+    return policy['enabled'] and (
+        cohort == '*'
+        or isinstance(cohort, list)
+        and in_rollout_cohort(uid, 'messaging-' + channel, legacy_members=tuple(cohort))
+    )
 
 
 def channel_enabled(channel):

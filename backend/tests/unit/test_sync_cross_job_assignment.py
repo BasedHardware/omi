@@ -160,7 +160,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
@@ -501,7 +502,8 @@ def _smart_merge_pair(store):
     store.rows[('users', 'u', 'conversations', 'n')] = donor
 
 
-def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     from tests.unit.test_sync_lineage_dedupe_replay import prove
@@ -517,7 +519,8 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1

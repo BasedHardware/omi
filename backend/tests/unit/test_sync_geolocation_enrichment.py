@@ -27,6 +27,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from database import _client as firestore_client
+
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -61,6 +63,8 @@ def _build_pipeline_fakes() -> dict:
         'database.users',
         'database.sync_jobs',
         'database.sync_ledger',
+        'database.sync_empty_recovery',
+        'database.owner_profile_updates',
         'database.firestore_read_metrics',
         'models.conversation',
         'models.conversation_enums',
@@ -82,6 +86,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.observability.fallback',
         'utils.observability.transcription',
         'utils.other.storage',
+        'utils.speaker_learning_jobs',
         'utils.speaker_assignment',
         'utils.speaker_identification',
         'utils.stt.pre_recorded',
@@ -97,12 +102,32 @@ def _build_pipeline_fakes() -> dict:
     for name in heavy_leaves:
         fakes[name] = AutoMockModule(name)
     fakes['utils.dream_vocabulary'].keyterms = AsyncMock(side_effect=lambda uid, existing: existing)
+    # Files that hold this module-scoped stub set open (e.g. the reprocess
+    # coalesce tests) also import routers/sync.py inside it: its import-time
+    # handler-budget resolution compares these constants inside min(), so they
+    # must be real numbers rather than auto-mocked attributes.
+    fakes['database.sync_jobs'].RUN_LOCK_TTL_SECONDS = 1800
+    fakes['database.sync_jobs'].STALE_THRESHOLD_SECONDS = 600
+    fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
+    fakes['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
     return fakes
 
 
 @pytest.fixture(scope="module")
 def pipeline():
     fakes = _build_pipeline_fakes()
+    fakes['database._client'] = firestore_client
+    for leaf in (
+        'database.summary_processing',
+        'database.auth',
+        'utils.conversations.summary_delivery',
+        'utils.conversations.deterministic_minimum',
+        'utils.sync.assignment',
+        'utils.manual_speaker_assignments',
+        'utils.sync.speaker_identity',
+        'utils.sync.safety_wal_coverage',
+    ):
+        fakes[leaf] = AutoMockModule(leaf)
     with stub_modules(fakes):
         yield load_module_fresh(
             "utils.sync.pipeline",
@@ -296,3 +321,33 @@ async def test_partial_batch_carries_one_strike_and_keeps_the_healthy_sibling(pi
 
 async def _noop_job_metric(*args, **kwargs):
     pass
+
+
+@pytest.mark.asyncio
+async def test_finalize_internal_failure_does_not_blame_provider_in_job_result(pipeline):
+    _prepare(pipeline, ['/tmp/finalize.wav'])
+    pipeline._finalize_sync_job_for_run = MagicMock()
+    pipeline._record_sync_job_outcome_async = _noop_job_metric
+
+    def process(path, uid, response, lock, errors, *args, **kwargs):
+        args[5].complete(path)
+        errors.append('sync_finalize_failed')
+        kwargs['deferred_outcome'].update(
+            outcome=pipeline.TranscriptionOutcome.UPSTREAM_ERROR,
+            phase='finalize',
+            provider='unknown',
+            model='unknown',
+            retryable=True,
+            exception_type='RuntimeError',
+        )
+        return False
+
+    pipeline.process_segment = process
+    await pipeline._run_full_pipeline_background_async(
+        'job-finalize', 'synthetic', ['/tmp/finalize.opus'], 'omi', False, '/tmp/job-finalize'
+    )
+    result = pipeline._finalize_sync_job_for_run.call_args.args[2]
+    assert result['failed_segments'] == 1
+    assert result['provider'] == result['model'] == 'unknown'
+    assert result['outcome'] == 'upstream_error'
+    assert result['errors'] == ['sync_finalize_failed']
