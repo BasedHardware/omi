@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-readback-failure-reported-as-save-failure",
+  "violated_contract": "A save that the server has already accepted must not be reported as a failure because a later read of that same value fails. Callers treat the thrown error as an unsaved change and roll the control back.",
+  "canonical_prevention": "After a successful write, catch a failed read-back and return the values the write sent. A protocol test fails the read and asserts the save still returns those values.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/APIClientMemoryMutationRequestTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift"
+  ],
+  "status": "open"
+}
