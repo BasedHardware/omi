@@ -122,6 +122,23 @@ def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_rout
     ]
 
 
+def test_plugin_capability_routes_declare_the_conversation_audio_scope():
+    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+    routes = [
+        route
+        for route in manifest['routes']
+        if 'plugin_capability' in route.get('policy', {}).get('auth', {}).get('mechanisms', [])
+    ]
+    assert [(route['method'], route['path']) for route in routes] == [
+        ('GET', '/v1/apps/{app_id}/backup-audio/{conversation_id}'),
+        ('HEAD', '/v1/apps/{app_id}/backup-audio/{conversation_id}'),
+    ]
+    assert all(
+        route['policy']['auth'] == {'mechanisms': ['plugin_capability'], 'placement': 'handler', 'scopes': ['audio']}
+        for route in routes
+    )
+
+
 def test_beta_breakglass_routes_reuse_existing_admin_key_authority():
     manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
     routes = [route for route in manifest['routes'] if route.get('path') == '/v2/desktop/beta/breakglass']

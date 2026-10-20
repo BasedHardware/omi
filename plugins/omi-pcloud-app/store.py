@@ -82,7 +82,8 @@ class Store:
     def get(self, kind: str, identity: str, *, consume: bool = False) -> dict | None:
         with self.transaction() as conn:
             row = conn.execute(
-                'SELECT uid,blob,expires FROM records WHERE kind=? AND id=?', (kind, identity)
+                'SELECT uid,blob,expires FROM records WHERE kind=? AND id=?',
+                (kind, identity),
             ).fetchone()
             if row is None:
                 return None
@@ -92,7 +93,14 @@ class Store:
                 return None
             return self.open(row[0], row[1])
 
-    def put(self, kind: str, identity: str, uid: str, data: dict, ttl: int = JOB_RETENTION_SECONDS):
+    def put(
+        self,
+        kind: str,
+        identity: str,
+        uid: str,
+        data: dict,
+        ttl: int = JOB_RETENTION_SECONDS,
+    ):
         with self.transaction() as conn:
             conn.execute(
                 'INSERT OR REPLACE INTO records VALUES (?,?,?,?,?)',
@@ -125,7 +133,8 @@ class Store:
     def check_ready(self):
         with self.transaction() as conn:
             row = conn.execute(
-                'SELECT uid,blob FROM records WHERE kind=? AND id=?', ('meta', 'encryption-canary')
+                'SELECT uid,blob FROM records WHERE kind=? AND id=?',
+                ('meta', 'encryption-canary'),
             ).fetchone()
             if row is None:
                 sample = conn.execute('SELECT uid,blob FROM records LIMIT 1').fetchone()
@@ -174,7 +183,8 @@ class Store:
     def jobs(self, uid: str) -> list[dict]:
         with self.transaction() as conn:
             rows = conn.execute(
-                'SELECT id,blob,state,expires FROM jobs WHERE uid=? ORDER BY rowid DESC LIMIT 30', (uid,)
+                'SELECT id,blob,state,expires FROM jobs WHERE uid=? ORDER BY rowid DESC LIMIT 30',
+                (uid,),
             ).fetchall()
             result = []
             for identity, blob, state, expires in rows:
@@ -201,7 +211,8 @@ class Store:
             conn.execute('DELETE FROM jobs WHERE expires<?', (now - 30 * 86400,))
             # Expiry removes private job payloads, not just their queue visibility.
             for identity, uid in conn.execute(
-                'SELECT id,uid FROM jobs WHERE expires<=? AND state<>?', (now, 'expired')
+                'SELECT id,uid FROM jobs WHERE expires<=? AND state<>?',
+                (now, 'expired'),
             ).fetchall():
                 conn.execute(
                     'UPDATE jobs SET blob=?,state=?,lease=? WHERE id=?',
@@ -234,21 +245,42 @@ class Store:
                 conn.execute('UPDATE jobs SET state=? WHERE id=?', ('unreadable', identity))
                 return None
             lease = secrets.token_urlsafe(24)
-            conn.execute('UPDATE jobs SET state=?,due=?,lease=? WHERE id=?', ('running', now + 300, lease, identity))
+            conn.execute(
+                'UPDATE jobs SET state=?,due=?,lease=? WHERE id=?',
+                ('running', now + 300, lease, identity),
+            )
             return identity, uid, lease, payload
 
-    def settle(self, identity: str, uid: str, lease: str, payload: dict, state: str, delay: int = 0):
+    def settle(
+        self,
+        identity: str,
+        uid: str,
+        lease: str,
+        payload: dict,
+        state: str,
+        delay: int = 0,
+    ):
         with self.transaction() as conn:
             changed = conn.execute(
                 'UPDATE jobs SET blob=?,state=?,due=? WHERE id=? AND uid=? AND lease=?',
-                (self.seal(uid, payload), state, time.time() + delay, identity, uid, lease),
+                (
+                    self.seal(uid, payload),
+                    state,
+                    time.time() + delay,
+                    identity,
+                    uid,
+                    lease,
+                ),
             ).rowcount
             if changed != 1:
                 raise RuntimeError('Backup worker lease is no longer current')
 
     def retry(self, uid: str, identity: str) -> bool:
         with self.transaction() as conn:
-            row = conn.execute('SELECT blob,state,expires FROM jobs WHERE uid=? AND id=?', (uid, identity)).fetchone()
+            row = conn.execute(
+                'SELECT blob,state,expires FROM jobs WHERE uid=? AND id=?',
+                (uid, identity),
+            ).fetchone()
             if not row or row[1] not in ('failed', 'pending') or row[2] <= time.time():
                 return False
             payload = self.open(uid, row[0])
@@ -261,13 +293,27 @@ class Store:
 
     def cancel_jobs(self, uid: str):
         with self.transaction() as conn:
-            rows = conn.execute('SELECT id FROM jobs WHERE uid=?', (uid,)).fetchall()
-            for (identity,) in rows:
+            rows = conn.execute(
+                'SELECT id,blob FROM jobs WHERE uid=? AND state NOT IN (?,?,?)',
+                (uid, 'completed', 'canceled', 'expired'),
+            ).fetchall()
+            for identity, blob in rows:
+                try:
+                    previous = self.open(uid, blob)
+                except (InvalidToken, ValueError, TypeError, KeyError):
+                    previous = {}
+                # Keep truthful receipts, not private export payloads or tokens.
+                receipt = {
+                    'id': identity,
+                    'title': previous.get('title', 'Conversation'),
+                    'uploaded': previous.get('uploaded', []),
+                    'error': 'Backup canceled on disconnect.',
+                }
                 conn.execute(
                     'UPDATE jobs SET state=?,blob=?,lease=? WHERE id=?',
                     (
                         'canceled',
-                        self.seal(uid, {'id': identity, 'uploaded': [], 'error': 'Backup canceled on disconnect.'}),
+                        self.seal(uid, receipt),
                         '',
                         identity,
                     ),
@@ -278,11 +324,18 @@ class Store:
         with self.transaction() as conn:
             for kind, identity, blob in conn.execute('SELECT kind,id,blob FROM records').fetchall():
                 conn.execute(
-                    'UPDATE records SET blob=? WHERE kind=? AND id=?', (self.cipher.rotate(blob), kind, identity)
+                    'UPDATE records SET blob=? WHERE kind=? AND id=?',
+                    (self.cipher.rotate(blob), kind, identity),
                 )
             for identity, blob in conn.execute('SELECT id,blob FROM jobs').fetchall():
-                conn.execute('UPDATE jobs SET blob=? WHERE id=?', (self.cipher.rotate(blob), identity))
+                conn.execute(
+                    'UPDATE jobs SET blob=? WHERE id=?',
+                    (self.cipher.rotate(blob), identity),
+                )
 
 
 def configured_store() -> Store:
-    return Store(os.environ.get('PCLOUD_DB_PATH', ''), json.loads(os.environ.get('PCLOUD_ENCRYPTION_KEYS', '[]')))
+    return Store(
+        os.environ.get('PCLOUD_DB_PATH', ''),
+        json.loads(os.environ.get('PCLOUD_ENCRYPTION_KEYS', '[]')),
+    )

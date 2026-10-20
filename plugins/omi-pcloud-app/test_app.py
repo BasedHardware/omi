@@ -42,8 +42,19 @@ def payload(identity='conversation-a', title='Same title'):
         'id': identity,
         'created_at': '2026-10-20T10:00:00Z',
         'finished_at': '2026-10-20T10:30:00Z',
-        'structured': {'title': title, 'overview': 'Synthetic summary', 'category': 'work'},
-        'transcript_segments': [{'text': 'Synthetic private transcript', 'is_user': True, 'start': 0, 'end': 1}],
+        'structured': {
+            'title': title,
+            'overview': 'Synthetic summary',
+            'category': 'work',
+        },
+        'transcript_segments': [
+            {
+                'text': 'Synthetic private transcript',
+                'is_user': True,
+                'start': 0,
+                'end': 1,
+            }
+        ],
         'discarded': False,
         '_omi_backup_audio_token': TRANSPORT.token(UID, 'audio', conversation_id=identity, ttl=86400),
     }
@@ -75,7 +86,9 @@ def env(tmp_path, monkeypatch):
 def login(env, uid=UID, client=None):
     client = client or env.client
     result = client.get(
-        '/setup/pcloud', params={'uid': uid, 'omi_token': TRANSPORT.token(uid, 'setup')}, follow_redirects=False
+        '/setup/pcloud',
+        params={'uid': uid, 'omi_token': TRANSPORT.token(uid, 'setup')},
+        follow_redirects=False,
     )
     assert result.status_code == 303
     assert result.headers['location'] == '/setup/pcloud'
@@ -148,7 +161,10 @@ def success_provider(env):
 )
 def test_uid_does_not_authorize(env, path, method):
     response = (
-        getattr(env.client, method)(path, data={'csrf': 'bogus', 'folder_name': 'x'} if method == 'post' else None)
+        getattr(env.client, method)(
+            path,
+            data={'csrf': 'bogus', 'folder_name': 'x'} if method == 'post' else None,
+        )
         if method == 'post'
         else env.client.get(path)
     )
@@ -168,7 +184,10 @@ def test_setup_grant_is_uid_bound_one_use_and_scrubbed(env):
 @pytest.mark.parametrize('scope', ['status', 'audio', 'delivery'])
 def test_other_scopes_cannot_open_setup(env, scope):
     assert (
-        env.client.get('/setup/pcloud', params={'uid': UID, 'omi_token': TRANSPORT.token(UID, scope)}).status_code
+        env.client.get(
+            '/setup/pcloud',
+            params={'uid': UID, 'omi_token': TRANSPORT.token(UID, scope)},
+        ).status_code
         == 401
     )
 
@@ -184,7 +203,10 @@ def test_csrf_and_account_are_bound_to_session(env):
     csrf = login(env)
     for wrong in ('bogus', '非ASCII'):
         assert env.client.post('/settings', data={'csrf': wrong, 'folder_name': 'x'}).status_code == 403
-    result = env.client.post('/settings?uid=victim', data={'csrf': csrf, 'folder_name': 'mine', 'save_summary': 'on'})
+    result = env.client.post(
+        '/settings?uid=victim',
+        data={'csrf': csrf, 'folder_name': 'mine', 'save_summary': 'on'},
+    )
     assert result.status_code == 200
     assert env.store.settings(UID)['folder_name'] == 'mine'
     assert env.store.settings('victim')['folder_name'] == 'Omi Conversations'
@@ -210,11 +232,20 @@ def test_oauth_uses_documented_callback_region(env, region, host):
         json=lambda: {'result': 0, 'access_token': 'synthetic-oauth-token', 'uid': 123},
     )
     calls = []
-    env.monkeypatch.setattr(requests, 'post', lambda url, **kw: (calls.append(url) or response))
-    env.monkeypatch.setattr(PCloudClient, 'get_user_info', lambda self: ({'email': 'synthetic@example.invalid'}, None))
+    env.monkeypatch.setattr(requests, 'post', lambda url, **kw: calls.append(url) or response)
+    env.monkeypatch.setattr(
+        PCloudClient,
+        'get_user_info',
+        lambda self: ({'email': 'synthetic@example.invalid'}, None),
+    )
     result = env.client.get(
         '/auth/pcloud/callback',
-        params={'state': state, 'code': 'synthetic-code', 'locationid': region, 'hostname': host},
+        params={
+            'state': state,
+            'code': 'synthetic-code',
+            'locationid': region,
+            'hostname': host,
+        },
     )
     assert result.status_code == 200
     assert calls == [f'https://{host}/oauth2_token']
@@ -227,12 +258,20 @@ def test_oauth_rejects_untrusted_host_and_stale_state(env):
     login(env)
     env.store.put('oauth', 'expired', UID, {'uid': UID, 'session_csrf': 'x'}, ttl=-1)
     assert env.client.get('/auth/pcloud/callback', params={'state': 'expired', 'code': 'x'}).status_code == 400
-    csrf = env.store.get('session', hashlib.sha256(env.client.cookies.get(main.COOKIE).encode()).hexdigest())['csrf']
+    csrf = env.store.get(
+        'session',
+        hashlib.sha256(env.client.cookies.get(main.COOKIE).encode()).hexdigest(),
+    )['csrf']
     env.store.put('oauth', 'host', UID, {'uid': UID, 'session_csrf': csrf})
     assert (
         env.client.get(
             '/auth/pcloud/callback',
-            params={'state': 'host', 'code': 'x', 'locationid': 2, 'hostname': 'metadata.google.internal'},
+            params={
+                'state': 'host',
+                'code': 'x',
+                'locationid': 2,
+                'hostname': 'metadata.google.internal',
+            },
         ).status_code
         == 400
     )
@@ -253,6 +292,37 @@ def test_failed_revocation_stops_exports_but_preserves_recovery_token(env):
     env.monkeypatch.setattr(PCloudClient, 'logout', lambda self: (True, None))
     assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
     assert env.store.get('connection', UID) is None
+
+
+def test_disconnect_preserves_completed_receipts(env):
+    csrf = login(env)
+    connection(env)
+    deliver(env)
+    success_provider(env)
+    worker.run_next_job(env.store)
+    before = env.store.jobs(UID)[0]
+    assert before['state'] == 'completed' and before['uploaded'] == ['summary.md']
+    env.monkeypatch.setattr(PCloudClient, 'logout', lambda self: (False, 'synthetic outage'))
+    result = env.client.post('/disconnect', data={'csrf': csrf})
+    after = env.store.jobs(UID)[0]
+    assert after == before
+    assert 'Completed' in result.text and '1 file saved' in result.text
+
+
+def test_disconnect_scrubs_partial_payload_but_keeps_saved_file_receipts(env):
+    csrf = login(env)
+    connection(env)
+    settings(env, save_transcript=True)
+    deliver(env)
+    identity, uid, lease, job = env.store.claim()
+    job['uploaded'] = ['summary.md']
+    env.store.settle(identity, uid, lease, job, 'failed')
+    env.monkeypatch.setattr(PCloudClient, 'logout', lambda self: (True, None))
+    env.client.post('/disconnect', data={'csrf': csrf})
+    after = env.store.jobs(UID)[0]
+    assert after['state'] == 'canceled' and after['uploaded'] == ['summary.md']
+    assert after['title'] == 'Same title'
+    assert not {'files', 'audio_token', 'authorization_token'} & after.keys()
 
 
 @pytest.mark.parametrize('tamper', ['body', 'uid', 'scope', 'none'])
@@ -466,7 +536,12 @@ def test_setup_escapes_private_text_and_matches_saved_consent(env):
     connection(env)
     csrf = login(env)
     result = env.client.post(
-        '/settings', data={'csrf': csrf, 'folder_name': 'Folder <script>alert(1)</script>', 'save_summary': 'on'}
+        '/settings',
+        data={
+            'csrf': csrf,
+            'folder_name': 'Folder <script>alert(1)</script>',
+            'save_summary': 'on',
+        },
     )
     assert result.status_code == 200
     assert '<script>' not in result.text
@@ -478,7 +553,12 @@ def test_authenticated_sessions_share_one_mobile_desktop_state(env):
     csrf = login(env)
     assert (
         env.client.post(
-            '/settings', data={'csrf': csrf, 'folder_name': 'Saved From Mobile', 'save_summary': 'on'}
+            '/settings',
+            data={
+                'csrf': csrf,
+                'folder_name': 'Saved From Mobile',
+                'save_summary': 'on',
+            },
         ).status_code
         == 200
     )

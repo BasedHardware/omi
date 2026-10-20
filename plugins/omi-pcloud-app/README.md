@@ -122,7 +122,7 @@ provider-client and backend-signing conformance tests. The deterministic manifes
 runs it in both local and CI lanes. Backend transport/route tests live in
 `backend/tests/unit/test_plugin_transport*.py`.
 
-- [ ] Final local HTTP/browser smoke and focused backend verification recorded in PR.
+- [x] Local HTTP/browser smoke and focused backend verification recorded in PR (synthetic provider only).
 - [ ] GitHub checks pass on the final reviewed SHA.
 - [ ] Operator provisions pCloud developer app, minimal grants, callbacks and test account.
 - [ ] Runtime secret bindings reviewed and provisioned on all conversation-finalization hosts.
