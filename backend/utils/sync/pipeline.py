@@ -172,6 +172,7 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.recording_intent import user_selected_recording
 from utils.sync.input_limits import (
     MAX_BACKFILL_FILES,
     MAX_BACKFILL_RAW_BYTES,
@@ -2363,13 +2364,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     if stt_cap_dispatch_enabled(uid, 'sync'):
         # A hold is pending processing, not a locked transcript partition.
         should_lock = False
-    # LocalRecordingsProvider uploads one explicitly selected native recording
-    # at a time. The writer's exact marker distinguishes Transcribe Later from
-    # automatic offline fallback (omibatchphoneauto) in already-released clients.
-    # Keep this narrow: a mixed/bulk sync job does not establish a keep choice.
-    user_selected_phone_recording = len(raw_paths) == 1 and os.path.basename(raw_paths[0]).lower().startswith(
-        'audio_omibatchphone_'
-    )
+    selected_recording = user_selected_recording(raw_paths)
     # Enrich raw sync geolocation (address / place id) once per job before any
     # conversation is created. This is the single enrichment point covering both
     # the inline and Cloud Tasks dispatch branches; it runs before the
@@ -3252,7 +3247,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     uid,
                     response,
                     on_fenced=_checkpoint_fenced_conversations,
-                    **({'user_selected': True} if user_selected_phone_recording else {}),
+                    **({'user_selected': True} if selected_recording else {}),
                 )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced

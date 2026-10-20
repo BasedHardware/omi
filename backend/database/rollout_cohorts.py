@@ -11,6 +11,7 @@ from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
 from database._client import get_data_plane_firestore_client, run_transactional
 
 STT_CAP_DOCUMENT = 'stt-cap-dispatch'
+HELD_CONTENT_DOCUMENT = 'held-content'
 
 
 def read_stt_cap_cohort(*, firestore_client: Any | None = None) -> dict | None:
@@ -21,6 +22,13 @@ def read_stt_cap_cohort(*, firestore_client: Any | None = None) -> dict | None:
     """
     client = firestore_client or get_data_plane_firestore_client()
     doc = client.collection(COLLECTION).document(STT_CAP_DOCUMENT).get(timeout=1.0, retry=None)
+    return (doc.to_dict() or {}) if doc.exists else None
+
+
+def read_held_content_cohort(*, firestore_client: Any | None = None) -> dict | None:
+    """One process-wide control document. None means absent; malformed stays present."""
+    client = firestore_client or get_data_plane_firestore_client()
+    doc = client.collection(COLLECTION).document(HELD_CONTENT_DOCUMENT).get(timeout=1.0, retry=None)
     return (doc.to_dict() or {}) if doc.exists else None
 
 

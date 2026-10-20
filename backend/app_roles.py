@@ -38,6 +38,7 @@ from routers import (
     review,
     proactivity,
     chat,
+    chat_video,
     firmware,
     static_map,
     transcribe,
@@ -195,6 +196,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(memories),
     Mount(chat, roles=API_REALTIME),  # websocket
     Mount(chat_receipts),
+    Mount(chat_video),  # main #22839 via sync 14
     Mount(speech_profile),
     Mount(speaker_tag_prompts),
     Mount(speaker_labels),

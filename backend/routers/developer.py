@@ -2033,6 +2033,73 @@ def _bind_late_client_projection(
     return updated
 
 
+def _apply_late_from_segments_context(
+    uid: str,
+    existing_conversation: dict,
+    request: CreateConversationFromTranscriptRequest,
+) -> dict:
+    """Idempotency hit: bind a folder or calendar context the retry carries.
+
+    The first attempt's 200 can be lost to a timeout while the row still lands,
+    and the client re-sends the same ``client_session_id`` with the folder and
+    calendar context it built. Returning early from the idempotency branch used
+    to throw both away, leaving the conversation in the AI-assigned folder with
+    no meeting block on its summary.
+    """
+    conversation_id = existing_conversation.get('id')
+    if not conversation_id:
+        return existing_conversation
+
+    updates: dict[str, Any] = {}
+
+    previous_folder = existing_conversation.get('folder_id')
+    folder_id = getattr(request, 'folder_id', None)
+    if folder_id is not None and folder_id != previous_folder:
+        # The first attempt rejects an unknown folder with 422; a folder deleted
+        # between attempts must not come back as a dangling reference here.
+        if folders_db.get_folder(uid, folder_id):
+            updates['folder_id'] = folder_id
+        else:
+            logger.warning(
+                'from-segments retry names a folder that no longer exists uid=%s folder_id=%s; keeping the stored folder',
+                uid,
+                folder_id,
+            )
+
+    calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
+    external_data = dict(existing_conversation.get('external_data') or {})
+    stored_calendar_context = None
+    if calendar_context is not None and 'calendar_meeting_context' not in external_data:
+        # Dotted path, so a concurrent writer's other external_data keys survive.
+        stored_calendar_context = calendar_context.model_dump(mode='json')
+        updates['external_data.calendar_meeting_context'] = stored_calendar_context
+
+    if not updates or not conversations_db.update_conversation(uid, conversation_id, updates):
+        return existing_conversation
+
+    if 'folder_id' in updates:
+        # A preset folder skips AI folder assignment, and with it the count
+        # refresh that assignment does. Both folders can be affected.
+        for affected_folder in {previous_folder, folder_id}:
+            if not affected_folder:
+                continue
+            try:
+                folders_db.update_folder_conversation_count(uid, affected_folder)
+            except Exception:
+                logger.exception(
+                    'from-segments late folder count refresh failed uid=%s folder_id=%s',
+                    uid,
+                    affected_folder,
+                )
+
+    updated = dict(existing_conversation)
+    if 'folder_id' in updates:
+        updated['folder_id'] = updates['folder_id']
+    if stored_calendar_context is not None:
+        updated['external_data'] = {**external_data, 'calendar_meeting_context': stored_calendar_context}
+    return updated
+
+
 def _create_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
@@ -2141,6 +2208,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -2233,6 +2301,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(

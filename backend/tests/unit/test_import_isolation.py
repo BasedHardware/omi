@@ -10,6 +10,7 @@ import pytest
 
 from testing.import_isolation import (
     AutoMockModule,
+    install_package_submodule_stubs,
     load_module_fresh,
     package_submodule_stubs,
     stub_modules,
@@ -412,3 +413,56 @@ def test_package_submodule_stubs_can_omit_the_package_key(tmp_path: Path):
     stubs = package_submodule_stubs("synthetic.pkg", include_package=False, directory=pkg)
     assert "synthetic.pkg" not in stubs
     assert list(stubs) == ["synthetic.pkg.child"]
+
+
+def test_install_package_submodule_stubs_fills_an_empty_path_package(tmp_path: Path):
+    """A new on-disk sibling resolves; a spy override and a retained real module stay."""
+
+    pkg = tmp_path / "pkg"
+    _write_pkg(pkg, "spy.py", "VALUE = 'disk'\n")
+    _write_pkg(pkg, "unlisted.py", "VALUE = 'disk'\n")
+    _write_pkg(pkg, "retained.py", "VALUE = 'real'\n")
+
+    retained_name = "synthetic_obs.retained"
+    spec = importlib.util.spec_from_file_location(retained_name, pkg / "retained.py")
+    assert spec is not None and spec.loader is not None
+    retained = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(retained)
+
+    parent = ModuleType("synthetic_obs")
+    parent.__path__ = []  # type: ignore[attr-defined]
+    spy = ModuleType("synthetic_obs.spy")
+    spy.record = "spy"  # type: ignore[attr-defined]
+
+    names = (
+        "synthetic_obs",
+        "synthetic_obs.spy",
+        "synthetic_obs.unlisted",
+        retained_name,
+    )
+    prior = {name: sys.modules.get(name) for name in names}
+    saved: dict = {}
+    try:
+        sys.modules["synthetic_obs"] = parent
+        sys.modules[retained_name] = retained
+        install_package_submodule_stubs(
+            "synthetic_obs",
+            saved,
+            overrides={"synthetic_obs.spy": spy},
+            directory=pkg,
+        )
+        assert sys.modules["synthetic_obs.unlisted"].__name__ == "synthetic_obs.unlisted"
+        assert sys.modules["synthetic_obs.spy"] is spy
+        assert sys.modules[retained_name] is retained
+        assert parent.unlisted is sys.modules["synthetic_obs.unlisted"]
+        assert parent.spy is spy
+        assert parent.retained is retained
+        assert saved["synthetic_obs.unlisted"] is None
+        assert saved["synthetic_obs.spy"] is None
+        assert retained_name not in saved
+    finally:
+        for name, module in prior.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module

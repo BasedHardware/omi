@@ -7,6 +7,7 @@ import re
 from urllib.parse import urlsplit
 import io
 import logging
+import threading
 import time
 import wave
 
@@ -18,9 +19,10 @@ from config.batch_pipeline import (
     recovery_dispatch_batch_size,
     recovery_wake_lease_seconds,
     empty_asr_disposition_enabled,
+    recovery_policy_refresh_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import RecoveryPolicy, kill_switch
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -132,12 +134,23 @@ class QuarantineRecovery:
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
+        # The serving pass and the dispatch loop share this instance.
+        self._sweeping = threading.Lock()
+
+    def _refreshed(self, segment_id, owner_id, job, policy):
+        """A disabled snapshot with no paid intent follows today's recovery setting."""
+        if not recovery_policy_refresh_enabled():
+            return job, policy
+        refreshed = refresh_disabled_recovery(self.store, segment_id, owner_id)
+        return refreshed if refreshed is not None else (job, policy)
 
     def recover(self, segment_id, owner_id):
         try:
             job, policy = load_stage_policy(self.store, segment_id, 'recovery')
             if not job or job.get('owner_id') != owner_id:
                 return 'held'
+            if not policy.recovery_enabled:
+                job, policy = self._refreshed(segment_id, owner_id, job, policy)
             if not policy.recovery_enabled:
                 return 'disabled'
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
@@ -301,6 +314,8 @@ class QuarantineRecovery:
         if not existing or existing.get('owner_id') != owner_id:
             return 'held'
         if not policy.recovery_enabled:
+            existing, policy = self._refreshed(segment_id, owner_id, existing, policy)
+        if not policy.recovery_enabled:
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue
         # acknowledgement loss never spends the intent. The HTTP handler or
@@ -382,6 +397,14 @@ class QuarantineRecovery:
             self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
 
     def sweep(self):
+        if not self._sweeping.acquire(blocking=False):
+            return {}  # A concurrent scan of the same instance is already dispatching.
+        try:
+            return self._sweep()
+        finally:
+            self._sweeping.release()
+
+    def _sweep(self):
         counts = {}
         budget = recovery_dispatch_batch_size()
         # Discovery is independent of today's admission/recovery cohort. Every
@@ -412,4 +435,9 @@ class QuarantineRecovery:
                 logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
             except Exception:
                 pass
+        if len(candidates) < budget:
+            # A short page reached the end of the scan. Resuming after its last
+            # ID would skip every earlier candidate, including new quarantines,
+            # for a whole pass.
+            self._candidate_after = None
         return counts

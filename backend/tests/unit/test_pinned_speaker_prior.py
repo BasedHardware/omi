@@ -27,10 +27,15 @@ def decide(distances):
     return select_speaker_match(distances)
 
 
-def test_flag_defaults_off_and_reads_only_true():
-    assert pinned_speaker_prior_enabled({}) is False
-    assert pinned_speaker_prior_enabled({'PINNED_SPEAKER_PRIOR_ENABLED': 'TRUE '}) is True
-    assert pinned_speaker_prior_enabled({'PINNED_SPEAKER_PRIOR_ENABLED': '1'}) is False
+@pytest.mark.parametrize('raw', [None, '', ' ', 'true', 'TRUE ', '1', 'on', 'yes', 'unknown'])
+def test_flag_defaults_on(raw):
+    env = {} if raw is None else {'PINNED_SPEAKER_PRIOR_ENABLED': raw}
+    assert pinned_speaker_prior_enabled(env) is True
+
+
+@pytest.mark.parametrize('raw', ['false', ' FALSE ', 'off', 'OFF', '0'])
+def test_explicit_kill_switch(raw):
+    assert pinned_speaker_prior_enabled({'PINNED_SPEAKER_PRIOR_ENABLED': raw}) is False
 
 
 def test_distance_just_above_threshold_on_a_pinned_person_is_a_near_miss():

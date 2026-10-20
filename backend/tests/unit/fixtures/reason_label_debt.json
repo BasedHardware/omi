@@ -353,6 +353,14 @@
       "why": "callers pass string literals (stored/version_bypass/...); closed in practice, scanner is intraprocedural."
     },
     {
+      "path": "utils/held_content_cohort.py",
+      "function": "RuntimeCohort._failure",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
       "path": "utils/llm/gateway_observability.py",
       "function": "record_direct_exception_surface",
       "label": "reason",
@@ -583,6 +591,22 @@
       "shape": "name",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
     },
     {
       "path": "utils/observability/journeys.py",

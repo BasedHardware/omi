@@ -848,6 +848,46 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+      "owner_uid": "omi-stt-chain-exhausted-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total",
+        "omi_stt_chain_exhausted_total"
+      ],
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+      "owner_uid": "omi-stt-chain-exhausted-ratio",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(count((min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) == 100) or (max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) != max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}))) or vector(0)) and on () (count(omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) > 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_stage"
+      ],
+      "owner_title": "Live STT - no provider at stage 100 (router availability escape)",
+      "owner_uid": "omi-stt-no-full-stage-target",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
       "file": "alerts/owner-recognition.json",
       "issues": [],
@@ -2971,7 +3011,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 194
+    "query_consumers": 197
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -8,7 +8,7 @@ import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import scheduler_control_key
+from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key
 from config.policy import resolve_batch_policy
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -185,6 +185,8 @@ class Scheduler:
             'late_capture': bool(
                 watermark and (item.capture_at, item.segment_id) <= (watermark['capture_at'], watermark['segment_id'])
             ),
+            # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
+            'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
         _append(tx, control, job)
         tx.put('jobs', item.segment_id, job)

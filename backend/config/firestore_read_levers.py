@@ -38,6 +38,9 @@ KNOWN_LEVERS = frozenset(
         'ledger_purge_coalesce',
         'people_scan_dedupe',
         'queue_age_sample_budget',
+        'memory_list_index_window',
+        'mcp_conversation_cards_cache',
+        'canonical_statuses_dedupe',
     }
 )
 

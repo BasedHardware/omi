@@ -177,7 +177,84 @@ def apply_fence(database, case):
         raise AssertionError(f'unimplemented fence case: {case}')
 
 
-@pytest.mark.parametrize('case', PRIVACY_CASES, ids=lambda case: case['case'])
+DELETION_CASES = [case for case in PRIVACY_CASES if case['reason'] == 'conversation_deleted']
+DENIAL_CASES = [case for case in PRIVACY_CASES if case['reason'] != 'conversation_deleted']
+
+
+@pytest.mark.parametrize('case', DELETION_CASES, ids=lambda case: case['case'])
+@pytest.mark.parametrize('state', [None, 'queued', 'processing', 'failed', 'partial_failure'])
+def test_user_deletion_completes_terminally_without_ids(poll, monkeypatch, caplog, case, state):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    client, database = poll
+    receipt(
+        database,
+        result={
+            'total_segments': 2,
+            'failed_segments': 0,
+            'errors': [],
+            'outcome': 'success',
+            'new_memories': ['target'],
+            'updated_memories': ['survivor'],
+        },
+    )
+    database.rows['users', 'owner', 'conversations', 'survivor'] = {}
+    apply_fence(database, case['case'])
+    if state is not None:
+        sync_jobs.create_sync_job('owner', 1, 1, 'original', content_id='content')
+        sync_jobs.update_sync_job('original', {'status': state, 'reason_code': 'sync_worker_stale'})
+    before = deepcopy(database.rows)
+    redis_before = sync_jobs.get_sync_job('original')
+    response = client.get('/v2/sync-local-files/original')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['job_id'] == 'original' and body['status'] == 'completed'
+    assert body['reason_code'] == 'conversation_deleted'
+    assert body['result'] == {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 0,
+        'total_segments': 2,
+        'errors': [],
+    }
+    assert 'target' not in response.text and 'survivor' not in response.text
+    assert 'outcome=conversation_deleted_terminal' in caplog.text
+    assert database.rows == before
+    assert sync_jobs.get_sync_job('original') == redis_before
+
+
+@pytest.mark.parametrize('status', ['processing', 'retryable'])
+def test_user_deletion_never_completes_unproven_work(poll, status):
+    client, database = poll
+    result = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'new_memories': ['target']}
+    receipt(database, result=result, status=status)
+    apply_fence(database, 'conversation_tombstone')
+    assert client.get('/v2/sync-local-files/original').status_code == 404
+
+
+@pytest.mark.parametrize('order', [['target', 'donor'], ['donor', 'target']])
+def test_user_deletion_beside_redirect_failure_never_acks(poll, order):
+    # The fence walk stops at the first denied ID of an unordered set; the
+    # answer must not depend on which one it reaches first.
+    client, database = poll
+    result = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'new_memories': order}
+    receipt(database, result=result)
+    apply_fence(database, 'conversation_tombstone')
+    database.rows['users', 'owner', 'conversations', 'donor'] = {'deleted': True, 'sync_merged_into': 'missing'}
+    assert client.get('/v2/sync-local-files/original').status_code == 404
+
+
+def test_account_denial_dominates_user_deletion(poll):
+    client, database = poll
+    result = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'new_memories': ['target']}
+    receipt(database, result=result)
+    apply_fence(database, 'conversation_tombstone')
+    database.rows['account_deletions', 'owner'] = {'wipe_status': 'completed'}
+    assert client.get('/v2/sync-local-files/original').status_code == 404
+
+
+@pytest.mark.parametrize('case', DENIAL_CASES, ids=lambda case: case['case'])
 @pytest.mark.parametrize('state', [None, 'queued', 'processing', 'failed', 'partial_failure'])
 def test_privacy_denial_matches_old_contract_without_ack(poll, monkeypatch, caplog, case, state):
     client, database = poll

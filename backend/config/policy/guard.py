@@ -81,7 +81,7 @@ def env_reads(source):
 RESOLUTION_EDGES = {
     'config/batch_pipeline.py': {'*'},  # Legacy/E1b facade; in-tree unit callers use parts.
     'config/batch_live_preview.py': {'*'},  # E2 pre-unit routing.
-    'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction'},
+    'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction', 'refresh_disabled_recovery'},
     'database/batch_pipeline_intake.py': {'admit'},
     'database/sync_jobs.py': {'create_sync_job', '_pin_legacy_job_policy'},
     'utils/batch_pipeline/intake.py': {'accept_upload'},
