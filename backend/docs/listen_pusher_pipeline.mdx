@@ -2562,6 +2562,34 @@ the exact issued prompt/evidence/segment identity once, even if Yes/No/Skip
 committed first and changed the transcript fingerprint. This bookkeeping never
 clears the consumed marker or restores playback/answer/issuance authority.
 
+### Paid access during speaker browsing
+
+Empty-query speaker search (`speaker_id=user` for Me, or an owned person ID)
+uses the bounded snapshot-cursor conversation scan. Speaker/discard predicates
+run before a request-scoped `PaidLockRecovery` admits historical locked matches;
+otherwise the search helper would discard them before recovery could run.
+The same fresh active-paid/ordinary-allowance policy owns both selection and
+durable access-only writes. BYOK/reviewer overrides cannot authorize recovery,
+and `processing_deferred` backlogs retain their explicit processing choice.
+
+Only the selected response page is unlocked through `update_conversation` under
+the account write fence, before redaction/serialization. Skipped pages, unrelated
+speakers and pagination lookahead are never rewritten. Existing scan/document
+caps, date filters and truncation headers remain unchanged. Free/inactive/
+exhausted matches stay hidden, including in pagination. Authority/persistence
+failures return retryable 503; no transcription, summaries or billing is started.
+Unlocked or unrelated rows add no entitlement dependency. This boundary is shared
+with the list/detail/keyword recovery work in #22031, not a second plan policy.
+
+Verification and rollout checklist:
+
+- [x] First-action HTTP browse for Me and a named person; subsequent detail and
+  a new client lifetime read the durable access patch and original content.
+- [x] Denial, unknown authority, failed-write retry, deferred backlog, bounded
+  page-only writes and truncation regressions exercise production behavior.
+- [ ] Merge/release and privately verify the affected account before closing
+  #20590. Local fixtures do not establish production entitlement or recovery.
+
 ### People-stats aggregate cache
 
 `GET /v1/users/people?include_stats=true` aggregates the newest conversations (locked/discarded excluded, `started_at` else `created_at`, per-segment `person_id`/`start`/`end`/`speaker_match_source`) into one `person_id -> {conversation_count, last_heard_at, talk_seconds, auto_conversation_count}` map per call. `database.people_stats_cache` caches only that map — Person rows and signed speech-sample URLs stay fresh reads. Entries live at `users/{uid}/people_stats/v1/{generation}/{scan_cap}` in the generic Redis cache (60 s TTL, 262144-byte serialized cap on read and write; oversize/corrupt/nonfinite payloads are misses). A per-uid generation token at `people_stats:v1:{uid}:generation` (86400 s TTL, fetch-or-create via `SET NX`) namespaces every entry: a writer-side bump retires all outstanding entries at once, so the 60 s entry TTL is only a safety cap for a failed invalidation — normal writes invalidate immediately. `collect_people_stats` resolves generation and entry before consuming the scan iterator, so a hit performs zero Firestore reads; it re-checks the generation before writing. If invalidation happens after that check, a fill may still be written under the retired key, which is unreachable. A `ListReadBudget`-truncated scan is never stored — only a full capped pass is cached. For N repeat loads within one unchanged 60 s generation, one capped scan serves all N: a fully populated first scan means a hit avoids all 1000 conversation reads (raw reads can reach 2000 because tombstones and invisible rows consume the document budget without yielding). Every operation fails open to the uncached scan; generation and invalidation failures log uid + error type and count `other`/`cached`->`uncached`/`connection_lost`/`recovered`.
