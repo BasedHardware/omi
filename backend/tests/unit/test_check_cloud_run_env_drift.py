@@ -1396,6 +1396,156 @@ def test_gke_envfrom_reference_order_is_compared(checker) -> None:
     assert checker.exit_code((swapped,), strict=True) == 1
 
 
+def test_rendered_state_env_entries_must_be_well_formed(checker, tmp_path: Path) -> None:
+    # The renderer emits only {name, value/valueFrom} mappings; a corrupted
+    # entry (null, non-mapping, or missing name) must be rejected rather than
+    # silently skipped, which would keep the manifest's expectation for that key.
+    manifest_path = _two_service_manifest(tmp_path)
+    for bad_entry in (None, 'not-a-mapping', {'value': 'nameless'}):
+        rendered = tmp_path / 'corrupt.json'
+        rendered.write_text(
+            json.dumps({'services': {'backend': {'env': []}, 'backend-sync': {'env': [bad_entry]}}}),
+            encoding='utf-8',
+        )
+        with pytest.raises(ValueError, match='malformed env entry'):
+            checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+
+
+def test_gke_envfrom_duplicate_sources_are_preserved(checker) -> None:
+    # K8s resolves the last envFrom source for overlapping keys, so `A, B, A`
+    # and `A, B` are different effective environments even though the deduped
+    # reference sets are equal.
+    cm_a = 'fixture-config-a'
+    cm_b = 'fixture-config-b'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    def run(expected_envfrom, live_envfrom):
+        rendered = yaml.safe_dump_all(
+            [
+                {
+                    'kind': 'Deployment',
+                    'metadata': {'name': deployment},
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': expected_envfrom}]
+                            }
+                        }
+                    },
+                }
+            ]
+        )
+
+        def runner(argv, **_kwargs):
+            return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+        gke_state = {
+            'pusher': {
+                'deployment': {},
+                'replicasets': [
+                    _replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=live_envfrom)
+                ],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+        )
+        return result
+
+    ref = lambda name: {'configMapRef': {'name': name}}  # noqa: E731
+    # Same deduped set, different sequences: drift.
+    duplicated = run([ref(cm_a), ref(cm_b), ref(cm_a)], [ref(cm_a), ref(cm_b)])
+    assert duplicated.error is None, duplicated.error
+    assert duplicated.envfrom_mismatched_refs == (cm_a, cm_b)
+    assert duplicated.status == 'DRIFT'
+    # Identical sequences including duplicates: no drift.
+    same = run([ref(cm_a), ref(cm_b), ref(cm_a)], [ref(cm_a), ref(cm_b), ref(cm_a)])
+    assert same.error is None, same.error
+    assert same.envfrom_mismatched_refs == ()
+    assert same.status == 'INVENTORY', same  # unresolvable fixture refs, no manifest entry
+
+
+def test_gke_optional_envfrom_missing_configmap_is_not_an_error(checker) -> None:
+    # An optional envFrom reference whose ConfigMap does not exist is legal
+    # K8s: the pod runs without it. The workload must compare (INVENTORY, empty
+    # contribution) rather than fail with a workload-wide fetch ERROR.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    def runner(argv, **_kwargs):
+        if argv[0] == 'helm':
+            rendered = yaml.safe_dump_all(
+                [
+                    {
+                        'kind': 'Deployment',
+                        'metadata': {'name': deployment},
+                        'spec': {
+                            'template': {
+                                'spec': {
+                                    'containers': [
+                                        {
+                                            'name': 'pusher',
+                                            'env': serving_env,
+                                            'envFrom': [
+                                                {'configMapRef': {'name': 'fixture-gone-config', 'optional': True}}
+                                            ],
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    }
+                ]
+            )
+            return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'fixture-gone-config', 'optional': True}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            raise subprocess.CalledProcessError(
+                1, argv, output='', stderr='Error from server (NotFound): configmaps "fixture-gone-config" not found'
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        kube_context='gke_ctx',
+        runner=runner,
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_refs == ('fixture-gone-config?optional',)
+    assert result.envfrom_unproven == ('fixture-gone-config?optional',)
+    assert result.status == 'INVENTORY'
+    assert checker.exit_code((result,), strict=True) == 0
+
+
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
     cm_name, cm_data = _prod_configmap_fixture(checker)
     envfrom = [{'configMapRef': {'name': cm_name}}]

@@ -291,7 +291,10 @@ def _envfrom_sources(container: Mapping[str, Any] | None) -> tuple[tuple[str, st
             # the reference and belongs in its identity.
             optional = isinstance(ref, Mapping) and ref.get('optional') is True
             sources.append((name, prefix if isinstance(prefix, str) else '', optional))
-    return tuple(dict.fromkeys(sources))
+    # Duplicates are preserved: the K8s API resolves the last envFrom source
+    # when several export the same key, so `A, B, A` and `A, B` are different
+    # effective environments, not the same set of references.
+    return tuple(sources)
 
 
 def _envfrom_ref_identity(name: str, prefix: str, optional: bool) -> str:
@@ -423,6 +426,17 @@ def expected_cloud_run_env(
             # not renderer output, and consuming it would quietly re-source this
             # service's expected values from the raw manifest.
             raise ValueError(f'Rendered state {rendered_state_path} entry for service {service_name!r} has no env list')
+        rendered_env: list[Any] = rendered_service.get('env') or []
+        if rendered_state_path is not None and not all(
+            isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name'] for entry in rendered_env
+        ):
+            # Every renderer-emitted entry is a mapping with a non-empty name;
+            # anything else is corruption, and skipping it would silently keep
+            # the manifest's expectation for that key.
+            raise ValueError(
+                f'Rendered state {rendered_state_path} entry for service {service_name!r} '
+                'has a malformed env entry (every entry must be a mapping with a non-empty name)'
+            )
         if rendered_service:
             # The rendered state is the exact deploy contract. A provisional
             # env_var binding the renderer omitted (unset at deploy time, or a
@@ -502,7 +516,8 @@ def expected_gke_envfrom_refs(workload: str, *, env: str, root: Path = ROOT) -> 
         name = values.get('runtimeConfigMapName')
         if isinstance(name, str) and name:
             sources = [(name, '', False)]
-    return _envfrom_ref_identities(tuple(dict.fromkeys(sources)))
+    # Duplicates preserved for the same last-source-wins reason as _envfrom_sources.
+    return _envfrom_ref_identities(tuple(sources))
 
 
 def _load_values(path: Path) -> dict[str, Any]:
@@ -744,7 +759,7 @@ def read_gke_workload(
             shared = offline_gke.get('configmaps')
             configmaps = shared if isinstance(shared, Mapping) else {}
 
-        def resolve_configmap(ref: str) -> Mapping[str, Any] | None:
+        def resolve_configmap(ref: str, *, optional: bool = False) -> Mapping[str, Any] | None:
             # None marks an offline fixture that does not carry this ConfigMap's
             # data; the workload reports INVENTORY rather than guessing.
             doc = configmaps.get(ref)
@@ -774,12 +789,23 @@ def read_gke_workload(
         replicasets = cache[namespace]
         cm_cache = configmap_cache if configmap_cache is not None else {}
 
-        def resolve_configmap(ref: str) -> Mapping[str, Any] | None:
+        def resolve_configmap(ref: str, *, optional: bool = False) -> Mapping[str, Any] | None:
             # A live read that fails raises (fetch error); one that succeeds but has
-            # no data mapping resolves to an empty key set.
+            # no data mapping resolves to an empty key set. An optional reference
+            # whose ConfigMap is NotFound is not a fetch failure: K8s permits the
+            # pod to run without it, so it resolves to an empty (unproven) set and
+            # the workload reports INVENTORY instead of ERROR.
             if ref not in cm_cache:
-                cm_doc = _run_json(runner, [*base, 'configmap', ref, '-o', 'json'])
-                cm_cache[ref] = cm_doc.get('data') if isinstance(cm_doc.get('data'), Mapping) else {}
+                try:
+                    cm_doc = _run_json(runner, [*base, 'configmap', ref, '-o', 'json'])
+                except subprocess.CalledProcessError as exc:
+                    stderr = getattr(exc, 'stderr', '') or ''
+                    if optional and 'NotFound' in stderr:
+                        cm_cache[ref] = {}
+                    else:
+                        raise
+                else:
+                    cm_cache[ref] = cm_doc.get('data') if isinstance(cm_doc.get('data'), Mapping) else {}
             return cm_cache[ref]
 
         def configmap_is_proven(ref: str) -> bool:
@@ -835,8 +861,8 @@ def read_gke_workload(
         target_refs = _envfrom_ref_identities(sources)
         target_unproven_keys: set[str] = set()
         target_degraded_refs: set[str] = set()
-        for ref, (source_name, source_prefix, _optional) in zip(target_refs, sources):
-            data = resolve_configmap(source_name)
+        for ref, (source_name, source_prefix, optional) in zip(target_refs, sources):
+            data = resolve_configmap(source_name, optional=optional)
             if data is None:
                 refs_unresolved.add(ref)
                 target_degraded_refs.add(ref)
@@ -1357,10 +1383,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.no_cloud_run and not (args.gke or args.gke_workloads):
         parser.error('--no-cloud-run requires --gke or --gke-workload; otherwise there is nothing to check')
 
-    allowlist_map = load_allowlist_file(args.allowlist_file) if args.allowlist_file else LIVE_MANAGED_ENV_ALLOWLIST
     services = tuple(args.services or DEFAULT_SERVICES)
 
     try:
+        # Input loads belong inside the handled section: a missing or malformed
+        # --cloud-run-state / --gke-state / --allowlist-file is an operational
+        # (exit 2) failure, not drift, and must not escape as an uncaught
+        # exception or be misclassified as confirmed drift (exit 1).
+        allowlist_map = load_allowlist_file(args.allowlist_file) if args.allowlist_file else LIVE_MANAGED_ENV_ALLOWLIST
         # Offline fixture loads belong inside the handled section: a missing or
         # malformed --cloud-run-state / --gke-state is an operational (exit 2)
         # failure, not drift, and must not escape as an uncaught exception.
