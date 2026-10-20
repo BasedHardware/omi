@@ -31,6 +31,7 @@ from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.agent_capabilities.errors import ToolError
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
+from utils.review_projection import sync_transcript_chunks
 
 
 def edit_key(edit, records=None):
@@ -197,6 +198,10 @@ def apply_verified_edit(
             and isinstance(change, dict)
             and change.get('undone', False) is False
         ):
+            if prior.get('transcript_overlay'):
+                sync_transcript_chunks(
+                    uid, prior['transcript_overlay']['conversation_id'], firestore_client=review_store.client()
+                )
             return 'applied'
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
