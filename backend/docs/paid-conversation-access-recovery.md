@@ -16,7 +16,8 @@ Detail, list, exact-reference, speaker browsing and keyword search use that same
 boundary. The slim list projection remains enabled. Keyword search retains owner-scoped locked
 index candidates internally; it rehydrates their own Firestore records and
 verifies paid access before restoring and returning any locked match. Unlocked
-search results do not gain an entitlement dependency. Other search
+search results do not gain an entitlement dependency. Remaining locks cannot
+contribute to pagination metadata. Other search
 callers keep the default locked-hit filter. A sync redirect repairs the survivor
 ID. A stored `processing_deferred` backlog still requires its explicit processing
 choice and is excluded from restoration.

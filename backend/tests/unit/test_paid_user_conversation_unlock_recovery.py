@@ -264,9 +264,12 @@ def test_http_keyword_search_retains_paid_locked_hits_before_hydration_but_hides
     monkeypatch.setattr(search_module, 'client', fake_client)
     monkeypatch.setattr(routes.vector_db, 'index', None)
     with _http_client() as client:
-        response = client.post('/v1/conversations/search', json={'query': 'Historical', 'include_discarded': True})
+        response = client.post(
+            '/v1/conversations/search', json={'query': 'Historical', 'include_discarded': True, 'per_page': 1}
+        )
     assert response.status_code == 200, response.text
     assert [row['id'] for row in response.json()['items']] == ([CONV_LOCKED_1] if paid else [])
+    assert response.json()['total_pages'] == (2 if paid else 1)
     assert bool(updated) is paid
     assert rows[CONV_LOCKED_1]['is_locked'] is not paid
 
