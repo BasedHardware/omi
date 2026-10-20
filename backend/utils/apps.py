@@ -1158,7 +1158,7 @@ def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
 
 
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
-    """Sort apps by computed score in descending order.
+    """Sort apps by computed score in descending order, breaking ties by install count.
 
     Score formula: ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
     This balances review quality, review quantity, and popularity.
@@ -1167,7 +1167,7 @@ def sort_apps_by_installs(apps: List[App]) -> List[App]:
     for app in apps:
         app.score = compute_app_score(app)
 
-    return sorted(apps, key=lambda a: a.score or 0, reverse=True)
+    return sorted(apps, key=lambda a: (a.score or 0, max(0, a.installs or 0)), reverse=True)
 
 
 def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
