@@ -3721,6 +3721,7 @@ export interface PageContext {
 
 export interface Participant {
   email?: string | null;
+  evidence?: string | null;
   is_ai_agent?: boolean;
   name?: string | null;
   organization?: string | null;
