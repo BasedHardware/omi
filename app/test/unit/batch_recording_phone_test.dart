@@ -109,4 +109,102 @@ void main() {
       });
     }
   });
+
+  group('canAutoUploadPhoneRecordings', () {
+    test('returns true when allowed', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('returns false when custom STT is used', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: true,
+          autoSyncOfflineRecordings: true,
+          isUploading: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns false when auto sync is disabled', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: false,
+          isUploading: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns false when already uploading', () {
+      expect(
+        canAutoUploadPhoneRecordings(
+          useCustomStt: false,
+          autoSyncOfflineRecordings: true,
+          isUploading: true,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('selectNextAutoPhoneUpload', () {
+    const explicit = 'audio_omibatchphone_opus_fs320_16000_1_fs320_1720000000.bin';
+    const auto1 = 'audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000001.bin';
+    const auto2 = 'audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000002.bin';
+    const other = 'audio_omi_opus_16000_1_fs160_1720000000.bin';
+
+    test('returns null if no files provided', () {
+      expect(
+        selectNextAutoPhoneUpload([], busyNames: {}, failureCounts: {}),
+        isNull,
+      );
+    });
+
+    test('skips explicit and other files, returns first valid auto file', () {
+      expect(
+        selectNextAutoPhoneUpload([explicit, other, auto1, auto2], busyNames: {}, failureCounts: {}),
+        auto1,
+      );
+    });
+
+    test('skips busy files', () {
+      expect(
+        selectNextAutoPhoneUpload([auto1, auto2], busyNames: {auto1}, failureCounts: {}),
+        auto2,
+      );
+
+      expect(
+        selectNextAutoPhoneUpload([auto1], busyNames: {auto1}, failureCounts: {}),
+        isNull,
+      );
+    });
+
+    test('skips files with failure count >= max failures', () {
+      expect(
+        selectNextAutoPhoneUpload([auto1, auto2], busyNames: {}, failureCounts: {auto1: 3}),
+        auto2,
+      );
+
+      expect(
+        selectNextAutoPhoneUpload([auto1], busyNames: {}, failureCounts: {auto1: 3}),
+        isNull,
+      );
+    });
+
+    test('does not skip files with failure count < max failures', () {
+      expect(
+        selectNextAutoPhoneUpload([auto1, auto2], busyNames: {}, failureCounts: {auto1: 2}),
+        auto1,
+      );
+    });
+  });
 }
