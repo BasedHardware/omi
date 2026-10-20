@@ -95,6 +95,10 @@ backend/
 
 ## Service Map
 
+Authenticated standalone-plugin backup handoff and its source-only rollout boundary:
+[`docs/plugin-transport.md`](docs/plugin-transport.md). The pCloud service owns its
+durable export jobs, not Omi conversation/audio identity.
+
 ```
 Shared: Firestore, Redis
 

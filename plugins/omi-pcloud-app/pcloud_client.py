@@ -7,8 +7,9 @@ the CloudBackupProvider Protocol.
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple
+from typing import BinaryIO, Optional, Tuple
 import requests
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 try:
     from .provider_contract import BackupUploadResult, CloudBackupProvider
@@ -53,15 +54,16 @@ class PCloudClient(CloudBackupProvider):
                 f"{self.base_url}/userinfo",
                 headers=self._headers(),
                 timeout=15,
+                allow_redirects=False,
             )
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("result") == 0:
                     return data, None
                 return None, f"pCloud error: {data.get('error', 'Unknown')}"
-            return None, f"HTTP error {resp.status_code}: {resp.text}"
+            return None, f"pCloud request failed (HTTP {resp.status_code})"
         except Exception as ex:
-            return None, f"Network exception: {str(ex)}"
+            return None, 'Could not reach pCloud'
 
     def logout(self) -> Tuple[bool, Optional[str]]:
         """Revokes the current access token on pCloud servers via /logout."""
@@ -70,15 +72,16 @@ class PCloudClient(CloudBackupProvider):
                 f"{self.base_url}/logout",
                 headers=self._headers(),
                 timeout=10,
+                allow_redirects=False,
             )
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("result") == 0 or data.get("auth_deleted", False):
+                if data.get("result") == 0 and data.get("auth_deleted") is True:
                     return True, None
                 return False, f"pCloud logout error: {data.get('error', 'Unknown')}"
-            return False, f"HTTP error {resp.status_code}: {resp.text}"
+            return False, f"pCloud revocation failed (HTTP {resp.status_code})"
         except Exception as ex:
-            return False, f"Network exception during logout: {str(ex)}"
+            return False, 'Could not confirm pCloud revocation'
 
     def ensure_folder(self, folder_path: str) -> Tuple[Optional[int], Optional[str]]:
         """Ensures a folder hierarchy exists via sequential parent creation in /createfolderifnotexists.
@@ -109,6 +112,7 @@ class PCloudClient(CloudBackupProvider):
                     headers=self._headers(),
                     params={"path": subpath},
                     timeout=20,
+                    allow_redirects=False,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -118,9 +122,9 @@ class PCloudClient(CloudBackupProvider):
                     else:
                         return None, f"pCloud createfolder error for '{subpath}': {data.get('error')}"
                 else:
-                    return None, f"HTTP error {resp.status_code} for '{subpath}': {resp.text}"
+                    return None, f"pCloud folder request failed (HTTP {resp.status_code})"
             except Exception as ex:
-                return None, f"Network exception creating folder '{subpath}': {str(ex)}"
+                return None, 'Could not create the pCloud folder'
 
         return current_folder_id, None
 
@@ -128,7 +132,7 @@ class PCloudClient(CloudBackupProvider):
         self,
         folder_ref: str | int,
         filename: str,
-        content: bytes,
+        content: bytes | BinaryIO,
         overwrite: bool = True,
     ) -> Tuple[Optional[BackupUploadResult], Optional[str]]:
         """Uploads file content to the specified folder with idempotent retries.
@@ -161,13 +165,20 @@ class PCloudClient(CloudBackupProvider):
             folder_prefix = clean_folder
 
         files = {"file": (clean_filename, content)}
+        headers = self._headers()
+        body = {'files': files}
+        if not isinstance(content, bytes):
+            encoder = MultipartEncoder(fields={'file': (clean_filename, content, 'application/octet-stream')})
+            headers = {**headers, 'Content-Type': encoder.content_type}
+            body = {'data': encoder}
         try:
             resp = requests.post(
                 f"{self.base_url}/uploadfile",
-                headers=self._headers(),
+                headers=headers,
                 params=params,
-                files=files,
+                **body,
                 timeout=30,
+                allow_redirects=False,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -176,7 +187,7 @@ class PCloudClient(CloudBackupProvider):
                     meta = raw_meta[0] if isinstance(raw_meta, list) else raw_meta
                     file_id = str(meta.get("fileid", ""))
                     actual_name = meta.get("name", clean_filename)
-                    size_bytes = meta.get("size", len(content))
+                    size_bytes = meta.get("size", len(content) if isinstance(content, bytes) else 0)
                     modified = str(meta.get("modified", ""))
                     result_path = f"{folder_prefix.rstrip('/')}/{actual_name}"
                     return (
@@ -190,6 +201,6 @@ class PCloudClient(CloudBackupProvider):
                         None,
                     )
                 return None, f"pCloud upload error: {data.get('error')}"
-            return None, f"HTTP error {resp.status_code}: {resp.text}"
+            return None, f"pCloud upload failed (HTTP {resp.status_code})"
         except Exception as ex:
-            return None, f"Network exception uploading file: {str(ex)}"
+            return None, 'Could not upload the file to pCloud'

@@ -88,6 +88,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
             "https://api.pcloud.com/userinfo",
             headers={"Authorization": "Bearer tok123"},
             timeout=15,
+            allow_redirects=False,
         )
 
     @patch("requests.get")
@@ -122,6 +123,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
             "https://api.pcloud.com/logout",
             headers={"Authorization": "Bearer tok123"},
             timeout=10,
+            allow_redirects=False,
         )
 
     @patch("requests.get")
@@ -135,11 +137,12 @@ class TestPCloudClientAndProvider(unittest.TestCase):
         client = PCloudClient("tok123", location_id=2)
         ok, err = client.logout()
         self.assertFalse(ok)
-        self.assertIn("HTTP error 400", err)
+        self.assertIn("HTTP 400", err)
         mock_get.assert_called_once_with(
             "https://eapi.pcloud.com/logout",
             headers={"Authorization": "Bearer tok123"},
             timeout=10,
+            allow_redirects=False,
         )
 
     @patch("requests.post")
@@ -267,6 +270,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
             },
             files={"file": ("transcript.md", b"# Conversation transcript")},
             timeout=30,
+            allow_redirects=False,
         )
 
     @patch("requests.post")
@@ -305,6 +309,7 @@ class TestPCloudClientAndProvider(unittest.TestCase):
             },
             files={"file": ("audio.wav", b"RIFF...")},
             timeout=30,
+            allow_redirects=False,
         )
 
     @patch("requests.post")
@@ -319,15 +324,15 @@ class TestPCloudClientAndProvider(unittest.TestCase):
             content=b"RIFF...",
         )
         self.assertIsNone(res)
-        self.assertIn("Connection reset by peer", err)
+        self.assertEqual(err, 'Could not upload the file to pCloud')
 
     def test_user_settings_validation_and_defaults(self):
         """PCloudUserSettings model enforces Literal[1, 2] validation."""
         settings = PCloudUserSettings()
         self.assertEqual(settings.folder_name, "Omi Conversations")
         self.assertTrue(settings.save_summary)
-        self.assertTrue(settings.save_transcript)
-        self.assertTrue(settings.save_audio)
+        self.assertFalse(settings.save_transcript)
+        self.assertFalse(settings.save_audio)
         self.assertEqual(settings.location_id, 1)
 
         # Valid EU setting

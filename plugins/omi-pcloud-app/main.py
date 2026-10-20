@@ -1,585 +1,414 @@
-"""
-pCloud Integration App for Omi.
-
-Automatically synchronizes conversation summaries, transcripts, and audio to pCloud.
-Supports multi-region routing (United States and Europe) with encrypted token storage.
-"""
+"""Authenticated setup and durable admission for the standalone pCloud service."""
 
 from __future__ import annotations
 
-import html
-import io
+import asyncio
+import hashlib
+import hmac
+import json
+import logging
 import os
 import secrets
-import wave
-from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
-from urllib.parse import quote
+import time
+from html import escape
+from contextlib import asynccontextmanager
+from urllib.parse import urlencode
 
 import requests
+from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import ValidationError
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    pass
-
-try:
-    from fastapi import FastAPI, Form, Query, Request
-    from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-except ImportError:
-
-    class FastAPI:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def get(self, *args, **kwargs):
-            return lambda f: f
-
-        def post(self, *args, **kwargs):
-            return lambda f: f
-
-    def Query(default=None, **kwargs):
-        return default
-
-    def Form(default=None, **kwargs):
-        return default
-
-    class Request:
-        pass
-
-    class HTMLResponse:
-        def __init__(self, content="", status_code=200):
-            self.content = content
-            self.status_code = status_code
-            self.body = content.encode("utf-8") if isinstance(content, str) else bytes(content)
-
-    class JSONResponse:
-        def __init__(self, content=None, status_code=200):
-            self.content = content or {}
-            self.status_code = status_code
-            import json as _json
-
-            self.body = _json.dumps(self.content).encode("utf-8")
-
-    class RedirectResponse:
-        def __init__(self, url="", status_code=307):
-            self.url = str(url)
-            self.status_code = status_code
-            self.headers = {"location": str(url)}
-            self.body = b""
-
-
-from db import (
-    delete_oauth_state,
-    delete_pcloud_tokens,
-    get_oauth_state,
-    get_pcloud_tokens,
-    get_user_settings,
-    store_oauth_state,
-    store_pcloud_tokens,
-    store_user_settings,
-)
-from models import Conversation, EndpointResponse, PCloudUserSettings
+from omi_plugin_sdk.models import Conversation
 from pcloud_client import PCloudClient
+from presentation import setup_html, summary_markdown, transcript_markdown
+from security import signing_key, verify, verify_delivery
+from store import configured_store
+from worker import run_next_job
 
-app = FastAPI(
-    title="Omi pCloud Backup Plugin",
-    description="Extensible cloud backup destination for Omi conversations",
-    version="1.0.0",
-)
-
-# Configuration from environment
-PCLOUD_CLIENT_ID = os.getenv("PCLOUD_CLIENT_ID", "")
-PCLOUD_CLIENT_SECRET = os.getenv("PCLOUD_CLIENT_SECRET", "")
-PCLOUD_REDIRECT_URI = os.getenv("PCLOUD_REDIRECT_URI", "")
-
-# OAuth endpoints for pCloud (US vs EU)
-AUTH_URL_US = "https://my.pcloud.com/oauth2/authorize"
-AUTH_URL_EU = "https://e-my.pcloud.com/oauth2/authorize"
-TOKEN_URL_US = "https://api.pcloud.com/oauth2_token"
-TOKEN_URL_EU = "https://eapi.pcloud.com/oauth2_token"
-
-# In-memory bounded audio buffer
-MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024  # 25 MB per user
-AUDIO_BUFFER_TTL_SECONDS = 3600  # 1 hour eviction
-
-audio_buffers: Dict[str, bytes] = defaultdict(bytes)
-audio_sample_rates: Dict[str, int] = {}
-audio_buffer_created: Dict[str, datetime] = {}
+COOKIE = 'omi_pcloud_session'
+REGIONS = {1: 'api.pcloud.com', 2: 'eapi.pcloud.com'}
+_store = None
 
 
-def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
-    """Converts raw PCM16 audio bytes to WAV format."""
-    buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as wav_file:
-        wav_file.setnchannels(1)  # Mono
-        wav_file.setsampwidth(2)  # 16-bit PCM
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(audio_bytes)
-    return buffer.getvalue()
+def get_store():
+    global _store
+    if _store is None:
+        _store = configured_store()
+    return _store
 
 
-def get_and_clear_audio(uid: str) -> Optional[bytes]:
-    """Retrieves accumulated audio for a user and cleans up buffer."""
-    if uid in audio_buffers and audio_buffers[uid]:
-        audio_data = audio_buffers[uid]
-        sample_rate = audio_sample_rates.get(uid, 16000)
-        del audio_buffers[uid]
-        audio_sample_rates.pop(uid, None)
-        audio_buffer_created.pop(uid, None)
-        return create_wav_file(audio_data, sample_rate)
-    return None
+@asynccontextmanager
+async def lifespan(app):
+    signing_key()
+    get_store().check_ready()
+    for name in ('PCLOUD_CLIENT_ID', 'PCLOUD_CLIENT_SECRET', 'PCLOUD_REDIRECT_URI'):
+        if not os.getenv(name):
+            raise RuntimeError(f'Missing {name}')
+    stop = asyncio.Event()
 
-
-def _evict_stale_audio_buffers() -> None:
-    """Evicts stale audio buffers exceeding TTL."""
-    now = datetime.now(timezone.utc)
-    stale_uids = [
-        uid
-        for uid, created in audio_buffer_created.items()
-        if (now - created).total_seconds() > AUDIO_BUFFER_TTL_SECONDS
-    ]
-    for uid in stale_uids:
-        audio_buffers.pop(uid, None)
-        audio_sample_rates.pop(uid, None)
-        audio_buffer_created.pop(uid, None)
-
-
-def generate_summary_markdown(conversation: Conversation) -> str:
-    """Generates structured summary.md content from an Omi conversation."""
-    structured = conversation.structured
-    finished_at = conversation.finished_at or conversation.created_at or datetime.now(timezone.utc)
-    date_str = finished_at.strftime("%Y-%m-%d %H:%M UTC")
-
-    category = getattr(structured, "category", "general")
-    if hasattr(category, "value"):
-        category = category.value
-
-    emoji = getattr(structured, "emoji", "💬") or "💬"
-    title = getattr(structured, "title", "New Conversation") or "New Conversation"
-    overview = getattr(structured, "overview", "") or ""
-
-    content = f"# {title} {emoji}\n\n**Date**: {date_str}\n**Category**: {category}\n\n## Summary\n\n{overview}\n"
-
-    if hasattr(structured, "action_items") and structured.action_items:
-        content += "\n## Action Items\n\n"
-        for item in structured.action_items:
-            checkbox = "x" if getattr(item, "completed", False) else " "
-            desc = getattr(item, "description", "")
-            content += f"- [{checkbox}] {desc}\n"
-
-    content += "\n---\n*Saved by Omi pCloud Backup Integration*\n"
-    return content
-
-
-def generate_transcript_markdown(conversation: Conversation) -> str:
-    """Generates transcript.md content with speaker segments and timestamps."""
-    structured = conversation.structured
-    finished_at = conversation.finished_at or conversation.created_at or datetime.now(timezone.utc)
-    date_str = finished_at.strftime("%Y-%m-%d %H:%M UTC")
-    title = getattr(structured, "title", "Conversation") or "Conversation"
-
-    content = f"# Transcript: {title}\n\n**Date**: {date_str}\n\n---\n\n"
-
-    segments = getattr(conversation, "transcript_segments", [])
-    if segments:
-        for seg in segments:
-            speaker = getattr(seg, "speaker", None) or ("User" if getattr(seg, "is_user", False) else "Speaker")
-            start = getattr(seg, "start", 0.0)
-            end = getattr(seg, "end", 0.0)
-            text = getattr(seg, "text", "")
-            time_tag = f"[{int(start // 60):02d}:{int(start % 60):02d} - {int(end // 60):02d}:{int(end % 60):02d}]"
-            content += f"**{speaker}** {time_tag}: {text}\n\n"
-    else:
-        content += "*No transcript recorded.*\n\n"
-
-    content += "---\n*Saved by Omi pCloud Backup Integration*\n"
-    return content
-
-
-def create_folder_name(title: str, finished_at: Optional[datetime]) -> str:
-    """Creates a filesystem-safe folder name for the conversation."""
-    safe_title = PCloudClient.sanitize_path(title)[:50] if title else "Conversation"
-    if not finished_at:
-        finished_at = datetime.now(timezone.utc)
-    date_str = finished_at.strftime("%Y-%m-%d %H-%M")
-    return f"{safe_title} ({date_str})"
-
-
-def get_setup_page_html(
-    uid: str,
-    connected: bool,
-    email: str = "",
-    userid: Optional[int] = None,
-    settings: Optional[dict] = None,
-    notice: Optional[str] = None,
-) -> str:
-    """Renders accessible, responsive HTML setup page for mobile/desktop webviews."""
-    if settings is None:
-        settings = get_user_settings(uid)
-
-    uid_q = quote(uid or "", safe="")
-    folder_name = html.escape(settings.get("folder_name", "Omi Conversations"))
-    save_summary = settings.get("save_summary", True)
-    save_transcript = settings.get("save_transcript", True)
-    save_audio = settings.get("save_audio", True)
-    location_id = settings.get("location_id", 1)
-
-    notice_banner = ""
-    if notice:
-        notice_banner = f"""<div style="background:#e6f4ea;color:#137333;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px;">{html.escape(notice)}</div>"""
-
-    status_badge = (
-        f"""<div style="display:inline-block;background:#e6f4ea;color:#137333;padding:4px 12px;border-radius:16px;font-size:13px;font-weight:600;">✓ Connected as {html.escape(email or f'User #{userid}')}</div>"""
-        if connected
-        else """<div style="display:inline-block;background:#feefe3;color:#c5221f;padding:4px 12px;border-radius:16px;font-size:13px;font-weight:600;">● Not Connected</div>"""
-    )
-
-    action_buttons = (
-        f"""<a href="/disconnect?uid={uid_q}" style="display:inline-block;background:#d93025;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:500;">Disconnect pCloud</a>"""
-        if connected
-        else f"""<a href="/auth/pcloud?uid={uid_q}&location_id={location_id}" style="display:inline-block;background:#1a73e8;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;">Connect pCloud Account</a>"""
-    )
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pCloud Backup Settings — Omi</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8f9fa; color: #202124; margin: 0; padding: 24px; }}
-    .card {{ max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-    h1 {{ font-size: 20px; margin: 0 0 16px 0; }}
-    label {{ display: block; font-size: 14px; font-weight: 500; margin-top: 14px; margin-bottom: 6px; }}
-    input[type="text"], select {{ width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #dadce0; border-radius: 6px; font-size: 14px; }}
-    .checkbox-group {{ margin-top: 16px; }}
-    .checkbox-item {{ display: flex; align-items: center; margin-bottom: 10px; font-size: 14px; }}
-    .checkbox-item input {{ margin-right: 10px; width: 18px; height: 18px; }}
-    .btn-submit {{ background: #1a73e8; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 18px; }}
-    .retention-box {{ margin-top: 24px; padding: 14px; background: #f1f3f4; border-radius: 8px; font-size: 12px; color: #5f6368; line-height: 1.5; }}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>☁️ pCloud Backup for Omi</h1>
-    {notice_banner}
-    <div style="margin-bottom: 20px;">
-      {status_badge}
-    </div>
-    <div style="margin-bottom: 24px;">
-      {action_buttons}
-    </div>
-    <form method="post" action="/settings?uid={uid_q}">
-      <label for="folder_name">Destination Root Folder</label>
-      <input type="text" id="folder_name" name="folder_name" value="{folder_name}" required>
-
-      <label for="location_id">Data Center Region</label>
-      <select id="location_id" name="location_id">
-        <option value="1" {'selected' if location_id == 1 else ''}>United States / Global (api.pcloud.com)</option>
-        <option value="2" {'selected' if location_id == 2 else ''}>European Union (eapi.pcloud.com)</option>
-      </select>
-
-      <div class="checkbox-group">
-        <label>Backup Preferences (Explicit Consent)</label>
-        <div class="checkbox-item">
-          <input type="checkbox" id="save_summary" name="save_summary" {'checked' if save_summary else ''}>
-          <label for="save_summary" style="margin:0;font-weight:normal;">Save conversation summaries (summary.md)</label>
-        </div>
-        <div class="checkbox-item">
-          <input type="checkbox" id="save_transcript" name="save_transcript" {'checked' if save_transcript else ''}>
-          <label for="save_transcript" style="margin:0;font-weight:normal;">Save private transcripts (transcript.md)</label>
-        </div>
-        <div class="checkbox-item">
-          <input type="checkbox" id="save_audio" name="save_audio" {'checked' if save_audio else ''}>
-          <label for="save_audio" style="margin:0;font-weight:normal;">Save raw conversation audio (audio.wav)</label>
-        </div>
-      </div>
-
-      <button type="submit" class="btn-submit">Save Settings</button>
-    </form>
-
-    <div class="retention-box">
-      <strong>Privacy & Retention Policy:</strong><br>
-      • Your access credentials are encrypted at rest using per-account isolation.<br>
-      • Private transcripts and audio files require explicit opt-in consent above.<br>
-      • Disconnecting revokes access on pCloud and permanently removes local credentials. Existing files already backed up to pCloud remain permanently preserved in your private personal storage and are never deleted by Omi.
-    </div>
-  </div>
-</body>
-</html>"""
-
-
-# ============== API Endpoints ==============
-
-
-@app.get("/")
-@app.get("/health")
-async def health_check():
-    """Health check endpoint confirming provider service status."""
-    return {"status": "ok", "provider": "pcloud", "version": "1.0.0"}
-
-
-@app.get("/setup/pcloud", response_class=HTMLResponse)
-async def setup_page(
-    uid: str = Query(...),
-    status: Optional[str] = Query(None),
-):
-    """Renders the setup HTML page for the given user ID."""
-    tokens = get_pcloud_tokens(uid)
-    connected = tokens is not None
-    email = tokens.get("email", "") if tokens else ""
-    userid = tokens.get("userid") if tokens else None
-    settings = get_user_settings(uid)
-
-    notice = None
-    if status == "connected":
-        notice = "Successfully connected your pCloud account!"
-    elif status == "disconnected":
-        notice = "Disconnected pCloud account and erased local tokens."
-    elif status == "settings_saved":
-        notice = "Preferences saved successfully."
-
-    html_body = get_setup_page_html(
-        uid=uid,
-        connected=connected,
-        email=email,
-        userid=userid,
-        settings=settings,
-        notice=notice,
-    )
-    return HTMLResponse(content=html_body)
-
-
-@app.get("/auth/pcloud")
-async def auth_pcloud(
-    uid: str = Query(...),
-    location_id: int = Query(1),
-):
-    """Initiates OAuth 2.0 authorization with pCloud."""
-    if not PCLOUD_CLIENT_ID:
-        return JSONResponse(
-            status_code=500,
-            content={"error": "pCloud OAuth credentials not configured on server (PCLOUD_CLIENT_ID missing)"},
-        )
-
-    state = secrets.token_hex(16)
-    store_oauth_state(state=state, uid=uid, location_id=location_id)
-
-    auth_base = AUTH_URL_EU if location_id == 2 else AUTH_URL_US
-    redirect_uri = quote(PCLOUD_REDIRECT_URI or "", safe="")
-    auth_url = f"{auth_base}?client_id={PCLOUD_CLIENT_ID}&response_type=code&redirect_uri={redirect_uri}&state={state}"
-    return RedirectResponse(url=auth_url)
-
-
-@app.get("/auth/pcloud/callback")
-async def auth_pcloud_callback(
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
-    error: Optional[str] = Query(None),
-):
-    """Handles OAuth 2.0 callback, exchanges code for access token, and stores encrypted credentials."""
-    if error or not code or not state:
-        return HTMLResponse(
-            f"<h2>OAuth Failed</h2><p>{html.escape(error or 'Missing authorization code')}</p>",
-            status_code=400,
-        )
-
-    state_data = get_oauth_state(state)
-    if not state_data:
-        return HTMLResponse("<h2>Invalid or Expired OAuth State</h2>", status_code=400)
-
-    uid = state_data["uid"]
-    location_id = state_data.get("location_id", 1)
-    delete_oauth_state(state)
-
-    token_url = TOKEN_URL_EU if location_id == 2 else TOKEN_URL_US
-    try:
-        resp = requests.post(
-            token_url,
-            data={
-                "client_id": PCLOUD_CLIENT_ID,
-                "client_secret": PCLOUD_CLIENT_SECRET,
-                "code": code,
-            },
-            timeout=20,
-        )
-        if resp.status_code != 200:
-            return HTMLResponse(
-                "<h2>Token Exchange Error</h2><p>Failed to exchange authorization code with pCloud API.</p>",
-                status_code=502,
-            )
-
-        data = resp.json()
-        if data.get("result") != 0:
-            return HTMLResponse(
-                f"<h2>pCloud OAuth Error</h2><p>{html.escape(data.get('error', 'Unknown'))}</p>",
-                status_code=502,
-            )
-
-        access_token = data.get("access_token", "")
-        userid = data.get("userid")
-        loc_id = data.get("locationid", location_id)
-
-        # Retrieve user email via client
-        client = PCloudClient(access_token, location_id=loc_id)
-        user_info, _ = client.get_user_info()
-        email = user_info.get("email") if user_info else None
-
-        store_pcloud_tokens(
-            uid=uid,
-            access_token=access_token,
-            location_id=loc_id,
-            userid=userid,
-            email=email,
-        )
-        return RedirectResponse(f"/setup/pcloud?uid={quote(uid, safe='')}&status=connected")
-    except Exception:
-        return HTMLResponse(
-            "<h2>Unexpected Server Exception</h2><p>An unexpected error occurred during authorization.</p>",
-            status_code=500,
-        )
-
-
-@app.get("/disconnect")
-async def disconnect_pcloud(uid: str = Query(...)):
-    """Revokes credentials on pCloud and disconnects user from local database."""
-    tokens = get_pcloud_tokens(uid)
-    if tokens:
-        access_token = tokens.get("access_token")
-        location_id = tokens.get("location_id", 1)
-        if access_token:
+    async def loop():
+        while not stop.is_set():
             try:
-                client = PCloudClient(access_token, location_id=location_id)
-                client.logout()
-            except Exception:
-                pass
-        # Erase encrypted tokens from database
-        delete_pcloud_tokens(uid)
+                worked = await asyncio.to_thread(run_next_job, get_store())
+            except Exception as error:
+                logging.getLogger(__name__).error('Backup worker store step failed: %s', type(error).__name__)
+                worked = False
+            if not worked:
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=2)
+                except asyncio.TimeoutError:
+                    pass
 
-    return RedirectResponse(f"/setup/pcloud?uid={quote(uid, safe='')}&status=disconnected")
+    task = asyncio.create_task(loop(), name='pcloud-backup-worker')
+    app.state.worker_task = task
+    try:
+        yield
+    finally:
+        stop.set()
+        await task
 
 
-@app.post("/settings")
-async def save_settings(
-    uid: str = Query(...),
-    folder_name: str = Form("Omi Conversations"),
-    location_id: int = Form(1),
-    save_summary: Optional[str] = Form(None),
-    save_transcript: Optional[str] = Form(None),
-    save_audio: Optional[str] = Form(None),
-):
-    """Saves user preferences for folder location, region, and privacy consent."""
-    settings = {
-        "folder_name": folder_name.strip() or "Omi Conversations",
-        "location_id": 2 if location_id == 2 else 1,
-        "save_summary": save_summary is not None,
-        "save_transcript": save_transcript is not None,
-        "save_audio": save_audio is not None,
+app = FastAPI(title='Omi pCloud Backup', version='2.0.0', lifespan=lifespan)
+
+
+@app.middleware('http')
+async def privacy_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.update(
+        {
+            'Cache-Control': 'no-store',
+            'Referrer-Policy': 'no-referrer',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://my.pcloud.com; frame-ancestors 'none'; base-uri 'none'",
+        }
+    )
+    return response
+
+
+def session(request: Request, csrf: str | None = None) -> dict:
+    sid = request.cookies.get(COOKIE, '')
+    data = get_store().get('session', hashlib.sha256(sid.encode()).hexdigest()) if sid else None
+    if not data:
+        raise HTTPException(status_code=401, detail='Open pCloud settings from your signed-in Omi app.')
+    if csrf is not None and not hmac.compare_digest(csrf.encode(), data['csrf'].encode()):
+        raise HTTPException(status_code=403, detail='This form expired. Reload settings and try again.')
+    return data
+
+
+def page(request: Request, notice: str = '', status_code: int = 200):
+    principal = session(request)
+    store = get_store()
+    if not notice:
+        flash_id = hashlib.sha256(request.cookies[COOKIE].encode()).hexdigest()
+        notice = (store.get('flash', flash_id, consume=True) or {}).get('message', '')
+    return HTMLResponse(
+        setup_html(
+            store.settings(principal['uid']),
+            store.get('connection', principal['uid']),
+            store.jobs(principal['uid']),
+            principal['csrf'],
+            notice,
+        ),
+        status_code=status_code,
+    )
+
+
+def success_page(request: Request, message: str):
+    principal = session(request)
+    flash_id = hashlib.sha256(request.cookies[COOKIE].encode()).hexdigest()
+    get_store().put('flash', flash_id, principal['uid'], {'message': message}, ttl=60)
+    return RedirectResponse('/setup/pcloud', status_code=303)
+
+
+@app.exception_handler(HTTPException)
+def actionable_error(request: Request, error: HTTPException):
+    if 'text/html' in request.headers.get('accept', ''):
+        return HTMLResponse(
+            f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>pCloud connection · Omi</title><main style="max-width:600px;margin:48px auto;padding:20px;font:16px/1.6 system-ui"><h1>pCloud connection needs attention</h1><p>{escape(str(error.detail))}</p><p>Your saved connection and existing remote backups have not been changed by this rejected request.</p></main></html>',
+            status_code=error.status_code,
+        )
+    return JSONResponse({'detail': error.detail}, status_code=error.status_code)
+
+
+@app.get('/health')
+def health():
+    get_store().check_ready()
+    signing_key()
+    task = getattr(app.state, 'worker_task', None)
+    if task is not None and task.done():
+        raise HTTPException(status_code=503, detail='The backup worker is not running')
+    return {'status': 'ok', 'provider': 'pcloud'}
+
+
+@app.get('/setup/pcloud')
+def setup(request: Request, uid: str | None = None, omi_token: str | None = None):
+    if omi_token:
+        claims = verify(omi_token, 'setup')
+        if uid != claims['sub'] or not get_store().consume_nonce(
+            claims['jti'], uid, max(1, claims['exp'] - int(time.time()))
+        ):
+            raise HTTPException(status_code=401, detail='Open a fresh setup link from Omi.')
+        sid = secrets.token_urlsafe(32)
+        get_store().put(
+            'session',
+            hashlib.sha256(sid.encode()).hexdigest(),
+            uid,
+            {'uid': uid, 'csrf': secrets.token_urlsafe(32)},
+            ttl=3600,
+        )
+        response = RedirectResponse('/setup/pcloud', status_code=303)
+        response.set_cookie(COOKIE, sid, max_age=3600, secure=True, httponly=True, samesite='lax')
+        return response
+    principal = session(request)
+    if uid is not None and uid != principal['uid']:
+        raise HTTPException(status_code=403, detail='This account does not match your Omi session.')
+    return page(request)
+
+
+@app.get('/setup-completed')
+def setup_completed(uid: str, omi_token: str):
+    claims = verify(omi_token, 'status')
+    if claims['sub'] != uid:
+        raise HTTPException(status_code=401, detail='Account mismatch')
+    connection = get_store().get('connection', uid)
+    settings = get_store().settings(uid)
+    return {
+        'is_setup_completed': bool(connection and connection['status'] == 'active' and settings['consent_version'] == 1)
     }
-    store_user_settings(uid, settings)
-    return RedirectResponse(f"/setup/pcloud?uid={quote(uid, safe='')}&status=settings_saved", status_code=303)
 
 
-@app.post("/audio")
-async def on_audio_chunk(
+@app.post('/settings')
+def save_settings(
     request: Request,
-    uid: str = Query(...),
-    sample_rate: int = Query(16000),
+    csrf: str = Form(...),
+    folder_name: str = Form(...),
+    save_summary: str | None = Form(None),
+    save_transcript: str | None = Form(None),
+    save_audio: str | None = Form(None),
 ):
-    """Receives and buffers raw audio chunks for the current conversation."""
-    body = await request.body()
-    if not body:
-        return JSONResponse({"status": "empty_chunk"})
+    principal = session(request, csrf)
+    parts = folder_name.strip('/ ').split('/')
+    if len(folder_name) > 200 or len(parts) > 5 or any(not p.strip() or p.strip() in ('.', '..') for p in parts):
+        return page(
+            request, 'Choose a folder up to 200 characters, with at most five levels and no . or .. components.', 422
+        )
+    store = get_store()
+    with store.account_lock(principal['uid']):
+        store.put(
+            'settings',
+            principal['uid'],
+            principal['uid'],
+            {
+                'folder_name': '/'.join(PCloudClient.sanitize_path(p) for p in parts),
+                'save_summary': save_summary is not None,
+                'save_transcript': save_transcript is not None,
+                'save_audio': save_audio is not None,
+                'consent_version': 1,
+            },
+            ttl=10 * 365 * 86400,
+        )
+    return success_page(request, 'Backup preferences saved. Changes apply to unfinished files as well as new backups.')
 
-    _evict_stale_audio_buffers()
-    current_size = len(audio_buffers[uid])
-    if current_size + len(body) <= MAX_AUDIO_BUFFER_BYTES:
-        audio_buffers[uid] += body
-        audio_sample_rates[uid] = sample_rate
-        if uid not in audio_buffer_created:
-            audio_buffer_created[uid] = datetime.now(timezone.utc)
-    return JSONResponse({"status": "received", "buffered_bytes": len(audio_buffers[uid])})
+
+@app.post('/auth/pcloud')
+def connect(request: Request, csrf: str = Form(...)):
+    principal = session(request, csrf)
+    store = get_store()
+    with store.account_lock(principal['uid']):
+        if store.get('connection', principal['uid']):
+            return page(request, 'Disconnect your current pCloud account before connecting another.', 409)
+        state = secrets.token_urlsafe(32)
+        store.put(
+            'oauth', state, principal['uid'], {'uid': principal['uid'], 'session_csrf': principal['csrf']}, ttl=900
+        )
+    return RedirectResponse(
+        'https://my.pcloud.com/oauth2/authorize?'
+        + urlencode(
+            {
+                'client_id': os.environ['PCLOUD_CLIENT_ID'],
+                'response_type': 'code',
+                'redirect_uri': os.environ['PCLOUD_REDIRECT_URI'],
+                'state': state,
+            }
+        ),
+        status_code=303,
+    )
 
 
-@app.post("/conversation", response_model=EndpointResponse)
-async def on_conversation_created(
-    conversation: Conversation,
-    uid: str = Query(...),
+@app.get('/auth/pcloud/callback')
+def callback(
+    request: Request,
+    state: str = Query('', max_length=128),
+    code: str = Query('', max_length=4096),
+    locationid: int = 0,
+    hostname: str = '',
+    error: str = '',
 ):
-    """Webhook invoked by Omi when a conversation is finalized.
-
-    Exports summary, transcript, and audio to pCloud based on explicit consent settings.
-    """
-    tokens = get_pcloud_tokens(uid)
-    if not tokens or not tokens.get("access_token"):
-        return EndpointResponse(message="pCloud account not connected")
-
-    if getattr(conversation, "discarded", False):
-        return EndpointResponse(message="Skipped discarded conversation")
-
-    settings = get_user_settings(uid)
-    save_summary = settings.get("save_summary", True)
-    save_transcript = settings.get("save_transcript", True)
-    save_audio = settings.get("save_audio", True)
-    folder_name = settings.get("folder_name", "Omi Conversations")
-    location_id = tokens.get("location_id", settings.get("location_id", 1))
-
-    if not save_summary and not save_transcript and not save_audio:
-        return EndpointResponse(message="No backup items enabled in user settings")
-
-    client = PCloudClient(tokens["access_token"], location_id=location_id)
-
-    finished_at = conversation.finished_at or conversation.created_at
-    conv_folder = create_folder_name(conversation.structured.title, finished_at)
-    target_path = f"/{folder_name}/{conv_folder}"
-
-    # Ensure parent folder hierarchy exists sequentially
-    folder_id, folder_err = client.ensure_folder(target_path)
-    if folder_err:
-        return EndpointResponse(message=f"Failed to create pCloud folder: {folder_err}")
-
-    uploaded_files: List[str] = []
-
-    # 1. Export summary markdown
-    if save_summary:
-        summary_md = generate_summary_markdown(conversation)
-        res, err = client.upload_file(
-            folder_ref=target_path,
-            filename="summary.md",
-            content=summary_md.encode("utf-8"),
-            overwrite=True,
+    principal = session(request)
+    data = get_store().get('oauth', state, consume=True)
+    if not data or data['uid'] != principal['uid'] or not hmac.compare_digest(data['session_csrf'], principal['csrf']):
+        return page(request, 'The connection request expired or belongs to another session. Start again.', 400)
+    if error or not code:
+        return page(request, 'pCloud authorization was not completed. Your existing backups were not changed.', 400)
+    if locationid not in REGIONS or hostname != REGIONS[locationid]:
+        return page(request, 'pCloud returned an unsupported data-center address. Restart the connection.', 400)
+    try:
+        response = requests.post(
+            f'https://{REGIONS[locationid]}/oauth2_token',
+            data={
+                'client_id': os.environ['PCLOUD_CLIENT_ID'],
+                'client_secret': os.environ['PCLOUD_CLIENT_SECRET'],
+                'code': code,
+            },
+            timeout=(5, 20),
+            allow_redirects=False,
         )
-        if not err and res:
-            uploaded_files.append("summary.md")
-
-    # 2. Export transcript markdown (explicit user consent check)
-    if save_transcript and getattr(conversation, "transcript_segments", None):
-        transcript_md = generate_transcript_markdown(conversation)
-        res, err = client.upload_file(
-            folder_ref=target_path,
-            filename="transcript.md",
-            content=transcript_md.encode("utf-8"),
-            overwrite=True,
-        )
-        if not err and res:
-            uploaded_files.append("transcript.md")
-
-    # 3. Export audio WAV (explicit user consent check)
-    if save_audio:
-        _evict_stale_audio_buffers()
-        audio_wav = get_and_clear_audio(uid)
-        if audio_wav:
-            res, err = client.upload_file(
-                folder_ref=target_path,
-                filename="audio.wav",
-                content=audio_wav,
-                overwrite=True,
+        response.raise_for_status()
+        if response.status_code != 200:
+            raise ValueError('Unexpected token exchange response')
+        payload = response.json()
+        if (
+            payload.get('result') != 0
+            or not isinstance(payload.get('access_token'), str)
+            or not payload['access_token']
+        ):
+            raise ValueError('Invalid token response')
+        client = PCloudClient(payload['access_token'], locationid)
+        profile, profile_error = client.get_user_info()
+        connection = {
+            'access_token': payload['access_token'],
+            'location_id': locationid,
+            'userid': payload.get('uid'),
+            'email': (profile or {}).get('email', ''),
+            'generation': secrets.token_urlsafe(24),
+            'status': 'revoke_pending' if profile_error else 'active',
+        }
+        store = get_store()
+        with store.account_lock(principal['uid']):
+            if store.get('connection', principal['uid']):
+                client.logout()
+                return page(request, 'Another connection finished first. Disconnect it before changing accounts.', 409)
+            store.put('connection', principal['uid'], principal['uid'], connection, ttl=10 * 365 * 86400)
+        if profile_error:
+            return page(
+                request, 'pCloud account verification failed. Backups are stopped; retry access revocation below.', 502
             )
-            if not err and res:
-                uploaded_files.append("audio.wav")
+        return success_page(request, 'pCloud connected. Review and save your backup preferences to finish setup.')
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return page(
+            request,
+            'Could not finish connecting to pCloud. Try connecting again; no backup was reported as complete.',
+            502,
+        )
 
-    return EndpointResponse(message=f"Backed up to pCloud: {', '.join(uploaded_files)}")
+
+@app.post('/disconnect')
+def disconnect(request: Request, csrf: str = Form(...)):
+    principal = session(request, csrf)
+    store = get_store()
+    with store.account_lock(principal['uid']):
+        connection = store.get('connection', principal['uid'])
+        store.cancel_jobs(principal['uid'])
+        if connection:
+            connection['status'] = 'revoke_pending'
+            store.put('connection', principal['uid'], principal['uid'], connection, ttl=10 * 365 * 86400)
+            ok, _ = PCloudClient(connection['access_token'], connection['location_id']).logout()
+            if not ok:
+                return page(
+                    request,
+                    'Backups stopped, but pCloud has not confirmed access revocation. Retry below, or remove this app in your pCloud account.',
+                    502,
+                )
+            store.delete('connection', principal['uid'])
+    return success_page(request, 'Disconnected and revoked pCloud access. Existing remote files were not deleted.')
+
+
+@app.post('/audio')
+def reject_unscoped_audio():
+    raise HTTPException(
+        status_code=410,
+        detail='UID-only audio buffering is not supported. Backups read canonical saved audio by conversation ID.',
+    )
+
+
+@app.post('/conversation')
+async def conversation_created(request: Request, uid: str):
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > 4 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail='Conversation delivery is too large')
+        raw.extend(chunk)
+    try:
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError('Expected object')
+        verify_delivery(request, payload, uid)
+        conversation = Conversation.model_validate(payload)
+    except (ValueError, ValidationError):
+        raise HTTPException(status_code=422, detail='Invalid conversation delivery')
+    if not conversation.id:
+        raise HTTPException(status_code=422, detail='A stable conversation ID is required')
+    return await asyncio.to_thread(admit, uid, conversation, payload.get('_omi_backup_audio_token'))
+
+
+def admit(uid: str, conversation: Conversation, audio_token: str | None):
+    store = get_store()
+    with store.account_lock(uid):
+        connection = store.get('connection', uid)
+        if not connection or connection['status'] != 'active':
+            raise HTTPException(status_code=409, detail='Connect pCloud before exporting this conversation')
+        if conversation.discarded:
+            return JSONResponse({'status': 'skipped', 'message': 'Discarded conversation was not exported'})
+        settings = store.settings(uid)
+        files = {}
+        if settings['save_summary']:
+            files['summary.md'] = summary_markdown(conversation)
+        if settings['save_transcript']:
+            files['transcript.md'] = transcript_markdown(conversation)
+        audio_enabled = settings['save_audio']
+        claims = verify(audio_token or '', 'audio')
+        if claims['sub'] != uid or claims.get('conversation_id') != conversation.id:
+            raise HTTPException(status_code=401, detail='Backup authorization belongs to another conversation')
+        if not files and not audio_enabled:
+            return JSONResponse({'status': 'paused', 'message': 'No backup items enabled'})
+        key = hashlib.sha256(f'{uid}\0{conversation.id}'.encode()).hexdigest()
+        job = {
+            'conversation_id': conversation.id,
+            'title': conversation.structured.title,
+            'path': f'/{settings["folder_name"]}/{key}',
+            'files': files,
+            'audio_token': audio_token if audio_enabled else None,
+            'authorization_token': audio_token,
+            'generation': connection['generation'],
+        }
+        try:
+            identity = store.enqueue(uid, conversation.id, job)
+        except OverflowError:
+            raise HTTPException(
+                status_code=429, detail='Too many unfinished backups. Review failed backups in settings.'
+            )
+        state = store.job_state(uid, identity)
+        queued = state in ('pending', 'running')
+        return JSONResponse(
+            {
+                'status': 'accepted' if queued else state,
+                'backup_id': identity,
+                'message': (
+                    'Queued for backup; check pCloud settings for progress.'
+                    if queued
+                    else 'This conversation already has a backup record. Check its status in pCloud settings.'
+                ),
+            },
+            status_code=202 if queued else 200,
+        )
+
+
+@app.post('/backups/{identity}/retry')
+def retry_backup(identity: str, request: Request, csrf: str = Form(...)):
+    principal = session(request, csrf)
+    store = get_store()
+    with store.account_lock(principal['uid']):
+        if not store.retry(principal['uid'], identity):
+            return page(request, 'This backup cannot be retried. It may be complete, expired, or canceled.', 409)
+    return success_page(request, 'Backup queued for retry. Previously completed files will not be uploaded again.')

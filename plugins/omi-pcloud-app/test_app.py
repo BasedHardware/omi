@@ -1,350 +1,566 @@
-"""
-Hermetic unit and integration tests for pCloud Omi plugin FastAPI service (main.py).
-Tests OAuth flow, setup webview, user settings, privacy consent gating, and conversation export.
-Runs under standard library unittest without third-party server or live network dependencies.
+"""Real HTTP/SQLite regressions for #20498 and #20213; provider network is denied.
+
+Expected consent semantics come from #20213. Region/revocation expectations come
+from docs.pcloud.com/methods/oauth_2.0/authorize.html and methods/auth/logout.html.
 """
 
-from __future__ import annotations
-
-import asyncio
-from datetime import datetime, timezone
+import copy
+import concurrent.futures
+import hashlib
+import json
 import os
-from pathlib import Path
-import shutil
+import secrets
 import sys
-import unittest
-from typing import Optional
-from unittest.mock import MagicMock, patch
+import time
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
-_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _CURRENT_DIR not in sys.path:
-    sys.path.insert(0, _CURRENT_DIR)
+import jwt
+import pytest
+import requests
+from cryptography.fernet import Fernet, MultiFernet, InvalidToken
+from fastapi.testclient import TestClient
 
-import db
+sys.path.append(str(Path(__file__).resolve().parents[2] / 'backend'))
+from utils.plugin_transport import PluginTransport, authorize_app_setup
+
 import main
-from models import ActionItem, Conversation, Structured, TranscriptSegment
-from pcloud_client import BackupUploadResult
+import worker
+from pcloud_client import PCloudClient
+from provider_contract import BackupUploadResult
+from store import Store
 
-try:
-    from starlette.testclient import TestClient as _StarletteTestClient
-
-    _HAS_FASTAPI_APP = hasattr(main.app, "routes") and len(getattr(main.app, "routes", [])) > 0
-    _TEST_CLIENT = _StarletteTestClient(main.app) if _HAS_FASTAPI_APP else None
-except Exception:
-    _TEST_CLIENT = None
-
-
-def _get_auth_pcloud_callback_response(
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
-):
-    """Invokes /auth/pcloud/callback via TestClient when available, falling back to direct coroutine invocation."""
-    if _TEST_CLIENT is not None:
-        params = {}
-        if code is not None:
-            params["code"] = code
-        if state is not None:
-            params["state"] = state
-        if error is not None:
-            params["error"] = error
-        try:
-            return _TEST_CLIENT.get("/auth/pcloud/callback", params=params, follow_redirects=False)
-        except TypeError:
-            return _TEST_CLIENT.get("/auth/pcloud/callback", params=params, allow_redirects=False)
-    return asyncio.run(main.auth_pcloud_callback(code=code, state=state, error=error))
+KEY = 'synthetic-test-key-at-least-32-bytes-long'
+APP = 'synthetic-pcloud-app'
+UID = 'synthetic-user-a'
+TRANSPORT = PluginTransport(APP, 'https://pcloud.example.invalid', KEY)
 
 
-def _get_body_text(response) -> str:
-    """Extracts text content across Starlette Response (.body bytes) and fallback shim (.content/.body)."""
-    if hasattr(response, "text") and response.text is not None:
-        return response.text
-    if hasattr(response, "body") and response.body is not None:
-        if isinstance(response.body, bytes):
-            return response.body.decode("utf-8", errors="replace")
-        return str(response.body)
-    if hasattr(response, "content") and response.content is not None:
-        if isinstance(response.content, bytes):
-            return response.content.decode("utf-8", errors="replace")
-        return str(response.content)
-    return ""
+def payload(identity='conversation-a', title='Same title'):
+    return {
+        'id': identity,
+        'created_at': '2026-10-20T10:00:00Z',
+        'finished_at': '2026-10-20T10:30:00Z',
+        'structured': {'title': title, 'overview': 'Synthetic summary', 'category': 'work'},
+        'transcript_segments': [{'text': 'Synthetic private transcript', 'is_user': True, 'start': 0, 'end': 1}],
+        'discarded': False,
+        '_omi_backup_audio_token': TRANSPORT.token(UID, 'audio', conversation_id=identity, ttl=86400),
+    }
 
 
-def _get_redirect_location(response) -> str:
-    """Extracts redirect target across Starlette Response (headers['location']) and fallback shim (.url)."""
-    if hasattr(response, "headers") and response.headers is not None:
-        loc = response.headers.get("location") or response.headers.get("Location")
-        if loc:
-            return str(loc)
-    if hasattr(response, "url") and response.url:
-        return str(response.url)
-    return ""
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setenv('OMI_PLUGIN_SIGNING_KEY', KEY)
+    monkeypatch.setenv('OMI_PLUGIN_APP_ID', APP)
+    monkeypatch.setenv('PCLOUD_CLIENT_ID', 'synthetic-client')
+    monkeypatch.setenv('PCLOUD_CLIENT_SECRET', 'synthetic-secret')
+    monkeypatch.setenv('PCLOUD_REDIRECT_URI', 'https://pcloud.example.invalid/auth/pcloud/callback')
+    key = Fernet.generate_key().decode()
+    store = Store(str(tmp_path / 'pcloud.sqlite3'), [key])
+    monkeypatch.setattr(main, '_store', store)
+    monkeypatch.setattr(
+        requests.sessions.Session,
+        'request',
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError('Live network forbidden')),
+    )
+    monkeypatch.setattr(requests, 'head', lambda *args, **kwargs: SimpleNamespace(status_code=200))
+    # No lifespan worker in route tests: drive its real production function explicitly.
+    client = TestClient(main.app, base_url='https://pcloud.example.invalid')
+    result = SimpleNamespace(store=store, client=client, monkeypatch=monkeypatch, key=key)
+    yield result
+    client.close()
 
 
-class TestPCloudAppHermetic(unittest.TestCase):
-    """Hermetic test suite exercising main.py endpoints, webhooks, and privacy gates."""
+def login(env, uid=UID, client=None):
+    client = client or env.client
+    result = client.get(
+        '/setup/pcloud', params={'uid': uid, 'omi_token': TRANSPORT.token(uid, 'setup')}, follow_redirects=False
+    )
+    assert result.status_code == 303
+    assert result.headers['location'] == '/setup/pcloud'
+    cookie = client.cookies.get(main.COOKIE)
+    principal = env.store.get('session', hashlib.sha256(cookie.encode()).hexdigest())
+    return principal['csrf']
 
-    def setUp(self):
-        # Clear test data directory before each test
-        self.test_data_dir = os.path.join(os.path.dirname(__file__), "data")
-        if os.path.exists(self.test_data_dir):
-            shutil.rmtree(self.test_data_dir, ignore_errors=True)
 
-        # Clear in-memory audio buffers
-        main.audio_buffers.clear()
-        main.audio_sample_rates.clear()
-        main.audio_buffer_created.clear()
+def connection(env, uid=UID):
+    env.store.put(
+        'connection',
+        uid,
+        uid,
+        {
+            'access_token': 'synthetic-provider-token',
+            'status': 'active',
+            'location_id': 1,
+            'email': 'synthetic@example.invalid',
+            'generation': 'generation-a',
+        },
+    )
 
-        # Set default test environment variables
-        os.environ["PCLOUD_TOKEN_ENCRYPTION_KEY"] = "test-encryption-key-for-hermetic-unit-tests"
-        main.PCLOUD_CLIENT_ID = "test_client_id_123"
-        main.PCLOUD_CLIENT_SECRET = "test_client_secret_xyz"
-        main.PCLOUD_REDIRECT_URI = "https://test.omi.me/auth/pcloud/callback"
 
-    def tearDown(self):
-        os.environ.pop("PCLOUD_TOKEN_ENCRYPTION_KEY", None)
-        if os.path.exists(self.test_data_dir):
-            shutil.rmtree(self.test_data_dir, ignore_errors=True)
+def settings(env, **values):
+    env.store.put(
+        'settings',
+        UID,
+        UID,
+        {
+            'folder_name': 'Omi Conversations',
+            'save_summary': True,
+            'save_transcript': False,
+            'save_audio': False,
+            'consent_version': 1,
+            **values,
+        },
+    )
 
-    def test_health_check(self):
-        """Health check returns status ok and provider pcloud."""
-        res = asyncio.run(main.health_check())
-        self.assertEqual(res["status"], "ok")
-        self.assertEqual(res["provider"], "pcloud")
 
-    def test_setup_page_disconnected(self):
-        """Setup page renders Not Connected badge and connect button for unauthenticated users."""
-        res = asyncio.run(main.setup_page(uid="user_anon"))
-        html_content = _get_body_text(res)
-        self.assertIn("pCloud Backup for Omi", html_content)
-        self.assertIn("Not Connected", html_content)
-        self.assertIn("Connect pCloud Account", html_content)
-        self.assertIn("Privacy & Retention Policy", html_content)
+def deliver(env, value=None, uid=UID, headers=None):
+    value = value or payload()
+    auth = (
+        headers
+        if headers is not None
+        else TRANSPORT.delivery_headers(uid, 'https://pcloud.example.invalid/conversation', value)
+    )
+    return env.client.post('/conversation', params={'uid': uid}, json=value, headers=auth)
 
-    def test_setup_page_connected(self):
-        """Setup page renders Connected badge and email for authenticated users."""
-        db.store_pcloud_tokens(
-            uid="user_authed",
-            access_token="valid_access_tok",
-            location_id=1,
-            userid=9876,
-            email="contributor@example.com",
+
+def success_provider(env):
+    calls = []
+    env.monkeypatch.setattr(PCloudClient, 'ensure_folder', lambda *a: (123, None))
+
+    def upload(self, folder_ref, filename, content, overwrite=True):
+        calls.append((filename, content if isinstance(content, bytes) else content.read()))
+        return BackupUploadResult('id', filename, '/backup/' + filename, 1, 'now'), None
+
+    env.monkeypatch.setattr(PCloudClient, 'upload_file', upload)
+    return calls
+
+
+@pytest.mark.parametrize(
+    'path,method',
+    [
+        ('/setup/pcloud?uid=known-victim', 'get'),
+        ('/auth/pcloud', 'post'),
+        ('/settings', 'post'),
+        ('/disconnect', 'post'),
+    ],
+)
+def test_uid_does_not_authorize(env, path, method):
+    response = (
+        getattr(env.client, method)(path, data={'csrf': 'bogus', 'folder_name': 'x'} if method == 'post' else None)
+        if method == 'post'
+        else env.client.get(path)
+    )
+    assert response.status_code == 401
+
+
+def test_setup_grant_is_uid_bound_one_use_and_scrubbed(env):
+    grant = TRANSPORT.token(UID, 'setup')
+    assert env.client.get('/setup/pcloud', params={'uid': 'other', 'omi_token': grant}).status_code == 401
+    response = env.client.get('/setup/pcloud', params={'uid': UID, 'omi_token': grant}, follow_redirects=False)
+    assert response.status_code == 303
+    assert 'Secure' in response.headers['set-cookie'] and 'HttpOnly' in response.headers['set-cookie']
+    assert env.client.get('/setup/pcloud', params={'uid': UID, 'omi_token': grant}).status_code == 401
+    assert env.client.get('/setup/pcloud?uid=other').status_code == 403
+
+
+@pytest.mark.parametrize('scope', ['status', 'audio', 'delivery'])
+def test_other_scopes_cannot_open_setup(env, scope):
+    assert (
+        env.client.get('/setup/pcloud', params={'uid': UID, 'omi_token': TRANSPORT.token(UID, scope)}).status_code
+        == 401
+    )
+
+
+def test_expired_or_wrong_key_setup_denied(env):
+    expired = TRANSPORT.token(UID, 'setup', ttl=-1)
+    wrong = PluginTransport(APP, TRANSPORT.base_url, 'other-key-with-at-least-32-bytes!!').token(UID, 'setup')
+    for token in (expired, wrong):
+        assert env.client.get('/setup/pcloud', params={'uid': UID, 'omi_token': token}).status_code == 401
+
+
+def test_csrf_and_account_are_bound_to_session(env):
+    csrf = login(env)
+    for wrong in ('bogus', '非ASCII'):
+        assert env.client.post('/settings', data={'csrf': wrong, 'folder_name': 'x'}).status_code == 403
+    result = env.client.post('/settings?uid=victim', data={'csrf': csrf, 'folder_name': 'mine', 'save_summary': 'on'})
+    assert result.status_code == 200
+    assert env.store.settings(UID)['folder_name'] == 'mine'
+    assert env.store.settings('victim')['folder_name'] == 'Omi Conversations'
+
+
+def test_setup_status_requires_grant_and_saved_preferences(env):
+    connection(env)
+    params = {'uid': UID, 'omi_token': TRANSPORT.token(UID, 'status')}
+    assert env.client.get('/setup-completed', params=params).json() == {'is_setup_completed': False}
+    settings(env)
+    assert env.client.get('/setup-completed', params=params).json() == {'is_setup_completed': True}
+    assert env.client.get('/setup-completed', params={**params, 'uid': 'other'}).status_code == 401
+
+
+@pytest.mark.parametrize('region,host', [(1, 'api.pcloud.com'), (2, 'eapi.pcloud.com')])
+def test_oauth_uses_documented_callback_region(env, region, host):
+    csrf = login(env)
+    initiation = env.client.post('/auth/pcloud', data={'csrf': csrf}, follow_redirects=False)
+    state = parse_qs(urlsplit(initiation.headers['location']).query)['state'][0]
+    response = SimpleNamespace(
+        status_code=200,
+        raise_for_status=lambda: None,
+        json=lambda: {'result': 0, 'access_token': 'synthetic-oauth-token', 'uid': 123},
+    )
+    calls = []
+    env.monkeypatch.setattr(requests, 'post', lambda url, **kw: (calls.append(url) or response))
+    env.monkeypatch.setattr(PCloudClient, 'get_user_info', lambda self: ({'email': 'synthetic@example.invalid'}, None))
+    result = env.client.get(
+        '/auth/pcloud/callback',
+        params={'state': state, 'code': 'synthetic-code', 'locationid': region, 'hostname': host},
+    )
+    assert result.status_code == 200
+    assert calls == [f'https://{host}/oauth2_token']
+    saved = env.store.get('connection', UID)
+    assert saved['location_id'] == region and saved['userid'] == 123
+    assert env.client.get('/auth/pcloud/callback', params={'state': state, 'code': 'again'}).status_code == 400
+
+
+def test_oauth_rejects_untrusted_host_and_stale_state(env):
+    login(env)
+    env.store.put('oauth', 'expired', UID, {'uid': UID, 'session_csrf': 'x'}, ttl=-1)
+    assert env.client.get('/auth/pcloud/callback', params={'state': 'expired', 'code': 'x'}).status_code == 400
+    csrf = env.store.get('session', hashlib.sha256(env.client.cookies.get(main.COOKIE).encode()).hexdigest())['csrf']
+    env.store.put('oauth', 'host', UID, {'uid': UID, 'session_csrf': csrf})
+    assert (
+        env.client.get(
+            '/auth/pcloud/callback',
+            params={'state': 'host', 'code': 'x', 'locationid': 2, 'hostname': 'metadata.google.internal'},
+        ).status_code
+        == 400
+    )
+
+
+def test_failed_revocation_stops_exports_but_preserves_recovery_token(env):
+    csrf = login(env)
+    connection(env)
+    deliver(env)
+    env.monkeypatch.setattr(PCloudClient, 'logout', lambda self: (False, 'provider secret error'))
+    result = env.client.post('/disconnect', data={'csrf': csrf})
+    assert result.status_code == 502 and 'not confirmed' in result.text
+    assert 'provider secret' not in result.text
+    assert env.store.get('connection', UID)['status'] == 'revoke_pending'
+    assert env.store.jobs(UID)[0]['state'] == 'canceled'
+    assert 'files' not in env.store.jobs(UID)[0]
+    assert deliver(env).status_code == 409
+    env.monkeypatch.setattr(PCloudClient, 'logout', lambda self: (True, None))
+    assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+    assert env.store.get('connection', UID) is None
+
+
+@pytest.mark.parametrize('tamper', ['body', 'uid', 'scope', 'none'])
+def test_delivery_signature_covers_identity_and_content(env, tamper):
+    connection(env)
+    value = payload()
+    headers = TRANSPORT.delivery_headers(UID, 'https://pcloud.example.invalid/conversation', value)
+    uid = UID
+    if tamper == 'body':
+        value['structured']['overview'] = 'tampered'
+    elif tamper == 'uid':
+        uid = 'other'
+    elif tamper == 'scope':
+        headers = {'X-Omi-Plugin-Authorization': TRANSPORT.token(UID, 'setup')}
+    else:
+        headers = {}
+    assert deliver(env, value, uid=uid, headers=headers).status_code == 401
+    assert env.store.jobs(UID) == []
+
+
+def test_legacy_missing_consent_does_not_export_or_store_sensitive_content(env):
+    connection(env)
+    env.store.put('settings', UID, UID, {'save_transcript': True, 'save_audio': True})
+    response = deliver(env)
+    assert response.status_code == 202
+    job = env.store.jobs(UID)[0]
+    assert list(job['files']) == ['summary.md'] and job['audio_token'] is None
+    assert 'Synthetic private transcript' not in json.dumps(job)
+    calls = success_provider(env)
+    assert worker.run_next_job(env.store)
+    assert [name for name, _ in calls] == ['summary.md']
+    assert env.store.jobs(UID)[0]['state'] == 'completed'
+
+
+def test_discard_and_uid_audio_never_create_cross_conversation_buffers(env):
+    connection(env)
+    value = payload()
+    value['discarded'] = True
+    assert deliver(env, value).json()['status'] == 'skipped'
+    assert env.client.post('/audio?uid=' + UID, content=b'private').status_code == 410
+    assert env.store.jobs(UID) == []
+
+
+def test_distinct_conversation_identity_is_unique_but_retries_are_not(env):
+    connection(env)
+    a = deliver(env).json()['backup_id']
+    again = deliver(env, payload(title='Changed title')).json()['backup_id']
+    b = deliver(env, payload('conversation-b')).json()['backup_id']
+    assert a == again and a != b
+    jobs = env.store.jobs(UID)
+    assert len(jobs) == 2 and jobs[0]['path'] != jobs[1]['path']
+
+
+def test_failed_partial_upload_preserves_payload_and_resumes_only_missing_files(env):
+    connection(env)
+    settings(env, save_transcript=True)
+    job_id = deliver(env).json()['backup_id']
+    env.monkeypatch.setattr(PCloudClient, 'ensure_folder', lambda *a: (1, None))
+    calls = []
+
+    def first(self, folder_ref, filename, content, overwrite=True):
+        calls.append(filename)
+        return (
+            (BackupUploadResult('1', filename, '/file', 1, 'now'), None)
+            if filename == 'summary.md'
+            else (None, 'secret provider text')
         )
-        res = asyncio.run(main.setup_page(uid="user_authed"))
-        html_content = _get_body_text(res)
-        self.assertIn("Connected as contributor@example.com", html_content)
-        self.assertIn("Disconnect pCloud", html_content)
 
-    def test_auth_pcloud_redirect_url(self):
-        """OAuth initiate generates secure state and redirects to correct region."""
-        # US region (location_id=1)
-        res_us = asyncio.run(main.auth_pcloud(uid="user_1", location_id=1))
-        loc_us = _get_redirect_location(res_us)
-        self.assertTrue(loc_us.startswith("https://my.pcloud.com/oauth2/authorize"))
-        self.assertIn("client_id=test_client_id_123", loc_us)
-        self.assertIn("state=", loc_us)
+    env.monkeypatch.setattr(PCloudClient, 'upload_file', first)
+    worker.run_next_job(env.store)
+    job = env.store.jobs(UID)[0]
+    assert job['state'] == 'pending' and job['uploaded'] == ['summary.md']
+    assert 'transcript.md' in job['files'] and 'secret provider text' not in job['error']
+    calls = success_provider(env)
+    assert env.store.retry(UID, job_id)
+    worker.run_next_job(Store(str(env.store.path), [env.key]))
+    assert [name for name, _ in calls] == ['transcript.md']
+    done = env.store.jobs(UID)[0]
+    assert done['state'] == 'completed' and done['files'] == {} and done['audio_token'] is None
 
-        # EU region (location_id=2)
-        res_eu = asyncio.run(main.auth_pcloud(uid="user_1", location_id=2))
-        loc_eu = _get_redirect_location(res_eu)
-        self.assertTrue(loc_eu.startswith("https://e-my.pcloud.com/oauth2/authorize"))
 
-    @patch("requests.post")
-    @patch.object(main.PCloudClient, "get_user_info")
-    def test_auth_pcloud_callback_success(self, mock_get_user_info, mock_post):
-        """OAuth callback exchanges code for token, stores encrypted credentials, and redirects."""
-        # Pre-seed CSRF state
-        db.store_oauth_state(state="csrf_state_123", uid="user_callback", location_id=1)
+def test_opt_out_and_relink_fence_queued_jobs(env):
+    connection(env)
+    settings(env, save_transcript=True)
+    deliver(env)
+    settings(env, save_transcript=False)
+    calls = success_provider(env)
+    worker.run_next_job(env.store)
+    assert [name for name, _ in calls] == ['summary.md']
+    deliver(env, payload('new-conversation'))
+    saved = env.store.get('connection', UID)
+    saved['generation'] = 'different-account-generation'
+    env.store.put('connection', UID, UID, saved)
+    worker.run_next_job(env.store)
+    assert env.store.jobs(UID)[0]['state'] == 'canceled'
 
-        # Mock pCloud token response
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "result": 0,
-            "access_token": "secret_access_token_abc",
-            "userid": 554433,
-            "locationid": 1,
-        }
-        mock_post.return_value = mock_resp
-        mock_get_user_info.return_value = ({"email": "oauth_user@example.com"}, None)
 
-        res = _get_auth_pcloud_callback_response(code="auth_code_xyz", state="csrf_state_123")
-        loc = _get_redirect_location(res)
-        self.assertIn("/setup/pcloud?uid=user_callback&status=connected", loc)
+def test_store_claim_nonce_rotation_and_encryption_are_durable(env):
+    connection(env)
+    job_id = deliver(env).json()['backup_id']
+    assert env.store.consume_nonce('nonce', UID, 900)
+    assert not env.store.consume_nonce('nonce', UID, 900)
+    claimed = env.store.claim()
+    assert claimed[0] == job_id and env.store.claim() is None
+    raw = env.store.path.read_bytes()
+    assert b'synthetic-provider-token' not in raw and b'Synthetic summary' not in raw
+    new_key = Fernet.generate_key()
+    env.store.cipher = MultiFernet([Fernet(new_key), Fernet(env.key.encode())])
+    env.store.rotate_keys()
+    env.store.cipher = MultiFernet([Fernet(new_key)])
+    assert env.store.get('connection', UID)['status'] == 'active'
+    assert env.store.jobs(UID)[0]['id'] == job_id
 
-        # Verify token was encrypted and stored in database
-        tokens = db.get_pcloud_tokens("user_callback")
-        self.assertIsNotNone(tokens)
-        self.assertEqual(tokens["access_token"], "secret_access_token_abc")
-        self.assertEqual(tokens["email"], "oauth_user@example.com")
 
-        # Verify CSRF state was consumed
-        self.assertIsNone(db.get_oauth_state("csrf_state_123"))
+def test_job_expiry_scrubs_pending_content(env):
+    connection(env)
+    deliver(env)
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET expires=?', (time.time() - 1,))
+    assert env.store.claim() is None
+    job = env.store.jobs(UID)[0]
+    assert job['state'] == 'expired' and 'files' not in job and 'audio_token' not in job
 
-    def test_auth_pcloud_callback_invalid_state(self):
-        """OAuth callback rejects invalid or expired state with 400 Bad Request."""
-        res = _get_auth_pcloud_callback_response(code="auth_code_xyz", state="invalid_expired_state")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("Invalid or Expired OAuth State", _get_body_text(res))
 
-    def test_auth_pcloud_callback_error_param(self):
-        """OAuth callback rejects upstream error parameter with 400 Bad Request."""
-        res = _get_auth_pcloud_callback_response(error="access_denied")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("OAuth Failed", _get_body_text(res))
-        self.assertIn("access_denied", _get_body_text(res))
+def test_crashed_lease_reclaims_but_cannot_commit_stale_work(env):
+    connection(env)
+    deliver(env)
+    first = env.store.claim()
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET due=0')
+    reopened = Store(str(env.store.path), [env.key])
+    second = reopened.claim()
+    assert first[0] == second[0] and first[2] != second[2]
+    with pytest.raises(RuntimeError):
+        env.store.settle(first[0], UID, first[2], first[3], 'completed')
 
-    @patch.object(main.PCloudClient, "logout")
-    def test_disconnect(self, mock_logout):
-        """Disconnect endpoint calls pCloud /logout, erases stored tokens, and redirects."""
-        mock_logout.return_value = (True, None)
-        db.store_pcloud_tokens("user_disc", "tok_disc", location_id=1)
-        self.assertIsNotNone(db.get_pcloud_tokens("user_disc"))
 
-        res = asyncio.run(main.disconnect_pcloud(uid="user_disc"))
-        loc = _get_redirect_location(res)
-        self.assertIn("status=disconnected", loc)
-        self.assertIsNone(db.get_pcloud_tokens("user_disc"))
-        mock_logout.assert_called_once()
+def test_duplicate_admission_is_atomic_across_store_instances(env):
+    job = {'generation': 'a', 'files': {}, 'audio_token': None}
 
-    def test_fail_fast_encryption_key_missing(self):
-        """Encryption functions fail fast with RuntimeError if no encryption key is configured."""
-        with patch.dict(os.environ, {}, clear=True):
-            with self.assertRaises(RuntimeError) as ctx:
-                db._get_encryption_key()
-            self.assertIn("PCLOUD_TOKEN_ENCRYPTION_KEY or APP_SECRET", str(ctx.exception))
+    def enqueue(index):
+        store = Store(str(env.store.path), [env.key])
+        return store.enqueue(UID, 'same-conversation', dict(job))
 
-    def test_save_settings(self):
-        """Settings endpoint updates user preferences and retention defaults."""
-        res = asyncio.run(
-            main.save_settings(
-                uid="user_settings",
-                folder_name="Custom Backups",
-                location_id=2,
-                save_summary="on",
-                save_transcript="on",
-                save_audio=None,  # Audio unchecked
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        identities = list(pool.map(enqueue, range(8)))
+    assert len(set(identities)) == 1 and len(env.store.jobs(UID)) == 1
+
+
+def test_expired_state_nonce_cannot_be_consumed(env):
+    env.store.put('oauth', 'old', UID, {'uid': UID}, ttl=-1)
+    assert env.store.get('oauth', 'old', consume=True) is None
+
+
+def test_wrong_encryption_key_fails_readiness(env):
+    env.store.check_ready()
+    wrong = Store(str(env.store.path), [Fernet.generate_key().decode()])
+    with pytest.raises(InvalidToken):
+        wrong.check_ready()
+
+
+def test_corrupt_job_is_visible_and_does_not_starve_other_jobs(env):
+    connection(env)
+    identity = deliver(env).json()['backup_id']
+    deliver(env, payload('healthy-conversation'))
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET blob=? WHERE id=?', (b'corrupt-ciphertext', identity))
+    assert env.store.claim() is None
+    job = next(item for item in env.store.jobs(UID) if item['id'] == identity)
+    assert job['state'] == 'unreadable'
+    success_provider(env)
+    assert worker.run_next_job(env.store)
+    assert env.store.jobs(UID)[0]['state'] == 'completed'
+
+
+@pytest.mark.parametrize('status', [403, 404, 503])
+def test_queued_copy_stops_if_omi_access_is_no_longer_confirmed(env, status):
+    connection(env)
+    deliver(env)
+    calls = success_provider(env)
+    env.monkeypatch.setattr(requests, 'head', lambda *args, **kwargs: SimpleNamespace(status_code=status))
+    worker.run_next_job(env.store)
+    assert calls == [] and env.store.jobs(UID)[0]['state'] == 'pending'
+
+
+def test_terminal_retry_budget_is_visible_and_can_be_retried_by_owner(env):
+    connection(env)
+    identity = deliver(env).json()['backup_id']
+    env.monkeypatch.setattr(PCloudClient, 'ensure_folder', lambda *args: (None, 'provider error'))
+    for index in range(5):
+        with env.store.transaction() as conn:
+            conn.execute('UPDATE jobs SET due=0')
+        worker.run_next_job(env.store)
+    assert env.store.jobs(UID)[0]['state'] == 'failed'
+    csrf = login(env)
+    assert env.client.post(f'/backups/{identity}/retry', data={'csrf': csrf}).status_code == 200
+    assert env.store.jobs(UID)[0]['state'] == 'pending'
+    assert env.store.retry('other-user', identity) is False
+
+
+def test_completed_replay_is_not_reported_as_newly_queued(env):
+    connection(env)
+    deliver(env)
+    success_provider(env)
+    worker.run_next_job(env.store)
+    result = deliver(env)
+    assert result.status_code == 200 and result.json()['status'] == 'completed'
+
+
+def test_setup_escapes_private_text_and_matches_saved_consent(env):
+    connection(env)
+    csrf = login(env)
+    result = env.client.post(
+        '/settings', data={'csrf': csrf, 'folder_name': 'Folder <script>alert(1)</script>', 'save_summary': 'on'}
+    )
+    assert result.status_code == 200
+    assert '<script>' not in result.text
+    assert 'name="save_transcript" checked' not in result.text
+    assert 'name="save_audio" checked' not in result.text
+
+
+def test_authenticated_sessions_share_one_mobile_desktop_state(env):
+    csrf = login(env)
+    assert (
+        env.client.post(
+            '/settings', data={'csrf': csrf, 'folder_name': 'Saved From Mobile', 'save_summary': 'on'}
+        ).status_code
+        == 200
+    )
+    other = TestClient(main.app, base_url='https://pcloud.example.invalid')
+    try:
+        login(env, client=other)
+        response = other.get('/setup/pcloud')
+        assert response.status_code == 200 and 'Saved From Mobile' in response.text
+        assert response.headers['cache-control'] == 'no-store'
+    finally:
+        other.close()
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'http://storage.googleapis.com/file',
+        'https://metadata.google.internal/file',
+        'https://storage.googleapis.com.evil.invalid/file',
+        'https://user:pass@storage.googleapis.com/file',
+    ],
+)
+def test_audio_rejects_noncanonical_downloads(url):
+    with pytest.raises(worker.BackupFailure):
+        worker.audio_payload(url)
+
+
+def test_audio_failure_retains_bound_token_and_success_uses_same_conversation(env):
+    connection(env)
+    settings(env, save_summary=False, save_audio=True)
+    value = payload()
+    value['_omi_backup_audio_token'] = TRANSPORT.token(UID, 'audio', conversation_id=value['id'], ttl=86400)
+    job_id = deliver(env, value).json()['backup_id']
+    calls = success_provider(env)
+    response = SimpleNamespace(
+        raise_for_status=lambda: None,
+        json=lambda: {'audio_files': [{'id': 'part-one', 'status': 'pending', 'signed_url': None}]},
+    )
+    env.monkeypatch.setattr(requests, 'get', lambda *a, **kw: response)
+    worker.run_next_job(env.store)
+    job = env.store.jobs(UID)[0]
+    assert job['state'] == 'pending' and job['audio_token'] == value['_omi_backup_audio_token']
+    requests_seen = []
+
+    class Download:
+        status_code = 200
+        headers = {'Content-Length': '4'}
+
+        def raise_for_status(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def iter_content(self, size):
+            yield b'RIFF'
+
+    def get(url, **kwargs):
+        requests_seen.append(url)
+        if '/backup-audio/' in url:
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    'audio_files': [
+                        {
+                            'id': 'part-one',
+                            'status': 'cached',
+                            'signed_url': 'https://storage.googleapis.com/synthetic/file',
+                            'content_type': 'audio/wav',
+                        }
+                    ]
+                },
             )
-        )
-        self.assertIn("status=settings_saved", _get_redirect_location(res))
+        return Download()
 
-        s = db.get_user_settings("user_settings")
-        self.assertEqual(s["folder_name"], "Custom Backups")
-        self.assertEqual(s["location_id"], 2)
-        self.assertTrue(s["save_summary"])
-        self.assertTrue(s["save_transcript"])
-        self.assertFalse(s["save_audio"])
-
-    @patch.object(main.PCloudClient, "upload_file")
-    @patch.object(main.PCloudClient, "ensure_folder")
-    def test_conversation_export_full(self, mock_ensure_folder, mock_upload_file):
-        """Conversation webhook exports summary, transcript, and audio when user is connected."""
-        uid = "user_export"
-        db.store_pcloud_tokens(uid, "tok_valid", location_id=1)
-        db.store_user_settings(
-            uid,
-            {
-                "folder_name": "Omi Conversations",
-                "save_summary": True,
-                "save_transcript": True,
-                "save_audio": True,
-            },
-        )
-
-        # Buffer synthetic audio
-        main.audio_buffers[uid] = b"\x00\x01\x02\x03" * 100
-        main.audio_sample_rates[uid] = 16000
-        main.audio_buffer_created[uid] = datetime.now(timezone.utc)
-
-        mock_ensure_folder.return_value = (501, None)
-        mock_upload_file.return_value = (
-            BackupUploadResult("f1", "summary.md", "/Omi/conv/summary.md", 250, "now"),
-            None,
-        )
-
-        conv = Conversation(
-            id="conv_101",
-            created_at=datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc),
-            finished_at=datetime(2026, 10, 6, 12, 15, tzinfo=timezone.utc),
-            structured=Structured(
-                title="DeepMind Team Sync",
-                overview="Discussion regarding graph-router deployment.",
-                emoji="🚀",
-                category="work",
-                action_items=[ActionItem(description="Review PR #20498", completed=True)],
-            ),
-            transcript_segments=[
-                TranscriptSegment(text="Hello everyone", speaker="Abubakr", is_user=True, start=0.0, end=2.5),
-                TranscriptSegment(text="All systems green", speaker="Lead", is_user=False, start=2.6, end=5.0),
-            ],
-            discarded=False,
-        )
-
-        resp = asyncio.run(main.on_conversation_created(conv, uid=uid))
-        self.assertIn("summary.md", resp.message)
-        self.assertIn("transcript.md", resp.message)
-        self.assertIn("audio.wav", resp.message)
-
-        # Verify folder ensure and all 3 uploads occurred
-        mock_ensure_folder.assert_called_once()
-        self.assertEqual(mock_upload_file.call_count, 3)
-
-    @patch.object(main.PCloudClient, "upload_file")
-    @patch.object(main.PCloudClient, "ensure_folder")
-    def test_conversation_export_privacy_consent_gating(self, mock_ensure_folder, mock_upload_file):
-        """User opting out of private transcript and audio strictly blocks their export."""
-        uid = "user_privacy"
-        db.store_pcloud_tokens(uid, "tok_valid", location_id=1)
-        # Explicitly opt-out of transcript and audio
-        db.store_user_settings(
-            uid,
-            {
-                "folder_name": "Omi Conversations",
-                "save_summary": True,
-                "save_transcript": False,  # No consent for transcript
-                "save_audio": False,  # No consent for audio
-            },
-        )
-
-        # Audio present in buffer
-        main.audio_buffers[uid] = b"\x00\x01\x02\x03" * 50
-
-        mock_ensure_folder.return_value = (502, None)
-        mock_upload_file.return_value = (
-            BackupUploadResult("f2", "summary.md", "/Omi/conv/summary.md", 200, "now"),
-            None,
-        )
-
-        conv = Conversation(
-            id="conv_102",
-            structured=Structured(title="Private Medical Consultation", overview="Confidential notes"),
-            transcript_segments=[TranscriptSegment(text="Sensitive details", start=0.0, end=1.0)],
-            discarded=False,
-        )
-
-        resp = asyncio.run(main.on_conversation_created(conv, uid=uid))
-        self.assertIn("summary.md", resp.message)
-        self.assertNotIn("transcript.md", resp.message)
-        self.assertNotIn("audio.wav", resp.message)
-
-        # Exactly 1 upload occurred (summary only)
-        self.assertEqual(mock_upload_file.call_count, 1)
-
-    def test_conversation_discarded_skipped(self):
-        """Discarded conversations are skipped without creating folders or uploads."""
-        uid = "user_discard"
-        db.store_pcloud_tokens(uid, "tok_valid", location_id=1)
-
-        conv = Conversation(id="conv_discarded", discarded=True)
-        resp = asyncio.run(main.on_conversation_created(conv, uid=uid))
-        self.assertEqual(resp.message, "Skipped discarded conversation")
-
-    def test_conversation_account_isolation_unconnected(self):
-        """Unconnected accounts fail-closed with clear status message."""
-        conv = Conversation(id="conv_anon")
-        resp = asyncio.run(main.on_conversation_created(conv, uid="unconnected_uid"))
-        self.assertEqual(resp.message, "pCloud account not connected")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    env.monkeypatch.setattr(requests, 'get', get)
+    env.store.retry(UID, job_id)
+    worker.run_next_job(env.store)
+    assert '/backup-audio/conversation-a' in requests_seen[0]
+    assert len(calls) == 1 and calls[0][0].startswith('audio-part-one-') and calls[0][0].endswith('.wav')
+    assert calls[0][1] == b'RIFF'
+    assert env.store.jobs(UID)[0]['state'] == 'completed'

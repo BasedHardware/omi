@@ -1,51 +1,134 @@
-# pCloud Omi Backup App
+# Omi pCloud backup service
 
-Turnkey cloud-backup integration for Omi conversations supporting **pCloud** storage
-with multi-region data center support (United States and Europe), encrypted token storage,
-and an extensible provider protocol.
+Completion of the foundation in [#20498](https://github.com/BasedHardware/omi/pull/20498),
+tracking [#20213](https://github.com/BasedHardware/omi/issues/20213). This is not a
+deployment or evidence that the issue is resolved for customers.
 
-Addresses [BasedHardware/omi #20213](https://github.com/BasedHardware/omi/issues/20213).
+## User flow
 
-## Features
+Open the integration from your signed-in Omi app, on mobile or desktop. Omi's
+authenticated app-details response supplies a short-lived setup capability.
+The service consumes it once, sets a Secure/HttpOnly session cookie and removes
+the capability from the URL. A bare `?uid=` never grants access.
 
-- **Extensible Architecture**: Implements `CloudBackupProvider` protocol, establishing
-  a unified interface for modular cloud storage destinations.
-- **Multi-Region Routing**:
-  - Global / US: `https://api.pcloud.com` (Auth: `https://my.pcloud.com/oauth2/authorize`, `location_id: 1`)
-  - European Union: `https://eapi.pcloud.com` (Auth: `https://e-my.pcloud.com/oauth2/authorize`, `location_id: 2`)
-- **Least-Privilege OAuth & Account Isolation**:
-  - Secure authorization flow with per-account token encryption at rest.
-  - One-time CSRF state expiration.
-  - Complete credential revocation on disconnect (remotely on pCloud via `/logout` and locally from database).
-- **Automated Conversation Synchronization**:
-  - `/conversation` webhook automatically exports finalized conversations.
-  - Supports `summary.md`, `transcript.md`, and raw audio WAV (`audio.wav`).
-- **Explicit Privacy & Consent Gates**:
-  - Independent user preferences for summary, transcript, and audio export.
-  - Private transcripts and audio require explicit opt-in consent before export.
-- **Idempotent Storage & Sequential Folder Management**:
-  - Creates parent folder hierarchies sequentially to prevent pCloud API error 2002.
-  - Rejects relative directory traversal (`.` and `..`).
-  - Safe overwrite retries (`renameifexists=0`) to eliminate duplicate numbered files.
-- **Hermetic Test Suite**: 28 mocked unit and integration tests with zero external
-  network or server dependencies.
+Connect pCloud, then save your destination folder and independent summary,
+transcript and audio preferences. Transcripts/audio default off, including
+records without a current consent version. The same server-side connection,
+preferences and recent-backup list serve both clients.
 
-## Endpoints
+New finalized conversations enter encrypted durable jobs. `202 accepted` means
+queued, not uploaded. The settings page distinguishes pending, running, failed,
+completed, canceled and expired work and offers retry. Completed files are
+checkpointed individually; retries overwrite the same destination rather than
+creating numbered copies. Conversation identity, not title/minute, owns the
+remote folder. Summary/transcript files retain the readable conversation title.
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Health check confirming service readiness |
-| `GET` | `/setup/pcloud?uid={uid}` | Webview setup interface showing connection status & settings |
-| `GET` | `/auth/pcloud?uid={uid}` | Initiates OAuth 2.0 flow with pCloud |
-| `GET` | `/auth/pcloud/callback` | Exchanges code for access token and saves encrypted credentials |
-| `GET` | `/disconnect?uid={uid}` | Revokes token on pCloud and erases local user credentials |
-| `POST` | `/settings?uid={uid}` | Saves folder name, region, and privacy consent preferences |
-| `POST` | `/conversation?uid={uid}` | Webhook invoked by Omi to export finalized conversation |
-| `POST` | `/audio?uid={uid}` | Buffers raw conversation audio chunks |
+Audio comes from Omi's canonical saved-audio records by conversation ID, never
+from a shared per-user buffer. Original WAV or MP3 parts retain their real
+format. If Omi has not saved audio, has removed it, or playback is not ready,
+the job reports that limitation; it never calls a truncated or missing file a
+successful audio backup. The maximum audio file is 512 MB; downloads are bounded
+and uploads use streaming multipart. Summary/transcript successes remain saved
+even if the audio portion fails.
 
-## Privacy & Retention Policy
+Before each provider write, the worker rechecks Omi account/app/conversation
+access and the current local consent and connection generation. Uncertain
+authorization stops the operation. Discarded, deleted and locked conversations
+cannot be recovered through an old backup grant.
 
-- **Token Storage**: Credentials are encrypted at rest using per-account authenticated keystreams.
-- **Disconnect Behavior**: Disconnecting calls pCloud's `/logout` endpoint to revoke the access token remotely and deletes local encrypted credentials.
-- **Remote File Retention**: Existing files already uploaded to pCloud remain permanently preserved
-  in the user's private personal storage and are never deleted by Omi.
+## Deployment topology and configuration
+
+This standalone service requires **one replica with a persistent, backed-up
+volume**, mounted at `/data`. It owns one transactional SQLite database for
+sessions, OAuth state, credentials, consent and jobs. Multiple workers on that
+same volume use SQLite leases and per-account OS locks. **Do not deploy it onto
+ephemeral Cloud Run disk, use separate per-replica volumes, or silently fall
+back to files/another store.** A horizontally scaled deployment needs a separately
+reviewed shared-store implementation before rollout.
+
+The JSON/Redis implementation in the unmerged foundation is replaced, not
+automatically migrated. Existing files or Redis records are not read, erased or
+rewritten. If any existing installation is discovered, inventory and migrate its
+state explicitly before changing its deployment. No such migration is performed
+by importing or starting this code.
+
+Configure these secrets/settings through your deployment's secret manager:
+
+| Variable | Meaning |
+| --- | --- |
+| `OMI_PLUGIN_APP_ID` | Registered Omi app ID |
+| `OMI_PLUGIN_SIGNING_KEY` | Per-app random signing secret, at least 32 bytes; matches backend registration |
+| `PCLOUD_CLIENT_ID`, `PCLOUD_CLIENT_SECRET` | pCloud developer-app credentials |
+| `PCLOUD_REDIRECT_URI` | Exact HTTPS URL ending `/auth/pcloud/callback` |
+| `PCLOUD_DB_PATH` | Absolute persistent path, e.g. `/data/pcloud.sqlite3` |
+| `PCLOUD_ENCRYPTION_KEYS` | JSON array of Fernet keys, newest first; no public/default key |
+| `OMI_API_BASE_URL` | Trusted HTTPS Omi API base; defaults to `https://api.omi.me` |
+
+Use a random secret generator and `Fernet.generate_key()` locally; never paste
+secret values into issues, PRs or logs. Configure the pCloud application for the
+minimum provider-supported permission level. The code does not request the
+optional `manageshares` permission; verify the actual app grant in the developer
+console before claiming app-folder-only access. pCloud OAuth tokens currently do
+not expire and have no refresh-token flow; reconnect/revoke rather than inventing
+one. US/EU selection comes from the allowlisted provider callback parameters.
+
+On the Omi backend, provision the server-only `OMI_PLUGIN_TRANSPORT_JSON` mapping
+from app ID to `{base_url, key}`. `base_url` is the service's exact HTTPS origin;
+`key` matches the plugin signing secret. Never put the key in marketplace metadata,
+query strings, or client configuration. The new registration is intentionally
+unprovisioned in this source-only PR; its reviewed runtime secret bindings and
+rollout are part of the remaining checklist. Unregistered apps retain their old
+behavior. See [transport architecture](../../backend/docs/plugin-transport.md).
+
+Install from this directory: `uv pip install -r requirements.txt`. Run
+`python -m uvicorn main:app --host 0.0.0.0 --port 8080 --no-access-log`.
+The worker starts with the application and resumes persisted work after restart;
+the host must keep CPU available while idle. Do not enable request-query access
+logs at the app or proxy, because setup links carry short-lived capabilities.
+
+## Retention, disconnect and key rotation
+
+Pending payloads (including scoped access tokens) are encrypted with vetted
+Fernet, expire after seven days and are scrubbed by the worker. There are at most
+100 unfinished jobs per account. Five failed attempts stop automatic retries;
+the owner can retry within retention. After expiry use Omi's manual export.
+Completed jobs clear their content and authorization tokens. Job metadata is
+removed 30 days after expiry. Credentials and preferences are retained while
+connected (ten-year maximum); sessions last one hour and OAuth state 15 minutes.
+Nonce consumption and expiry are transactional, including local development.
+
+Disconnect first stops exports and cancels/scrubs queued payloads. Only a
+confirmed `result=0, auth_deleted=true` response erases the local provider token.
+Failed revocation retains an inactive encrypted token solely for retry and tells
+the user how to revoke access directly in pCloud. Omi does not delete remote
+files or promise retention beyond pCloud's own policies.
+
+To rotate encryption keys: back up the volume, configure `[new_key, old_key, ...]`,
+run `configured_store().rotate_keys()` in an administrative shell on that volume,
+verify reads with the new key, then remove retired keys. The transaction rewraps
+both credentials and job payloads. Test the procedure against a copy first.
+Signing-key rotation invalidates outstanding launch/access grants; pause admission
+and settle/cancel pending jobs before coordinating that separate change.
+
+The provider protocol remains local to this first implementation. The shared
+Omi SDK deliberately owns webhook models only; Dropbox/S3/WebDAV are not claimed
+as implementations of this protocol.
+
+## Verification and release checklist
+
+Run `bash scripts/run-plugin-pcloud-tests.sh` from the repository root. It installs
+the actual pinned FastAPI/service dependencies and runs the HTTP, storage,
+provider-client and backend-signing conformance tests. The deterministic manifest
+runs it in both local and CI lanes. Backend transport/route tests live in
+`backend/tests/unit/test_plugin_transport*.py`.
+
+- [ ] Final local HTTP/browser smoke and focused backend verification recorded in PR.
+- [ ] GitHub checks pass on the final reviewed SHA.
+- [ ] Operator provisions pCloud developer app, minimal grants, callbacks and test account.
+- [ ] Runtime secret bindings reviewed and provisioned on all conversation-finalization hosts.
+- [ ] Persistent-volume backup, restore and encryption-key rotation exercised by operator.
+- [ ] Synthetic US/EU connect, settings parity, three-part backup, retry and revocation verified live.
+- [ ] Separately authorized rollout completed and customer acceptance checked before closing #20213.
+
+No deployment, production data change, credential provisioning or issue closure
+is part of this code-only work.
