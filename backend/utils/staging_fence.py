@@ -57,8 +57,26 @@ PROD_DATA_PLANE_HASHES: frozenset[str] = frozenset(
 )
 
 # Production references by shape. ``based-hardware`` not followed by ``-dev``,
-# prod Cloud Run URL suffix, and the public prod API.
-_PROD_REFERENCE = re.compile(r'based-hardware(?!-dev)|hhibjajaja|208440318997|api\.omi\.me', re.IGNORECASE)
+# prod Cloud Run URL suffix, and any omi.me host (api.omi.me, parakeet.omi.me, ...).
+_PROD_REFERENCE = re.compile(
+    r'based-hardware(?!-dev)|hhibjajaja|208440318997|(?<![a-z0-9-])(?:[a-z0-9-]+\.)*omi\.me(?![a-z0-9-])',
+    re.IGNORECASE,
+)
+# Production network addresses (ro-prod 2026-10-20): the prod VPC subnets, which hold the
+# prod ILBs (Parakeet, diarizer), and the prod external load balancer IPs. Dev is
+# 172.16.0.0/18 and Cloud SQL 172.20.0.0/16, so these never overlap a staging value.
+PROD_NETWORKS: tuple[ipaddress.IPv4Network, ...] = tuple(
+    ipaddress.IPv4Network(cidr)
+    for cidr in (
+        '172.16.128.0/20',
+        '172.16.144.0/20',
+        '172.16.160.0/20',
+        '34.160.137.29/32',
+        '34.49.188.104/32',
+        '34.54.223.100/32',
+    )
+)
+_IPV4 = re.compile(r'(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])')
 
 _PROJECT_ENV = ('OMI_CUSTOMER_DATA_PROJECT', 'GOOGLE_CLOUD_PROJECT')
 _OPTIONAL_PROJECT_ENV = ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'GCLOUD_PROJECT', 'GCP_PROJECT', 'FIREBASE_PROJECT_ID')
@@ -113,6 +131,17 @@ def _is_private_redis_host(host: str) -> bool:
     return address.is_private
 
 
+def _has_prod_address(text: str) -> bool:
+    for literal in _IPV4.findall(text):
+        try:
+            address = ipaddress.ip_address(literal)
+        except ValueError:
+            continue
+        if any(address in network for network in PROD_NETWORKS):
+            return True
+    return False
+
+
 def staging_violations(env: Mapping[str, str]) -> list[tuple[str, str]]:
     """Return ``(reason, variable_name)`` for every fence breach. Empty means isolated."""
     if not is_staging(env):
@@ -157,6 +186,8 @@ def staging_violations(env: Mapping[str, str]) -> list[tuple[str, str]]:
             violations.append(('prod_hash', name))
         elif _PROD_REFERENCE.search(text):
             violations.append(('prod_reference', name))
+        elif _has_prod_address(text):
+            violations.append(('prod_address', name))
     # Stable order, no duplicates.
     return sorted(set(violations))
 

@@ -206,10 +206,42 @@ def test_corpus_score_aggregates_without_text(tmp_path):
     scores = corpus.score(units, batch, None, None, pinned=True)
     assert scores['corpus_minutes'] == 60.0
     batch_scores = scores['pipelines']['batch']
-    assert batch_scores['wer']['errors'] == 1 and batch_scores['wer']['reference_words'] == 2
+    # One substitution plus the filler emitted on the silence bed.
+    assert batch_scores['wer']['errors'] == 2 and batch_scores['wer']['reference_words'] == 2
     assert batch_scores['speaker'] == {'words': 2, 'correct_1to1': 2, 'accuracy_1to1': 1.0}
     assert batch_scores['silence_inserted_words'] == 1
     assert 'hello' not in json.dumps(scores)
+
+
+def test_corpus_score_charges_silence_insertions_and_counts_missing_units(tmp_path):
+    units = tmp_path / 'built'
+    (units / 'refs').mkdir(parents=True)
+    index = {
+        'libri-a': {'use': ['wer'], 'seconds': 1800.0},
+        'libri-b': {'use': ['wer'], 'seconds': 1800.0},
+        'silence-00': {'use': ['silence'], 'seconds': 60.0},
+    }
+    (units / 'index.json').write_text(json.dumps(index))
+    for unit in ('libri-a', 'libri-b'):
+        (units / 'refs' / f'{unit}.json').write_text(json.dumps({'use': ['wer'], 'text': 'one two'}))
+    (units / 'refs' / 'silence-00.json').write_text(json.dumps({'use': ['silence']}))
+    batch = tmp_path / 'batch'
+    batch.mkdir()
+    (batch / 'libri-a.json').write_text(json.dumps({'words': [{'text': 'one two', 'start': 0, 'end': 1}]}))
+    silence = [{'text': 'ghost words', 'start': 0, 'end': 1}, {'text': 'uh', 'start': 1, 'end': 2}]
+    (batch / 'silence-00.json').write_text(json.dumps({'words': silence}))
+    side = corpus.score(units, batch, None, None, pinned=True)['pipelines']['batch']
+    assert side['missing_units'] == 1 and side['scored_wer_minutes'] == 30.0
+    # Three tokens on the silence bed, filler included, are insertion errors in the pooled WER.
+    assert side['wer']['errors'] == 3 and side['wer']['reference_words'] == 2
+    assert side['wer']['wer'] == 1.5
+
+
+def test_paired_run_job_fails_on_gate_failure_and_unknown_run():
+    script = (corpus.HERE / 'k8s' / 'paired-run-job.yaml').read_text()
+    assert script.count('|| gate=$?') == 2 and 'echo "exit=$?"' not in script
+    assert script.rstrip().count('exit "$gate"') == 1
+    assert script.index('*)') < script.index('esac') and 'exit 64' in script
 
 
 def test_manifest_meets_the_row1_sixty_minute_floor():

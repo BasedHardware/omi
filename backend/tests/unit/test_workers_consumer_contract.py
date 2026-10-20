@@ -165,6 +165,54 @@ def test_heartbeat_reports_lost_lease():
     assert got.outcome is Outcome.STALE
 
 
+@pytest.mark.parametrize('expected_call', ['ack', 'defer', 'release'])
+def test_settle_uses_a_clock_no_earlier_than_the_last_heartbeat(monkeypatch, expected_call):
+    """M1 Grok L01-1: a long, heartbeated run must not settle at the entry ``now`` (the outbox derives the
+    settle/coalesce window from it)."""
+    from utils.workers import consumer as consumer_module
+
+    clock = iter([1_500.0, 2_400.0])
+    monkeypatch.setattr(consumer_module.time, 'time', lambda: next(clock))
+    nows: dict[str, float] = {}
+
+    class RecordingOutbox(FakeOutbox):
+        def heartbeat(self, claim, lease_seconds, *, now):
+            nows['heartbeat'] = now
+            return super().heartbeat(claim, lease_seconds, now=now)
+
+        def ack(self, claim, reason, *, now):
+            nows['settle'] = now
+            return super().ack(claim, reason, now=now)
+
+        def defer(self, claim, available_at, reason, *, now):
+            nows['settle'] = now
+            return super().defer(claim, available_at, reason, now=now)
+
+        def release(self, claim, reason, *, now):
+            nows['settle'] = now
+            return super().release(claim, reason, now=now)
+
+    results = {
+        'ack': Result(Outcome.DONE, ConsumerReason.PROCESSED),
+        'defer': Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=5_000.0),
+        'release': Result(Outcome.RETRY, RetryReason.LOCKED, available_at=5_000.0),
+    }
+
+    class LongRun(FakeConsumer):
+        def process(self, claim, heartbeat):
+            assert heartbeat() and heartbeat()
+            return self.result
+
+    run_push(LongRun(results[expected_call]), RecordingOutbox(), 'row-1', 'wk-1', now=1_000.0)
+    assert nows == {'heartbeat': 2_400.0, 'settle': 2_400.0}
+
+
+def test_settle_without_heartbeat_keeps_the_entry_clock():
+    outbox = FakeOutbox()
+    run_push(FakeConsumer(Result(Outcome.DONE, ConsumerReason.PROCESSED)), outbox, 'row-1', 'wk-1', now=1_000.0)
+    assert [c[0] for c in outbox.calls] == ['claim_key', 'ack']
+
+
 @pytest.mark.parametrize(
     'kwargs, error',
     [

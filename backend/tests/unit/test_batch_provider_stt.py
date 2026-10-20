@@ -366,6 +366,74 @@ def test_privacy_fence_discards_before_any_spend(world, monkeypatch):
     assert artifacts.fetches == 0 and vendor.calls == 0
 
 
+def _gpu_sibling_ready(store, monkeypatch):
+    """A later GPU capture for the same owner, completed and waiting behind the provider unit."""
+    admit(monkeypatch, store, [item('g1', 20, compute=True)], 'content-g')
+    gpu = Scheduler(store)
+    lease = gpu.pull(150.0)[0]
+    store.run(lambda tx: tx.put('jobs', 'g1', {**tx.get('jobs', 'g1'), 'compute_admission_token': lease.token}))
+    from utils.batch_pipeline.contracts import WorkResult
+
+    assert gpu.complete(WorkResult('g1', 'gs://synthetic/results/g1'), lease.token, 151.0)
+    merge = OrderedMerge(store)
+    assert merge.commit_next(OWNER, 152.0) is None  # held behind p1
+    return merge
+
+
+def test_superseded_provider_unit_releases_the_owner_merge(world, monkeypatch):
+    """M1 L08-1: a ProjectionBlocked unit used to close its outbox row and keep merge_pending forever."""
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    merge = _gpu_sibling_ready(store, monkeypatch)
+    ledger_key = f'{OWNER}/content-p'
+    store.run(lambda tx: tx.put('content', ledger_key, {**tx.get('content', ledger_key), 'dispatch_protocol': 'v2'}))
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor).run('p1')
+    assert (outcome.outcome, outcome.reason) == ('discarded', 'superseded')
+    assert artifacts.fetches == 0 and vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['state'] == provider_stt.SUPERSEDED and row['merge_pending'] is False
+    assert merge.commit_next(OWNER, 210.0)['segment_id'] == 'g1'  # the later sibling now commits
+
+
+def test_redirect_topology_fence_defers_and_keeps_the_unit(world, monkeypatch):
+    """Invalid redirect topology is not deletion (custody precedent): keep the row and the job."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.client.rows[('users', OWNER, 'conversations', 'conv-1')] = {'deleted': True, 'sync_merged_into': 'gone'}
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor).run('p1')
+    assert (outcome.outcome, outcome.reason, outcome.available_at) == (
+        'deferred',
+        'not_due',
+        200.0 + provider_stt.FUNDING_RETRY_SECONDS,
+    )
+    assert vendor.calls == 0 and job(store, 'p1')['state'] == PENDING and job(store, 'p1')['merge_pending']
+
+
+def test_erasure_fence_releases_the_unit_before_the_row_is_acked(world, monkeypatch):
+    """A deletion fence revokes the unit through the fence-bypass store write (no purge is assumed)."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.delete_conversation(OWNER, 'conv-1')
+    vendor = Vendor()
+    assert stage(store, Artifacts(), vendor).run('p1').reason == 'privacy_blocked'
+    row = job(store, 'p1')
+    assert row['state'] == 'privacy_blocked' and row['merge_pending'] is False and vendor.calls == 0
+
+
+def test_deleted_merge_survivor_releases_the_donor_unit(world, monkeypatch):
+    """M1 re-review L08-4: deleting the survivor tombstones only the survivor, so no purge reaches a job that
+    still names the donor; the walk donor -> survivor raises conversation_deleted at the stage."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.merge_conversation(OWNER, 'conv-1', 'conv-2')
+    customer.delete_conversation(OWNER, 'conv-2')
+    assert stage(store, Artifacts(), Vendor()).run('p1').reason == 'privacy_blocked'
+    row = job(store, 'p1')
+    assert row['state'] == 'privacy_blocked' and row['merge_pending'] is False
+
+
 def test_gpu_units_are_never_taken_by_the_provider_stage(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('g1', 20, compute=True)], 'content-g')
@@ -675,6 +743,24 @@ async def test_active_legacy_owner_is_acknowledged_never_readmitted(dark_intake)
     response = await dark_intake.intake.accept_upload(**UPLOAD)
     assert response.status_code == 409 and json.loads(response.body)['job_id'] == 'legacy-1'
     assert dark_intake.calls == []
+
+
+@pytest.mark.asyncio
+async def test_fresh_claim_whose_redis_owner_expired_is_adopted(dark_intake, monkeypatch):
+    """M1 review L10-3: the same Redis existence check claim_sync_content makes."""
+    from datetime import datetime, timezone
+
+    from database import sync_jobs
+
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda job_id: None)
+    row = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': datetime.now(timezone.utc)}
+    dark_intake.store.run(lambda tx: tx.put('content', f'{OWNER}/content', row))
+    response = await dark_intake.intake.accept_upload(**UPLOAD)
+    assert response.status_code == 202
+    ((_, kwargs),) = dark_intake.calls
+    assert kwargs['adopt'](dict(row)) is True
+    # The same row with a live owner job stays legacy's (409, never re-admitted).
+    assert stranded_adopter(row, owner_job_present=True)(dict(row)) is False
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ import pytest
 
 from diarizer.batch_pipeline import PipelineWorker
 from diarizer.batch_pipeline_models import ParakeetWords, StagedAudio, stt_language
+from utils.batch_pipeline import intake  # module level: its import cost stays outside the fast-unit call budget
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline.contracts import Priority, RecoveryWork, ValidationFailureWork, WorkItem
 from utils.batch_pipeline.pump import Pump
@@ -143,7 +144,6 @@ def test_staged_audio_reads_the_intake_language():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('user_language,expected', [('vi', 'vi'), ('pt-BR', 'pt'), (None, '')])
 async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_language, expected):
-    from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 

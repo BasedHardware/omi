@@ -62,6 +62,12 @@ class SimOutbox:
         )  # fmt: skip
 
     def enqueue(self, dedupe_key, owner_id, payload, available_at, *, policy_id=None, coalesce='max', tx=None, now):
+        result = self._enqueue(dedupe_key, owner_id, payload, available_at, policy_id, coalesce)
+        if tx is None and result.wake_token is not None:  # invariant 4: without tx the outbox owns the wake
+            self._try_wake(self.rows[int(result.row_id)])
+        return result
+
+    def _enqueue(self, dedupe_key, owner_id, payload, available_at, policy_id, coalesce):
         import json
 
         if len(json.dumps(payload, separators=(',', ':')).encode()) > 4096:
@@ -174,12 +180,9 @@ class SimOutbox:
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         discarded = expired = 0
         to_wake: list[dict[str, Any]] = []
+        # Actionable rows only (same predicate as outbox_pg.sweep): healthy woken rows never fill the page.
         candidates = [
-            r
-            for r in self._open()
-            if (0 < r['lease_until'] <= now)
-            or (r['wake_pending'] and r['lease_until'] <= now)
-            or (r['available_at'] <= now and r['lease_until'] <= now)
+            r for r in self._open() if (0 < r['lease_until'] <= now) or (r['wake_pending'] and r['lease_until'] <= now)
         ]
         for row in sorted(candidates, key=lambda r: (r['available_at'], r['id']))[:limit]:
             if self._fenced(row):

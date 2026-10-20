@@ -269,3 +269,85 @@ def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
     assert uid_sequencer.kick('test-uid') is False
     assert uid_sequencer.sweep() == {'legacy_dark': 1}
     claim.assert_not_called()
+
+
+# --- M1 review (Grok) fixes ---
+
+
+def test_claim_without_timestamp_is_stranded_like_claim_transaction():
+    """L10-3: ``_claim_transaction`` takes over a processing claim without ``updated_at``."""
+    assert classify_ledger_row({'status': 'processing', 'job_id': 'j'}, now=NOW) is LegacyOwnership.STRANDED
+
+
+@pytest.mark.parametrize(
+    'row, job, expected',
+    [
+        ({'status': 'processing', 'job_id': 'j', 'updated_at': NOW}, None, False),
+        ({'status': 'processing', 'job_id': 'j', 'updated_at': NOW}, {'job_id': 'j'}, True),
+        ({'status': 'completed', 'job_id': 'j', 'result': COMPLETED}, None, None),
+        ({'dispatch_protocol': 'batch_v1', 'status': 'processing', 'job_id': 'j'}, None, None),
+        ({'status': 'processing'}, None, None),
+        (None, None, None),
+    ],
+)
+def test_owner_probe_matches_claim_sync_content(monkeypatch, row, job, expected):
+    """L10-3: the fence makes the same Redis existence check as ``claim_sync_content``."""
+    from database import sync_jobs
+
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda job_id: job)
+    assert legacy_dark.legacy_owner_job_present(row) is expected
+
+
+def test_owner_probe_failure_is_unknown_not_absent(monkeypatch):
+    from database import sync_jobs
+
+    def unavailable(job_id):
+        raise ConnectionError('redis down')
+
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', unavailable)
+    row = {'status': 'processing', 'job_id': 'j', 'updated_at': NOW}
+    assert legacy_dark.legacy_owner_job_present(row) is None
+    assert fence_decision(row, DARK, now=NOW, owner_job_present=None).ownership is LegacyOwnership.ACTIVE
+
+
+@pytest.mark.parametrize('mode', [DRAINING, DARK])
+def test_expired_redis_owner_is_adopted_not_followed(mode):
+    """L10-3: a fresh claim whose Redis job expired is stranded, so batch adopts it."""
+    row = {'status': 'processing', 'job_id': 'j', 'updated_at': NOW}
+    decision = fence_decision(row, mode, now=NOW, owner_job_present=False, batch_adopts_stranded=True)
+    assert decision.action is FenceAction.ADMIT_BATCH
+    assert decision.reason is LegacyDarkReason.LEGACY_STRANDED_ADOPTED
+
+
+@pytest.mark.parametrize('mode', [DRAINING, DARK])
+def test_live_repeat_failure_pause_is_never_adopted(mode):
+    """L10-4: CAPPED answers 409 for the remaining pause even when the caller can adopt."""
+    row = {'status': 'retryable', 'job_id': 'j', 'repeat_failure_pause_until': NOW + timedelta(hours=1)}
+    decision = fence_decision(row, mode, now=NOW, batch_adopts_stranded=True)
+    assert decision.action is FenceAction.RETRY
+    assert decision.reason is LegacyDarkReason.LEGACY_CAPPED
+    assert decision.retry_after_seconds == 3601
+
+
+@pytest.mark.parametrize('state, verb', [('RUNNING', 'resume'), ('PAUSED', 'pause')])
+def test_recreate_restores_queue_state_both_ways(monkeypatch, tmp_path, state, verb):
+    """L10-5: ``queues update`` never changes state, so recreate resumes a RUNNING spec too."""
+    from scripts.legacy_dark import legacy_queues
+
+    spec_path = tmp_path / 'spec.json'
+    spec_path.write_text(
+        json.dumps(
+            {
+                'spec_version': legacy_queues.SPEC_VERSION,
+                'env': 'staging',
+                'queues': {'sync-jobs': {'state': state, 'max_attempts': 5}},
+            }
+        )
+    )
+    calls = []
+    monkeypatch.setattr(legacy_queues, 'describe', lambda env, queue: {'name': queue})
+    monkeypatch.setattr(legacy_queues, 'flags_from_spec', lambda spec: [])
+    monkeypatch.setattr(legacy_queues, '_gcloud', lambda command: calls.append(command))
+    assert legacy_queues.recreate('staging', str(spec_path), apply=True) == 0
+    assert [command[2] for command in calls] == ['update', verb]
+    assert calls[1][3] == 'staging-sync-jobs'

@@ -6,8 +6,8 @@ Surfaces:
                          plus the quality corpus. Rows 1, 1b, 2, 3, 4, 5, 6 (throughput), 7, 8.
   --surface prod-shadow  M3 ladder holds from 25% (contract (g)). The gated prod cohort vs
                          the concurrent legacy population on rows 3-6 (aggregates, ro-prod).
-                         Rows 1b/2 on David's own recordings are reported when supplied but
-                         do not gate ADVANCE.
+                         Rows 1b/2 (replay half) on David's own recordings are evaluated when
+                         --replay-dir is supplied; they are reported but do not gate ADVANCE.
 
 Inputs are files produced by collectors; every one is optional and a missing
 input makes its rows PENDING, never PASS:
@@ -20,9 +20,11 @@ input makes its rows PENDING, never PASS:
   --cost           JSON: steady_hours, leases_per_min_per_node, batch/legacy $ parts (row 6)
 
 Exit status: 0 PASS, 1 FAIL, 3 PENDING. The last stdout line is
-``PARITY_PASS`` / ``PARITY_FAIL <reason>`` / ``PARITY_PENDING <reason>``, and a
-data-loss FAIL (rows 5, 7) adds ``data_loss=true`` to the report so the ramp
-controller rolls back to zero.
+``PARITY_PASS`` / ``PARITY_FAIL row_<n>`` / ``PARITY_PENDING <reason>``. A FAIL names
+the failing row (contract (j)): the lowest data-loss row first (``row_5``, then
+``row_7``, which the ramp controller maps to ROLLBACK_ZERO), otherwise the lowest
+failing row. The specific ``ParityReason`` stays on the row and in the report, and a
+data-loss FAIL also sets ``data_loss=true`` in the report.
 
 Privacy: transcripts and labels are read into memory only; the report holds
 counts, rates and opaque sha256-prefixed keys. No GCP access happens here.
@@ -164,7 +166,7 @@ def evaluate(
         rows.row_8(census, surface),
     ]
     gating = PROD_SHADOW_GATING_ROWS if surface is Surface.PROD_SHADOW else None
-    status, reason, data_loss = combine(results, surface, gating)
+    status, reason, data_loss, failing_row = combine(results, surface, gating)
     supported = rows.max_supported_percent(rows.finite((cost or {}).get('leases_per_min_per_node')))
     stamp = (now or dt.datetime.now(dt.timezone.utc)).isoformat().replace('+00:00', 'Z')
     return ParityReport(
@@ -177,13 +179,15 @@ def evaluate(
         inputs=dict(inputs or {}),
         data_loss=data_loss,
         max_supported_percent=None if supported is None else round(supported, 1),
+        failing_row=failing_row,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Parity gate for legacy-sync retirement (contract (j)).')
     parser.add_argument('--surface', required=True, choices=[s.value for s in Surface])
-    parser.add_argument('--output', type=Path, required=True)
+    # Contract (j) pins the prod-shadow invocation with no extra arguments.
+    parser.add_argument('--output', type=Path, default=Path('parity_report.json'))
     parser.add_argument('--corpus-scores', type=Path)
     parser.add_argument('--replay-dir', type=Path)
     parser.add_argument('--reviewed-outliers', type=Path)
@@ -239,7 +243,10 @@ def main(argv: list[str] | None = None) -> int:
     args.output.write_text(json.dumps(body, indent=1, sort_keys=True) + '\n')
     for row in report.rows:
         print(f'row {row.row:>2} {row.status.value:<7} {row.reason.value}', flush=True)
-    print(verdict_line('PARITY', report.status, report.reason), flush=True)
+    if report.max_supported_percent is not None:
+        # Informational (no PARITY_ prefix): the ramp ceiling the measured throughput carries.
+        print(f'max_supported_percent {report.max_supported_percent}', flush=True)
+    print(verdict_line('PARITY', report.status, report.terminal_reason()), flush=True)
     return EXIT_CODES[report.status]
 
 
