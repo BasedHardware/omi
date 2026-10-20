@@ -13,52 +13,24 @@ deleted (or surviving) conversation ID is ever echoed.
 
 import logging
 import os
-from collections.abc import Callable, Iterable
 from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
 from utils.sync.stage import collection_name
 from utils.observability.fallback import record_fallback
+from utils.sync.deleted_conversation import (
+    CONVERSATION_DELETED_REASON_CODE,
+    confirm_only_user_deletions,
+    deleted_conversation_result,
+    is_conversation_deleted,
+)
 
 logger = logging.getLogger(__name__)
-
-CONVERSATION_DELETED_REASON_CODE = 'conversation_deleted'
-
-
-def is_conversation_deleted(error: BatchPrivacyBlocked) -> bool:
-    return error.reason is BatchPrivacyReason.CONVERSATION_DELETED
-
-
-def confirm_only_user_deletions(check: Callable[[list[str]], Any], conversation_ids: Iterable[str]) -> None:
-    """Re-raise unless every denied conversation ID is a user deletion.
-
-    The privacy walk stops at the first denied ID of an unordered set, so a
-    receipt mixing a user deletion with, say, a missing server redirect could
-    surface either reason. Re-check each ID alone, in a fixed order, within the
-    caller's transaction; any other denial wins and is never acknowledged.
-    """
-    for conversation_id in sorted(set(conversation_ids)):
-        try:
-            check([conversation_id])
-        except BatchPrivacyBlocked as error:
-            if not is_conversation_deleted(error):
-                raise
-
-
-def deleted_conversation_result(total_segments: int) -> dict[str, Any]:
-    """An all-success, ID-free result for content whose conversation the user deleted."""
-    return {
-        'new_memories': [],
-        'updated_memories': [],
-        'failed_segments': 0,
-        'total_segments': total_segments,
-        'errors': [],
-    }
 
 
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:

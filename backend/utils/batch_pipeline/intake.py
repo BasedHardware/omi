@@ -30,7 +30,7 @@ from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
 from utils.sync.capture import chunk_identity
-from utils.sync.completed_status import (
+from utils.sync.deleted_conversation import (
     CONVERSATION_DELETED_REASON_CODE,
     confirm_only_user_deletions,
     deleted_conversation_result,
