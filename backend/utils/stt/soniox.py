@@ -231,7 +231,6 @@ class SafeSonioxSocket(STTSocket):
             self.disable_capture_axis_diagnostics()
         self._ws: Any = ws
         self.stream_end = ProviderStreamEnd(SONIOX_SERVICE_NAME, ws)
-        self._draining = False
         self._opened_at = time.monotonic()
         self._stream_transcript = stream_transcript
         self._loop = loop
@@ -395,8 +394,8 @@ class SafeSonioxSocket(STTSocket):
             if self._closed or self._finishing:
                 return
             self._finishing = True
-        if not self._draining:
-            self.stream_end.record(self._ws)
+        if not self.stream_end.closing:
+            self.stream_end.record()  # No owner will close this transport; the session just let go.
 
         def finish_on_loop() -> None:
             try:
@@ -420,7 +419,7 @@ class SafeSonioxSocket(STTSocket):
                 self._mark_dead('finish called after provider event loop closed', typed_reason='normal_close')
 
     async def drain_and_close(self) -> None:
-        self._draining = True
+        self.stream_end.begin_close()
         done_timed_out = False
         try:
             self.finish()
@@ -438,12 +437,13 @@ class SafeSonioxSocket(STTSocket):
         self._send_task.cancel()
         # Receive cleanup flushes the last committed word. Complete that callback
         # before the owner tears down its transcript consumer, including timeout.
-        await asyncio.gather(self._recv_task, self._send_task, return_exceptions=True)
         try:
+            await asyncio.gather(self._recv_task, self._send_task, return_exceptions=True)
             await self._ws.close()
         except Exception:
             pass
-        self.stream_end.record(self._ws, closer=US_TIMEOUT if done_timed_out else None)
+        finally:
+            self.stream_end.record(closer=US_TIMEOUT if done_timed_out else None)
         # Idempotent: covers a receive task cancelled before it ever started.
         telemetry_call(self, '_connected_meter', 'flush', close=True)
 

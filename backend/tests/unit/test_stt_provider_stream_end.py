@@ -435,3 +435,96 @@ def test_soniox_planned_idle_close_is_our_timeout_not_a_vendor_drop():
     delta = _Delta('soniox', US_TIMEOUT, '1000')
     asyncio.run(run())
     assert delta.value == 1
+
+
+# --- owner-closed transports record after the close (Grok review, 2026-10-20) ------------------------
+
+
+def test_while_an_owner_closes_neither_a_transport_error_nor_a_clean_eof_latches():
+    end = ProviderStreamEnd('modulate', SimpleNamespace(close_rcvd=None, close_sent=Close(1000, '')))
+    end.note_intent(US_FAILOVER)
+    end.begin_close()
+    assert end.record(error=ConnectionClosedError(None, None)) is False
+    assert end.record(closer=VENDOR, reason='clean_eof') is False
+    delta = _Delta('modulate', US_FAILOVER, '1000')
+    assert end.record() is True  # The owner's record after ws.close().
+    assert delta.value == 1
+
+
+def test_clean_eof_after_sigterm_is_our_drain(monkeypatch):
+    monkeypatch.setattr(pse, 'is_draining', lambda: True)
+    end = ProviderStreamEnd('soniox', SimpleNamespace(close_rcvd=Close(1001, ''), close_sent=None))
+    delta = _Delta('soniox', US_DRAIN, '1001')
+    assert end.record(closer=VENDOR, reason='clean_eof')
+    assert delta.value == 1
+
+
+def test_soniox_error_frame_keeps_the_vendor_close_code_over_a_real_websocket(caplog):
+    caplog.set_level(logging.INFO)
+
+    async def run():
+        async def provider(ws):
+            await ws.recv()  # config
+            await ws.send(json.dumps({'error_code': 503, 'error_type': 'unavailable', 'error_message': 'private'}))
+            await ws.close(code=1011, reason='private_provider_body')
+
+        async with websockets.serve(provider, '127.0.0.1', 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            async with websockets.connect(f'ws://127.0.0.1:{port}') as ws:
+                await ws.send('{}')
+                socket = soniox.SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
+                await asyncio.wait_for(socket._recv_task, timeout=3)
+                await asyncio.wait_for(ws.wait_closed(), timeout=3)
+                note_stream_close_intent(socket, US_FAILOVER)
+                await socket.drain_and_close()
+
+    delta = _Delta('soniox', VENDOR, '1011')
+    asyncio.run(run())
+    assert delta.value == 1
+    assert 'private' not in caplog.text
+
+
+def test_abort_replay_socket_records_once_after_the_transport_close():
+    from utils.stt.replay_delivery import abort_replay_socket
+
+    async def run():
+        ws = _ScriptedWebSocket([])
+        socket = soniox.SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
+        note_stream_close_intent(SimpleNamespace(_conn=socket), US_FAILOVER)
+        await abort_replay_socket(SimpleNamespace(_conn=socket, finish=socket.finish))
+        socket.finish()
+        return ws
+
+    delta = _Delta('soniox', US_FAILOVER, '1000')
+    nothing = _Delta('soniox', US_FAILOVER, 'none')
+    ws = asyncio.run(run())
+    assert ws.close_sent is not None
+    assert delta.value == 1
+    assert nothing.value == 0
+
+
+def test_a_cancelled_soniox_drain_still_counts():
+    async def run():
+        ws = _ScriptedWebSocket([])
+        socket = soniox.SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
+        assert socket.send(b'\x00\x00' * 160)
+        await asyncio.sleep(0.05)  # Audio reaches the wire, so the drain waits for "finished".
+        note_stream_close_intent(socket, US_CLIENT_GONE)
+        drain = asyncio.ensure_future(socket.drain_and_close())
+        await asyncio.sleep(0.05)
+        drain.cancel()
+        await asyncio.gather(drain, return_exceptions=True)
+        return socket
+
+    before = sum(_end_count('soniox', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
+    socket = asyncio.run(run())
+    after = sum(_end_count('soniox', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
+    assert socket.stream_end.recorded
+    assert after - before == 1
+
+
+def test_idle_wrapper_drain_marks_its_transport_owner_closing():
+    end = ProviderStreamEnd('soniox', None)
+    transport = SimpleNamespace(stream_end=end)
+    pse.begin_stream_close(SimpleNamespace(_transport=transport))
+    assert end.closing

@@ -240,10 +240,12 @@ class ProviderStreamEnd:
 
     def __init__(self, provider: str, ws: Any, *, clock: Callable[[], float] = time.monotonic) -> None:
         self.provider = bounded_stream_close_provider(provider)
+        self._ws = ws
         self._clock = clock
         self._opened_at = clock()
         self._lock = threading.Lock()
         self._recorded = False
+        self._closing = False
         self._intent: Optional[str] = None
         self._vendor_reason: Optional[str] = None
         self._first_audio_at: Optional[float] = None
@@ -254,6 +256,18 @@ class ProviderStreamEnd:
     @property
     def recorded(self) -> bool:
         return self._recorded
+
+    @property
+    def closing(self) -> bool:
+        return self._closing
+
+    def begin_close(self) -> None:
+        """An owner is closing the transport and records after ``ws.close()``, once the close frames exist.
+
+        From here ``finish()`` and transport errors defer to that owner, so our
+        own close can neither latch early with no close code nor read as a vendor drop.
+        """
+        self._closing = True
 
     def note_intent(self, closer: str) -> None:
         """The session's reason for closing this stream. The first intent wins."""
@@ -289,19 +303,22 @@ class ProviderStreamEnd:
             pass
 
     def _closer(self, closer: Optional[str], sent: Any, error: Optional[BaseException]) -> Optional[str]:
-        if closer in CLOSERS:
+        if closer in CLOSERS and closer != VENDOR:
             return closer
         if self._vendor_reason is not None:
             return VENDOR  # The vendor said why; that holds even while we drain.
-        if error is not None:
+        if closer == VENDOR:
+            label: Optional[str] = VENDOR
+        elif error is not None:
             label = transport_closer(error, sent)
-            # After SIGTERM a dropped leg died of our restart (FC-listen-cancellation-counted-as-provider-failure).
-            return US_DRAIN if label == VENDOR and is_draining() else label
-        return self._intent or US_CLIENT_GONE
+        else:
+            return self._intent or US_CLIENT_GONE
+        # After SIGTERM a dropped leg died of our restart (FC-listen-cancellation-counted-as-provider-failure).
+        return US_DRAIN if label == VENDOR and is_draining() else label
 
     def record(
         self,
-        ws: Any,
+        ws: Any = None,
         *,
         error: Optional[BaseException] = None,
         closer: Optional[str] = None,
@@ -309,9 +326,16 @@ class ProviderStreamEnd:
     ) -> bool:
         """Count and log this stream's end once. Returns whether this call recorded it.
 
-        An ``error`` that is not a transport failure attributes nothing: the
-        latch stays open for the teardown that follows.
+        ``ws`` defaults to the transport the latch was opened with. An ``error``
+        that is not a transport failure attributes nothing, and a transport
+        error raised while an owner is closing defers to that owner's record:
+        either way the latch stays open for the teardown. So does a clean EOF
+        seen while an owner closes: that EOF is our own close.
         """
+        if ws is None:
+            ws = self._ws
+        if self._closing and (error is not None or closer == VENDOR):
+            return False
         try:
             received, sent = _close_frames(ws, error)
             label = self._closer(closer, sent, error)
@@ -376,6 +400,26 @@ def stream_end_of(socket: Any) -> Optional[ProviderStreamEnd]:
             None,
         )
     return None
+
+
+def begin_stream_close(socket: Any) -> None:
+    """An owner is about to close the provider transport under ``socket``. Never raises."""
+    try:
+        stream_end = stream_end_of(socket)
+        if stream_end is not None:
+            stream_end.begin_close()
+    except Exception:
+        pass
+
+
+def record_stream_end(socket: Any) -> None:
+    """Record the end of the provider stream under ``socket`` after its owner closed the transport. Never raises."""
+    try:
+        stream_end = stream_end_of(socket)
+        if stream_end is not None:
+            stream_end.record()
+    except Exception:
+        pass
 
 
 def note_stream_close_intent(socket: Any, closer: str) -> None:

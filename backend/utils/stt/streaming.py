@@ -1641,13 +1641,15 @@ class SafeModulateSocket(STTSocket):
             if self._closed:
                 return
             self._closed = True
-        self.stream_end.record(self._ws)
+        if not self.stream_end.closing:
+            self.stream_end.record()  # No owner will close this transport; the session just let go.
         try:
             self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
         except (RuntimeError, Exception):
             pass
 
     async def drain_and_close(self) -> None:
+        self.stream_end.begin_close()
         done_timed_out = False
         try:
             await asyncio.sleep(0)
@@ -1676,7 +1678,8 @@ class SafeModulateSocket(STTSocket):
             await self._ws.close()
         except Exception:
             pass
-        self.stream_end.record(self._ws, closer=US_TIMEOUT if done_timed_out else None)
+        finally:
+            self.stream_end.record(closer=US_TIMEOUT if done_timed_out else None)
 
     def _note_wire_audio(self, data: bytes) -> None:
         try:
