@@ -1643,8 +1643,7 @@ class SafeModulateSocket(STTSocket):
             if self._closed:
                 return
             self._closed = True
-        if not self.stream_end.closing:
-            self.stream_end.record()  # No owner will close this transport; the session just let go.
+        self.stream_end.record(unless_closing=True)  # Only when no owner will close this transport.
         try:
             self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
         except (RuntimeError, Exception):
@@ -1652,7 +1651,14 @@ class SafeModulateSocket(STTSocket):
 
     async def drain_and_close(self) -> None:
         self.stream_end.begin_close()
-        done_timed_out = False
+        self._done_timed_out = False
+        try:
+            await self._drain_and_close()
+        finally:
+            # Cancelled or not, this owner records once, after its close when that ran.
+            self.stream_end.record(closer=US_TIMEOUT if self._done_timed_out else None)
+
+    async def _drain_and_close(self) -> None:
         try:
             await asyncio.sleep(0)
             _EOS_SENTINEL = b'__EOS__'
@@ -1668,7 +1674,7 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._done_event.wait(), timeout=60)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 logger.warning('Modulate drain timed out waiting for done message')
-                done_timed_out = True
+                self._done_timed_out = True
                 if self._prev_partial_text:
                     self._flush_partial()
         except Exception:
@@ -1680,8 +1686,6 @@ class SafeModulateSocket(STTSocket):
             await self._ws.close()
         except Exception:
             pass
-        finally:
-            self.stream_end.record(closer=US_TIMEOUT if done_timed_out else None)
 
     def _note_wire_audio(self, data: bytes) -> None:
         try:

@@ -836,6 +836,7 @@ class ReplayTailSocket:
         # Accepted tail remains owed after client departure. Drain it before
         # EOS; only cancellation/death/deadline cuts the tail, and finish meters it.
         self._draining = True
+        begin_stream_close(self.connection)  # The provider drain or abort below records it after closing.
         shutdown_deadline = getattr(getattr(self.host, 'receiver', None), 'shutdown_deadline', None)
         try:
             if self._task is not None and not self._task.done() and not self.is_connection_dead:

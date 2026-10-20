@@ -267,7 +267,8 @@ class ProviderStreamEnd:
         From here ``finish()`` and transport errors defer to that owner, so our
         own close can neither latch early with no close code nor read as a vendor drop.
         """
-        self._closing = True
+        with self._lock:
+            self._closing = True
 
     def note_intent(self, closer: str) -> None:
         """The session's reason for closing this stream. The first intent wins."""
@@ -323,6 +324,7 @@ class ProviderStreamEnd:
         error: Optional[BaseException] = None,
         closer: Optional[str] = None,
         reason: Optional[str] = None,
+        unless_closing: bool = False,
     ) -> bool:
         """Count and log this stream's end once. Returns whether this call recorded it.
 
@@ -330,12 +332,12 @@ class ProviderStreamEnd:
         that is not a transport failure attributes nothing, and a transport
         error raised while an owner is closing defers to that owner's record:
         either way the latch stays open for the teardown. So does a clean EOF
-        seen while an owner closes: that EOF is our own close.
+        seen while an owner closes (that EOF is our own close), and an
+        ``unless_closing`` record (``finish()`` with no owner) once an owner
+        has begun closing; that check and ``begin_close()`` share the lock.
         """
         if ws is None:
             ws = self._ws
-        if self._closing and (error is not None or closer == VENDOR):
-            return False
         try:
             received, sent = _close_frames(ws, error)
             label = self._closer(closer, sent, error)
@@ -345,6 +347,8 @@ class ProviderStreamEnd:
             return False
         with self._lock:
             if self._recorded:
+                return False
+            if self._closing and (unless_closing or error is not None or closer == VENDOR):
                 return False
             self._recorded = True
         try:

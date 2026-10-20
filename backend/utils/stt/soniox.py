@@ -396,8 +396,7 @@ class SafeSonioxSocket(STTSocket):
             if self._closed or self._finishing:
                 return
             self._finishing = True
-        if not self.stream_end.closing:
-            self.stream_end.record()  # No owner will close this transport; the session just let go.
+        self.stream_end.record(unless_closing=True)  # Only when no owner will close this transport.
 
         def finish_on_loop() -> None:
             try:
@@ -422,7 +421,14 @@ class SafeSonioxSocket(STTSocket):
 
     async def drain_and_close(self) -> None:
         self.stream_end.begin_close()
-        done_timed_out = False
+        self._done_timed_out = False
+        try:
+            await self._drain_and_close()
+        finally:
+            # Cancelled or not, this owner records once, after its close when that ran.
+            self.stream_end.record(closer=US_TIMEOUT if self._done_timed_out else None)
+
+    async def _drain_and_close(self) -> None:
         try:
             self.finish()
             await asyncio.gather(self._send_task, return_exceptions=True)
@@ -431,7 +437,7 @@ class SafeSonioxSocket(STTSocket):
                     await asyncio.wait_for(self._done_event.wait(), timeout=60)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     logger.warning('Soniox drain timed out waiting for finished message')
-                    done_timed_out = True
+                    self._done_timed_out = True
         except Exception:
             pass
         self._closed = True
@@ -439,13 +445,11 @@ class SafeSonioxSocket(STTSocket):
         self._send_task.cancel()
         # Receive cleanup flushes the last committed word. Complete that callback
         # before the owner tears down its transcript consumer, including timeout.
+        await asyncio.gather(self._recv_task, self._send_task, return_exceptions=True)
         try:
-            await asyncio.gather(self._recv_task, self._send_task, return_exceptions=True)
             await self._ws.close()
         except Exception:
             pass
-        finally:
-            self.stream_end.record(closer=US_TIMEOUT if done_timed_out else None)
         # Idempotent: covers a receive task cancelled before it ever started.
         telemetry_call(self, '_connected_meter', 'flush', close=True)
 

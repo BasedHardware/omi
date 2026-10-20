@@ -523,6 +523,46 @@ def test_a_cancelled_soniox_drain_still_counts():
     assert after - before == 1
 
 
+def test_finish_without_an_owner_records_but_never_after_an_owner_began_closing():
+    end = ProviderStreamEnd('soniox', SimpleNamespace(close_rcvd=None, close_sent=None))
+    end.begin_close()
+    assert end.record(unless_closing=True) is False
+    assert not end.recorded
+    free = ProviderStreamEnd('soniox', SimpleNamespace(close_rcvd=None, close_sent=None))
+    assert free.record(unless_closing=True) is True
+
+
+def test_a_modulate_drain_cancelled_before_its_close_still_counts():
+    async def run():
+        ws = _ScriptedWebSocket([])
+        sock = streaming.SafeModulateSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        note_stream_close_intent(sock, US_CLIENT_GONE)
+        drain = asyncio.ensure_future(sock.drain_and_close())
+        await asyncio.sleep(0)
+        drain.cancel()
+        await asyncio.gather(drain, return_exceptions=True)
+        sock.finish()  # A later finish must not count the same stream again.
+        sock._recv_task.cancel()
+        await asyncio.gather(sock._recv_task, sock._send_task, return_exceptions=True)
+        return sock
+
+    before = sum(_end_count('modulate', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
+    sock = asyncio.run(run())
+    after = sum(_end_count('modulate', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
+    assert sock.stream_end.recorded
+    assert after - before == 1
+
+
+def test_replay_tail_drain_marks_its_provider_owner_closing_before_finishing():
+    import inspect
+
+    from utils.stt import replay_delivery
+
+    source = inspect.getsource(replay_delivery)
+    tail = source[source.index('Accepted tail remains owed after client departure') :]
+    assert tail.index('begin_stream_close(self.connection)') < tail.index('self.finish()')
+
+
 @pytest.mark.parametrize('cls', [streaming.SafeModulateSocket, soniox.SafeSonioxSocket])
 def test_a_socket_built_without_init_has_a_detached_latch_that_records_nothing(cls):
     socket = object.__new__(cls)
