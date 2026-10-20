@@ -209,12 +209,23 @@ class Scheduler:
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
         for _ in range(limit):
-            lease = self._pull_one(
-                now,
-                allow_backfill=allow_backfill and backfill_budget > 0,
-                max_seconds=max_seconds,
-                shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
-            )
+            try:
+                lease = self._pull_one(
+                    now,
+                    allow_backfill=allow_backfill and backfill_budget > 0,
+                    max_seconds=max_seconds,
+                    shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
+                )
+            except Exception as error:
+                if not result:
+                    raise
+                # Each earlier lease is its own committed transaction. Raising
+                # would strand them leased until LEASE_SECONDS expiry and
+                # charge a retry; hand them to the caller instead.
+                logger.error(
+                    'event=batch_pull outcome=partial leased=%d exception_type=%s', len(result), type(error).__name__
+                )
+                break
             if lease is None:
                 break
             result.append(lease)
@@ -238,7 +249,10 @@ class Scheduler:
                 if receipt:
                     lease, enqueued_at = receipt
                     if self.metrics:
-                        self.metrics.record('leased', wait_seconds=now - enqueued_at)
+                        try:
+                            self.metrics.record('leased', wait_seconds=now - enqueued_at)
+                        except Exception:
+                            pass  # Metrics cannot turn an issued lease into a failed pull.
                     return lease
                 if eligible == 'reserved':
                     return None
@@ -379,7 +393,10 @@ class Scheduler:
             return None, bool(eligible_queues), observations
 
         receipt, eligible, observations = self.store.run(commit)
-        record_policy_observations(observations)
+        try:
+            record_policy_observations(observations)
+        except Exception:
+            pass  # Telemetry after commit cannot drop the lease it just issued.
         # Only committed attempts emit telemetry; Firestore may retry callbacks.
         if self.metrics:
             for event, age in observations:
@@ -527,6 +544,24 @@ class Scheduler:
                 token='',
                 lease_until=0.0,
             )
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def release(self, segment_id: str, token: str, now: float) -> bool:
+        """Expire a held lease now: the lease-expiry transition without the wait.
+
+        For a holder that can no longer publish. The attempt stays charged and
+        the retry backoff applies, exactly as ``recover`` would after expiry;
+        a stale token is fenced like every other transition.
+        """
+
+        def commit(tx):
+            job = tx.get('jobs', segment_id)
+            if not owns_lease(job, token, now):
+                return False
+            _defer(job, now, 'lease_released')
             tx.put('jobs', segment_id, job)
             return True
 
