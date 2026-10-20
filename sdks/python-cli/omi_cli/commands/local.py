@@ -379,7 +379,13 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
     app_filter = arguments.get("app_filter")
     limit = int(arguments.get("limit") or 15)
 
-    if result.startswith("No matching screen-history results") or result.startswith("No screen history is available"):
+    is_empty_result = (
+        result.startswith("No matching screen-history results")
+        or result.startswith("No screen history is available")
+        or (result.startswith("Omi has ") and "not ready to search yet" in result)
+        or result.startswith("No screenshots found matching")
+    )
+    if is_empty_result:
         suggestions = [
             "Try a broader query",
             "Increase --days",
