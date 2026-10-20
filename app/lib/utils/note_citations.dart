@@ -1,3 +1,16 @@
+/// Protected-unit keys: a prefix the input does not contain, the unit's index in base 254 over
+/// U+E002..U+E0FF, then U+E001. Private-use characters match no repair pattern, and the keys stay
+/// short however many units a note holds.
+const _keyBase = 254;
+String _keyDigits(int index) {
+  final codes = <int>[];
+  do {
+    codes.insert(0, 0xE002 + index % _keyBase);
+    index ~/= _keyBase;
+  } while (index > 0);
+  return String.fromCharCodes(codes);
+}
+
 /// Read-time note repair. Never writes a conversation; numeric chat citations remain separate.
 ({String text, List<String> sourceIDs}) _repairPass(String input, Iterable<String> knownIDs) {
   final valid = knownIDs.toSet();
@@ -7,7 +20,7 @@
     prefix += '\uE000';
   }
   String protect(String value) {
-    final key = '$prefix${List.filled(protected.length, '\uE002').join()}\uE001';
+    final key = '$prefix${_keyDigits(protected.length)}\uE001';
     protected[key] = value;
     return key;
   }
@@ -113,9 +126,13 @@
         .trim();
   }
   if (text.contains('\x01')) text = text.replaceAll('\x01', '').trim();
-  for (final entry in protected.entries.toList().reversed) {
-    text = text.replaceAll(entry.key, entry.value);
-  }
+  // One pass, restoring nested units (a link label that held a code span) recursively.
+  final keyPattern = RegExp('$prefix[\uE002-\uE0FF]+\uE001');
+  String restore(String value) => value.replaceAllMapped(keyPattern, (match) {
+        final unit = protected[match[0]!];
+        return unit == null ? match[0]! : restore(unit);
+      });
+  text = restore(text);
   return (text: text, sourceIDs: recovered.toSet().toList());
 }
 

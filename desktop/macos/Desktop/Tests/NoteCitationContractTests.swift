@@ -4,6 +4,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class NoteCitationContractTests: XCTestCase {
+  func testThousandsOfProtectedUnitsRestoreExactlyIncludingCodeNestedInALink() {
+    // Keys used to grow with the unit count and restore once per unit: quadratic.
+    let many = (0..<3000).map { "`c\($0)` [s01234]" }.joined(separator: " ")
+    let kept = (0..<3000).map { "`c\($0)`" }.joined(separator: " ")
+    XCTAssertEqual(NoteCitationContract.repair(many, valid: ["s01234"]).text, kept)
+    let nested = NoteCitationContract.repair("See [`x`](https://e.com) [s01234].", valid: ["s01234"])
+    XCTAssertEqual(nested.text, "See [`x`](https://e.com).")
+    XCTAssertEqual(nested.sourceIDs, ["s01234"])
+  }
+
   func testHandAuthoredCrossClientContract() throws {
     // Read the single tracked contract directly, never a generated fixture copy.
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

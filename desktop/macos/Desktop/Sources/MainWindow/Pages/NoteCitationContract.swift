@@ -15,14 +15,27 @@ enum NoteCitationContract {
     }
   }
 
+  /// Protected-unit keys: a prefix the input does not contain, the unit's index in base 254 over
+  /// U+E002..U+E0FF, then U+E001. Private-use characters match no repair pattern, and the keys
+  /// stay short however many units a note holds.
+  private static func keyDigits(_ index: Int) -> String {
+    var index = index
+    var scalars: [Unicode.Scalar] = []
+    repeat {
+      scalars.insert(Unicode.Scalar(UInt32(0xE002 + index % 254))!, at: 0)
+      index /= 254
+    } while index > 0
+    return String(String.UnicodeScalarView(scalars))
+  }
+
   private static func repairPass(_ input: String, valid: Set<String>) -> (text: String, sourceIDs: [String]) {
-    var protected: [(String, String)] = []
+    var protected: [String: String] = [:]
     var prefix = "\u{E000}"
     while input.contains(prefix) { prefix += "\u{E000}" }
     let marker = "\u{0000}"
     func protect(_ value: String) -> String {
-      let key = prefix + String(repeating: "\u{E002}", count: protected.count) + "\u{E001}"
-      protected.append((key, value))
+      let key = prefix + keyDigits(protected.count) + "\u{E001}"
+      protected[key] = value
       return key
     }
     var text = replace(
@@ -115,7 +128,12 @@ enum NoteCitationContract {
     if text.contains("\u{0001}") {
       text = text.replacingOccurrences(of: "\u{0001}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    for (key, value) in protected.reversed() { text = text.replacingOccurrences(of: key, with: value) }
+    // One pass, restoring nested units (a link label that held a code span) recursively.
+    let keyPattern = NSRegularExpression.escapedPattern(for: prefix) + "[\u{E002}-\u{E0FF}]+\u{E001}"
+    func restore(_ value: String) -> String {
+      replace(value, pattern: keyPattern) { key in protected[key].map(restore) ?? key }
+    }
+    text = restore(text)
     var seen = Set<String>()
     return (text, recovered.filter { seen.insert($0).inserted })
   }

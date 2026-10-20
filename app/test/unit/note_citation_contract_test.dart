@@ -27,4 +27,14 @@ void main() {
     expect(result.text, '## Decisions\n\n- Fact.\n  - Nested detail.\nHard break.  \nNext line.');
     expect(result.sourceIDs, ['s01234']);
   });
+
+  test('thousands of protected units restore exactly, including code nested in a link', () {
+    // Keys used to grow with the unit count and restore once per unit: quadratic.
+    final many = List.generate(3000, (i) => '`c$i` [s01234]').join(' ');
+    final kept = List.generate(3000, (i) => '`c$i`').join(' ');
+    expect(repairNoteCitations(many, ['s01234']).text, kept);
+    final nested = repairNoteCitations('See [`x`](https://e.com) [s01234].', ['s01234']);
+    expect(nested.text, 'See [`x`](https://e.com).');
+    expect(nested.sourceIDs, ['s01234']);
+  });
 }
