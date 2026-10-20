@@ -12,9 +12,8 @@ const chatGptBrandName = 'ChatGPT';
 
 /// The approved ChatGPT directory listing: the one-tap ChatGPT path (same link as the macOS app's
 /// `MemoryExportDestination.chatGPTDirectoryInstallURL`).
-final chatGptDirectoryUrl = Uri.parse(
-  'https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi',
-);
+final chatGptDirectoryUrl =
+    Uri.parse('https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi');
 
 /// Opens ChatGPT with [prompt] typed in the composer.
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
@@ -83,10 +82,10 @@ class AgentConnections {
   AgentConnections withoutChatGpt() => AgentConnections(chatGptGrantIds: const [], agentKeys: agentKeys);
 
   AgentConnections withoutAgentKey(ComputerAgent agent) => AgentConnections(
-    chatGptGrantIds: chatGptGrantIds,
-    agentKeys: {...agentKeys}..remove(agent),
-    chatGptMissingScopes: chatGptMissingScopes,
-  );
+        chatGptGrantIds: chatGptGrantIds,
+        agentKeys: {...agentKeys}..remove(agent),
+        chatGptMissingScopes: chatGptMissingScopes,
+      );
 
   static AgentConnections from({required List<Map<String, dynamic>> grants, required List<McpApiKey> keys}) {
     final live = [
@@ -121,13 +120,13 @@ class AgentConnectService {
     Future<void> Function(String keyId)? deleteKey,
     Future<ZkrShare> Function(String secret)? share,
     String? apiBase,
-  }) : _loadGrants = loadGrants ?? McpApi.getOauthGrants,
-       _revokeGrant = revokeGrant ?? McpApi.revokeOauthGrant,
-       _loadKeys = loadKeys ?? McpApi.getMcpApiKeys,
-       _createKey = createKey ?? McpApi.createMcpApiKey,
-       _deleteKey = deleteKey ?? McpApi.deleteMcpApiKey,
-       _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
-       _apiBase = apiBase;
+  })  : _loadGrants = loadGrants ?? McpApi.getOauthGrants,
+        _revokeGrant = revokeGrant ?? McpApi.revokeOauthGrant,
+        _loadKeys = loadKeys ?? McpApi.getMcpApiKeys,
+        _createKey = createKey ?? McpApi.createMcpApiKey,
+        _deleteKey = deleteKey ?? McpApi.deleteMcpApiKey,
+        _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
+        _apiBase = apiBase;
 
   final Future<List<Map<String, dynamic>>> Function() _loadGrants;
   final Future<void> Function(String grantId) _revokeGrant;
@@ -139,7 +138,10 @@ class AgentConnectService {
 
   Future<AgentConnections> load() async {
     final results = await Future.wait([_loadGrants(), _loadKeys()]);
-    return AgentConnections.from(grants: results[0] as List<Map<String, dynamic>>, keys: results[1] as List<McpApiKey>);
+    return AgentConnections.from(
+      grants: results[0] as List<Map<String, dynamic>>,
+      keys: results[1] as List<McpApiKey>,
+    );
   }
 
   /// Whether ChatGPT can look up a conversation; grants only, for surfaces that do not show keys.
@@ -202,7 +204,7 @@ class AgentConnectService {
     }
     final ids = [
       for (final key in listed)
-        if (key.name == agent.keyName) key.id,
+        if (key.name == agent.keyName) key.id
     ];
     await Future.wait(ids.map(_deleteKey));
   }

@@ -72,11 +72,10 @@ Future<bool> writeServerPreferredSummaryApp(String? appId) =>
 Future<List<App>> fetchInstalledSummaryApps() async {
   final result = await retrieveInstalledChatApps(limit: 100);
   return switch (result) {
-    ApiSuccess(:final data) =>
-      (data.data ?? const [])
-          .map(App.fromGeneratedCatalogItem)
-          .where((app) => !app.deleted && app.worksWithMemories() && app.enabled)
-          .toList(),
+    ApiSuccess(:final data) => (data.data ?? const [])
+        .map(App.fromGeneratedCatalogItem)
+        .where((app) => !app.deleted && app.worksWithMemories() && app.enabled)
+        .toList(),
     ApiFailure(:final problem) => throw StateError('installed apps unavailable: ${problem.kind.name}'),
   };
 }
@@ -141,8 +140,8 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Returns cached suggested apps for the open conversation (empty for any other).
   List<App> get cachedSuggestedApps =>
       _cachedSuggestedAppsConversationId != null && _cachedSuggestedAppsConversationId == conversationOrNull?.id
-      ? _cachedSuggestedApps
-      : const [];
+          ? _cachedSuggestedApps
+          : const [];
 
   /// Forgets the open conversation's suggestions (another conversation is now open).
   @protected
@@ -164,9 +163,8 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     final target = conversation;
     final key = _summaryViewConversationId == target.id ? _summaryViewKey : null;
     if (key != null) {
-      final picked = ConversationSummarySelection.available(
-        target,
-      ).firstWhereOrNull((selection) => selection.sourceKey == key);
+      final picked =
+          ConversationSummarySelection.available(target).firstWhereOrNull((selection) => selection.sourceKey == key);
       if (picked != null) return picked;
     }
     return ConversationSummarySelection.select(target);
@@ -209,9 +207,8 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     if (summaryGenerationDisposed || generation != _enabledAppsGeneration) return;
 
     // Preserve locally added apps that aren't in the API response yet
-    final locallyAddedApps = _cachedEnabledConversationApps
-        .where((app) => _locallyAddedAppIds.contains(app.id))
-        .toList();
+    final locallyAddedApps =
+        _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
 
     _cachedEnabledConversationApps.clear();
     _cachedEnabledConversationApps.addAll(apps);

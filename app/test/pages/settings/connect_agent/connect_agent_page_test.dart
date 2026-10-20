@@ -17,7 +17,10 @@ void main() {
   }
 
   testWidgets('lists ChatGPT and the computer agents with their state', (tester) async {
-    await pumpPage(tester, FakeAgentBackend(chatGptConnected: true, keys: {'Muse': null}));
+    await pumpPage(
+      tester,
+      FakeAgentBackend(chatGptConnected: true, keys: {'Muse': null}),
+    );
     expect(find.text('Use your Omi memory in ChatGPT and your AI agents'), findsOneWidget);
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Connected'), findsOneWidget);

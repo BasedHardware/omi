@@ -31,17 +31,17 @@ class _Reprocess {
 }
 
 Widget _summaryTab({VoidCallback? onOpenTranscript}) => Scaffold(
-  body: CustomScrollView(slivers: [GetAppsWidgets(onOpenTranscript: onOpenTranscript)]),
-);
+      body: CustomScrollView(slivers: [GetAppsWidgets(onOpenTranscript: onOpenTranscript)]),
+    );
 
 /// A page with a button that opens the template sheet.
 Widget _sheetLauncher() => Scaffold(
-  body: Builder(
-    builder: (context) => Center(
-      child: TextButton(onPressed: () => showSummarizedAppsSheet(context), child: const Text('open')),
-    ),
-  ),
-);
+      body: Builder(
+        builder: (context) => Center(
+          child: TextButton(onPressed: () => showSummarizedAppsSheet(context), child: const Text('open')),
+        ),
+      ),
+    );
 
 Future<void> _openSheet(WidgetTester tester) async {
   await tester.tap(find.text('open'));
@@ -152,11 +152,9 @@ void main() {
       expect(find.text(l10n.summaryCreateYourOwn), findsOneWidget);
       // Suggestions show only when there are some.
       expect(find.text(l10n.summarySuggestedTemplates), findsNothing);
-      final skeleton = tester.widget<Container>(
-        find
-            .descendant(of: find.byKey(const Key('summary_template_skeleton')).first, matching: find.byType(Container))
-            .first,
-      );
+      final skeleton = tester.widget<Container>(find
+          .descendant(of: find.byKey(const Key('summary_template_skeleton')).first, matching: find.byType(Container))
+          .first);
       final color = (skeleton.decoration as BoxDecoration).color;
       expect(color, isNot(OmiColors.surface1), reason: 'skeletons must not vanish into the sheet surface');
     });
@@ -365,22 +363,19 @@ void main() {
   });
 
   testWidgets('a long title ends in an ellipsis at rest instead of being cut off', (tester) async {
-    final provider = summaryProvider(
-      summaryConversation(title: List.filled(12, 'Turn right at the next one').join(' ')),
-    );
+    final provider =
+        summaryProvider(summaryConversation(title: List.filled(12, 'Turn right at the next one').join(' ')));
     addTearDown(provider.dispose);
-    await tester.pumpWidget(
-      summaryHarness(
-        provider,
-        Scaffold(
-          body: ConversationTitleField(
-            style: OmiType.title1,
-            controller: provider.titleController,
-            focusNode: provider.titleFocusNode,
-          ),
+    await tester.pumpWidget(summaryHarness(
+      provider,
+      Scaffold(
+        body: ConversationTitleField(
+          style: OmiType.title1,
+          controller: provider.titleController,
+          focusNode: provider.titleFocusNode,
         ),
       ),
-    );
+    ));
     final text = tester.widget<Text>(find.byKey(const Key('conversation_title_at_rest')));
     expect(text.maxLines, 3);
     expect(text.overflow, TextOverflow.ellipsis);

@@ -56,11 +56,9 @@ void main() {
     });
 
     test('409 conversation_processing_in_progress is busy', () {
-      final result = reprocessResultFromResponse(
-        _json(409, {
-          'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
-        }),
-      );
+      final result = reprocessResultFromResponse(_json(409, {
+        'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
+      }));
       expect(result, isA<ReprocessBusy>());
     });
 
@@ -80,11 +78,9 @@ void main() {
 
     test('502 app_result_failed and 500 are failures', () {
       expect(
-        reprocessResultFromResponse(
-          _json(502, {
-            'detail': {'code': 'app_result_failed', 'message': 'no content'},
-          }),
-        ),
+        reprocessResultFromResponse(_json(502, {
+          'detail': {'code': 'app_result_failed', 'message': 'no content'},
+        })),
         isA<ReprocessFailed>(),
       );
       expect(reprocessResultFromResponse(http.Response('', 500)), isA<ReprocessFailed>());
@@ -127,9 +123,9 @@ void main() {
     test('an Omi request answered 200 with an empty overview and a stale template result is a failure', () async {
       // summary-v2 F1: a busy echo from an older backend carries the stored row; a template result
       // already on it is not the Omi summary that was asked for.
-      final (provider, ok) = await run(
-        ReprocessSuccess(summaryConversation(appResults: [AppResponse('Stale Paul Graham essay', appId: 'pg')])),
-      );
+      final (provider, ok) = await run(ReprocessSuccess(summaryConversation(
+        appResults: [AppResponse('Stale Paul Graham essay', appId: 'pg')],
+      )));
       expect(ok, isFalse);
       expect(provider.summaryFailure!.kind, SummaryFailureKind.generic);
       expect(provider.reprocessedConversationId, isNull);
@@ -149,14 +145,10 @@ void main() {
     });
 
     test('success shows the summary that was asked for, even when another template result comes first', () async {
-      final (provider, ok) = await run(
-        ReprocessSuccess(
-          summaryConversation(
-            overview: 'Omi overview',
-            appResults: [AppResponse('Paul Graham essay', appId: 'pg')],
-          ),
-        ),
-      );
+      final (provider, ok) = await run(ReprocessSuccess(summaryConversation(
+        overview: 'Omi overview',
+        appResults: [AppResponse('Paul Graham essay', appId: 'pg')],
+      )));
       expect(ok, isTrue);
       expect(provider.summaryFailure, isNull);
       expect(provider.getSummarySelection().appId, 'pg', reason: 'the stored order still leads with the app');
@@ -165,13 +157,12 @@ void main() {
 
     test('a throwing reprocess settles the page even when crash reporting throws too', () async {
       final conversation = summaryConversation();
-      final provider =
-          _ThrowingReporterProvider(
-              reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
-                  throw StateError('transport'),
-            )
-            ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
-            ..setCachedConversation(conversation);
+      final provider = _ThrowingReporterProvider(
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+            throw StateError('transport'),
+      )
+        ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
+        ..setCachedConversation(conversation);
       addTearDown(provider.dispose);
 
       expect(await provider.reprocessConversation(appId: 'pg'), isFalse);
