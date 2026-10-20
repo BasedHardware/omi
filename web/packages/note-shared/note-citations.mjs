@@ -93,11 +93,16 @@ function repairPass(input, knownIDs) {
   )) {
     const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(
-      new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, "gu"),
+      new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, "gu"),
       marker
     );
   }
-  text = text.replace(/\b(?:spk|speaker)[ _]\d+\b:?[ \t]*/gi, marker);
+  // Word boundaries are Unicode, as in Python generation and Swift (ICU): an
+  // ID or speaker label glued to CJK text is part of a word, not a citation.
+  text = text.replace(
+    /(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\d+(?![\p{L}\p{N}_]):?[ \t]*/giu,
+    marker
+  );
   for (;;) {
     const cleaned = text.replace(/\([^()\n]*\)/g, (value) => {
       if (!/[\0\x01]/.test(value)) return value;

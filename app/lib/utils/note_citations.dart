@@ -84,9 +84,14 @@
       (match) => unit(match[0]!));
   final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
-    text = text.replaceAll(RegExp('(?<![\\w-])${RegExp.escape(id)}(?![\\w-])'), marker);
+    text =
+        text.replaceAll(RegExp('(?<![\\p{L}\\p{N}_-])${RegExp.escape(id)}(?![\\p{L}\\p{N}_-])', unicode: true), marker);
   }
-  text = text.replaceAll(RegExp(r'\b(?:spk|speaker)[ _]\d+\b:?[ \t]*', caseSensitive: false), marker);
+  // Word boundaries are Unicode, as in Python generation and Swift (ICU): an ID or
+  // speaker label glued to CJK text is part of a word, not a citation.
+  text = text.replaceAll(
+      RegExp(r'(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\d+(?![\p{L}\p{N}_]):?[ \t]*', caseSensitive: false, unicode: true),
+      marker);
   while (true) {
     final cleaned = text.replaceAllMapped(RegExp(r'\([^()\n]*\)'), (match) {
       final value = match[0]!;
