@@ -5,12 +5,7 @@ import {
   fetchAllMemoriesPaged,
   type MemoriesResponse
 } from '../lib/memoriesBulk'
-import {
-  cache,
-  hydrateFromDisk,
-  publish,
-  subscribers,
-} from '../lib/memoriesCache'
+import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
 import { getCacheUid } from '../lib/persistentCache'
 import {
   parseKnowledgeLedgerMemory,
@@ -65,7 +60,7 @@ async function patchMemoryOptimistic(
       const next = current
         .map((m) => (m.id === id || m.id === parsedReplacement.id ? parsedReplacement : m))
         .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
-      publish(next, cache.view)
+      publish(next)
     }
     return parsedReplacement
   } catch (e) {
@@ -188,9 +183,7 @@ export function useMemories(): {
   const deleteMemory = async (id: string): Promise<void> => {
     const originUid = getCacheUid()
     const prev = cache.list ?? []
-    publish(
-      prev.filter((m) => m.id !== id),
-      )
+    publish(prev.filter((m) => m.id !== id))
     try {
       await omiApi.delete(`/v3/memories/${id}`)
     } catch (e) {

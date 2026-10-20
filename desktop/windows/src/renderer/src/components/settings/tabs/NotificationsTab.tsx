@@ -4,7 +4,7 @@ import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { Slider } from '../controls/Slider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
-import { useAuth } from '../../../../hooks/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 
 // Frequency levels 0–5, mirroring Mac's stepped slider labels and the interval
 // table in main/assistants/core/notify.ts (LEVEL_INTERVALS_MS).

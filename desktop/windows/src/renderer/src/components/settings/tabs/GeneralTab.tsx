@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
-import { useAuth } from '../../../../hooks/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { FontSizeCard } from '../FontSizeCard'
