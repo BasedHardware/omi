@@ -132,6 +132,11 @@ def _load_baseline_stage():
         capture_output=True,
         text=True,
     ).stdout
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('speaker_resolution_pinned_baseline')
     exec(compile(source, 'speaker_resolution.py', 'exec'), module.__dict__)
     return module
@@ -173,6 +178,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module

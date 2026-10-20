@@ -34,6 +34,11 @@ class PostHogManager {
 
     PostHogSDK.shared.setup(config)
 
+    // Remove the retired identity experiment's persisted super-properties.
+    for key in ["experiment_id", "variant", "experiment_forced"] {
+      PostHogSDK.shared.unregister(key)
+    }
+
     // Release-identity super-properties (#10425): every captured event carries the
     // app version + build + release channel, so PostHog (including
     // `floating_bar_ptt_ended` and other per-event tracks that previously carried no

@@ -50,6 +50,11 @@ def _historical(name, revision, path):
     source = subprocess.check_output(
         ['git', 'show', f'{revision}:{path}'], cwd=Path(__file__).resolve().parents[2], text=True
     )
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     sys.modules[name] = module
     exec(compile(source, path, 'exec'), module.__dict__)
@@ -1294,19 +1299,20 @@ async def test_unbound_runs_freeze_to_acceptance_conversation(monkeypatch):
 
 
 @pytest.mark.parametrize('cache_state', ['missing', 'corrupt'])
-def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
+def test_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
     store, diarizer = env
     monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     target = round4_stage if round4_stage else stagemod.stage
     conv = stagemod._conversation([0, 1] * 4)
-    audio = stagemod.FakeAudio([0, 1] * 4)
-    monkeypatch.setattr(stagemod.stage, 'iter_audio_chunk_pcm', audio)
+    audio = stagemod._install_audio(monkeypatch, [0, 1] * 4)
     if round4_stage is not None:
         monkeypatch.setattr(round4_stage, 'iter_audio_chunk_pcm', audio)
     target.resolve_speakers_for_processing('u1', conv)
     assert conv.speaker_resolution.status == 'resolved'
+    origin = stagemod.STARTED.timestamp()
+    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])]
     first_calls = diarizer.calls
     first_ids = {s.id: s.speaker_id for s in conv.transcript_segments}
     first_sources = {s.id: s.audio_source for s in conv.transcript_segments}
@@ -1327,16 +1333,17 @@ def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, c
 @pytest.mark.parametrize(
     'damage', ['retimed', 'absent', 'non_sync', 'malformed', 'nonfinite', 'unplaced', 'origin_changed']
 )
-def test_off_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
+def test_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
     store, diarizer = env
     monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     conv = stagemod._conversation([0, 1] * 4)
-    audio = stagemod.FakeAudio([0, 1] * 4)
-    monkeypatch.setattr(stagemod.stage, 'iter_audio_chunk_pcm', audio)
+    audio = stagemod._install_audio(monkeypatch, [0, 1] * 4)
     stagemod.stage.resolve_speakers_for_processing('u1', conv)
     assert conv.speaker_resolution.status == 'resolved'
+    origin = stagemod.STARTED.timestamp()
+    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])]
     calls = diarizer.calls
     for s in conv.transcript_segments:
         s.audio_capture_start = stagemod.STARTED.timestamp() + s.start

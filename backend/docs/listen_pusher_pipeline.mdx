@@ -3422,7 +3422,7 @@ trusted capture span — and refuses before the first diarizer call if any
 required segment is unplaceable. Placement cost is paid once per
 conversation, not per segment: the stage builds one `PreparedAudioCoverage`
 index (validated union coverage plus the ambiguity intervals above) and each
-`locate` call probes it with bisect instead of rescanning the manifest..
+`locate` call probes it with bisect instead of rescanning the manifest.
 The manifest is counted before serialization: one entry per file plus the
 larger of its `chunk_spans`/`chunk_timestamps` lengths. A manifest above
 `MAX_PLACEMENT_SPANS` (10 000) remains unvalidated. Coverage preparation

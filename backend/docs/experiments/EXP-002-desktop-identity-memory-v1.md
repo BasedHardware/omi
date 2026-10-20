@@ -15,7 +15,9 @@ catches the error, clears the assignment, marks the phase resolved, and logs
 “painting control”. It presents no error UI and the resolved guard prevents
 another request for that launch/owner. Assignments are not persisted on the
 client. Removing the route therefore restores control on the next launch;
-no compatibility stub or two-release deletion timer is needed. Turning the
+no compatibility stub or two-release deletion timer is needed. Git history
+shows the same catch/control/resolved guard in both coordinator revisions since
+EXP-002 was introduced (`f9ca7105ddb9`, `d04010dffcce`). Turning the
 PostHog enrollment flag off first also restores control before server removal.
 Remote flag disable/archive is an operator prerequisite; this PR does not
 claim to have changed PostHog.
