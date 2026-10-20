@@ -43362,11 +43362,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AppRejectRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AppRejectRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
