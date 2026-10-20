@@ -4845,7 +4845,12 @@ subscriptions). One metadata-only document at
 and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
 same period return 409. A new period logically expires the old choice and
 replaces the same document, avoiding unbounded history. Delayed older-period
-writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+writes cannot overwrite a newer choice. Each transaction attempt also checks the
+current UTC month after its read, so a request delayed by allowance resolution or
+a transaction retry returns `409 budget_period_changed`, including identical
+replays of an expired choice. The [hermetic custody acceptance and proposed
+graduation ramp](runbooks/held-content-acceptance.md) covers this boundary.
+`upgrade` records intent only; managed
 processing still requires a positive answer from the existing allowance resolver.
 A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
 `X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
