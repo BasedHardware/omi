@@ -386,6 +386,10 @@ class ReviewAppRequest(PydanticBaseModel):
     response: Optional[str] = None
 
 
+class RejectAppRequest(PydanticBaseModel):
+    reason: str
+
+
 class ReplyToReviewRequest(PydanticBaseModel):
     reviewer_uid: str
     response: str
@@ -2512,18 +2516,22 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
-def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
+def reject_app(app_id: str, uid: str, data: RejectAppRequest, secret_key: str = Header(...)):
     if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    # TODO: Add reason for rejection in payload and also redirect to the app page
+
+    notification_data = {
+        'navigate_to': f"/app?id={app_id}",
+    }
     send_notification(
         uid,
         'App Rejected 😔',
-        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+        f'Your app {app["name"]} has been rejected. Reason: {data.reason}. Please make the necessary changes and resubmit for approval.',
+        data=notification_data,
     )
     return {'status': 'ok'}
 
