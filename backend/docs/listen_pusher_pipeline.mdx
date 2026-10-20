@@ -1636,7 +1636,7 @@ The client side above is listen's own websocket. The provider side is every Modu
 
 - `closer=vendor`: a vendor error frame, close frame, clean EOF or transport drop ended the stream. A drop with no close frame either way is `code_class=1006`.
 - `closer=us_timeout`: our keepalive ping went unanswered (sent `1011`), our drain gave up waiting for the vendor's done/finished frame, a failover serving check timed out, or Soniox idle-closed the socket.
-- `closer=us_drain`: the listen session ended with `1012`, which uvicorn sends to every websocket when the pod shuts down.
+- `closer=us_drain`: the pod is draining. Either the listen session ended with `1012`, which uvicorn sends to every websocket at shutdown, or the `utils/stt/pod_drain.py` SIGTERM marker is set. A transport drop after SIGTERM counts here, not as `vendor`. A vendor error frame stays `vendor`.
 - `closer=us_failover`: we replaced the stream, or rejected a replacement candidate, mid-session.
 - `closer=us_client_gone`: any other session teardown (the client left).
 - `code_class` is `1000`, `1001`, `1006`, `1011`, `4xxx`, `other`, or `none` when no close frame was seen.

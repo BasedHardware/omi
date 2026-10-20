@@ -95,10 +95,31 @@ def test_closer_vocabulary_is_the_five_named_closers():
     assert bounded_closer(US_FAILOVER) == US_FAILOVER
 
 
-def test_pod_restart_close_code_is_our_drain():
+def test_pod_restart_close_code_is_our_drain(monkeypatch):
     assert teardown_closer(1012) == US_DRAIN
     for code in (1000, 1001, 1006, None):
         assert teardown_closer(code) == US_CLIENT_GONE
+    monkeypatch.setattr(pse, 'is_draining', lambda: True)
+    assert teardown_closer(1000) == US_DRAIN
+
+
+def test_after_sigterm_a_dropped_leg_is_our_drain_but_a_vendor_frame_stays_vendor(monkeypatch):
+    monkeypatch.setattr(pse, 'is_draining', lambda: True)
+    dropped = ProviderStreamEnd('soniox', None)
+    delta = _Delta('soniox', US_DRAIN, '1006')
+    assert dropped.record(None, error=ConnectionClosedError(None, None))
+    assert delta.value == 1
+
+    framed = ProviderStreamEnd('modulate', None)
+    framed.note_vendor_error('modulate_serve_error')
+    delta = _Delta('modulate', VENDOR, 'none')
+    assert framed.record(SimpleNamespace())
+    assert delta.value == 1
+
+    timed_out = ProviderStreamEnd('soniox', None)
+    delta = _Delta('soniox', US_TIMEOUT, 'none')
+    assert timed_out.record(None, error=TimeoutError())
+    assert delta.value == 1
 
 
 @pytest.mark.parametrize(

@@ -30,6 +30,7 @@ from prometheus_client import Counter, Histogram
 
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.failure_diagnostics import frame_close_code, session_age_bucket
+from utils.stt.pod_drain import is_draining
 from utils.stt.stream_close import bounded_stream_close_provider
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ def bounded_request_id(value: Any) -> Optional[str]:
 
 def teardown_closer(close_code: Any) -> str:
     """Our-side closer for a listen session ending with the client websocket's close code."""
-    return US_DRAIN if close_code == POD_RESTART_CLOSE_CODE else US_CLIENT_GONE
+    return US_DRAIN if close_code == POD_RESTART_CLOSE_CODE or is_draining() else US_CLIENT_GONE
 
 
 def _headers(source: Any) -> Optional[Mapping[str, Any]]:
@@ -291,9 +292,11 @@ class ProviderStreamEnd:
         if closer in CLOSERS:
             return closer
         if self._vendor_reason is not None:
-            return VENDOR
+            return VENDOR  # The vendor said why; that holds even while we drain.
         if error is not None:
-            return transport_closer(error, sent)
+            label = transport_closer(error, sent)
+            # After SIGTERM a dropped leg died of our restart (FC-listen-cancellation-counted-as-provider-failure).
+            return US_DRAIN if label == VENDOR and is_draining() else label
         return self._intent or US_CLIENT_GONE
 
     def record(
