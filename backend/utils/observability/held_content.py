@@ -159,13 +159,10 @@ def publish_fleet(snapshot: dict, *, now: float | None = None) -> None:
     backlog = _gauge_number(body.get('backlog_items'), whole=True)
     undated = _gauge_number(body.get('undated_pending'), whole=True)
     listed = body.get('oldest_listed_at')
-    dated = not isinstance(listed, bool) and isinstance(listed, (int, float)) and listed > 0
-    if pending_count <= 0:
-        age = 0.0
-    elif dated:
-        age = max(0.0, moment - float(listed))
+    if isinstance(listed, bool) or not isinstance(listed, (int, float)) or listed <= 0:
+        age = UNDATED_OLDEST_AGE_SENTINEL if pending_count > 0 else 0.0
     else:
-        age = UNDATED_OLDEST_AGE_SENTINEL
+        age = max(0.0, moment - float(listed)) if pending_count > 0 else 0.0
     try:
         OLDEST_AGE.set(age)
         PENDING_COUNT.set(pending_count)
