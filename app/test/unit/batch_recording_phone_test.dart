@@ -7,6 +7,11 @@ import 'package:omi/utils/batch_recording.dart';
 /// truth table, the scanner-prefix property both markers must satisfy, and the
 /// exact duration math. Pure — no singletons, hermetic under `bash test.sh`.
 void main() {
+  _testParsingAndMath();
+  _testTruthTableAndMode();
+}
+
+void _testParsingAndMath() {
   const explicit = 'audio_omibatchphone_opus_fs320_16000_1_fs320_1720000000.bin';
   const auto = 'audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000000.bin';
 
@@ -53,6 +58,11 @@ void main() {
       expect(auto.startsWith('audio_$batchRecordingDevice'), isTrue);
     });
   });
+}
+
+void _testTruthTableAndMode() {
+  const explicit = 'audio_omibatchphone_opus_fs320_16000_1_fs320_1720000000.bin';
+  const auto = 'audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000000.bin';
 
   group('isAutoPhoneBatchRecording — truth table', () {
     test('true only for the auto-fallback phone marker', () {

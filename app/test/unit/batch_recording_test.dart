@@ -5,6 +5,11 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 void main() {
+  _testBatchRecordingInfo();
+  _testAutoUploadLogic();
+}
+
+void _testBatchRecordingInfo() {
   group('BatchRecordingInfo.fromFileName', () {
     test('parses opus fs160', () {
       final info = BatchRecordingInfo.fromFileName('audio_omi_opus_16000_1_fs160_1735689600.bin');
@@ -97,7 +102,9 @@ void main() {
       expect(info.secondsFromFrameCount(0), 1);
     });
   });
+}
 
+void _testAutoUploadLogic() {
   group('canAutoUploadPhoneRecordings', () {
     test('returns true only when custom STT is off, auto-sync is on, and not already uploading', () {
       expect(
