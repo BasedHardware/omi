@@ -305,6 +305,56 @@ answers instead:
 - `processing` when such an intent is open or a sibling is still in flight.
 - Any other quarantine failure keeps `failed`/`batch_worker_quarantined`.
 
+### Held uploads complete as partial
+
+David ruled on 2026-10-20 that held uploads complete as partial on the ledger.
+Kill switch `BATCH_PIPELINE_HELD_PARTIAL_ENABLED` (default on). Every 300 s the
+serving maintenance leader scans up to 32 `held`/`failed_held` jobs
+(`Projector.sweep_held`). It completes an upload as partial once every unit
+without a projection receipt is **held with no recovery path left**:
+`failed_held`, or `held` with a recorded recovery policy that is off and no
+`recovery` intent. A unit with an open `speech_redrive`, `terminal_disposition`
+or `silence_disposition` intent still blocks it. Every other unit must have a
+`ready` projection receipt or be erased.
+
+- **Ledger.** `status: partial` with `result.outcome: partial`,
+  `failed_segments == held_segments` (the held span) and the projected
+  siblings' visible conversation IDs. These go through the same redirect and
+  privacy fences as completion. `usage_committed_seconds` records the projected
+  speech that was charged, and `usage_previous_seconds` the step's start. The
+  held span is never charged. Hourly usage commits in the partial transaction.
+  Fair use records that durable step only after the commit; a scan replay
+  re-issues the same once-key, so a lost Redis write lands exactly once.
+  Accounting returns nothing while any unit can still change, so an
+  ineligible upload is never charged.
+- **Client.** The status poll and a re-upload answer `completed` with
+  `reason_code: batch_unit_held`, the partial result, and
+  `failed_segments` set to the held count. Released apps ACK the WAL. A
+  conversation the user has since deleted answers `conversation_deleted`, as
+  it does for a completed row.
+- **Nothing else moves.** There is no provider call, and no job, intent,
+  merge-head, owner-revision or retention write. The held units' encrypted
+  audio stays for a reviewed redrive, and parked siblings keep
+  `quarantine_held`. Nothing is published to the legacy Redis job, because its
+  fence takes only all-success results.
+- **Upgrade.** A partial row stays owned by its batch job:
+  `batch_projection_ledger_owner_matches` accepts `processing` and `partial`.
+  Recovery, the operator redrive tools and the ordinary completion therefore
+  still run. When a held unit recovers, its projection completes the upload,
+  the ledger becomes `completed`, and only the remaining speech is charged
+  (hourly usage, plus fair use keyed `<content_id>:<charged_ms>`). If other
+  units are still held, the next scan rewrites the partial with the smaller
+  held span. A completed row is never re-partialed. Partial writes are
+  idempotent: a replay of the same state writes nothing.
+- **Rollback.** Setting the kill switch to false stops new partials. Existing
+  partial rows keep answering `completed` and can still upgrade.
+
+The record lane's capture listing (`list_audio_chunks(require_archive=True)`)
+raises when the raw-archive pack listing fails. It never returns only the
+legacy chunks, which would admit a recording whose later packs are silently
+missing. The admission retries in 60 s. Conversation merge uses the same mode,
+because it deletes the source audio after the copy.
+
 Completed content whose conversation the user has since deleted answers
 `completed` with an empty result and `reason_code: conversation_deleted`, on
 both the poll and the re-upload claim (a legacy receipt re-upload answers the

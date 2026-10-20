@@ -272,6 +272,16 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
     return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
+def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | None = None):
+    """Held/failed_held units in document order for the partial scan; eligibility is rechecked per upload."""
+    collection = client.collection(f'{namespace}_jobs')
+    query = collection.where('recovery_state', 'in', ['held', 'failed_held']).order_by('__name__')
+    if after_id is not None:
+        # A document-reference cursor requires no extra document read.
+        query = query.start_after({'__name__': collection.document(after_id)})
+    return [(doc.id, doc.to_dict() or {}) for doc in query.limit(max(1, min(limit, 64))).stream()]
+
+
 def cancel_fenced_recovery(store, segment_id):
     """Revocation-only write, allowed after privacy rejects ordinary job writes."""
     from google.cloud import firestore

@@ -28,6 +28,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_store import FirestoreStore
+from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem
@@ -87,7 +88,7 @@ def checked_job(store, sid, uid, key):
             return job
         require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
         ledger = tx.get('content', f'{uid}/{binding.content_id}')
-        require(ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None, 'completed_ledger')
+        require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
         return job
 
     return held.readonly_run(store, check)

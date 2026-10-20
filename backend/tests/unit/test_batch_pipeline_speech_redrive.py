@@ -205,6 +205,38 @@ def test_completed_upload_replay_uses_receipt_without_live_ledger_run(setup, mon
     alternate.assert_called_once()
 
 
+def test_partial_upload_keeps_the_reviewed_paid_redrive(setup, monkeypatch, legacy_dependencies):
+    import sys
+
+    from database.batch_pipeline_projection import ProjectionStore
+
+    client, store, binding, artifacts, legacy, alternate, old = enabled(setup, monkeypatch, legacy_dependencies)
+    accounting = {'seconds': 3, 'source': 'sync_fresh', 'updates': {}, 'hour': 'h', 'completed': False}
+    assert ProjectionStore(store).complete_partial(binding, 99, accounting)[0]['held_segments'] == 1
+    ledger = client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
+    assert ledger['status'] == 'partial' and ledger['usage_committed_at'] is not None
+    sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
+    spec = importlib.util.spec_from_file_location(
+        'speech_operator_partial', Path(__file__).parents[2] / 'scripts/batch_pipeline_speech_redrive.py'
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    key = module.held.fingerprint(row(client))
+    transaction = client.transaction
+    monkeypatch.setattr(client, 'transaction', lambda **kwargs: transaction())
+    # The census still admits the held unit: the partial charged only its siblings.
+    assert module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key) == 'speech'
+    # A completed upload still refuses it (the ownership fence answers first).
+    ledger['status'] = 'completed'
+    with pytest.raises((module.held.Refused, ProjectionBlocked)):
+        module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key)
+    ledger['status'] = 'partial'
+    assert redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100) == 'recovered'
+    assert row(client)['result']['outcome'] == 'success' and row(client)['merge_pending']
+    alternate.assert_called_once()
+    legacy.assert_not_called()
+
+
 def test_positive_vad_with_empty_local_hypothesis_reproduces_fast_closed_failure(
     setup, monkeypatch, legacy_dependencies
 ):
