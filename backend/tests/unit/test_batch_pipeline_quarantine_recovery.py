@@ -1155,3 +1155,66 @@ def test_extend_never_overrides_a_concurrent_held_rearm(setup, monkeypatch):
     assert row(client)['recovery_wake']['wake_until'] == 821.0
     assert recovery.protocol.extend_wake('bad', token, 1, 701.0, 600) is False
     assert row(client)['recovery_wake']['wake_until'] == 821.0
+
+
+def _freeze_disabled_snapshot(monkeypatch, recovery, binding):
+    """Admit the unit's recovery part while recovery is off for its owner."""
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+
+
+def test_disabled_snapshot_with_no_paid_intent_refreshes_once_enabled(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED', 'false')
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is False
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    # Kill switch off: the frozen verdict stands even though recovery is now on.
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    stt.assert_not_called()
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert stt.call_count == 1
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True
+    assert row(client)['policy_part_sources']['recovery'] == 'refreshed'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+
+
+def test_refresh_never_adopts_a_still_disabled_setting(setup, monkeypatch):
+    client, _, binding, artifacts, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    recorded = dict(row(client)['policy_parts']['recovery'])
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    assert row(client)['policy_parts']['recovery'] == recorded
+    assert 'policy_part_sources' not in row(client) or row(client)['policy_part_sources'].get('recovery') != 'refreshed'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['intent', 'failed_held', 'foreign'])
+def test_refresh_never_touches_spent_or_foreign_units(setup, monkeypatch, change):
+    from database.batch_pipeline_policy import refresh_disabled_recovery
+
+    client, store, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    if change == 'intent':
+        row(client)['recovery'] = {'token': 'spent', 'epoch': 1, 'privacy_generation': 0}
+    elif change == 'failed_held':
+        row(client)['recovery_state'] = 'failed_held'
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    owner = 'other-owner' if change == 'foreign' else binding.owner_id
+    before = dict(row(client))
+    assert refresh_disabled_recovery(store, 'bad', owner) is None
+    assert row(client) == before
+    stt.assert_not_called()
+
+
+def test_dispatch_refreshes_disabled_snapshot_before_enqueue(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', binding.owner_id)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '')
+    outcome = recovery.dispatch('bad', binding.owner_id)
+    assert outcome != 'disabled'
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True

@@ -552,3 +552,32 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'
+
+
+def _tombstone(store, conversation_id):
+    store.rows[('users', 'u', 'deleted_conversations', conversation_id)] = {'conversation_id': conversation_id}
+
+
+def test_reupload_never_recreates_a_hard_deleted_conversation_id():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('deleted', 1000))
+    assert conversations(store) == []
+
+
+def test_hard_deleted_explicit_target_is_not_replaced_temporally():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted-target')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal', 1000), target_id='deleted-target')
+    assert conversations(store) == []
+
+
+def test_tombstone_of_another_id_still_creates_and_appends():
+    store = StrictFirestore()
+    _tombstone(store, 'unrelated')
+    first, created, _ = intake(store, chunk('first', 1000))
+    assert created and first['id'] == 'first'
+    second, created, _ = intake(store, chunk('second', 1012))
+    assert not created and second['id'] == 'first'
