@@ -57,7 +57,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.listen_close import note_ws_close, record_listen_ws_close
+from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
@@ -241,8 +241,7 @@ class ListenSessionRuntime:
         try:
             await self.request.websocket.send_json(event.to_json())
             return True
-        except WebSocketDisconnect as error:
-            note_ws_close(self.state, 'client', error.code)
+        except WebSocketDisconnect:
             self.state.active = False
         except RuntimeError as error:
             # The ASGI server refuses a send after close: the socket is gone, so stop
@@ -743,8 +742,7 @@ class ListenSessionRuntime:
         try:
             await self.request.websocket.send_text('ping')
             return True
-        except WebSocketDisconnect as error:
-            note_ws_close(self.state, 'client', error.code)
+        except WebSocketDisconnect:
             self.state.active = False
         except RuntimeError as error:
             self.state.active = False
@@ -1272,6 +1270,23 @@ class ListenSessionRuntime:
             if error is not None:
                 raise error
 
+    async def _observe_pending_client_close(self) -> None:
+        # A sender's WebSocketDisconnect carries a synthetic 1006 whatever the peer
+        # sent, so read the queued disconnect frame for the client's real code.
+        websocket = self.request.websocket
+        if (
+            getattr(self.state, 'ws_close_initiator', None) is not None
+            or getattr(self.receiver, '_receiving', False)
+            or websocket.client_state != WebSocketState.CONNECTED
+        ):
+            return
+        try:
+            message = await asyncio.wait_for(websocket.receive(), timeout=CLOSE_FRAME_DRAIN_SECONDS)
+        except Exception:
+            return
+        if message.get('type') == 'websocket.disconnect':
+            note_ws_close(self.state, 'client', message.get('code', 1000))
+
     def _cap_held_at_close(self) -> bool:
         # Paused at onset (cap_paused) or holding denied audio mid-session (live_hold.paused).
         receiver = getattr(self, 'receiver', None)
@@ -1335,6 +1350,7 @@ class ListenSessionRuntime:
             logger.error('STT finish failed type=%s', type(error).__name__)
         if not owner_persistence_blocked:
             await self._flush_usage(final=True)
+        await self._observe_pending_client_close()
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
                 await self.request.websocket.close(code=self.state.close_code)

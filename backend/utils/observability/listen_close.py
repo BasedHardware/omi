@@ -1,8 +1,9 @@
 """Listen websocket close outcomes: who closed the socket, with which code, while cap-held or not.
 
 A client-reported 1006 means no close frame reached the client. This counter is the server-side
-half: the first close the server observed (a client disconnect frame or exception, or the server's
-own close) and the code it carried, recorded once per session at teardown.
+half: the first close the server observed (a client disconnect frame read by receive, or a server
+close that returned) and the code it carried, recorded once per session at teardown. A sender's
+WebSocketDisconnect is not an observation: Starlette maps every send-side OSError to 1006.
 
 Labels are closed vocabularies only; never uid, session or conversation identifiers. Raw close
 codes fold into ``CODE_CLASSES``, so application codes (4xxx, 1008, 1003) count as ``other``.
@@ -22,6 +23,9 @@ CODE_CLASSES = ('1000', '1001', '1006', '1011', 'other')
 INITIATORS = ('client', 'server', 'unknown')
 HELD = ('true', 'false')
 
+# Teardown's bounded read for a disconnect frame no receive loop consumed.
+CLOSE_FRAME_DRAIN_SECONDS = 0.25
+
 LISTEN_WS_CLOSE_TOTAL = Counter(
     'omi_listen_ws_close_total',
     'Listen websocket sessions by first observed close code class, initiator and cap-held state at close',
@@ -35,9 +39,10 @@ LISTEN_WS_CLOSE_FINALIZE_SECONDS = Histogram(
 )
 
 # Zero-initialise every series so ramp gates read 0, not absent, before the first close.
-for _code_class in CODE_CLASSES:
-    for _initiator in INITIATORS:
-        for _held in HELD:
+for _initiator in INITIATORS:
+    for _held in HELD:
+        LISTEN_WS_CLOSE_FINALIZE_SECONDS.labels(initiator=_initiator, held=_held)
+        for _code_class in CODE_CLASSES:
             LISTEN_WS_CLOSE_TOTAL.labels(code_class=_code_class, initiator=_initiator, held=_held)
 
 
@@ -52,9 +57,12 @@ def note_ws_close(state: Any, initiator: str, code: Any) -> None:
     """Remember the first close the server observed; later observations of the same end are echoes."""
     if getattr(state, 'ws_close_initiator', None) is not None:
         return
-    state.ws_close_initiator = initiator if initiator in INITIATORS else 'unknown'
-    state.ws_close_code = code
-    state.ws_close_observed_at = time.monotonic()
+    try:
+        state.ws_close_initiator = initiator if initiator in INITIATORS else 'unknown'
+        state.ws_close_code = code
+        state.ws_close_observed_at = time.monotonic()
+    except Exception as error:
+        logger.warning('Listen websocket close note failed type=%s', type(error).__name__)
 
 
 def record_listen_ws_close(state: Any, *, held: bool, teardown_started_at: float) -> None:
@@ -63,10 +71,8 @@ def record_listen_ws_close(state: Any, *, held: bool, teardown_started_at: float
         initiator = getattr(state, 'ws_close_initiator', None)
         code = getattr(state, 'ws_close_code', None)
         if initiator is None:
-            # A terminal STT failure closes the socket itself (live_failure.py) and teardown
-            # skips its own close; any other unobserved end is unattributed.
-            initiator = 'server' if getattr(state, 'stt_terminal_failure', False) else 'unknown'
-            code = getattr(state, 'close_code', None)
+            # No frame was read and no server close returned: report the intended code, unattributed.
+            initiator, code = 'unknown', getattr(state, 'close_code', None)
         held_label = 'true' if held else 'false'
         LISTEN_WS_CLOSE_TOTAL.labels(code_class=close_code_class(code), initiator=initiator, held=held_label).inc()
         observed_at: Optional[float] = getattr(state, 'ws_close_observed_at', None)

@@ -21,6 +21,7 @@ from utils.observability.listen_close import (
     note_ws_close,
     record_listen_ws_close,
 )
+from utils.stt.live_failure import terminate_live_stt_backoff
 
 
 @pytest.fixture
@@ -65,9 +66,20 @@ class _Persistence:
         return None
 
 
-def _runtime(client_state=WebSocketState.CONNECTED, close=None):
-    """A real ListenSessionRuntime teardown with collaborators stubbed at their seams."""
-    websocket = SimpleNamespace(client_state=client_state, close=close or AsyncMock())
+def _runtime(client_state=WebSocketState.CONNECTED, close=None, pending=None):
+    """A real ListenSessionRuntime teardown with collaborators stubbed at their seams.
+
+    ``pending`` is the next message teardown's drain reads; by default a live client's audio frame.
+    """
+    message = pending or {'type': 'websocket.receive', 'bytes': b'audio'}
+
+    async def receive():
+        # Starlette marks the client DISCONNECTED once receive returns its disconnect.
+        if message['type'] == 'websocket.disconnect':
+            websocket.client_state = WebSocketState.DISCONNECTED
+        return message
+
+    websocket = SimpleNamespace(client_state=client_state, close=close or AsyncMock(), receive=AsyncMock(wraps=receive))
     request = ListenRequest(websocket=websocket, uid='synthetic')
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = request
@@ -222,14 +234,33 @@ async def test_live_hold_pause_marks_held():
 
 
 @pytest.mark.anyio
-async def test_terminal_stt_failure_counts_server_close_sent_by_live_failure():
-    # live_failure.terminate_live_stt_session closes the socket itself; teardown skips its close.
-    runtime = _runtime(client_state=WebSocketState.DISCONNECTED)
-    runtime.state.stt_terminal_failure = True
-    runtime.state.close_code = 1011
+async def test_terminal_stt_close_counts_server_only_when_close_returned():
+    # live_failure closes the socket itself; teardown then skips its own close.
+    runtime = _runtime()
+    runtime.request.websocket.send_json = AsyncMock()
+    await terminate_live_stt_backoff(
+        runtime.request.websocket, runtime.state, reason='provider_unavailable', retry_after=5
+    )
     before = _snapshot()
     await runtime._teardown()
+    runtime.request.websocket.close.assert_awaited_once()
     assert _delta(before) == {('1011', 'server', 'false'): 1}
+
+
+@pytest.mark.anyio
+async def test_terminal_stt_close_failure_keeps_the_client_drop():
+    runtime = _runtime(
+        close=AsyncMock(side_effect=RuntimeError('peer gone')),
+        pending={'type': 'websocket.disconnect', 'code': 1006},
+    )
+    runtime.request.websocket.send_json = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
+    await terminate_live_stt_backoff(
+        runtime.request.websocket, runtime.state, reason='provider_unavailable', retry_after=5
+    )
+    assert runtime.state.ws_close_initiator is None
+    before = _snapshot()
+    await runtime._teardown()
+    assert _delta(before) == {('1006', 'client', 'false'): 1}
 
 
 @pytest.mark.anyio
@@ -253,14 +284,54 @@ async def test_teardown_exception_still_counts_once():
 
 
 @pytest.mark.anyio
-async def test_heartbeat_disconnect_counts_client():
-    async def send_text(_payload):
-        raise WebSocketDisconnect(code=1006)
+@pytest.mark.parametrize('sender', ['ping', 'event'])
+async def test_send_side_synthetic_1006_does_not_hide_the_clients_clean_close(sender):
+    # Starlette turns every send-side OSError into WebSocketDisconnect(1006), even for a
+    # peer that sent 1000. Teardown must read the queued frame for the real code.
+    runtime = _runtime(pending={'type': 'websocket.disconnect', 'code': 1000})
+    runtime.request.websocket.send_text = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
+    runtime.request.websocket.send_json = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
+    if sender == 'ping':
+        assert await runtime._send_ping() is False
+    else:
+        assert await runtime.asend_event(SimpleNamespace(to_json=lambda: {})) is False
+    assert runtime.state.ws_close_initiator is None
+    before = _snapshot()
+    await runtime._teardown()
+    assert _delta(before) == {('1000', 'client', 'false'): 1}
+    runtime.request.websocket.close.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_drain_skipped_while_the_receive_loop_still_owns_the_socket():
+    runtime = _runtime()
+    runtime.receiver._receiving = True
+    before = _snapshot()
+    await runtime._teardown()
+    runtime.request.websocket.receive.assert_not_awaited()
+    assert _delta(before) == {('1001', 'server', 'false'): 1}
+
+
+@pytest.mark.anyio
+async def test_drain_timeout_falls_through_to_server_close():
+    async def silent():
+        await asyncio.sleep(10)
 
     runtime = _runtime()
-    runtime.request.websocket.send_text = send_text
-    assert await runtime._send_ping() is False
-    assert (runtime.state.ws_close_initiator, runtime.state.ws_close_code) == ('client', 1006)
+    runtime.request.websocket.receive = silent
+    before = _snapshot()
+    await asyncio.wait_for(runtime._teardown(), timeout=2)
+    assert _delta(before) == {('1001', 'server', 'false'): 1}
+
+
+def test_finalize_histogram_is_zero_initialised():
+    for initiator in INITIATORS:
+        for held in HELD:
+            assert any(
+                sample.name.endswith('_count') and sample.labels == {'initiator': initiator, 'held': held}
+                for family in LISTEN_WS_CLOSE_FINALIZE_SECONDS.collect()
+                for sample in family.samples
+            )
 
 
 def test_record_never_raises_on_hostile_state():
