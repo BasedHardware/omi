@@ -591,9 +591,12 @@ left out of the sweep's counts; the chain summary reports them. Every other page
 including rows past a walk that stopped at its bound, is attempted in page
 order as before. Each walked row still takes the Redis owner claim and the
 transactional predecessor, privacy and receipt fences one at a time, so no
-owner gains concurrency. Walked rows reach follow-ups through ordinary
-discovery, not the wake's priority queue, so they cannot starve other owners'
-follow-ups; a walk that persisted any async row keeps follow-ups scheduled. The log line is `event=batch_projection action=sweep_chain
+owner gains concurrency. Walked async rows do not use the wake's priority
+queue. They are held (at most 256, durable either way) until the next
+follow-up discovery pass and queued behind its page, without moving its
+rotation. They are never stranded behind the discovery cursor, and they never
+jump discovered work or keep discovery from running. The finish page skips rows
+this sweep already assigned or finished. The log line is `event=batch_projection action=sweep_chain
 outcome=summary owners=N advanced=N`.
 
 `BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` defaults to `true` (kill

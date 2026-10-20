@@ -207,6 +207,10 @@ class Projector:
         self.fetch_audio = fetch_audio
         self.followups = None
         self.has_async_followups = False
+        # Async rows a sweep walk persisted. Handed to the follow-up queue
+        # behind work already queued, never ahead of it, so discovery's cursor
+        # position cannot strand them and other owners are not starved.
+        self.chain_followups: list[str] = []
         self.discovery = ProjectionDiscovery(store)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
@@ -231,7 +235,8 @@ class Projector:
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
-        await self.followups.schedule(priority)
+        tail, self.chain_followups = self.chain_followups, []
+        await self.followups.schedule(priority, tail=tail)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
@@ -668,16 +673,25 @@ class Projector:
             previous = segment_id
             advanced.append(segment_id)
             if policy.async_projection:
+                if segment_id == recovered:
+                    first = binding.content_id
                 group = groups.get(binding.content_id)
                 if group is None:
                     group = groups[binding.content_id] = {}
-                    for sibling in binding.segment_ids:
-                        receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
-                        if receipt and receipt.get('state') != 'ready':
-                            group[sibling] = None
+                    try:
+                        for sibling in binding.segment_ids:
+                            receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
+                            if receipt and receipt.get('state') != 'ready':
+                                group[sibling] = None
+                    except Exception as error:
+                        # The persisted row is still owed its follow-up.
+                        group[segment_id] = None
+                        logger.error(
+                            'event=batch_projection action=owner_chain outcome=error exception_type=%s',
+                            type(error).__name__,
+                        )
+                        break
                 group[segment_id] = None
-                if segment_id == recovered:
-                    first = binding.content_id
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
         return followups, advanced
@@ -696,8 +710,11 @@ class Projector:
         # At most one walk per owner per sweep. Page rows a walk already
         # persisted are skipped unread and left out of ``counts``: the
         # sweep_chain summary owns them. Every other row is attempted as before.
+        # ``touched`` rows were assigned or finished this sweep; the finish page
+        # does not repeat them.
         walked: set[str] = set()
         chained: set[str] = set()
+        touched: set[str] = set()
         # The shared budget starts with the first walk, not the page.
         chain_deadline: float | None = None
         for segment_id in discovery.next(limit=size):
@@ -714,6 +731,7 @@ class Projector:
                 else:
                     result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
+                touched.add(segment_id)
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
                 continue
@@ -744,6 +762,7 @@ class Projector:
                         # other async row is on either page this pass.
                         if followups:
                             self.has_async_followups = True
+                            self.chain_followups.extend(followups)
                         chained.update(advanced)
                     except Exception as error:
                         logger.error(
@@ -751,7 +770,7 @@ class Projector:
                             type(error).__name__,
                         )
         if pending_page:
-            contention = self._sweep_finish(size, counts) or contention
+            contention = self._sweep_finish(size, counts, touched | chained) or contention
         if contention:
             logger.info(
                 'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
@@ -768,7 +787,7 @@ class Projector:
             )
         return counts
 
-    def _sweep_finish(self, size: int, counts: dict[str, int]) -> bool:
+    def _sweep_finish(self, size: int, counts: dict[str, int], touched: set[str]) -> bool:
         """Advance persisted/ready rows that the pending-only assignment page skips.
 
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
@@ -779,6 +798,8 @@ class Projector:
 
         contention = False
         for segment_id in self.finish_discovery.next(limit=size):
+            if segment_id in touched:
+                continue
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])

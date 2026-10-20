@@ -179,9 +179,8 @@ def test_walk_budget_starts_at_the_first_walk_not_the_page(monkeypatch):
     projector._finish = Mock(side_effect=slow_finish)
     projector.sweep()
     assert log.persist_order == ids
-    # Assignment pass in chain order; the finish page then retries the
-    # still-persisted synchronous receipts (this mock never marks them ready).
-    assert finished == ids + ids
+    # Each row finishes once: the finish page skips rows this sweep finished.
+    assert finished == ids
 
 
 def test_walked_async_tail_behind_a_sync_head_keeps_followups_scheduled(monkeypatch):
@@ -198,6 +197,76 @@ def test_walked_async_tail_behind_a_sync_head_keeps_followups_scheduled(monkeypa
     projector.sweep(limit=1)
     assert log.persist_order == ['head', *tails]
     assert projector.has_async_followups
+
+
+@pytest.mark.asyncio
+async def test_walked_async_tails_behind_parked_cursors_still_start_followups(monkeypatch):
+    """Both cursors are parked past the tails; the walk's owed rows still run."""
+    log = ResultLog(async_projection=False)
+    log.commit(BURST, 'h', 'head', ['head'])
+    async_policy = projection.ProjectionPolicy(async_projection=True).to_dict()
+    tails = chain(log, BURST, 'a', 3)
+    for sid in tails:
+        log.jobs[sid]['policy_parts'] = {'projection': async_policy}
+    sync_receipts = []
+    for n in range(120):
+        sid = f'sync-{n}'
+        log.commit(f'owner-{n}', f's{n}', sid, [sid], state='persisted')
+        sync_receipts.append(sid)
+    projector = projector_for(log)
+    projector._finish = Mock(return_value=None)
+    parked = (log.results['sync-0']['committed_at'], 'sync-0')
+    projector.finish_discovery.after = parked
+    projector.followups = projection_followup.ProjectionFollowups(projector)
+    projector.followups.discovery.after = parked
+    service = Serving(MemoryStore(), projector=projector)
+    started = []
+
+    async def run(self, segment):
+        started.append(segment)
+
+    monkeypatch.setattr(projection_followup.ProjectionFollowups, 'run', run)
+    for _ in range(2):
+        await service.reconcile_async(periodic=True)
+        await asyncio.sleep(0)
+    assert log.persist_order[: 1 + len(tails)] == ['head', *tails]
+    assert set(tails) <= set(started)
+    # Out-of-order owed rows do not move the follow-up discovery rotation.
+    assert projector.followups.after not in tails
+
+
+@pytest.mark.asyncio
+async def test_owed_rows_join_behind_the_discovered_page_and_never_block_discovery():
+    projector = Mock()
+    runner = projection_followup.ProjectionFollowups(projector)
+    runner.candidates = lambda: ['page-a', 'page-b']
+    launched = []
+    runner.launch = lambda: launched.append(list(runner.pending))
+    runner.pending.append('queued')
+    await runner.schedule(tail=['owed-1', 'page-a'])
+    # A non-empty queue launches first; owed rows wait for the next discovery.
+    assert list(runner.pending) == ['queued'] and list(runner.owed) == ['owed-1', 'page-a']
+    runner.pending.clear()
+    await runner.schedule(tail=['owed-2'])
+    assert list(runner.pending) == ['page-a', 'page-b', 'owed-1', 'owed-2']
+    assert not runner.owed and {'owed-1', 'owed-2'} <= runner.prioritized
+
+
+def test_walk_keeps_a_persisted_async_row_when_its_sibling_read_fails():
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    real = log.ref
+    calls = []
+
+    def flaky(table, sid):
+        calls.append(sid)
+        if len(calls) > 1 and log.results[ids[0]].get('projection'):
+            raise RuntimeError('synthetic read outage')
+        return real(table, sid)
+
+    log.ref = flaky
+    followups, advanced = projector_for(log)._walk_owner(BURST, recovered=None, limit=64, budget_seconds=30)
+    assert advanced == [ids[0]] and followups == [ids[0]]
 
 
 def test_finish_page_contention_on_async_receipts_still_logs_the_summary(monkeypatch, caplog):
