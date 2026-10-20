@@ -1,15 +1,69 @@
 """Shared mobile/desktop setup and consented backup document formatting."""
 
 import html
+from collections.abc import Mapping
+
+
+# Primary summary selection, ported from backend/utils/conversations/summary_selection.py.
+# The plugin is a standalone service and cannot import the backend; the shared vectors
+# in contracts/parity/conversation_summary.json keep the two in agreement (test_app.py).
+def _value(source, key, default=None):
+    if isinstance(source, Mapping):
+        return source.get(key, default)
+    return getattr(source, key, default)
+
+
+def _text(value) -> str:
+    return value.strip() if isinstance(value, str) else ''
+
+
+def render_sections_markdown(sections) -> str:
+    section_list = list(sections or [])
+    if any(_value(section, 'kind') == 'side_notes' for section in section_list):
+        section_list = [s for s in section_list if _value(s, 'kind') != 'side_notes'] + [
+            s for s in section_list if _value(s, 'kind') == 'side_notes'
+        ]
+    rendered = []
+    for section in section_list:
+        heading = _text(_value(section, 'heading'))
+        body = _text(_value(section, 'body_markdown'))
+        if heading and body:
+            rendered.append(f'## {heading}\n\n{body}')
+        elif body:
+            rendered.append(body)
+    return '\n\n'.join(rendered)
+
+
+def select_primary_summary(conversation) -> dict:
+    """The one primary body that display, copy, sharing and this backup agree on."""
+    for result_index, result in enumerate(_value(conversation, 'apps_results', []) or []):
+        content = _text(_value(result, 'content'))
+        if content:
+            app_id = _value(result, 'app_id')
+            return {
+                'kind': 'app',
+                'content': content,
+                'app_id': app_id if isinstance(app_id, str) else None,
+                'result_index': result_index,
+            }
+    structured = _value(conversation, 'structured', {}) or {}
+    overview = _text(_value(structured, 'overview'))
+    sections = render_sections_markdown(_value(structured, 'sections', []) or [])
+    if overview and sections and overview == sections:
+        return {'kind': 'sections', 'content': sections, 'app_id': None, 'result_index': None}
+    if overview:
+        return {'kind': 'overview', 'content': overview, 'app_id': None, 'result_index': None}
+    if sections:
+        return {'kind': 'sections', 'content': sections, 'app_id': None, 'result_index': None}
+    return {'kind': 'empty', 'content': '', 'app_id': None, 'result_index': None}
 
 
 def summary_markdown(conversation) -> str:
     structured = conversation.structured
     date = conversation.finished_at or conversation.created_at
     category = getattr(structured.category, 'value', structured.category)
-    content = (
-        f'# {structured.title}\n\n**Date:** {date.isoformat()}\n**Category:** {category}\n\n{structured.overview}\n'
-    )
+    body = select_primary_summary(conversation)['content']
+    content = f'# {structured.title}\n\n**Date:** {date.isoformat()}\n**Category:** {category}\n\n{body}\n'
     for item in structured.action_items:
         content += f'\n- [{"x" if item.completed else " "}] {item.description}'
     return content + '\n'

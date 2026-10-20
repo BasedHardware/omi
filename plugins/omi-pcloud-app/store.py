@@ -153,11 +153,17 @@ class Store:
             else:
                 self.open(row[0], row[1])
 
+    # An expired or canceled backup is a scrubbed tombstone, not a delivery to
+    # deduplicate: a fresh authenticated delivery (re-export, or reconnect after
+    # disconnect) replaces it. Active, failed, completed and unreadable rows keep
+    # deduplicating so a backup is never uploaded twice or a restore is lost.
+    REPLACEABLE_JOB_STATES = ('expired', 'canceled')
+
     def enqueue(self, uid: str, conversation_id: str, payload: dict) -> str:
         identity = hashlib.sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
         with self.transaction() as conn:
-            row = conn.execute('SELECT id FROM jobs WHERE id=?', (identity,)).fetchone()
-            if row:
+            row = conn.execute('SELECT state FROM jobs WHERE id=?', (identity,)).fetchone()
+            if row and row[0] not in self.REPLACEABLE_JOB_STATES:
                 return identity
             count = conn.execute(
                 'SELECT COUNT(*) FROM jobs WHERE uid=? AND state NOT IN (?,?,?)',
@@ -166,6 +172,13 @@ class Store:
             if count >= 100:
                 raise OverflowError('Too many unfinished backups. Review failed backups before trying again.')
             payload.update(id=identity, attempt=0, uploaded=[], error=None)
+            now = time.time()
+            if row:
+                conn.execute(
+                    'UPDATE jobs SET blob=?,state=?,due=?,lease=?,expires=? WHERE id=?',
+                    (self.seal(uid, payload), 'pending', now, '', now + JOB_RETENTION_SECONDS, identity),
+                )
+                return identity
             conn.execute(
                 'INSERT INTO jobs VALUES (?,?,?,?,?,?,?)',
                 (
@@ -173,9 +186,9 @@ class Store:
                     uid,
                     self.seal(uid, payload),
                     'pending',
-                    time.time(),
+                    now,
                     '',
-                    time.time() + JOB_RETENTION_SECONDS,
+                    now + JOB_RETENTION_SECONDS,
                 ),
             )
         return identity

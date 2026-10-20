@@ -375,4 +375,78 @@ void main() {
     expect(enableCalls, 0, reason: 'missing payment link must not attempt an unpaid install');
     expect(find.text('Invalid payment URL'), findsOneWidget);
   });
+
+  group('app home with a one-use launch grant', () {
+    App homeApp(String homeUrl, {bool enabled = true}) => App(
+          id: 'app-1',
+          name: 'Backups',
+          author: 'Omi',
+          description: 'Backs up conversations',
+          image: '',
+          capabilities: {'external_integration'},
+          status: 'approved',
+          category: 'productivity',
+          approved: true,
+          ratingCount: 0,
+          enabled: enabled,
+          deleted: false,
+          isPaid: false,
+          isUserPaid: false,
+          externalIntegration: ExternalIntegration(appHomeUrl: homeUrl),
+        );
+
+    Future<List<String>> pumpHome(WidgetTester tester, App catalog, App fresh,
+        {bool preventAutoOpen = false, Future<(bool, String)> Function(String)? enableApp}) async {
+      final opened = <String>[];
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppProvider>.value(value: _FakeAppProvider(fresh)),
+          ChangeNotifierProvider<AddAppProvider>.value(value: AddAppProvider()),
+          ChangeNotifierProvider<MessageProvider>.value(value: MessageProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: AppDetailPage(
+            app: catalog,
+            preventAutoOpenHomePage: preventAutoOpen,
+            enableApp: enableApp ?? (_) async => (true, ''),
+            appDetailsLoader: (_) async => null,
+            setupChecker: (_) async => false,
+            openAppHome: (_, app) => opened.add(app.externalIntegration!.appHomeUrl!),
+          ),
+        ),
+      ));
+      await settle(tester);
+      return opened;
+    }
+
+    testWidgets('auto-open uses the freshly fetched grant, never the catalog URL', (tester) async {
+      final opened = await pumpHome(
+          tester, homeApp('https://plugin.test/home'), homeApp('https://plugin.test/home?omi_token=fresh-1'));
+      expect(opened, ['https://plugin.test/home?omi_token=fresh-1']);
+    });
+
+    testWidgets('the settings button fetches a new grant for each open', (tester) async {
+      final opened = await pumpHome(tester, homeApp('https://plugin.test/home?omi_token=cached'),
+          homeApp('https://plugin.test/home?omi_token=fresh-2'),
+          preventAutoOpen: true);
+      expect(opened, isEmpty);
+      await tester.tap(find.byTooltip('Backups settings'));
+      await settle(tester);
+      expect(opened, ['https://plugin.test/home?omi_token=fresh-2']);
+    });
+
+    testWidgets('opening after install uses a fresh grant', (tester) async {
+      final opened = await pumpHome(tester, homeApp('https://plugin.test/home', enabled: false),
+          homeApp('https://plugin.test/home?omi_token=fresh-3', enabled: false),
+          preventAutoOpen: true);
+      await tester.tap(find.text('Enable'));
+      await settle(tester);
+      await tester.tap(find.text('Enable').last); // the data-access consent dialog
+      await tester.pump(const Duration(seconds: 2));
+      await settle(tester);
+      expect(opened, ['https://plugin.test/home?omi_token=fresh-3']);
+    });
+  });
 }

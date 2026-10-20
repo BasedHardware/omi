@@ -22,6 +22,9 @@ completed, canceled and expired work and offers retry. Completed files are
 checkpointed individually; retries overwrite the same destination rather than
 creating numbered copies. Conversation identity, not title/minute, owns the
 remote folder. Summary/transcript files retain the readable conversation title.
+`summary.md` carries the conversation's primary summary as every client selects
+it (`contracts/parity/conversation-summary.md`): an app result, else the overview
+or structured sections, so an empty overview never yields an empty backup.
 
 Audio comes from Omi's canonical saved-audio records by conversation ID, never
 from a shared per-user buffer. Original WAV or MP3 parts retain their real
@@ -91,7 +94,9 @@ logs at the app or proxy, because setup links carry short-lived capabilities.
 Pending payloads (including scoped access tokens) are encrypted with vetted
 Fernet, expire after seven days and are scrubbed by the worker. There are at most
 100 unfinished jobs per account. Five failed attempts stop automatic retries;
-the owner can retry within retention. After expiry use Omi's manual export.
+the owner can retry within retention. After expiry use Omi's manual export: a
+fresh delivery replaces an expired (or, after reconnecting, canceled) record,
+while active, failed and completed backups still deduplicate.
 Completed jobs clear their content and authorization tokens. Job metadata is
 removed 30 days after expiry. Credentials and preferences are retained while
 connected (ten-year maximum); sessions last one hour and OAuth state 15 minutes.

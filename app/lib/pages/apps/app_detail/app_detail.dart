@@ -48,6 +48,7 @@ class AppDetailPage extends StatefulWidget {
   final Future<(bool, String)> Function(String) enableApp;
   final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
   final Future<bool> Function(String?) setupChecker;
+  final void Function(BuildContext context, App app) openAppHome;
 
   const AppDetailPage({
     super.key,
@@ -56,7 +57,10 @@ class AppDetailPage extends StatefulWidget {
     this.enableApp = enableAppServer,
     this.appDetailsLoader = getAppDetailsServer,
     this.setupChecker = isAppSetupCompleted,
+    this.openAppHome = _routeToAppHome,
   });
+
+  static void _routeToAppHome(BuildContext context, App app) => routeToPage(context, AppHomeWebPage(app: app));
 
   @override
   State<AppDetailPage> createState() => _AppDetailPageState();
@@ -224,12 +228,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Automatically open app home page if conditions are met
-      if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        routeToPage(context, AppHomeWebPage(app: app));
+      // Load details first: a transport-backed app's home URL carries a one-use
+      // launch grant that only a fresh details response contains.
+      final refreshed = await _refreshAppDetails();
+      if (!mounted) return;
+      if (refreshed &&
+          !widget.preventAutoOpenHomePage &&
+          app.enabled &&
+          app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+        widget.openAppHome(context, app);
       }
-      // Load details
-      await _refreshAppDetails();
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
@@ -239,7 +247,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
     super.initState();
   }
 
-  Future<void> _refreshAppDetails() async {
+  /// Returns whether fresh details were applied.
+  Future<bool> _refreshAppDetails() async {
     setIsLoading(true);
     var res = await context.read<AppProvider>().getAppDetails(app.id);
     if (mounted) {
@@ -258,6 +267,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
         _loadSubscriptionData();
       }
     }
+    return res != null;
+  }
+
+  /// Opens the app's home page with a launch grant fetched for this open. A grant
+  /// is one-use and short-lived, so a catalog copy or an earlier response is never
+  /// reused; if the fetch fails the current details are opened as before.
+  Future<void> _openAppHome() async {
+    final fresh = await context.read<AppProvider>().getAppDetails(app.id);
+    if (!mounted) return;
+    if (fresh != null) setState(() => app = fresh);
+    if (app.externalIntegration?.appHomeUrl?.isNotEmpty != true) return;
+    widget.openAppHome(context, app);
   }
 
   void _onExternalIntegrationUpdated() {
@@ -401,7 +422,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 OmiIconButton.filled(
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16),
                   label: l10n.appSettingsLabel(app.name.decodeString),
-                  onPressed: () => routeToPage(context, AppHomeWebPage(app: app)),
+                  onPressed: _openAppHome,
                 ),
               if (!isLoading && !app.private)
                 Builder(
@@ -838,9 +859,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // Automatically open app home page after installation if available
     if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
       Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          routeToPage(context, AppHomeWebPage(app: app));
-        }
+        if (mounted) _openAppHome();
       });
     }
   }

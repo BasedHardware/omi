@@ -12,12 +12,18 @@ The existing Flutter/macOS setup flows already use these fields and append the
 same UID hint, so no new client-specific auth channel or mobile-only state store
 is introduced. The plugin consumes setup nonces atomically and uses an HttpOnly
 session plus CSRF-protected POST forms for mutations. A query UID never authorizes.
+A launch grant is one-use and short-lived, so the Flutter app detail page fetches
+fresh details immediately before every home-page open (auto-open, the settings
+button and post-install) instead of reusing a catalog or earlier response.
 
 Finalized conversation fanout preserves SSRF target pinning, privacy redaction,
 the existing durable idempotency key and legacy apps. Only a registered app gets
 a signed delivery header and conversation-scoped saved-audio capability. Its
 existing webhook URL must match the trusted registration origin; metadata edits
-cannot redirect a capability to a different host.
+cannot redirect a capability to a different host. Re-enabling an auto-disabled
+registered app checks that origin and probes the service's non-mutating
+`GET /health`, because the authenticated delivery endpoint rightly rejects the
+unsigned empty `POST` legacy webhooks receive; deliveries stay signed.
 
 The plugin durably admits a job before acknowledging delivery. Its persistent
 store owns idempotency, per-file receipts, retry state, consent and connection

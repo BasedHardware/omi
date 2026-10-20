@@ -35,6 +35,10 @@ class PluginTransport:
         ):
             raise ValueError('Configured plugin endpoint does not match its trusted transport origin')
 
+    def health_url(self) -> str:
+        """A non-mutating readiness probe on the trusted origin; deliveries stay signed."""
+        return self.base_url.rstrip('/') + '/health'
+
     def token(self, uid: str, scope: str, *, ttl: int = 600, **claims) -> str:
         now = int(time.time())
         return jwt.encode(

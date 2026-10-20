@@ -472,6 +472,59 @@ def test_duplicate_admission_is_atomic_across_store_instances(env):
     assert len(set(identities)) == 1 and len(env.store.jobs(UID)) == 1
 
 
+def test_fresh_delivery_replaces_an_expired_or_canceled_backup(env):
+    first = env.store.enqueue(UID, 'conv-r', {'generation': 'old', 'files': {}, 'audio_token': None})
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET expires=? WHERE id=?', (time.time() - 1, first))
+    assert env.store.claim() is None
+    assert env.store.job_state(UID, first) == 'expired'
+
+    again = env.store.enqueue(UID, 'conv-r', {'generation': 'new', 'files': {}, 'audio_token': None})
+    assert again == first and env.store.job_state(UID, first) == 'pending'
+    claimed = env.store.claim()
+    assert claimed[0] == first and claimed[3]['generation'] == 'new'
+
+    env.store.cancel_jobs(UID)
+    assert env.store.job_state(UID, first) == 'canceled'
+    env.store.enqueue(UID, 'conv-r', {'generation': 'reconnected', 'files': {}, 'audio_token': None})
+    assert env.store.job_state(UID, first) == 'pending'
+
+
+def test_completed_and_active_backups_still_deduplicate(env):
+    identity = env.store.enqueue(UID, 'conv-d', {'generation': 'one', 'files': {}, 'audio_token': None})
+    env.store.enqueue(UID, 'conv-d', {'generation': 'two', 'files': {}, 'audio_token': None})
+    claimed = env.store.claim()
+    assert claimed[3]['generation'] == 'one', 'a pending job is not replaced'
+    env.store.settle(identity, UID, claimed[2], {**claimed[3], 'uploaded': ['summary.md']}, 'completed')
+    env.store.enqueue(UID, 'conv-d', {'generation': 'three', 'files': {}, 'audio_token': None})
+    assert env.store.job_state(UID, identity) == 'completed', 'a completed backup is never re-uploaded'
+
+
+def test_backup_summary_follows_the_shared_primary_summary_vectors():
+    from presentation import select_primary_summary
+
+    vectors = json.loads(
+        (Path(__file__).resolve().parents[2] / 'contracts' / 'parity' / 'conversation_summary.json').read_text()
+    )
+    assert vectors['cases']
+    for case in vectors['cases']:
+        assert select_primary_summary(case['conversation']) == case['expected'], case['id']
+
+
+def test_backup_summary_uses_sections_when_the_overview_is_empty():
+    from omi_plugin_sdk.models import Conversation
+    from presentation import summary_markdown
+
+    value = payload()
+    value['structured']['overview'] = ''
+    value['structured']['sections'] = [{'heading': 'Decisions', 'body_markdown': '- Ship the backup fix.'}]
+    body = summary_markdown(Conversation.model_validate(value))
+    assert '## Decisions\n\n- Ship the backup fix.' in body
+
+    value['apps_results'] = [{'app_id': 'notes-app', 'content': 'App-written summary'}]
+    assert 'App-written summary' in summary_markdown(Conversation.model_validate(value))
+
+
 def test_expired_state_nonce_cannot_be_consumed(env):
     env.store.put('oauth', 'old', UID, {'uid': UID}, ttl=-1)
     assert env.store.get('oauth', 'old', consume=True) is None
