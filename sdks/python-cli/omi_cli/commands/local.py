@@ -379,7 +379,16 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
     app_filter = arguments.get("app_filter")
     limit = int(arguments.get("limit") or 15)
 
-    if result.startswith("No matching screen-history results") or result.startswith("No screen history is available"):
+    # Desktop's emptySemanticSearchMessage (ChatToolExecutor.swift) formats four
+    # no-hit messages: no history captured, screenshots not indexed yet, no matches
+    # among indexed frames, and no matches when reading index stats failed.
+    if result.startswith(
+        (
+            "No matching screen-history results",
+            "No screen history is available",
+            "No screenshots found matching ",
+        )
+    ) or (result.startswith("Omi has ") and "not ready to search yet" in result):
         suggestions = [
             "Try a broader query",
             "Increase --days",
