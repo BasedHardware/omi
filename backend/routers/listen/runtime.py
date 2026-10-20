@@ -1272,7 +1272,8 @@ class ListenSessionRuntime:
 
     async def _observe_pending_client_close(self) -> None:
         # A sender's WebSocketDisconnect carries a synthetic 1006 whatever the peer
-        # sent, so read the queued disconnect frame for the client's real code.
+        # sent, so read the queued disconnect frame for the client's real code. Data
+        # frames queue ahead of it; the receive loop has left, so they are discarded.
         websocket = self.request.websocket
         if (
             getattr(self.state, 'ws_close_initiator', None) is not None
@@ -1280,12 +1281,15 @@ class ListenSessionRuntime:
             or websocket.client_state != WebSocketState.CONNECTED
         ):
             return
-        try:
-            message = await asyncio.wait_for(websocket.receive(), timeout=CLOSE_FRAME_DRAIN_SECONDS)
-        except Exception:
-            return
-        if message.get('type') == 'websocket.disconnect':
-            note_ws_close(self.state, 'client', message.get('code', 1000))
+        deadline = time.monotonic() + CLOSE_FRAME_DRAIN_SECONDS
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining)
+            except Exception:
+                return
+            if message.get('type') == 'websocket.disconnect':
+                note_ws_close(self.state, 'client', message.get('code', 1000))
+                return
 
     def _cap_held_at_close(self) -> bool:
         # Paused at onset (cap_paused) or holding denied audio mid-session (live_hold.paused).

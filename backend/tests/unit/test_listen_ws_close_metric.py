@@ -69,11 +69,15 @@ class _Persistence:
 def _runtime(client_state=WebSocketState.CONNECTED, close=None, pending=None):
     """A real ListenSessionRuntime teardown with collaborators stubbed at their seams.
 
-    ``pending`` is the next message teardown's drain reads; by default a live client's audio frame.
+    ``pending`` is what teardown's drain can read, in order; by default one audio frame from a
+    live client. Once it is empty the socket stays quiet, as a connected idle client would.
     """
-    message = pending or {'type': 'websocket.receive', 'bytes': b'audio'}
+    queue = list(pending or [{'type': 'websocket.receive', 'bytes': b'audio'}])
 
     async def receive():
+        if not queue:
+            await asyncio.sleep(10)
+        message = queue.pop(0)
         # Starlette marks the client DISCONNECTED once receive returns its disconnect.
         if message['type'] == 'websocket.disconnect':
             websocket.client_state = WebSocketState.DISCONNECTED
@@ -251,7 +255,7 @@ async def test_terminal_stt_close_counts_server_only_when_close_returned():
 async def test_terminal_stt_close_failure_keeps_the_client_drop():
     runtime = _runtime(
         close=AsyncMock(side_effect=RuntimeError('peer gone')),
-        pending={'type': 'websocket.disconnect', 'code': 1006},
+        pending=[{'type': 'websocket.receive', 'bytes': b'audio'}, {'type': 'websocket.disconnect', 'code': 1006}],
     )
     runtime.request.websocket.send_json = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
     await terminate_live_stt_backoff(
@@ -285,10 +289,12 @@ async def test_teardown_exception_still_counts_once():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize('sender', ['ping', 'event'])
-async def test_send_side_synthetic_1006_does_not_hide_the_clients_clean_close(sender):
+@pytest.mark.parametrize('audio_ahead', [0, 3])
+async def test_send_side_synthetic_1006_does_not_hide_the_clients_clean_close(sender, audio_ahead):
     # Starlette turns every send-side OSError into WebSocketDisconnect(1006), even for a
-    # peer that sent 1000. Teardown must read the queued frame for the real code.
-    runtime = _runtime(pending={'type': 'websocket.disconnect', 'code': 1000})
+    # peer that sent 1000. Teardown must read past queued audio to the real close frame.
+    audio = [{'type': 'websocket.receive', 'bytes': b'audio'}] * audio_ahead
+    runtime = _runtime(pending=[*audio, {'type': 'websocket.disconnect', 'code': 1000}])
     runtime.request.websocket.send_text = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
     runtime.request.websocket.send_json = AsyncMock(side_effect=WebSocketDisconnect(code=1006))
     if sender == 'ping':
