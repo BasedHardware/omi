@@ -19,6 +19,10 @@ import {
 } from '@/src/lib/share-preview-analytics.mjs';
 import { shareAlternates } from '@/src/lib/shared-export.mjs';
 import { firstSectionBulletPlainText } from '@/src/lib/shared-note.mjs';
+import {
+  noteTranscriptIDs,
+  presentableNoteText,
+} from '@omi/note-shared/note-sources.mjs';
 import { ParamsTypes, SearchParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
@@ -52,7 +56,10 @@ export async function generateMetadata(
 
   const title = !memory
     ? 'Shared Conversation Not Found'
-    : memory?.structured?.title || DEFAULT_TITLE_MEMORY;
+    : presentableNoteText(
+        memory?.structured?.title,
+        noteTranscriptIDs(memory?.transcript_segments),
+      ) || DEFAULT_TITLE_MEMORY;
   const description = !memory
     ? 'This shared conversation is private or no longer available. Open Omi to capture your own.'
     : firstSectionBulletPlainText(memory?.structured?.sections) ||
