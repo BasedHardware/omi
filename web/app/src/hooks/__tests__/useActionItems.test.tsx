@@ -148,4 +148,26 @@ describe('useActionItems', () => {
     expect(shownIds()).toEqual(['c']);
     expect(getActionItems).toHaveBeenCalledTimes(3);
   });
+
+  it('puts back only the tasks a partly failed bulk delete kept', async () => {
+    vi.mocked(getActionItems).mockResolvedValue({
+      items: [item('a'), item('b'), item('c')],
+      hasMore: false,
+    } as never);
+    // The other two deletes succeed. They must not be put back: the server is done
+    // with them, so a later reload would drop them again and the list flickers.
+    vi.mocked(deleteActionItem).mockImplementation(async (id: string) => {
+      if (id === 'b') throw new Error('API error: 500');
+    });
+
+    const { result } = renderHook(() => useActionItems());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.bulkDelete(['a', 'b', 'c']);
+    });
+
+    expect(result.current.items.map((task) => task.id)).toEqual(['b']);
+    expect(result.current.error).toBe('API error: 500');
+  });
 });
