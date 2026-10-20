@@ -306,6 +306,12 @@ def cancel_fenced_recovery(store, segment_id):
 class SilenceDispositionStore(RecoveryStore):
     """Explicit operator-only no-provider intent. The spent STT intent stays intact."""
 
+    def __init__(self, store: Any, *, server_flags):
+        """`server_flags` is the serving role's live settings for an unpinned unit,
+        or None to refuse it; never this process's environment."""
+        super().__init__(store)
+        self.server_flags = server_flags
+
     def prepare_silence(self, segment_id, owner_id, plan_digest, now):
         from config.batch_pipeline import empty_asr_disposition_enabled
 
@@ -317,7 +323,9 @@ class SilenceDispositionStore(RecoveryStore):
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id, allow_completed_silence=True)
-            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
             if not policy.recovery_enabled:
                 raise ProjectionBlocked('disposition disabled')
             existing = tx.get('results', segment_id)
