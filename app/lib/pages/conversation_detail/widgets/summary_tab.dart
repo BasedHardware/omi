@@ -22,6 +22,7 @@ import 'package:uuid/uuid.dart';
 import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
+import 'summary_task_recovery.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
@@ -147,6 +148,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
+                        if (conversation != null && !_isEditing && !summarySelection.isApp)
+                          SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed

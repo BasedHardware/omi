@@ -1,0 +1,51 @@
+# Conversation tasks on mobile
+
+Tasks and integrations share the existing `ActionItemsProvider` owner. Mobile
+conversation extraction keeps the backend's conservative direct-task writer
+(#12424). Desktop capture remains suggestion-only (INV-TASK-2); mobile readers
+approve its canonical Candidates rather than issuing manual task-create calls.
+
+The production provider factory wires `TaskSuggestionsApi` alongside
+`ActionItemsApi`. Tasks shows the server's bounded Suggested projection even
+when no task exists. Add Task and Dismiss use generation-fenced accept/reject
+receipts. Approval reads the exact returned task ID and upserts it into Tasks
+and Home. An acknowledged save whose point read fails stays visibly saved and
+retries only that read. A session reset fences all outstanding requests.
+
+A write revision prevents earlier Tasks, pagination and Home reads from
+replacing a newly acknowledged task. Resolved Candidate IDs suppress stale
+suggestion responses. A task revealed by its receipt does not advance the
+pagination offset until a server page includes it, so older summary replays
+cannot skip unseen tasks. Existing deletion tombstones remain authoritative;
+identical descriptions never imply identical tasks.
+
+Desktop summary readers can also recover an older action item explicitly.
+The client submits its stored conversation, row index and expected description
+to `/v1/candidates/from-conversation`, then separately accepts the prepared
+Candidate with the same reference. The server validates the current stored row
+and persists its task link. Repeating after reopening uses that durable link;
+there is no description-matching or manual-create fallback. This control is
+excluded from phone summaries, locked/discarded conversations and app-result
+summaries. Phone extraction already has a direct writer and must not acquire a
+second unlinked creation path.
+
+Task Integrations keeps its Tasks header entry and gains a named overflow entry,
+a Settings → Integrations row, and a localized Settings search destination.
+
+## Implementation and verification checklist
+
+- [x] Keep capture origin policy and canonical acceptance authority intact.
+- [x] Expose pending desktop suggestions on empty and populated Tasks lists.
+- [x] Recover older desktop summary rows through the durable server promoter.
+- [x] Retain saved receipts across list/hydration outages; fence stale reads.
+- [x] Clear suggestion, receipt and in-flight state on account reset.
+- [x] Make Task Integrations discoverable from Settings and localized search.
+- [x] Run provider/widget regression tests, mobile journeys and preflight.
+- [x] Capture native iOS UI evidence with synthetic transport.
+- [ ] Merge and release the mobile app; confirm production backend compatibility.
+- [ ] Verify affected customer conversations appear and remain after reopening.
+
+`test/providers/task_delivery_test.dart` exercises production composition,
+receipts, retries, stale reads and account reset. The offline native target is
+`integration_test/task_delivery_capture.dart`; it uses the real provider factory
+and widgets with a synthetic HTTP boundary, never customer credentials or data.
