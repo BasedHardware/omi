@@ -4,7 +4,7 @@ from copy import deepcopy
 from itertools import permutations
 import logging
 
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import DeadlineExceeded, FailedPrecondition
 import pytest
 
 from config.batch_pipeline import MERGE_HEAD_WAIT_DEFAULT, merge_head_wait_seconds
@@ -312,6 +312,28 @@ def test_owner_wide_privacy_fence_behind_a_blocked_head_leaves_the_owner_blocked
     assert merge.commit_next('heavy', 10 + W) is None
     assert ('results', 'b') not in store.rows
     assert merge.commit_next('other', 10 + W)['segment_id'] == 'x'
+
+
+class _FlakyProbeStore(MemoryStore):
+    failures = 1
+
+    def longest_ready_pending(self, owner_key):
+        if self.failures:
+            self.failures -= 1
+            raise DeadlineExceeded('synthetic probe timeout')
+        return super().longest_ready_pending(owner_key)
+
+
+def test_transient_probe_error_returns_strict_result_without_backoff():
+    store = _FlakyProbeStore()
+    queue = Scheduler(store)
+    for segment, capture in {'a': 1, 'b': 2}.items():
+        queue.enqueue(item(segment, capture=capture), 0)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(0, 2)}
+    complete(queue, leases, 'b', 10)
+    merge = OrderedMerge(store, head_wait_seconds=W)
+    assert merge.commit_next('heavy', 10 + W) is None  # Maintenance keeps draining other owners.
+    assert merge.commit_next('heavy', 10 + W)['segment_id'] == 'b'
 
 
 class _MissingIndex(MemoryTransaction):

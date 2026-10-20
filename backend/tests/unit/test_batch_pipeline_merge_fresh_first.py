@@ -6,7 +6,7 @@ import logging
 import random
 from unittest.mock import AsyncMock, Mock
 
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 import pytest
 
 from config.batch_pipeline import MERGE_CATCH_UP_DEPTH_DEFAULT, merge_catch_up_depth
@@ -225,6 +225,23 @@ def test_fresh_probe_takes_no_transactional_query_lock():
     store, queue, leases = admitted({'old': (1000, CATCH_UP), 'new': (90_000, FRESH)}, _ProbeOutsideStore())
     complete(queue, leases, 'new')
     assert merge_for(store).commit_next('heavy', NOW)['segment_id'] == 'new'
+
+
+class _FlakyFreshStore(MemoryStore):
+    def fresh_pending(self, owner_key, limit):
+        raise ServiceUnavailable('transient read')
+
+
+def test_transient_fresh_probe_error_keeps_the_strict_result(caplog):
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(4)} | {'f': (90_000, FRESH)}
+    store, queue, leases = admitted(rows, _FlakyFreshStore())
+    for segment in rows:
+        complete(queue, leases, segment)
+    merge = merge_for(store, depth=2)
+    with caplog.at_level(logging.WARNING):
+        assert [e['segment_id'] for e in drain(merge)] == ['c0', 'c1']
+    assert merge.held_owners == {'heavy'}
+    assert 'outcome=fresh_first_probe_retry' in caplog.text and 'fresh_first_unavailable' not in caplog.text
 
 
 def test_missing_fresh_index_falls_back_to_the_plain_order_and_logs(caplog):
