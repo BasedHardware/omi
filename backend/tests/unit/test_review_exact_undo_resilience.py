@@ -294,3 +294,28 @@ def test_witness_snapshot_tolerates_scalar_path():
 def test_witness_snapshot_keeps_conversation_fingerprint():
     result = undo.witness_snapshot('u', 'conversations/c1', None)
     assert 'speech' in result
+
+
+# ------------------------------------------- generation fence x row fence interplay
+
+
+def test_malformed_generation_match_still_lets_row_fence_reject_newer_edit(fake_store):
+    """A ``0 == 0`` generation match must not absorb a later user edit.
+
+    Both the recorded fence and the stored document carry an unusable
+    ``account_generation``; both coerce to ``0``, so ``validate_generation`` cannot
+    tell the two apart and passes. The reversal fence is then the only guard left,
+    and it still rejects the undo once the row has been edited afterwards.
+    """
+    fake_store['task_intelligence_control'] = {'state': {'account_generation': 'not-a-number'}}
+    fake_store['action_items'] = {'a1': {'owner': 'cleanup-owner'}}
+    journal = undo.journal_fences(
+        [],
+        [(_Edit('action_items', 'a1', {'owner': 'cleanup'}), None, {'owner': 'cleanup-owner'})],
+        {TARGET: {'account_generation': 'still-not-a-number'}},
+    )
+    assert journal['generation_fences'] == {TARGET: 0}
+    undo.validate_generation('u', None, journal)  # malformed on both sides, 0 == 0
+    assert undo.validate_row(journal, 'action_items', 'a1', {'owner': 'cleanup'}, 'after') is True
+    with pytest.raises(ReviewConflict):
+        undo.validate_row(journal, 'action_items', 'a1', {'owner': 'user-edit'}, 'after')
