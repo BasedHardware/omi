@@ -807,8 +807,7 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('state'), _desc('listed_at'), _desc('__name__')),
     ),
     # Redrive fleet snapshot. Collection-group count+sum of pending holds, the
-    # dated-hold count and oldest listed_at (same state + listed_at index), and
-    # the processing-backlog item sum. One scheduler cadence.
+    # dated count plus oldest listed_at on one index, and the backlog item sum.
     FirestoreIndexRequirement(
         'stt_cap_holds_group_state_asc_seconds_asc',
         'stt_cap_holds',
