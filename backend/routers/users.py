@@ -40,6 +40,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     user_webhook_status_db,
     set_user_preferred_app,
+    clear_user_preferred_app,
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
@@ -1078,6 +1079,18 @@ def set_preferred_app_for_user(
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
+
+
+@router.delete('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
+def clear_preferred_app_for_user(uid: str = Depends(auth.get_current_user_uid)):
+    """Clears the user's preferred app: future processing uses Omi's own summary. Idempotent."""
+    try:
+        clear_user_preferred_app(uid)
+    except Exception as e:
+        logger.error(f"Failed to clear preferred app in Redis for user {uid}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Failed to clear app preference.")
+
+    return {"status": "ok", "message": "Preferred app cleared."}
 
 
 # **************************************

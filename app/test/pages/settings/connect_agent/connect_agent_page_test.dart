@@ -165,6 +165,26 @@ void main() {
     expect(find.byKey(const ValueKey('connect_chatgpt_open')), findsOneWidget);
   });
 
+  testWidgets('a partial ChatGPT grant can be disconnected from the reconnect sheet', (tester) async {
+    final backend = await pumpPage(tester, FakeAgentBackend(chatGptConnected: true, chatGptScopes: ['memories.read']));
+    await tester.tap(find.text('Reconnect'));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('connect_chatgpt_disconnect')));
+    await settle(tester);
+    await tester.tap(find.text('Disconnect').last);
+    await settle(tester);
+    expect(backend.revokedGrants, ['grant-chatgpt']);
+    expect(find.byKey(const ValueKey('connect_chatgpt_open')), findsNothing);
+    expect(find.text('Needs more access. Reconnect to fix.'), findsNothing);
+  });
+
+  testWidgets('ChatGPT not connected offers no Disconnect on the sheet', (tester) async {
+    await pumpPage(tester, FakeAgentBackend());
+    await tester.tap(find.byKey(const ValueKey('connect_agent_chatgpt')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('connect_chatgpt_disconnect')), findsNothing);
+  });
+
   testWidgets('a new link abandoned mid-request keeps the working key', (tester) async {
     captureClipboard(tester);
     final backend = await pumpPage(tester, FakeAgentBackend());

@@ -733,6 +733,84 @@ Async follow-up discovery keeps its own mixed page and cursor unchanged. All
 three pages use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
+### Per-owner projection drain (Phase 1)
+
+The sweep-shared 30 s walk budget gave each heavy owner a shrinking share of
+each 20 s serving tick. With tens of catch-up owners on an instance, each
+owner's duty cycle collapsed. Three switches change that, all on by default.
+None relaxes ordering: the assignment transaction's predecessor, privacy,
+binding and receipt fences decide every row exactly as before.
+
+`BATCH_PIPELINE_OWNER_DRAIN_ENABLED` (kill switch; `false` restores the sweep
+owner-chain walk above with every pre-check. Read-ahead and the deferred index
+below have their own switches; all three off is the pre-drain behaviour):
+- The sweep only discovers owners. When it persists an owner's pending head
+  row, it hands the owner to this process's drain, not a budgeted walk. It
+  leaves that owner's later rows on the same page to the drain, and it skips
+  owners whose drain is already running here. An owner still waiting for a
+  drain slot keeps its one-row-per-pass page progress. The page row's own
+  follow-up hand-off is unchanged.
+- `OwnerDrains` (`utils/batch_pipeline/projection_drain.py`) keeps a FIFO of
+  owners and runs at most 8 at once per process. Each turn walks the owner's
+  chain in blocking steps of at most 15 s on `sync_executor`, until the chain
+  ends, blocks, or 120 s pass. An owner with rows left re-queues behind every
+  waiting owner. Every turn takes at least one step.
+- A drain step (and a recovery wake) holds the advisory Redis owner claim for
+  the whole step instead of taking it per row. So one owner has one walker
+  across processes, and a busy claim ends the step before any read. Firestore
+  stays the authority.
+- Rows the step reaches as the watermark's successor skip the two read-only
+  pre-check transactions (`predecessor` and the per-part check). The step's own
+  fresh read of the result row must show no receipt; a row or part that
+  already has one still replays through the check. If a receipt races in, the
+  assignment transaction replays it exactly as the check would have.
+- A recovery wake that stops at its 64-row or 30 s bound hands the owner to
+  the drain. Owed follow-ups join behind follow-up discovery, as before.
+- Log lines: `event=batch_projection action=owner_drain outcome=turn steps=
+  advanced= more= elapsed_ms=` per turn, and `action=owner_chain
+  outcome=claim_busy`.
+
+`BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
+malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on
+`storage_executor`: their successor links, job bindings, result payloads and
+audio manifests. All of these are immutable once committed. The walk still
+reads each result row fresh, so receipt state is never taken from the
+read-ahead. A read-ahead miss or failed load falls back to the walk's own read.
+A load still running when the step's budget is spent ends the step (`more`)
+and stays queued for the next step, so a slow read never runs again inline on
+the sync slot. A drain turn keeps one read-ahead across its steps. The step
+deadline is also checked between the parts of a multipart row; a row stopped
+there resumes at its first unpersisted part on the next step. The candidate
+hint lookup starts beside context and build, after the predecessor committed,
+for the span the words predict. Its wait is capped by what is left of the step.
+It is used only when it returns a conversation for exactly the built span;
+otherwise (no match, a different span, an error or the cap) the lookup runs
+inline as before.
+
+`BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED` (kill switch; `false`
+restores the inline index step). Budgeted walks no longer run the people-stats
+invalidation and Typesense step inside each assignment. That step re-deleted
+the canonical's whole `sync_merged_from` on every row, which made `index_ms`
+grow with donors. Walks now record the canonical and its lineage (cumulative
+`sync_merged_from` plus this commit's new donors from
+`assign_in_transaction(absorbed=...)`). `ProjectionIndex` coalesces them and
+converges each touched conversation once per flush, from durable state, through
+`conversations.index_sync_assignment`. Re-deleting the lineage once per flush
+keeps today's repair of a donor delete that failed or was lost. A flush runs
+after each drain step and on each serving tick, one flusher at a time:
+`event=batch_projection_index outcome=flushed owners= conversations= donors=
+lag_ms=`. It stays fail-open. Pending work is in memory, so a process exit
+loses it until the conversation's next deferral, as a Typesense outage does
+today. On the drain path `sync_assignment_timing` reports `index_ms=0` and
+`donors=` new donors.
+
+`python -m testing.pipeline_sim projection-drain` runs the real walk, sweep and
+drain on virtual time with modelled run-14 latencies. One 1,200-row owner:
+today's sweep walk 36.7 rows/min, drain with no cuts 44.4, Phase 1 118.2. Twelve
+300-row owners on one instance: 3.0 rows/min each today, 61.5-99.4 with the drain.
+Every mode makes the same assignment calls and ends with the same index. The
+model has no Firestore hot-document contention, so live rates stay below these.
+
 ### Assignment sub-phase timing
 
 With `BATCH_PIPELINE_PROJECTION_TIMING_ENABLED`, projection also times

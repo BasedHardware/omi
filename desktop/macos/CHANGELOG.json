@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.511",
+      "date": "2026-10-20",
+      "changes": [
+        "Action items in older conversation notes no longer show stray transcript reference codes"
+      ]
+    },
+    {
       "version": "0.12.510",
       "date": "2026-10-20",
       "changes": [
