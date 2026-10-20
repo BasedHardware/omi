@@ -92,7 +92,7 @@ class OwnerDrains:
                 advanced += len(walk.advanced)
                 if walk.followups:
                     # Owed rows join behind the next follow-up discovery page.
-                    self.projector.chain_followups.extend(walk.followups)
+                    self.projector.owe_followups(walk.followups)
                 self.projector.schedule_index_flush()
                 if not walk.more:
                     break

@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import threading
 import time
 import math
 import logging
@@ -260,6 +261,17 @@ class Projector:
         self.drain_requests: dict[str, None] = {}
         self.draining: set[str] = set()
         self.drains = None
+        # Sweeps and wakes hand off from sync-pool threads while overlapping
+        # reconcile passes and drains swap or extend on the event loop.
+        self.handoff = threading.Lock()
+
+    def request_drain(self, owner_id: str) -> None:
+        with self.handoff:
+            self.drain_requests[owner_id] = None
+
+    def owe_followups(self, segment_ids) -> None:
+        with self.handoff:
+            self.chain_followups.extend(segment_ids)
 
     @property
     def owes_followups(self) -> bool:
@@ -281,7 +293,8 @@ class Projector:
 
         if self.drains is None:
             self.drains = OwnerDrains(self)
-        requests, self.drain_requests = self.drain_requests, {}
+        with self.handoff:
+            requests, self.drain_requests = self.drain_requests, {}
         self.drains.request(requests)
 
     def schedule_index_flush(self) -> None:
@@ -313,7 +326,8 @@ class Projector:
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
-        tail, self.chain_followups = self.chain_followups, []
+        with self.handoff:
+            tail, self.chain_followups = self.chain_followups, []
         await self.followups.schedule(priority, tail=tail)
 
     def project(self, segment_id: str) -> dict | None:
@@ -763,7 +777,7 @@ class Projector:
         """
         walk = self._walk(owner_id, recovered=recovered, limit=limit, budget_seconds=budget_seconds)
         if walk.more and owner_drain_enabled():
-            self.drain_requests[owner_id] = None
+            self.request_drain(owner_id)
         logger.info(
             'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
             len(walk.advanced),
@@ -848,6 +862,7 @@ class Projector:
 
     def _walk_rows(self, owner_id, *, recovered, limit, budget_seconds, seed, drain, prefetch, deferred) -> Walk:
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from utils.batch_pipeline.projection_prefetch import NOT_READY, Prefetched
 
         key = owner_key(owner_id)
         deadline = time.monotonic() + budget_seconds
@@ -919,17 +934,25 @@ class Projector:
                 previous = segment_id
                 continue
             try:
-                prefetched = prefetch.take(segment_id) if prefetch is not None else None
-                if prefetched is not None and row:
+                prefetched = None
+                if prefetch is not None:
+                    prefetched = prefetch.take(segment_id, timeout=deadline - time.monotonic())
+                    if prefetched is NOT_READY:
+                        # Still loading at the step deadline: the next step
+                        # resumes here instead of holding this pool slot.
+                        more = True
+                        break
+                inputs = prefetched if isinstance(prefetched, Prefetched) and row else None
+                if inputs is not None:
                     # Immutable job and binding from the read-ahead; the
                     # mutable receipt state is this walk's fresh read.
-                    job, entry, binding = prefetched.job, row, prefetched.binding
+                    job, entry, binding = inputs.job, row, inputs.binding
                 else:
                     job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 hint = WalkHint(
                     successor=drain,
-                    prefetched=prefetched,
+                    prefetched=inputs,
                     defer_index=deferred,
                     parallel_candidate=prefetch is not None,
                 )
@@ -1000,6 +1023,7 @@ class Projector:
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
                     # That chain is the drain's: walking now (its claim would
                     # only refuse the row) or handed over earlier in this pass.
+                    counts['waiting'] += 1
                     continue
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
@@ -1031,7 +1055,7 @@ class Projector:
                 budget = 0.0
                 if drain:
                     handed.add(binding.owner_id)
-                    self.drain_requests[binding.owner_id] = None
+                    self.request_drain(binding.owner_id)
                 elif binding.owner_id not in walked:
                     if chain_deadline is None:
                         chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
@@ -1052,7 +1076,7 @@ class Projector:
                         # other async row is on either page this pass.
                         if followups:
                             self.has_async_followups = True
-                            self.chain_followups.extend(followups)
+                            self.owe_followups(followups)
                         chained.update(advanced)
                     except Exception as error:
                         logger.error(

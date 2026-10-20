@@ -308,7 +308,7 @@ class Conversations:
         after_assign(None, planned)
         self.calls.append((incoming['id'], candidate_id, canonical['id'], tuple(absorbed)))
         if defer_index is not None:
-            defer_index(uid, canonical['id'], absorbed)
+            defer_index(uid, canonical['id'], sorted({*canonical['merged_from'], *absorbed}))
         else:
             self.lanes.spend(
                 'index_base', LATENCY['index_base'] + LATENCY['index_per_donor'] * len(canonical['merged_from'])

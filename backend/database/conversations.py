@@ -4201,8 +4201,8 @@ def assign_sync_conversation(
     """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
 
     ``defer_index`` takes the post-commit search/people-stats step off this
-    call: it receives the canonical and only the donors this commit newly
-    absorbed, and the caller converges them later (``index_sync_assignment``).
+    call: it receives the canonical and its donor lineage, and the caller
+    converges each conversation once later (``index_sync_assignment``).
     """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
@@ -4285,9 +4285,10 @@ def assign_sync_conversation(
             )
         conversation = result[0]
         if defer_index is not None:
-            # Only this commit's new redirects; earlier donors were deleted when absorbed.
+            # The caller coalesces per conversation, so the full lineage (which
+            # retries a failed or lost donor delete) is paid once per flush.
             clock.donors = len(absorbed)
-            defer_index(uid, conversation['id'], list(absorbed))
+            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
         else:
             with clock.timed('index'):
                 clock.donors = len(conversation.get('sync_merged_from') or [])

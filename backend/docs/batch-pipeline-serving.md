@@ -673,17 +673,20 @@ exactly; otherwise it is redone inline.
 
 `BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED` (kill switch; `false`
 restores the inline index step). Budgeted walks no longer run the people-stats
-invalidation and Typesense step inside each assignment. They record the
-canonical and only the donors that commit newly absorbed
-(`assign_in_transaction(absorbed=...)`), not the cumulative `sync_merged_from`
-that made `index_ms` grow with donors. `ProjectionIndex` then converges each
-touched conversation once, from durable state, through
-`conversations.index_sync_assignment`. This happens after each drain step and on
-each serving tick, one flusher at a time:
+invalidation and Typesense step inside each assignment. That step re-deleted
+the canonical's whole `sync_merged_from` on every row, which made `index_ms`
+grow with donors. Walks now record the canonical and its lineage (cumulative
+`sync_merged_from` plus this commit's new donors from
+`assign_in_transaction(absorbed=...)`). `ProjectionIndex` coalesces them and
+converges each touched conversation once per flush, from durable state, through
+`conversations.index_sync_assignment`. Re-deleting the lineage once per flush
+keeps today's repair of a donor delete that failed or was lost. A flush runs
+after each drain step and on each serving tick, one flusher at a time:
 `event=batch_projection_index outcome=flushed owners= conversations= donors=
 lag_ms=`. It stays fail-open. Pending work is in memory, so a process exit
-loses it, as a Typesense outage does today. On the drain path
-`sync_assignment_timing` reports `index_ms=0` and `donors=` new donors.
+loses it until the conversation's next deferral, as a Typesense outage does
+today. On the drain path `sync_assignment_timing` reports `index_ms=0` and
+`donors=` new donors.
 
 `python -m testing.pipeline_sim projection-drain` runs the real walk, sweep and
 drain on virtual time with modelled run-14 latencies. One 1,200-row owner:

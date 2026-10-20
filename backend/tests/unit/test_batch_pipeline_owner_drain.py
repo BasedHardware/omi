@@ -193,10 +193,12 @@ def test_sweep_leaves_page_rows_of_a_handed_off_owner_to_the_drain():
     ids = chain(log, BURST, 'a', 5)
     other = chain(log, 'other', 'o', 2)
     projector = projector_for(log)
-    projector.sweep()
+    counts = projector.sweep()
     # Head rows only; the rest of each owner's page rows wait for its drain.
     assert log.persist_order == [ids[0], other[0]]
     assert list(projector.drain_requests) == [BURST, 'other']
+    # Rows left to the drain still count as waiting, not vanish from the summary.
+    assert counts == {'completed': 0, 'waiting': 7, 'blocked': 0, 'error': 0}
 
 
 def test_an_owner_queued_from_an_earlier_pass_still_gets_page_progress():
@@ -208,6 +210,23 @@ def test_an_owner_queued_from_an_earlier_pass_still_gets_page_progress():
         projector.sweep()
     assert log.persist_order == ids
     assert list(projector.drain_requests) == [BURST]
+
+
+def test_handoffs_from_pool_threads_serialize_with_event_loop_swaps():
+    import threading
+
+    projector = projector_for(ResultLog())
+    with projector.handoff:  # an event-loop swap in progress
+        writers = [
+            threading.Thread(target=projector.request_drain, args=('o1',)),
+            threading.Thread(target=projector.owe_followups, args=(['s1'],)),
+        ]
+        for writer in writers:
+            writer.start()
+        assert not projector.drain_requests and not projector.chain_followups
+    for writer in writers:
+        writer.join(timeout=5)
+    assert list(projector.drain_requests) == ['o1'] and projector.chain_followups == ['s1']
 
 
 def test_kill_switch_restores_the_sweep_walk(monkeypatch):
@@ -401,6 +420,36 @@ def test_prefetch_errors_fall_back_to_the_walks_own_reads(monkeypatch):
     assert walk.advanced == ids
 
 
+def test_a_still_loading_read_ahead_ends_the_step_instead_of_holding_the_slot(monkeypatch):
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    loading = Mock(successor=Mock(return_value=None), take=Mock(return_value=projection_prefetch.NOT_READY))
+    walk = projector.drain_step(BURST, 15.0, prefetch=loading)
+    assert walk == projection.Walk([], [], True) and log.persist_order == []
+    # The wait is capped by what is left of the step, never the 30 s ceiling.
+    assert 0 < loading.take.call_args.kwargs['timeout'] <= 15.0
+    loading.take.return_value = None
+    assert projector.drain_step(BURST, 15.0, prefetch=loading).advanced == ids
+
+
+def test_read_ahead_wait_accumulates_across_steps_then_falls_back(monkeypatch):
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    projector = projector_for(log)
+    ticks = itertools.count(0.0, 20.0)
+    monkeypatch.setattr(projection_prefetch, 'time', Mock(monotonic=lambda: next(ticks)))
+    monkeypatch.setattr(projection_prefetch, 'wait', lambda futures, timeout: None)
+    prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=InlineExecutor())
+    from concurrent.futures import Future
+
+    prefetch.rows[ids[0]] = Future()  # never completes
+    assert prefetch.take(ids[0], timeout=15.0) is projection_prefetch.NOT_READY
+    assert ids[0] in prefetch.rows  # kept for the next step
+    assert prefetch.take(ids[0], timeout=15.0) is None  # 40 s waited: read inline
+    assert ids[0] not in prefetch.rows
+
+
 def test_prefetch_depth_kill_switch_and_bounds(monkeypatch):
     for raw, expected in (('0', 0), ('8', 8), ('9', 4), ('-1', 4), ('x', 4)):
         monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREFETCH', raw)
@@ -462,12 +511,16 @@ class FakeSearch:
 
     def __init__(self, store):
         self.store, self.docs, self.calls = store, {}, 0
+        self.failing: set[str] = set()  # fail-open deletes that time out once
 
     def row(self, cid):
         return next((value for key, value in self.store.rows.items() if key[-1] == cid), None)
 
     def delete(self, uid, cid):
         self.calls += 1
+        if cid in self.failing:
+            self.failing.discard(cid)
+            return
         self.docs.pop(cid, None)
 
     def sync(self, uid, cid):
@@ -479,28 +532,51 @@ class FakeSearch:
             self.docs[cid] = (row['started_at'], row['finished_at'], len(row['transcript_segments']))
 
 
-def test_deferred_index_converges_to_the_inline_index(monkeypatch):
-    def replay(deferred):
-        store = StrictFirestore()
-        search = FakeSearch(store)
-        monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', search.delete)
-        monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', search.sync)
-        monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda uid: None)
-        index = ProjectionIndex()
-        # 'bridge' folds b into a; 'c' appends to a; 'e' folds d into a too.
-        for key, at in [('a', 1000), ('b', 1240), ('bridge', 1120), ('c', 1255), ('d', 1500), ('e', 1380)]:
-            absorbed: list[str] = []
-            result, _, _ = intake(store, chunk(key, at), absorbed)
-            if deferred:
-                index.defer('u', result['id'], absorbed)
-            else:
-                conversations_db.index_sync_assignment('u', [result['id']], result.get('sync_merged_from') or [])
-        assert index.flush() == int(deferred)
-        return search
+def lineage(result, absorbed):
+    """What assign_sync_conversation hands defer_index."""
+    return sorted({*(result.get('sync_merged_from') or []), *absorbed})
 
-    inline, deferred = replay(False), replay(True)
+
+def replay_index(monkeypatch, *, deferred, flush_every, failing=()):
+    store = StrictFirestore()
+    search = FakeSearch(store)
+    search.failing.update(failing)
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', search.delete)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', search.sync)
+    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda uid: None)
+    index = ProjectionIndex()
+    # 'bridge' folds b into a; 'c' appends to a; 'e' folds d into a too.
+    rows = [('a', 1000), ('b', 1240), ('bridge', 1120), ('c', 1255), ('d', 1500), ('e', 1380), ('f', 1262)]
+    for n, (key, at) in enumerate(rows, start=1):
+        absorbed: list[str] = []
+        result, _, _ = intake(store, chunk(key, at), absorbed)
+        # Every written conversation is indexed at once, as the extension would.
+        search.docs.setdefault(result['id'], 'seeded')
+        if deferred:
+            index.defer('u', result['id'], lineage(result, absorbed))
+            if n % flush_every == 0:
+                index.flush()
+        else:
+            conversations_db.index_sync_assignment('u', [result['id']], result.get('sync_merged_from') or [])
+    index.flush()
+    return search
+
+
+def test_deferred_index_converges_to_the_inline_index(monkeypatch):
+    inline = replay_index(monkeypatch, deferred=False, flush_every=1)
+    deferred = replay_index(monkeypatch, deferred=True, flush_every=len('abcdefg'))
     assert deferred.docs == inline.docs
+    assert set(deferred.docs) == {'a'}  # donors b and d are gone from search
+    # One lineage delete per donor per flush, not one per appended row.
     assert deferred.calls < inline.calls
+
+
+def test_a_failed_donor_delete_is_retried_by_a_later_flush(monkeypatch):
+    """The lineage, not only new donors, is re-deleted, as the inline step did."""
+    inline = replay_index(monkeypatch, deferred=False, flush_every=1, failing={'b'})
+    deferred = replay_index(monkeypatch, deferred=True, flush_every=3, failing={'b'})
+    assert 'b' not in inline.docs and 'b' not in deferred.docs
+    assert deferred.docs == inline.docs
 
 
 def test_index_flush_is_single_flight_and_keeps_late_deferrals(monkeypatch):
@@ -528,7 +604,7 @@ def test_index_sync_assignment_deletes_donors_and_converges_the_rest(monkeypatch
     assert ops == [('p', 'u'), ('d', 'c1'), ('s', 'c2')]
 
 
-def test_assign_sync_conversation_defers_only_new_donors(sdk_assignment, monkeypatch):  # noqa: F811
+def test_assign_sync_conversation_defers_the_lineage_instead_of_indexing(sdk_assignment, monkeypatch):  # noqa: F811
     from utils.sync import assignment
 
     store, _ = sdk_assignment()
@@ -550,7 +626,8 @@ def test_assign_sync_conversation_defers_only_new_donors(sdk_assignment, monkeyp
         firestore_client=store,
         defer_index=lambda *args: deferred.append(args),
     )
-    assert deferred == [('synthetic-unit', 'canonical', ['new'])]
+    # The lineage (old + new) is re-deleted once per flush, never per row.
+    assert deferred == [('synthetic-unit', 'canonical', ['new', 'old'])]
     inline.assert_not_called()
     conversations_db.assign_sync_conversation('synthetic-unit', chunk('canonical', 1000), firestore_client=store)
     inline.assert_called_once_with('synthetic-unit', ['canonical'], ['old', 'new'])

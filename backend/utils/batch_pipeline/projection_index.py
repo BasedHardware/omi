@@ -1,8 +1,10 @@
 """Search and people-stats convergence owed by owner-chain assignments.
 
 The step is fail-open and converges to durable state, so it need not run inside
-the ordered chain. Walks record each committed canonical and only the donors
-that commit newly absorbed; one flush per touched conversation follows. Pending
+the ordered chain. Walks record each committed canonical and its donor lineage;
+one flush converges each touched conversation once, so a heavy owner pays the
+lineage deletes (which retry any earlier failed delete) once per flush, not once
+per row. Pending
 work is in memory only: a lost flush degrades search freshness exactly like a
 Typesense outage does today.
 """

@@ -10,10 +10,11 @@ a walk faster, never change what it persists.
 
 from __future__ import annotations
 
-from concurrent.futures import Future
+from concurrent.futures import Future, wait
 from dataclasses import dataclass
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 # A prefetched row the walk is waiting for; beyond it the walk reads inline.
 PREFETCH_WAIT_SECONDS = 30.0
 EMPTY_OUTCOMES = frozenset({'silence', 'no_recoverable_speech'})
+# ``take`` result for a row whose read-ahead is still loading at the step deadline.
+NOT_READY = object()
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,8 @@ class ChainPrefetch:
         self.lock = threading.Lock()
         self.links: dict[str | None, str] = {}
         self.rows: dict[str, Future] = {}
+        # Seconds walks already waited on a still-loading row, across steps.
+        self.waited: dict[str, float] = {}
         self.scouting = False
         self.closed = False
 
@@ -74,14 +79,32 @@ class ChainPrefetch:
             with self.lock:
                 self.scouting = False
 
-    def take(self, segment_id: str) -> Prefetched | None:
+    def take(self, segment_id: str, timeout: float = PREFETCH_WAIT_SECONDS) -> Prefetched | object | None:
+        """The row's inputs; None means read inline; NOT_READY means still loading.
+
+        A load still running at ``timeout`` stays queued for the next step, so
+        a slow read never holds the walk's pool slot past its step budget.
+        """
         with self.lock:
-            future = self.rows.pop(segment_id, None)
+            future = self.rows.get(segment_id)
         if future is None:
             return None
         try:
-            return future.result(timeout=PREFETCH_WAIT_SECONDS)
+            waited = self.waited.get(segment_id, 0.0)
+            budget = max(0.0, min(timeout, PREFETCH_WAIT_SECONDS - waited))
+            started = time.monotonic()
+            wait([future], timeout=budget)
+            if not future.done():
+                self.waited[segment_id] = waited + time.monotonic() - started
+                if self.waited[segment_id] < PREFETCH_WAIT_SECONDS:
+                    return NOT_READY
+                raise TimeoutError('read-ahead exceeded its wait')
+            with self.lock:
+                self.rows.pop(segment_id, None)
+            return future.result(timeout=0)
         except Exception as error:
+            with self.lock:
+                self.rows.pop(segment_id, None)
             logger.info(
                 'event=batch_projection_prefetch outcome=miss exception_type=%s',
                 type(error).__name__,
