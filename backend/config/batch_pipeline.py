@@ -240,6 +240,20 @@ def owner_chain_projection_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
 
 
+def sweep_owner_chain_enabled() -> bool:
+    """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED')
+
+
+def projection_pending_page_enabled() -> bool:
+    """Kill switch: the assignment page holds only pending rows; finishing pages separately."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
 WORKER_PIPELINE_DEPTH_MAX = 4
 

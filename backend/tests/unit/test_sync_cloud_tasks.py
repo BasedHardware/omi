@@ -4078,6 +4078,38 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
                 sys.modules[name] = original
 
 
+def _pipeline_expiring_the_handler_budget(module):
+    """Pipeline stub that expires the attempt's handler budget from inside the
+    pipeline, then never returns.
+
+    A tiny real budget (0.05s) also races the attempt's pre-pipeline awaits
+    (thread-pool job reads, lock acquire): on a loaded runner it can expire
+    before the pipeline starts, so the recovery's job read lands on a
+    nonterminal read and the handler takes the preserved-lock branch instead.
+    Capturing the budget's timeout context and rescheduling it to now once the
+    pipeline runs places the expiry deterministically, independent of runner
+    speed; the budget itself keeps the module's production-sized default.
+    """
+    budgets = []
+
+    class _BudgetCapturingAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        def timeout(self, delay):
+            budget = asyncio.timeout(delay)
+            budgets.append(budget)
+            return budget
+
+    module.asyncio = _BudgetCapturingAsyncio()
+
+    async def _pipeline(*args, **kwargs):
+        budgets[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    return _pipeline
+
+
 @pytest.mark.asyncio
 async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_retry():
     """A pipeline that published a terminal result and then hit the budget
@@ -4100,11 +4132,9 @@ async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         reads = {'n': 0}
 
@@ -4275,8 +4305,7 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -4285,24 +4314,13 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         return 0  # EVAL: token no longer owns the key
 
     try:
-        # Wide enough that the preamble and the run-lock acquisition finish
-        # inside the budget on a loaded worker; the pipeline sleeps 30s, so the
-        # budget still expires after the lock is held (legacy-retire C10).
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.5
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         reads = {'n': 0}
-        started = time.monotonic()
 
         def _job_read(job_id):
             reads['n'] += 1
-            # The post-budget recovery read sees the terminal result; reads
-            # inside the budget see queued/processing. Keyed to the budget, not
-            # to the read count, which varies with the handler's pre-lock reads.
-            if time.monotonic() - started >= module.SYNC_JOB_HANDLER_BUDGET_SECONDS:
-                status = 'completed'
-            else:
-                status = 'queued' if reads['n'] == 1 else 'processing'
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
             return {
                 'job_id': job_id,
                 'status': status,
@@ -4354,11 +4372,9 @@ async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release()
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(return_value=1)
         reads = {'n': 0}
@@ -4421,8 +4437,7 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -4431,7 +4446,6 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         # Production contract: update_sync_job returns None for terminal
@@ -4505,14 +4519,12 @@ async def test_terminal_cleanup_replacement_survives_the_attempt_cap():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 2})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         module.update_sync_job = MagicMock(return_value=None)

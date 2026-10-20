@@ -16,6 +16,12 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_recovery import quarantine_fenced
 from utils.sync.stage import collection_name
 
+# Every state an obligation can drain from. Assignment needs only ``pending``;
+# completion of persisted/ready rows has its own page. All share one index.
+PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
+PROJECTION_ASSIGNMENT_STATES = ('pending',)
+PROJECTION_FINISH_STATES = ('persisted', 'ready')
+
 T = TypeVar('T')
 
 
@@ -181,8 +187,10 @@ class FirestoreStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
-    def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
-        return projection_page(self.client, self.namespace, limit, after=after)
+    def projection_page(
+        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+    ) -> tuple[list[str], Any]:
+        return projection_page(self.client, self.namespace, limit, after=after, states=states)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
@@ -192,18 +200,24 @@ def projection_pending(client: Any, namespace: str, limit: int = 100) -> list[st
     return projection_page(client, namespace, limit)[0]
 
 
-def projection_page(client: Any, namespace: str, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+def projection_page(
+    client: Any,
+    namespace: str,
+    limit: int = 100,
+    *,
+    after=None,
+    states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
 
     __name__ breaks committed_at ties (including siblings committed together).
     Cursor values are discovery hints, never authorization or ordering fences.
+    ``states`` narrows the same ``in`` filter to a subset of the drain states.
     """
+    if not states or not set(states) <= set(PROJECTION_DISCOVERY_STATES):
+        raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
-    query = (
-        collection.where('projection_state', 'in', ['pending', 'persisted', 'ready'])
-        .order_by('committed_at')
-        .order_by('__name__')
-    )
+    query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
     if after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
     size = max(1, min(limit, 100))
