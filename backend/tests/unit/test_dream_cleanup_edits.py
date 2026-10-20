@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from database import memory_ledger, review_changes, review_store, task_intelligence_control
+from database.legal_holds import DestructiveOperationInProgress
 from models.agent_tools import HarnessEdit, Search, tool_schemas
 from tests.support.dream_firestore import DreamFirestore
 from utils.agent_capabilities import tools as dream_tools
@@ -224,6 +225,63 @@ def test_person_bootstrap_merge_undo_redo_and_visible_survivor(store):
     assert 'merged_entity_ids' not in store.rows[left]
     review_changes.set_undone(UID, change['change_id'], False)
     assert (store.rows[left], store.rows[right]) == after
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        None,
+        'id',
+        'label',
+        'label_lower',
+        'node_type',
+        'aliases',
+        'aliases_lower',
+        'memory_ids',
+        'redirect_entity_id',
+        'merged_entity_ids',
+        'extra',
+        'person',
+        'missing_witness',
+    ],
+)
+def test_person_bootstrap_gate_retry_accepts_only_exact_canonical_nodes(store, monkeypatch, changed):
+    seen = person_merge_records(store)
+    monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, ref, snapshot: records(store).get(ref))
+    fences = dream_tools.proposal_fences(UID, {'records': seen})
+    fences['people/missing-witness'] = None
+    record = review_changes.record_agent_change
+
+    def contend(*args, **kwargs):
+        raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+
+    monkeypatch.setattr(review_changes, 'record_agent_change', contend)
+    with pytest.raises(DestructiveOperationInProgress):
+        dream_tools.apply_verified_edit(UID, person_merge(), seen, expected_records=fences, authority='dream')
+    node = store.rows[('users', UID, 'knowledge_nodes', 'person:left')]
+    assert node['label'] == 'Qorbi'
+    assert not any(key[2:3] == ('review_changes',) for key in store.rows)
+    monkeypatch.setattr(review_changes, 'record_agent_change', record)
+    if changed == 'person':
+        store.rows[('users', UID, 'people', 'left')]['name'] = 'Later synthetic name'
+    elif changed == 'missing_witness':
+        store.rows[('users', UID, 'people', 'missing-witness')] = {'name': 'New identity'}
+    elif changed:
+        node[changed] = ['later'] if isinstance(node.get(changed), list) else 'later'
+
+    def retry():
+        return dream_tools.apply_verified_edit(
+            UID, person_merge(), seen, expected_records=fences, authority='dream', gate_retry=True
+        )
+
+    if changed:
+        with pytest.raises(review_store.ReviewConflict):
+            retry()
+        assert not any(key[2:3] == ('review_changes',) for key in store.rows)
+    else:
+        assert retry() == 'applied'
+        assert store.rows[('users', UID, 'knowledge_nodes', 'person:right')]['redirect_entity_id'] == 'person:left'
+    assert fences['knowledge_nodes/person:left'] is None
 
 
 def test_already_merged_person_is_rejected_during_propose_with_actionable_feedback(store):

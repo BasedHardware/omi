@@ -225,7 +225,7 @@ their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
-Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
+read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
 
 Conversation processing adds a shared **Known spellings** block from Dream vocabulary
@@ -1631,6 +1631,17 @@ No series carries uid, session or conversation labels.
 The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
 
 D0b gate: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h before the HPA retune proceeds.
+
+### Listen websocket close metrics
+
+Each session that reaches teardown counts once in `omi_listen_ws_close_total{code_class, initiator, held}` (`utils/observability/listen_close.py`). The labels record the **first** close the server observed; a later close-frame echo of the same end doesn't change them.
+
+- `initiator=client`: a `websocket.disconnect` frame read by the receive loop, or by teardown's bounded drain, carrying the client's code. ASGI reports a peer that left without a close frame as `1006`. A send-side `WebSocketDisconnect` (heartbeat, events, segments) is not an observation, because Starlette reports every send failure as `1006` whatever the peer sent. When nothing has been observed and the receive loop has exited, teardown reads queued messages, discarding data frames, until a disconnect arrives or `CLOSE_FRAME_DRAIN_SECONDS` (0.25 s) runs out. Only then does it close.
+- `initiator=server`: a `websocket.close` returned, either teardown's `close(code=close_code)` or the terminal STT close in `utils/stt/live_failure.py` (teardown then skips its own close).
+- `initiator=unknown`: no frame was read and no server close returned. `code_class` is then the server's intended `close_code`.
+- `code_class` is one of `1000`, `1001`, `1006`, `1011` or `other` (application codes such as `1008` and `4xxx` count as `other`). `held` is `true` when the session was cap-held at teardown start (`receiver.cap_paused` or `live_hold.paused`).
+
+`omi_listen_ws_close_finalize_seconds{initiator, held}` measures the time from that first observed close (or teardown start, if none was observed) to the end of teardown. Pre-session rejections in `_admit`/`_bootstrap` and the decoder-initialisation close never reach teardown, so they aren't counted. No series carries uid, session or conversation labels, and every series is zero-initialised at import.
 
 ### Dev-only parity-pack capture
 
@@ -3988,7 +3999,7 @@ not enabled by this producer alone; deploying the producer requires the backend-
 
 After connect preferences load, `TranscriptProcessor` construction binds the
 existing `LiveLanguageProfile.expected` to the coordinator. These are spoken-language
-priors, not reading preferences. `TRANSLATION_PROFILE_GATE_ENABLED=true` defers short
+priors, not reading preferences. The permanent profile gate defers short
 out-of-profile detections locally. Expected foreign detections require agreement
 between raw and filler-cleaned local reads; expected foreign clauses can still
 override an English-dominant mixed turn. A >=40-letter, >=0.95-confidence sample
@@ -4001,12 +4012,12 @@ unchanged foreign source text. Conversation changes discard queued work and prio
 The phone-call interpreter bypasses the profile admission gate to preserve short
 foreign replies; it still applies the output guard before writing a badge.
 
-`TRANSLATION_OUTPUT_GUARD_ENABLED=true` rejects empty/case-only rewrites and conservative
+The permanent output guard rejects empty/case-only rewrites and conservative
 near-copies before cache publication and segment persistence, including legacy cache hits.
 Token-multiset Dice >=0.80 requires independent target-output evidence and either English
 grammatical edits or separately confirmed target-language lexical edit spans. Foreign
 edits in mostly English text remain translatable. This is a bounded heuristic, not a
-semantic guarantee; either flag can be disabled independently for recall rollback.
+semantic guarantee; the live demand gate does not disable these quality filters.
 `omi_translation_decisions_total{target_lang,decision,reason}` records admission/guard
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
@@ -4845,7 +4856,12 @@ subscriptions). One metadata-only document at
 and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
 same period return 409. A new period logically expires the old choice and
 replaces the same document, avoiding unbounded history. Delayed older-period
-writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+writes cannot overwrite a newer choice. Each transaction attempt also checks the
+current UTC month after its read, so a request delayed by allowance resolution or
+a transaction retry returns `409 budget_period_changed`, including identical
+replays of an expired choice. The [hermetic custody acceptance and proposed
+graduation ramp](runbooks/held-content-acceptance.md) covers this boundary.
+`upgrade` records intent only; managed
 processing still requires a positive answer from the existing allowance resolver.
 A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
 `X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
@@ -6141,3 +6157,7 @@ remain off; this source change does not activate the cap cohort.
 ## Operator minimal sync redrive
 
 Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
+
+Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
+Firestore token cache; session admission does not wait for it. Existing live sessions
+retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).

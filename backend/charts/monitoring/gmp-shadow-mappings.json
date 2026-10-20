@@ -312,39 +312,6 @@
       "semantic_review": "Candidate only: confirm producer, retained business labels, exporter delay and per-consumer PromQL before acceptance"
     },
     {
-      "id": "omi_soniox_month_ceiling_usd",
-      "producer": "native-gmp-candidate",
-      "local_metric": "omi_soniox_month_ceiling_usd",
-      "managed_metric": "omi_soniox_month_ceiling_usd",
-      "local_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_month_ceiling_usd{job=\"cloud-run-application-metrics\"})",
-      "managed_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_month_ceiling_usd{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\"})",
-      "relative_tolerance": 0.05,
-      "absolute_tolerance": 0.001,
-      "semantic_review": "Candidate only: confirm producer, retained business labels, exporter delay and per-consumer PromQL before acceptance"
-    },
-    {
-      "id": "omi_soniox_month_spend_usd",
-      "producer": "native-gmp-candidate",
-      "local_metric": "omi_soniox_month_spend_usd",
-      "managed_metric": "omi_soniox_month_spend_usd",
-      "local_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_month_spend_usd{job=\"cloud-run-application-metrics\"})",
-      "managed_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_month_spend_usd{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\"})",
-      "relative_tolerance": 0.05,
-      "absolute_tolerance": 0.001,
-      "semantic_review": "Candidate only: confirm producer, retained business labels, exporter delay and per-consumer PromQL before acceptance"
-    },
-    {
-      "id": "omi_soniox_usage_sample_timestamp_seconds",
-      "producer": "native-gmp-candidate",
-      "local_metric": "omi_soniox_usage_sample_timestamp_seconds",
-      "managed_metric": "omi_soniox_usage_sample_timestamp_seconds",
-      "local_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_usage_sample_timestamp_seconds{job=\"cloud-run-application-metrics\"})",
-      "managed_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (omi_soniox_usage_sample_timestamp_seconds{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\"})",
-      "relative_tolerance": 0.05,
-      "absolute_tolerance": 0.001,
-      "semantic_review": "Candidate only: confirm producer, retained business labels, exporter delay and per-consumer PromQL before acceptance"
-    },
-    {
       "id": "omi_stt_cost_routing_decisions_total",
       "producer": "native-gmp-candidate",
       "local_metric": "omi_stt_cost_routing_decisions_total",

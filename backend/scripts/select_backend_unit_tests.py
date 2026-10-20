@@ -154,7 +154,7 @@ FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
 # (tests/support/background_task_ratchet_scope.py); selection uses that
 # module's cheap prefix superset over the same scope constants, so a change
 # to any module the scanner can reach — including transitive closure members
-# like utils/stt/soniox_runway.py or services/users/account_deletion.py —
+# like services/users/account_deletion.py —
 # always runs the ratchet, and a new un-awaited site cannot slip past
 # changed-file CI and only fail a later --all run. The ratchet's own test
 # asserts the walk never escapes the selection prefixes.

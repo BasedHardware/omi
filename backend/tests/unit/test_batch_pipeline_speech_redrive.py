@@ -158,6 +158,25 @@ def test_digest_binds_paid_epoch_provider_operation_and_census():
     assert digest != module.paid_digest('original-census', 67, 3)
 
 
+def test_dry_run_reports_closed_epoch1_failures_of_payable_units():
+    spec = importlib.util.spec_from_file_location(
+        'operator', Path(__file__).parents[2] / 'scripts/batch_pipeline_speech_redrive.py'
+    )
+    module = importlib.util.module_from_spec(spec)
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
+    spec.loader.exec_module(module)
+    failure = lambda stage, reason: {'recovery': {'failure': {'stage': stage, 'reason': reason}}}
+    assert module.epoch1_failure(failure('response_validation', 'empty_asr')) == 'response_validation/empty_asr'
+    # Non-empty failures are payable too; the approver must be able to see them.
+    assert module.epoch1_failure(failure('provider', 'abandoned_running')) == 'provider/abandoned_running'
+    # Pre-telemetry rows and anything outside the closed vocabulary never echo raw text.
+    assert module.epoch1_failure({'recovery': {}}) == 'unrecorded'
+    assert module.epoch1_failure({}) == 'unrecorded'
+    assert module.epoch1_failure(failure('provider', 'raw provider body')) == 'unrecorded'
+
+
 def test_artifact_write_requires_running_epoch2_token(setup, monkeypatch, legacy_dependencies):
     from utils.batch_pipeline.retention import register_batch_artifact
 
