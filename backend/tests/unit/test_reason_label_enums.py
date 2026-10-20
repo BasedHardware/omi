@@ -84,73 +84,97 @@ def backend_modules() -> list[Path]:
     return paths
 
 
-def _apply_import(out: dict[str, str], node: ast.stmt) -> None:
-    if isinstance(node, ast.ImportFrom):
-        if any(alias.name == '*' for alias in node.names):
-            # A star import may overwrite any earlier binding: only later bindings resolve.
-            out.clear()
-            return
-        for alias in node.names:
-            if node.module and not node.level:
-                out[alias.asname or alias.name] = f'{node.module}.{alias.name}'
-            else:
-                out.pop(alias.asname or alias.name, None)
-    elif isinstance(node, ast.Import):
-        for alias in node.names:
-            if alias.asname:
-                out[alias.asname] = alias.name
-            else:
-                out.pop(alias.name.split('.')[0], None)
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 
 
-def bindings_for(tree: ast.Module, module: str) -> dict[str, str]:
-    """Map each module-level name to the qualified object it is bound to, in statement order.
+def _params(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> list[str]:
+    args = node.args
+    every = [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]
+    return [a.arg for a in every if a is not None]
 
-    Imports and ``def``s bind; any other module-level assignment to a name unbinds it, and a
-    star import unbinds everything bound before it (fail closed).
+
+def _collect(nodes, records: dict[str, set[str | None]], module: str | None) -> bool:
+    """Record every binding made directly in one scope; return True on a star import.
+
+    Python resolves a name per scope, not per statement: a name bound anywhere in a scope is
+    local throughout it. Nested function, class and lambda bodies are their own scopes and are
+    not entered. ``module`` is set only for the module scope, where a ``def`` binds the
+    module's own qualified name; everywhere else a ``def`` or any non-import store binds
+    ``None`` (an unknown callable).
     """
-    out: dict[str, str] = {}
-    for node in tree.body:
+    star = False
+    for node in nodes:
+        if node is None:  # kw_defaults holds None for keyword-only args without a default
+            continue
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            out[node.name] = f'{module}.{node.name}'
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            _apply_import(out, node)
+            records.setdefault(node.name, set()).add(f'{module}.{node.name}' if module else None)
+            star |= _collect([*node.decorator_list, *node.args.defaults, *node.args.kw_defaults], records, module)
+        elif isinstance(node, ast.ClassDef):
+            records.setdefault(node.name, set()).add(None)
+            star |= _collect([*node.decorator_list, *node.bases, *node.keywords], records, module)
+        elif isinstance(node, ast.Lambda):
+            star |= _collect([*node.args.defaults, *node.args.kw_defaults], records, module)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == '*':
+                    star = True
+                    continue
+                target = f'{node.module}.{alias.name}' if node.module and not node.level else None
+                records.setdefault(alias.asname or alias.name, set()).add(target)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split('.')[0]
+                target = alias.name if (alias.asname or '.' not in alias.name) else None
+                records.setdefault(local, set()).add(target)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            records.setdefault(node.id, set()).add(None)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                records.setdefault(name, set()).add(None)
         else:
-            for name in _stored_names(node):
-                out.pop(name, None)
+            for name in (
+                (
+                    getattr(node, 'name', None)
+                    if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
+                    else None
+                ),
+                getattr(node, 'rest', None) if isinstance(node, ast.MatchMapping) else None,
+            ):
+                if isinstance(name, str):
+                    records.setdefault(name, set()).add(None)
+            star |= _collect(list(ast.iter_child_nodes(node)), records, module)
+    return star
+
+
+def _resolve(records: dict[str, set[str | None]], star: bool, outer: dict[str, str]) -> dict[str, str]:
+    """A name resolves only when every binding of it in the scope is the same import (fail closed)."""
+    if star:
+        return {}
+    out = dict(outer)
+    for name, targets in records.items():
+        if len(targets) == 1 and None not in targets:
+            out[name] = next(iter(targets))  # type: ignore[assignment]
+        else:
+            out.pop(name, None)
     return out
 
 
-def _stored_names(node: ast.AST) -> set[str]:
-    names = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
-            names.add(child.id)
-        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and child is not node:
-            names.add(child.name)
-    return names
+def bindings_for(tree: ast.Module, module: str) -> dict[str, str]:
+    """Module-scope bindings: imports and top-level ``def``s; any other store unbinds (fail closed)."""
+    records: dict[str, set[str | None]] = {}
+    star = _collect(tree.body, records, module)
+    return _resolve(records, star, {})
 
 
-def local_bindings(func: ast.FunctionDef | ast.AsyncFunctionDef, outer: dict[str, str]) -> dict[str, str]:
-    """Bindings inside ``func``: parameters, assignments and nested defs shadow outer names (fail closed)."""
-    args = func.args
-    params = [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]
-    shadowed = {a.arg for a in params if a is not None}
-    imports = []
-    for stmt in func.body:
-        for child in ast.walk(stmt):
-            if isinstance(child, (ast.Import, ast.ImportFrom)):
-                imports.append(child)
-        shadowed |= _stored_names(stmt) | (
-            {stmt.name} if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else set()
-        )
-    inner = {k: v for k, v in outer.items() if k not in shadowed}
-    for node in imports:
-        if isinstance(node, ast.ImportFrom) and any(alias.name == '*' for alias in node.names):
-            inner.clear()
-            continue
-        _apply_import(inner, node)
-    return inner
+def scope_bindings(node: ast.AST, outer: dict[str, str]) -> dict[str, str]:
+    """Bindings inside a function, lambda or class body, seen from ``outer``."""
+    records: dict[str, set[str | None]] = {}
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        for name in _params(node):
+            records.setdefault(name, set()).add(None)
+    body = node.body if isinstance(node.body, list) else [node.body]  # type: ignore[attr-defined]
+    star = _collect(body, records, None)
+    return _resolve(records, star, outer)
 
 
 def classify(node: ast.expr, bindings: dict[str, str] | None = None) -> str | None:
@@ -198,20 +222,25 @@ def classify(node: ast.expr, bindings: dict[str, str] | None = None) -> str | No
 
 class _Visitor(ast.NodeVisitor):
     def __init__(self, bindings: dict[str, str]) -> None:
-        self.bindings = bindings
+        self.bindings = bindings  # names visible here
+        self.enclosing = bindings  # names a nested function sees (class scopes are skipped)
         self.scope: list[str] = []
         self.sites: Counter[tuple[str, str, str]] = Counter()
 
     def _enter(self, node: ast.AST) -> None:
-        self.scope.append(node.name)  # type: ignore[attr-defined]
-        outer = self.bindings
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            self.bindings = local_bindings(node, outer)
+        saved = (self.bindings, self.enclosing)
+        if isinstance(node, ast.ClassDef):
+            self.bindings = scope_bindings(node, self.bindings)
+        else:
+            self.bindings = self.enclosing = scope_bindings(node, self.enclosing)
+        if not isinstance(node, ast.Lambda):
+            self.scope.append(node.name)  # type: ignore[attr-defined]
         self.generic_visit(node)
-        self.bindings = outer
-        self.scope.pop()
+        if not isinstance(node, ast.Lambda):
+            self.scope.pop()
+        self.bindings, self.enclosing = saved
 
-    visit_ClassDef = visit_FunctionDef = visit_AsyncFunctionDef = _enter
+    visit_ClassDef = visit_FunctionDef = visit_AsyncFunctionDef = visit_Lambda = _enter
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Attribute) and node.func.attr == 'labels':
@@ -340,35 +369,62 @@ def f(exc):
         ('f', 'outcome', 'call:_bounded_outcome'): 1,
         ('f', 'reason', 'call:bucket_reason'): 1,
     }
-    shadowed = '''
-from utils.stt.outcomes import bounded_provider
-from utils.observability.reasons import reason_label
-
-def g(exc):
-    def bounded_provider(value):
-        return str(value)
-    A.labels(provider=bounded_provider(exc))
-
-def h(reason_label):
-    A.labels(reason=reason_label(exc))
-
-def k(exc):
-    from utils.sync.telemetry import bounded_exception_reason as bounded_provider
-    A.labels(provider=bounded_provider(exc))
-
-from somewhere import *
-
-def m(exc):
-    A.labels(reason=reason_label(exc))
-'''
-    assert dict(scan_source(shadowed, 'utils.example')) == {
-        ('g', 'provider', 'call:bounded_provider'): 1,
-        ('h', 'reason', 'call:reason_label'): 1,
-        ('k', 'provider', 'call:bounded_provider'): 1,
-        ('m', 'reason', 'call:reason_label'): 1,
-    }
     # The same local helper is closed only in its reviewed defining module.
     assert not scan_source(source.replace('    A.labels(reason=', '    # '), 'utils.sync.cap_hold_reservations')
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        # import, then a nested def of the same name: the def wins at runtime
+        'def g(exc):\n    from utils.stt.outcomes import bounded_provider\n'
+        '    def bounded_provider(value):\n        return str(value)\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # nested def before the call, outer import
+        'def g(exc):\n    def bounded_provider(value):\n        return str(value)\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # parameter shadows the module import
+        'def g(bounded_provider):\n    A.labels(provider=bounded_provider(exc))\n',
+        # assignment anywhere in the function makes the name local
+        'def g(exc):\n    A.labels(provider=bounded_provider(exc))\n    bounded_provider = str\n',
+        # local import of a raw-text helper under the allowlisted name
+        'def g(exc):\n    from utils.sync.telemetry import bounded_exception_reason as bounded_provider\n'
+        '    A.labels(provider=bounded_provider(exc))\n',
+        # lambda parameter
+        'def g(exc):\n    f = lambda bounded_provider: A.labels(provider=bounded_provider(exc))\n',
+        # exception handler name
+        'def g(exc):\n    try:\n        pass\n    except Exception as bounded_provider:\n'
+        '        A.labels(provider=bounded_provider(exc))\n',
+        # module-level rebinding after the import
+        'bounded_provider = str\n\ndef g(exc):\n    A.labels(provider=bounded_provider(exc))\n',
+        # a star import may overwrite it
+        'from somewhere import *\n\ndef g(exc):\n    A.labels(provider=bounded_provider(exc))\n',
+    ],
+)
+def test_classifier_rejects_shadowed_closed_helpers(body):
+    source = 'from utils.stt.outcomes import bounded_provider\n\n' + body
+    assert dict(scan_source(source, 'utils.example')) == {('g', 'provider', 'call:bounded_provider'): 1}
+
+
+def test_classifier_resolves_unshadowed_closed_helpers_in_every_scope():
+    source = '''
+from utils.stt.outcomes import bounded_provider
+import utils.stt.stream_close as close
+
+class C:
+    label = 'x'
+
+    def m(self, exc):
+        A.labels(provider=bounded_provider(exc))
+
+def g(exc):
+    from utils.observability.reasons import reason_label
+    f = lambda value: A.labels(reason=close.bounded_stream_close_reason(value))
+    def inner(value):
+        A.labels(provider=bounded_provider(value), reason=reason_label(value))
+    A.labels(provider=bounded_provider(exc))
+'''
+    assert not scan_source(source, 'utils.example')
 
 
 def test_every_closed_helper_exists_where_the_allowlist_says():
