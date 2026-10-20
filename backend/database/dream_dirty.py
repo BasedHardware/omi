@@ -29,6 +29,24 @@ def _dirty_counter() -> Counter:
 DIRTY = _dirty_counter()
 
 
+def _clean_token(value: Any) -> str | None:
+    """Return a stripped id usable as a path segment, or None when it is unsafe."""
+    if not isinstance(value, str):
+        return None
+    token = value.strip()
+    if not token or len(token) > 128 or '/' in token or '\\' in token or '..' in token:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 for char in token):
+        return None
+    return token
+
+
+def _clean_ids(values: Any) -> list[str]:
+    if not isinstance(values, (list, tuple)):
+        return []
+    return [token for token in map(_clean_token, values) if token]
+
+
 def after_write(collection: str):
     def decorate(fn):
         signature = inspect.signature(fn)
@@ -38,9 +56,11 @@ def after_write(collection: str):
         def wrapped(*args, **kwargs):
             result: Any = fn(*args, **kwargs)
             if mode() != 'off' and not dream_writing.get() and result is not False:
-                bound = signature.bind(*args, **kwargs).arguments
-                uid = bound[parameters[0]]
-                data = bound[parameters[1]]
+                bound_args = signature.bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                bound = bound_args.arguments
+                uid = bound.get(parameters[0]) if parameters else None
+                data = bound.get(parameters[1]) if len(parameters) > 1 else None
                 rows = data if isinstance(data, list) else [data]
                 ids = [str(row['id']) for row in rows if isinstance(row, dict) and row.get('id')]
                 if isinstance(data, str):
@@ -54,7 +74,7 @@ def after_write(collection: str):
 
                     if isinstance(result, CandidateRecord):
                         ids = [result.candidate_id]
-                notify(uid, [(collection, value) for value in ids])
+                notify(uid, [(collection, value) for value in _clean_ids(ids)])
             return result
 
         return wrapped
@@ -65,6 +85,16 @@ def after_write(collection: str):
 def notify(uid: str, refs: list[tuple[str, str]]) -> None:
     if mode() == 'off' or dream_writing.get() or not refs:
         return
+    uid = _clean_token(uid)
+    clean_refs = []
+    for ref in refs if isinstance(refs, (list, tuple)) else []:
+        if isinstance(ref, (list, tuple)) and len(ref) == 2:
+            name, doc_id = _clean_token(ref[0]), _clean_token(ref[1])
+            if name and doc_id:
+                clean_refs.append((name, doc_id))
+    if not uid or not clean_refs:
+        return
+    refs = clean_refs
     try:
         if mark_dirty(uid, refs, canary=True) if canary_writing.get() else mark_dirty(uid, refs):
             DIRTY.labels('ok').inc()
