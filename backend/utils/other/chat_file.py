@@ -3,6 +3,7 @@ import base64
 import logging
 import mimetypes
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, NoReturn, Optional, Protocol, Sequence, Tuple, Union, cast
 
@@ -312,8 +313,11 @@ class FileChatTool:
         ``digest`` is a utils.media.video_frames.VideoDigest. Returns FileChatTool.upload's
         result with a ``video`` dict ready for FileChat(video=...).
         """
-        sheet_name = f'{Path(file_name).stem or "video"}.jpg'
-        sheet_path = Path(directory) / sheet_name
+        # The user's name is only a display name; the file on disk has a fixed name.
+        stem = re.sub(r'[^\w .-]', '_', Path(file_name).stem).strip(' .')[:100] or 'video'
+        sheet_name = f'{stem}.jpg'
+        # Random, like the upload routes' temp names: the thumbnail's storage name derives from it.
+        sheet_path = Path(directory) / f'{uuid.uuid4().hex}.jpg'
         sheet_path.write_bytes(digest.sheet)
         result = FileChatTool.upload(sheet_path, file_name=sheet_name)
         strip = digest.strip
