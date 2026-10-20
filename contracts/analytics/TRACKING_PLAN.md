@@ -193,6 +193,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingWebviewShown | Onboarding Webview Shown | none | active | mobile-instrumentation-presence |
 | onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
+| captureRecoveryObserved | Capture Recovery Observed | kind, trigger | active | capture-recovery |
 
 ## App Review Opportunity decisions
 

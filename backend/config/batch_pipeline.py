@@ -285,6 +285,16 @@ def owner_chain_projection_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
 
 
+def recovered_merge_release_enabled() -> bool:
+    """Kill switch: the post-recovery owner wake commits the recovered unit (and
+    its content's ready siblings) at once past an unready merge head, and the
+    unit itself past the catch-up depth hold, so the wake's chain walk can
+    project it."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
 def sweep_owner_chain_enabled() -> bool:
     """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
     from config.policy import kill_switch

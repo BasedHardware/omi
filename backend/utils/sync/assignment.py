@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
-from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
@@ -330,14 +329,11 @@ def assign_in_transaction(
         if mismatch != 'none':
             if redirected:
                 raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
-            recover = sync_assignment_recovery_enabled()
             logger.warning(
                 'event=sync_assignment_target outcome=%s mismatch=%s',
-                'temporal_recovery' if recover else 'rejected',
+                'temporal_recovery',
                 mismatch,
             )
-            if not recover:
-                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
             record_fallback(
                 component='sync_dispatch',
                 from_mode='explicit_target',

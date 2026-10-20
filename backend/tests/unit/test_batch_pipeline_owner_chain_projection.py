@@ -305,9 +305,9 @@ def test_reconcile_drains_then_walks_owner_before_generic_sweep(monkeypatch):
     projector.project_owner.side_effect = lambda owner, recovered: calls.append(('chain', owner, recovered)) or ['seg']
     projector.sweep.side_effect = lambda: calls.append(('sweep',))
     service = Serving(MemoryStore(), projector=projector)
-    monkeypatch.setattr(service, 'drain_owner', lambda owner: calls.append(('drain', owner)))
+    monkeypatch.setattr(service, 'drain_owner', lambda owner, recovered=None: calls.append(('drain', owner, recovered)))
     assert service.reconcile(owner_id=BURST, recovered='r') == ['seg']
-    assert calls == [('drain', BURST), ('chain', BURST, 'r'), ('sweep',)]
+    assert calls == [('drain', BURST, 'r'), ('chain', BURST, 'r'), ('sweep',)]
     calls.clear()
     assert service.reconcile() == []
     assert calls == [('sweep',)]

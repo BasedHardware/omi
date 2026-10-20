@@ -233,6 +233,17 @@ class RegistryFixture(unittest.TestCase):
         output = render(self.root, registry, date(2026, 10, 8))
         self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
 
+    def test_with_legacy_keeps_a_dated_rollout_until_deletion(self) -> None:
+        entry = flag(decision="with_legacy", terminal="off", review_by="2026-12-15")
+        self.assertEqual(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root), [])
+        entry["terminal"] = "on"
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("decision with_legacy requires terminal off", errors)
+        entry["terminal"] = "off"
+        del entry["review_by"]
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("review_by", errors)
+
     def test_unknown_decision_is_rejected(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(decision="unknown")]))
         self.assertIn("invalid decision", "\n".join(self.errors()))

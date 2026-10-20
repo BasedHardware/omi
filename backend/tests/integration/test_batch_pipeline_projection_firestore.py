@@ -609,7 +609,6 @@ def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_polic
         geolocation=geo,
     )
     lane.projector.fetch_audio = lambda _: manifest
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'false')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
 
