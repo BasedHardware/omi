@@ -66,10 +66,12 @@ enum MeetingConversationBoundaryPolicy {
     meetingStateReady: Bool,
     shouldCapture: Bool,
     segmentCount: Int,
+    conversationRole: Role,
     hasSpeakerSegments: Bool
   ) -> Bool {
     mode == .onlyMeetings
       && meetingStateReady
+      && conversationRole == .meeting
       && !shouldCapture
       && (segmentCount > 0 || hasSpeakerSegments)
   }

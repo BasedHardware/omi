@@ -512,6 +512,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -524,6 +525,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -536,6 +538,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -548,6 +551,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -557,6 +561,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -569,6 +574,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: true,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -581,6 +587,7 @@ import XCTest
           meetingStateReady: false,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )

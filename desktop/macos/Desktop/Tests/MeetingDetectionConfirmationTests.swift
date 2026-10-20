@@ -258,6 +258,19 @@ final class MeetingDetectionConfirmationTests: XCTestCase {
       MeetingConversationBoundaryPolicy.initialObservation(captureActive: false, meetingConfirmed: false), false)
   }
 
+  func testUnconfirmedCapturedSpeechDoesNotRotateWhenGateCloses() {
+    for (count, speakers) in [(1, false), (0, true)] {
+      XCTAssertFalse(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings, meetingStateReady: true, shouldCapture: false,
+          segmentCount: count, conversationRole: .ambient, hasSpeakerSegments: speakers))
+      XCTAssertTrue(
+        MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: .onlyMeetings, meetingStateReady: true, shouldCapture: false,
+          segmentCount: count, conversationRole: .meeting, hasSpeakerSegments: speakers))
+    }
+  }
+
   func testConfirmationTelemetryHasOnlyBoundedEvidence() {
     let evidence = MeetingDetectionEvidence(
       snapshot: shot(title: "Meet - abc-defg-hij private title"), mode: .onlyMeetings, processInputAPIAvailable: true)
