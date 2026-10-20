@@ -62,7 +62,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     // Handle subsequent links (warm start — app already running)
-    _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
+    _linkSubscription = _appLinks.uriLinkStream.distinct(isRepeatedAppLink).listen((uri) {
       Logger.debug('onAppLink: $uri');
       openAppLink(uri);
     });
