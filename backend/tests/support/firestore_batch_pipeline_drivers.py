@@ -163,17 +163,16 @@ def entries():
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
-            'database.batch_pipeline_store.FirestoreTransaction.longest_ready_pending',
+            'database.batch_pipeline_store.FirestoreStore.longest_ready_pending',
             covered_by=('database.batch_pipeline_store.longest_ready_pending',),
             reason='thin store adapter delegates unchanged query arguments to the named query builder',
             expect_observed=False,
-            body_digest='29cef16ae58e1c63518ba828e89d960b032cda5964039f3a9adb4ffc9057f421',
+            body_digest='c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
         ),
         DriverEntry(
             'database.batch_pipeline_store.longest_ready_pending',
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
-            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',

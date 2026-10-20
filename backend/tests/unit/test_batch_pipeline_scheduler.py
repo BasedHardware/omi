@@ -50,18 +50,6 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
-    def longest_ready_pending(self, owner_key):
-        jobs = [
-            v
-            for (table, key), v in self.rows.items()
-            if table == 'jobs'
-            and v['owner_key'] == owner_key
-            and v['merge_pending']
-            and v['state'] == 'result_ready'
-            and 'ready_at' in v
-        ]
-        return min(jobs, key=lambda v: (v['ready_at'], v['segment_id'])) if jobs else None
-
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -125,6 +113,18 @@ class MemoryStore:
 
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
+
+    def longest_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and 'ready_at' in v
+        ]
+        return deepcopy(min(jobs, key=lambda v: (v['ready_at'], v['segment_id']))) if jobs else None
 
 
 def colliding_owner(owner):

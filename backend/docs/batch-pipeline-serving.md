@@ -512,15 +512,25 @@ head. The head later appends at the log tail as `late_capture`, exactly like a
 recovered quarantine. Rows without `ready_at` (written before this change)
 never start a bypass. A bypass commit carries `head_wait_bypass: true` and logs
 `event=batch_merge outcome=head_wait_bypass` with the head state and a wait
-bucket, never an ID. The two owner-scoped job queries need the `merge_ready`
-and `merge_ready_age` indexes; without them the merge logs
-`outcome=head_wait_unavailable` and keeps strict order for five minutes.
+bucket, never an ID.
+
+The strict commit transaction issues no new query. When it finds the head
+unready, a non-transactional probe (`merge_ready_age` index) reads the owner's
+longest waiter, so a still-waiting owner takes no extra transactional query
+lock. Only an expired wait opens a second transaction, which re-reads the
+waiter, selects the earliest-captured ready row (`merge_ready` index) and runs
+the unchanged commit body. Without either index the merge records a
+`firestore_read` fallback, logs `outcome=head_wait_unavailable` and keeps strict
+order for five minutes. An owner-wide privacy fence that refuses the released
+row leaves the owner blocked exactly as strict order would.
 
 The commit body is unchanged: the append-only log chain, `log_sequence`,
 watermark and late marking, owner revision fence, owner-serial projection in
 log order, sibling completion, billing and privacy fences all hold. Fresh
 traffic keeps capture order because attempt-1 compute finishes well inside W.
-Only intermediate states change, and they converge to the strict-order result:
+Log order can differ from capture order (bypassed heads are `late_capture`);
+the committed result set, the final watermark and the projected conversations
+converge to the strict-order state. Only intermediate states change:
 
 - a conversation can appear with its newest part first, then grow backwards
   (earlier start, more transcript at the top) as older units land;

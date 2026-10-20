@@ -63,7 +63,10 @@ def _chain_projector(simulation: Simulation):
 
     The simulator's default projector walks capture order one row per sweep;
     production follows the owner's log chain (R3) and keeps walking up to 64
-    rows per wake. A binding with an uncommitted sibling holds the chain.
+    rows per wake. A binding with an uncommitted sibling holds the chain here,
+    which is conservative: production projects each committed row once its
+    log predecessor persisted and holds only sibling completion. Catch-up
+    rows are single-unit bindings, so their timings are unaffected.
     """
     walking: set[str] = set()
 

@@ -124,9 +124,6 @@ class SimTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key, ready_only=True)
 
-    def longest_ready_pending(self, owner_key: str) -> dict | None:
-        return self.store.longest_ready_pending(owner_key)
-
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier(priority)
 

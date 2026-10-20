@@ -8,6 +8,7 @@ from google.api_core.exceptions import FailedPrecondition
 import pytest
 
 from config.batch_pipeline import MERGE_HEAD_WAIT_DEFAULT, merge_head_wait_seconds
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline import merge as merge_module
 from utils.batch_pipeline.contracts import WorkResult
@@ -127,18 +128,58 @@ def test_quarantined_head_is_not_a_blocker_and_needs_no_bypass():
 
 class _NoHeadWaitQueries(MemoryTransaction):
     def first_ready_pending(self, owner_key):
-        raise AssertionError('strict order must not issue head-wait queries')
-
-    longest_ready_pending = first_ready_pending
+        raise AssertionError('no transactional head-wait query expected')
 
 
 class _StrictStore(MemoryStore):
+    probes = 0
+
     def run(self, body):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(_NoHeadWaitQueries(snapshot))
             self.rows = snapshot
             return result
+
+    def longest_ready_pending(self, owner_key):
+        raise AssertionError('strict order must not probe for a waiter')
+
+
+class _ProbeOnlyStore(_StrictStore):
+    def longest_ready_pending(self, owner_key):
+        self.probes += 1
+        return MemoryStore.longest_ready_pending(self, owner_key)
+
+
+def test_blocked_owner_under_w_takes_no_transactional_head_wait_query():
+    # The emulator (and Firestore contention) locks on transactional queries;
+    # a still-waiting owner costs one non-transactional probe and nothing else.
+    store = _ProbeOnlyStore()
+    queue = Scheduler(store)
+    for segment, capture in {'a': 1, 'b': 2}.items():
+        queue.enqueue(item(segment, capture=capture), 0)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(0, 2)}
+    complete(queue, leases, 'b', 10)
+    assert OrderedMerge(store, head_wait_seconds=W).commit_next('heavy', 10 + W - 1) is None
+    assert store.probes == 1
+
+
+class _StaleProbeStore(MemoryStore):
+    def longest_ready_pending(self, owner_key):
+        waiter = super().longest_ready_pending(owner_key)
+        return {**waiter, 'ready_at': waiter['ready_at'] - 1000} if waiter else None
+
+
+def test_stale_probe_is_reverified_inside_the_bypass_transaction():
+    store = _StaleProbeStore()
+    queue = Scheduler(store)
+    for segment, capture in {'a': 1, 'b': 2}.items():
+        queue.enqueue(item(segment, capture=capture), 0)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(0, 2)}
+    complete(queue, leases, 'b', 10)
+    # The hint claims b waited 1000 s more than it did; the durable row disagrees.
+    assert OrderedMerge(store, head_wait_seconds=W).commit_next('heavy', 11) is None
+    assert ('results', 'b') not in store.rows
 
 
 @pytest.mark.parametrize('value', ['off', 'OFF', '0', '-5'])
@@ -238,15 +279,51 @@ def test_permutation_schedule_crosses_w_behind_an_unready_head():
     assert [(entry['segment_id'], entry['late_capture']) for entry in late] == [('a', True)]
 
 
-class _MissingIndex(MemoryTransaction):
-    calls = 0
+class _OwnerFencedStore(MemoryStore):
+    """Models the flush privacy guard: an owner-wide fence refuses every write for ``heavy``."""
 
-    def longest_ready_pending(self, owner_key):
+    fenced = False
+
+    def run(self, body):
+        with self.lock:
+            snapshot = deepcopy(self.rows)
+            result = body(MemoryTransaction(snapshot))
+            written = {key for (table, key), row in snapshot.items() if table == 'results'} - {
+                key for (table, key) in self.rows if table == 'results'
+            }
+            if self.fenced and any(snapshot['jobs', key]['owner_id'] == 'heavy' for key in written):
+                raise BatchPrivacyBlocked('account_deleted')
+            self.rows = snapshot
+            return result
+
+
+def test_owner_wide_privacy_fence_behind_a_blocked_head_leaves_the_owner_blocked():
+    # quarantine_fenced leaves the head privacy_blocked with merge_pending set.
+    store = _OwnerFencedStore()
+    queue = Scheduler(store)
+    for segment, owner, capture in (('a', 'heavy', 1), ('b', 'heavy', 2), ('x', 'other', 1)):
+        queue.enqueue(item(segment, owner=owner, capture=capture), 0)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(0, 3)}
+    complete(queue, leases, 'b', 10)
+    complete(queue, leases, 'x', 10)
+    store.rows['jobs', 'a'].update(state='privacy_blocked', token='', lease_until=0.0)
+    store.fenced = True
+    merge = OrderedMerge(store, head_wait_seconds=W)
+    assert merge.commit_next('heavy', 10 + W) is None
+    assert ('results', 'b') not in store.rows
+    assert merge.commit_next('other', 10 + W)['segment_id'] == 'x'
+
+
+class _MissingIndex(MemoryTransaction):
+    def first_ready_pending(self, owner_key):
         _MissingIndex.calls += 1
         raise FailedPrecondition('The query requires an index.')
 
 
-class _MissingIndexStore(MemoryStore):
+_MissingIndex.calls = 0
+
+
+class _MissingTransactionIndexStore(MemoryStore):
     def run(self, body):
         with self.lock:
             snapshot = deepcopy(self.rows)
@@ -255,8 +332,15 @@ class _MissingIndexStore(MemoryStore):
             return result
 
 
-def test_missing_index_falls_back_to_strict_order_and_backs_off(caplog):
-    store = _MissingIndexStore()
+class _MissingProbeIndexStore(MemoryStore):
+    def longest_ready_pending(self, owner_key):
+        _MissingIndex.calls += 1
+        raise FailedPrecondition('The query requires an index.')
+
+
+@pytest.mark.parametrize('store_class', [_MissingProbeIndexStore, _MissingTransactionIndexStore])
+def test_missing_index_falls_back_to_strict_order_and_backs_off(caplog, store_class):
+    store = store_class()
     queue = Scheduler(store)
     for segment, capture in {'a': 1, 'b': 2}.items():
         queue.enqueue(item(segment, capture=capture), 0)

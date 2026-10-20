@@ -6,6 +6,7 @@ import time
 from google.api_core.exceptions import FailedPrecondition
 
 from config.batch_pipeline import merge_head_wait_seconds
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
@@ -51,24 +52,34 @@ class OrderedMerge:
     def commit_next(self, owner_id: str, now: float) -> dict | None:
         key = owner_key(owner_id)
         wait = self._head_wait()
+        blocked: dict = {}
         bypass: dict = {}
 
-        def commit(tx):
-            bypass.clear()  # Firestore may retry this callback.
+        def commit(tx, waiter: dict | None = None):
+            blocked.clear()  # Firestore may retry this callback.
+            bypass.clear()
             owner = tx.get('owners', key)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
-            if candidate and candidate['state'] != 'result_ready' and wait > 0:
-                # Bounded head wait (David, 2026-10-20): once any result has
-                # waited `wait` seconds behind an unready head, release the
-                # owner's ready rows in capture order. The bypassed head later
-                # appends as late_capture through the unchanged body below.
+            if candidate and candidate['state'] != 'result_ready':
+                if waiter is None:
+                    blocked['head_state'] = candidate['state']
+                    return None
+                # Bounded head wait (David, 2026-10-20): the probed waiter must
+                # still be pending and ready; then release the owner's ready
+                # rows in capture order. The bypassed head later appends as
+                # late_capture through the unchanged body below.
+                current = tx.get('jobs', waiter['segment_id'])
+                if not (
+                    current.get('merge_pending')
+                    and current.get('state') == 'result_ready'
+                    and current.get('ready_at') == waiter['ready_at']
+                ):
+                    return None
+                bypass.update(head_state=candidate['state'], waited=now - waiter['ready_at'])
                 try:
-                    waiting = tx.longest_ready_pending(key)
-                    if waiting and now - waiting['ready_at'] >= wait:
-                        bypass.update(head_state=candidate['state'], waited=now - waiting['ready_at'])
-                        candidate = tx.first_ready_pending(key)
+                    candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
@@ -115,13 +126,35 @@ class OrderedMerge:
             tx.put('owners', key, owner)
             return entry
 
-        try:
-            entry = self.store.run(commit)
-        except HeadWaitUnavailable:
-            # The head is not ready, so strict order commits nothing either.
-            self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
-            logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
-            return None
+        entry = self.store.run(commit)
+        if entry is None and blocked and wait > 0:
+            # The strict transaction issues no head-wait query. Probe outside
+            # it so a blocked owner takes no extra transactional query lock;
+            # only an expired wait opens a second, re-verifying transaction.
+            try:
+                waiter = self.store.longest_ready_pending(key)
+                if not waiter or now - waiter['ready_at'] < wait:
+                    return None
+                entry = self.store.run(lambda tx: commit(tx, waiter))
+            except BatchPrivacyBlocked:
+                # An owner-wide fence (often the reason the head is blocked)
+                # also refuses the successor; strict order commits nothing here.
+                return None
+            except (FailedPrecondition, HeadWaitUnavailable):
+                # The head is not ready, so strict order commits nothing either.
+                self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
+                from utils.observability.fallback import record_fallback
+
+                record_fallback(
+                    component='firestore_read',
+                    from_mode='head_wait',
+                    to_mode='strict_order',
+                    reason='unavailable',
+                    outcome='degraded',
+                    log=logger,
+                )
+                return None
         if entry:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
