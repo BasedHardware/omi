@@ -217,6 +217,21 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  // The toolbar's TextSwap reads prefers-reduced-motion when its label changes as
+  // selection mode opens; jsdom does not implement matchMedia.
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({
+      matches: false,
+      media: '',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
   harness.query = '';
   harness.conversations = [];
   harness.conversationsLoading = false;
@@ -232,6 +247,10 @@ beforeEach(() => {
   harness.clearSearch.mockReset();
   harness.setContext.mockReset();
   harness.getFolders.mockReset().mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('ConversationSplitView review regressions', () => {
@@ -393,6 +412,21 @@ describe('ConversationSplitView review regressions', () => {
       ),
     );
     expect(harness.clearSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the detail pane when entering selection mode instead of re-selecting the newest tile', async () => {
+    harness.conversations = [conversation('conv-a', '2026-08-11T12:00:00Z')];
+
+    render(<ConversationSplitView />);
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-detail')).toHaveTextContent('conv-a'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('conversation-detail')).not.toBeInTheDocument(),
+    );
   });
 });
 

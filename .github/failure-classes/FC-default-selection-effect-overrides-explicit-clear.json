@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-default-selection-effect-overrides-explicit-clear",
+  "violated_contract": "An automatic initial-selection effect must only fill an unchosen state; it must never immediately re-populate a selection that an explicit user action or mode transition just cleared. In ConversationSplitView, enterSelectionMode and enterSelectionModeWithId cleared selection so the detail pane would close, but left preventAutoSelect false and did not gate the auto-select effect on isSelectionMode, so the next render immediately selected the newest item again.",
+  "canonical_prevention": "Record explicit selection clears on the same suppression flag that back-navigation uses (preventAutoSelect) and gate the auto-select effect on the active mode (isSelectionMode). Prove it by rendering the split view with an auto-selected item, entering selection mode, and asserting the detail pane closes and stays closed.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/conversations/__tests__/ConversationSplitView.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/components/conversations/ConversationSplitView.tsx"
+  ],
+  "status": "open"
+}
