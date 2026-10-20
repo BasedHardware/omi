@@ -293,7 +293,7 @@ environments:
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '0'
@@ -411,7 +411,7 @@ environments:
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '0'
@@ -930,7 +930,7 @@ environments:
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
-              value: based-hardware-dev-screen-frames
+              value: based-hardware-prod-screen-frames
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               category: ops_kill
               value: '0'
@@ -1210,7 +1210,7 @@ environments:
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
-              value: based-hardware-dev-screen-frames
+              value: based-hardware-prod-screen-frames
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               category: ops_kill
               value: '0'

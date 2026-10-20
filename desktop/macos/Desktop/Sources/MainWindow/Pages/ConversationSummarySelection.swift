@@ -105,6 +105,14 @@ enum ConversationSummarySelection {
     return SummarySection(heading: heading.text, bodyMarkdown: body.text, sourceSegmentIDs: sourceIDs)
   }
 
+  /// Read-time repair of a single-line note field (action item text). Generation already
+  /// sweeps these; this covers items stored before it did. Display only: task promotion keeps
+  /// comparing the stored description.
+  static func presentableText(_ text: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    return NoteCitationContract.repair(text, valid: valid).text
+  }
+
   /// Suggested "Try with Apps" rows: memories-capable apps that have not
   /// produced a result for this conversation yet.
   ///

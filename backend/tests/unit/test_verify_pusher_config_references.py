@@ -219,7 +219,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
-        "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "BUCKET_SCREEN_FRAMES": "based-hardware-prod-screen-frames",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
         "DREAM_AGENT_UID_ALLOWLIST": "",

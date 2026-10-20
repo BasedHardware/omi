@@ -297,7 +297,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     projector._project = Mock(return_value={'outcome': 'success'})
     assert projector.project('synthetic-segment') == {'outcome': 'success'}
     projector.store.read.assert_called_once_with('synthetic-segment')
-    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding)
+    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding, hint=None)
     claim.assert_not_called()
 
 

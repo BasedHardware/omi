@@ -200,21 +200,30 @@ final class MemoryReconcileRetryScheduler {
 
 extension MemoriesViewModel {
 
+  /// Users whose reconcile run exhausted its in-launch retries on a truncated
+  /// list. Separate from the success latch: nothing was pruned, and the next
+  /// launch starts clean.
+  static var exhaustedReconcileUserIDsThisLaunch: Set<String> = []
+
   /// Admission for one reconcile attempt; call at the top of
   /// `reconcileCacheIfNeeded()` after the launch-latch guard. Nil while
-  /// another attempt is in flight or a bounded retry is pending. The returned
+  /// another attempt is in flight, a bounded retry is pending, or this user's
+  /// run already exhausted its retries this launch. The returned
   /// token names the run and must ride with every terminal report of this
   /// attempt, so a superseded run cannot end or replace the live one.
   func beginReconcileAttempt(userId: String) -> MemoryReconcileRunToken? {
-    reconcileRetry.beginAttempt(
+    // An exhausted truncated run already spent this launch's pull budget for
+    // the user; later Memories reloads must not start another full run.
+    guard !Self.exhaustedReconcileUserIDsThisLaunch.contains(userId) else { return nil }
+    return reconcileRetry.beginAttempt(
       key: userId,
       authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot())
   }
 
   /// The pull came back truncated, so absence proves nothing this attempt:
   /// schedule the next bounded in-launch retry, or — when the run's attempts
-  /// are exhausted — finish the run unlatched so the next launch retries,
-  /// exactly as a truncated reconcile used to.
+  /// are exhausted — finish the run without pruning and latch the attempt so
+  /// the next launch, not the next reload, retries.
   func reconcileAttemptTruncated(run: MemoryReconcileRunToken) {
     // A superseded run's truncated report must neither schedule into the live
     // run's scheduler nor finish the live run.
@@ -250,6 +259,10 @@ extension MemoriesViewModel {
         reason: "list_truncated",
         outcome: .exhausted,
         extra: ["attempt": max(reconcileRetry.attempt, 1)])
+      // "next-launch" is a promise: latch the attempt (not the success) so a
+      // later loadMemories() in this process does not spend another full
+      // retry budget on a list that stays truncated.
+      Self.exhaustedReconcileUserIDsThisLaunch.insert(run.key)
       finishReconcileRun(run: run, truncated: true, pruned: 0, outcome: .truncatedExhausted)
     }
   }

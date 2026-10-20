@@ -1980,7 +1980,11 @@ adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; up to four frames (≤1024 px 
 6 s total GCS read budget) ride the notes call as image parts. Frame docs record
 `storage_bucket`; every host reads only docs whose bucket equals its own
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
-so a notes host without that env reads no frame evidence at all.
+so a notes host without that env reads no frame evidence at all. The bucket follows
+the customer data plane: dev hosts serve production Firestore and use
+`based-hardware-prod-screen-frames`. Skipped docs count
+`screen_frames_foreign_bucket_dropped_total{reason}`; older dev-bucket docs move with
+`scripts/migrate_screen_frames_to_data_plane_bucket.py`.
 
 The Mac closes the listen socket before that evidence pass lands, and teardown
 admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
