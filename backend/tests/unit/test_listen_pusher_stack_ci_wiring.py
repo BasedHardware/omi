@@ -63,6 +63,9 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
         encoding='utf-8'
     )
     assert 'def _free_ports(count: int) -> list[int]:' in runner
+    # SO_REUSEADDR on a probe waives the exclusive bind that makes the
+    # reservation meaningful; a probe must hold the port alone.
+    assert 'SO_REUSEADDR' not in runner
     assert 'ports = _free_ports(5)' in runner
     assert 'self.redis_port = ports[0]' in runner
     assert 'self.backend_port = ports[1]' in runner
