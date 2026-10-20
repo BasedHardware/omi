@@ -24,8 +24,9 @@ def main(argv=None, *, client_factory=None) -> int:
     choice.add_argument('--tokens-file', type=Path, help='Private UTF-8 token file, never printed')
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args(argv)
-    if args.environment == 'prod' and args.project != 'based-hardware':
-        parser.error('prod requires the production customer data project')
+    if (args.environment == 'prod') != (args.project == 'based-hardware'):
+        # A mismatched pair would overwrite the other environment's control doc and deny its cohort.
+        parser.error('environment must match project: prod=based-hardware, dev=based-hardware-dev')
     try:
         if args.tokens_file:
             with args.tokens_file.open(encoding='utf-8') as handle:

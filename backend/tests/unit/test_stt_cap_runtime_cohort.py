@@ -274,3 +274,46 @@ def test_writer_dry_run_tier_guard_and_schema(monkeypatch):
     factory.return_value.collection.return_value.document.return_value.set.assert_called_once_with(
         {'environment': 'prod', 'tokens': 'pct:5'}, timeout=3.0, retry=None
     )
+
+
+def test_writer_rejects_mismatched_environment_and_project():
+    factory = Mock()
+    for pair in (
+        ['--project', 'based-hardware', '--environment', 'dev'],
+        ['--project', 'based-hardware-dev', '--environment', 'prod'],
+    ):
+        with pytest.raises(SystemExit):
+            command.main(pair + ['--pct', '5', '--apply'], client_factory=factory)
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('choice', 'tokens'),
+    ((['--deny'], ''), (['--all'], 'all')),
+)
+def test_writer_deny_and_all_tokens(monkeypatch, choice, tokens):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/synthetic/credentials')
+    factory = Mock()
+    args = ['--project', 'based-hardware', '--environment', 'prod', *choice, '--apply']
+    assert command.main(args, client_factory=factory) == 0
+    factory.return_value.collection.return_value.document.return_value.set.assert_called_once_with(
+        {'environment': 'prod', 'tokens': tokens}, timeout=3.0, retry=None
+    )
+
+
+def test_writer_tokens_file(monkeypatch, tmp_path):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/synthetic/credentials')
+    good = tmp_path / 'tokens'
+    good.write_text('uid:synthetic-uid-1,pct:5\n', encoding='utf-8')
+    bad = tmp_path / 'bad'
+    bad.write_text('pct:500', encoding='utf-8')
+    factory = Mock()
+    base = ['--project', 'based-hardware', '--environment', 'prod', '--apply', '--tokens-file']
+    assert command.main(base + [str(bad)], client_factory=factory) == 2
+    factory.assert_not_called()
+    assert command.main(base + [str(good)], client_factory=factory) == 0
+    factory.return_value.collection.return_value.document.return_value.set.assert_called_once_with(
+        {'environment': 'prod', 'tokens': 'uid:synthetic-uid-1,pct:5'}, timeout=3.0, retry=None
+    )
