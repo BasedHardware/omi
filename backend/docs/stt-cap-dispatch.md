@@ -15,8 +15,9 @@ Use `uid:<COORDINATOR_TEST_UID>` (replace the placeholder before deployment),
 comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
 `all` is the explicit universal cohort. The token grammar and stable
 `sha256("free-tier-cohort:" + uid)[:8] % 100` bucket come from the retired free-tier
-parser, now shared in pure `config/rollout_cohorts.py`; no PostHog or Firestore
-membership call is added. Malformed tokens invalidate the whole cohort.
+parser, now shared in pure `config/rollout_cohorts.py`. The runtime token
+document below replaces the env cohort when present; no per-user membership
+read is added for this rollout. Malformed tokens invalidate the whole cohort.
 
 `STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset, empty
 or whitespace-only values select **live only**. Unknown tokens or empty tokens
@@ -92,7 +93,7 @@ owed persistence, not permission to dispatch STT.
 
 Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
 `live`. These are inert configuration declarations, not activation. The first
-cohort requires the same values on listen and the CPU recovery/sync hosts:
+cohort requires the same env defaults on listen and the CPU recovery/sync hosts:
 
 ```text
 STT_CAP_DISPATCH_ENFORCEMENT=true
@@ -114,7 +115,7 @@ Ramp owner **dazheng**: coordinator test accounts -> `pct:1` -> `pct:5` held for
 backlog stalls, live STT error rate and client 5xx against the pre-ramp baseline;
 advance only with no unexplained regression and a synthetic consented live hold
 recovering across instance replacement. Dazheng owns each expansion and the
-**2026-10-19 18:00 UTC** decision/checkpoint; a missed checkpoint or an incomplete
+**2026-10-27** completion checkpoint (runtime ramp brief, 2026-10-20); a missed checkpoint or an incomplete
 three-hour soak is a blocker to report, never authority to skip a stage. Keep
 `STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
 batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
@@ -130,6 +131,88 @@ sessions use their admitted state until reconnect/revision drain; roll the same
 configuration to all hosts and drain old sessions when changing scope. No new
 Scheduler jobs or Firestore indexes are introduced here; the existing durability
 job/index prerequisites below remain independently owned.
+
+### Runtime cohort (no restart)
+
+Once this code rides the next listen deploy (Nemotron owns listen deployment),
+**dazheng** owns runtime ramp writes through the **prod-operator** tier with
+Firestore write permission. No deployment or production write is performed by
+this PR. All serving hosts must run the resolver before expanding the doc.
+
+The existing independent ladder-only activation is preserved: setting
+`STT_CAP_DISPATCH_ENFORCEMENT=false` blocks legacy cap admission but does not
+turn off `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`. Both use this same cohort.
+This is a deliberate deviation from making the legacy switch a new master kill
+switch, which would disable the separately ratified ladder-only path. To stop
+both immediately for new admissions, use an empty runtime cohort; the deploy
+rollback still sets both admission switches false.
+
+The data-plane Firestore document is
+`projects/based-hardware/databases/(default)/documents/rollout_cohorts/stt-cap-dispatch`:
+
+```json
+{"environment": "prod", "tokens": "pct:1"}
+```
+
+`environment` is required and must exactly match `OMI_ENV_STAGE` (`prod`, `dev`,
+`local`, or `offline`). This is a control document, separate from the existing
+`rollout_cohorts/{uid}` membership schema. Do not write it with the per-user
+`rollout_cohort.py` command. A mismatched environment is a denial, never an
+activation. Dev experiments should use the dev data project so they cannot
+replace this prod control document. No query or new index is needed.
+
+A present valid document overrides `STT_CAP_DISPATCH_COHORT`. A missing document
+uses the env tokens, retaining the private-secret test cohort. An empty token
+string explicitly denies. Missing/wrong-type fields, malformed tokens, or an
+environment mismatch explicitly deny and log once per invalid episode. They do
+**not** fall back to env: doing so could undo an intentional runtime rollback.
+Read/scheduling errors retain the last snapshot (including denial); without a
+snapshot they retain today's env behavior. A successful deletion restores env,
+so **do not delete the doc as a rollback** unless that fallback is intended.
+
+The process cache uses a 60-second TTL and one in-flight read, with a one-second
+Firestore deadline and SDK retries disabled, on the bounded rollout executor.
+Listen and pusher poll in startup-owned background tasks; other configured hosts
+refresh lazily on scope checks. Cold and expired checks return env/last snapshot
+immediately while the read runs. The existing auth warm path schedules the same
+refresh without an extra await. There is no Firestore IO at session admission or
+per audio frame. Read errors also back off for 60 seconds. Expect roughly one
+read per active process per minute (40 single-worker pods: ~57,600 reads/day;
+multiple processes multiply that), independent of users and frame rate. Idle
+lazy hosts refresh at their next scope check. Existing live sessions retain
+their admitted state until reconnect; this does not force a reconnect or drain.
+
+Run from the repository root, after owner approval of the ramp step:
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+backend/.venv/bin/python backend/scripts/stt_cap_cohort.py \
+  --project based-hardware --environment prod --pct 5 --apply
+```
+
+Omit `--apply` for a hermetic validation-only dry run. Use `--pct 1`, then
+`--pct 5` for **3 hours**, then `--pct 25`, then `--all` by **2026-10-27**, with
+all earlier health/consent gates. Keep lanes `live`. Tokens use the unchanged
+stable UID hash, so percentage membership is identical between doc and env.
+For a private test cohort use `--tokens-file /private/path/to/tokens`; the file
+contains token grammar, never commit it or include its content in a PR/command.
+The writer prints neither tokens nor SDK exceptions.
+
+Runtime rollback uses the same command with `--deny` (empty tokens), or
+`--tokens-file` containing only the private test cohort. Do not roll forward if
+any pod's refresh-failure counter is rising: stale pods retain their previous
+cohort, so a Firestore outage can delay rollback. The existing deployment kill
+switches remain the emergency path; setting env enforcement false requires a
+deploy. Retain the existing custody/redrive processes during rollback.
+
+Verify per-pod `omi_stt_cap_cohort_source{source="doc|env|none"}` (one hot),
+`omi_stt_cap_cohort_percent` (0 for explicit-UID-only or denied cohorts, 100 for
+`all`), and `omi_stt_cap_cohort_refresh_failures_total{reason="read|schedule"}`.
+Source `doc` with pct 0 can be an intentional or invalid denial. Source `none`
+means no valid env cohort or no admission switch enabled. Changes emit
+`event=stt_cap_cohort_changed source=... pct=...`; invalid documents emit
+`event=stt_cap_cohort_invalid outcome=denied`. No tokens, UIDs, hashes or raw SDK
+errors are logged. The shared fallback metric also records refresh failures.
 
 ## Boundaries
 
