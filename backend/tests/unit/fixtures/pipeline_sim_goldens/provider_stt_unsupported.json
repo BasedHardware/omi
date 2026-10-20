@@ -14,7 +14,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -86,7 +86,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -158,7 +158,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-2",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -230,7 +230,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-2",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -302,7 +302,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -374,7 +374,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
@@ -446,7 +446,7 @@
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
