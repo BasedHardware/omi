@@ -1,0 +1,7 @@
+{
+  "version": "0.12.504",
+  "date": "2026-10-18",
+  "changes": [
+    "Enabled on-device screen search and available on-device summaries, preserving screen history when cloud processing is unavailable"
+  ]
+}

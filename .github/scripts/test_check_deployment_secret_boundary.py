@@ -87,6 +87,104 @@ jobs:
 
         self.assertEqual(self.errors(), [])
 
+    def test_dynamic_runtime_secret_keeps_credential_and_reference_classifications_separate(self) -> None:
+        path = "backend/deploy/runtime_env.yaml"
+        for reference in ("FAKE_RUNTIME_CONFIG", "'FAKE_RUNTIME_CONFIG'", '\"FAKE_RUNTIME_CONFIG\"'):
+            with self.subTest(reference=reference):
+                self.write(
+                    path,
+                    f"""environments:
+  dev:
+    desktop_backend:
+      secrets:
+        FAKE_SERVER_SECRET:
+          env_var: {reference}
+          default: ''
+          version: latest
+      env:
+        FAKE_RUNTIME_CONFIG:
+          value: harmless
+""",
+                )
+                bindings = CHECKER.extract_current_bindings(self.root)
+                self.assertIn(CHECKER.Binding(path, "cloud_run_secret", "FAKE_SERVER_SECRET"), bindings)
+                self.assertIn(CHECKER.Binding(path, "secret_reference", "FAKE_RUNTIME_CONFIG"), bindings)
+                self.assertNotIn(CHECKER.Binding(path, "normal_env", "FAKE_SERVER_SECRET"), bindings)
+                self.assertEqual(self.errors(), [])
+
+    def test_dynamic_secret_target_under_normal_env_is_still_rejected(self) -> None:
+        self.write(
+            "backend/deploy/runtime_env.yaml",
+            """desktop_backend:
+  secrets:
+    FAKE_SERVER_SECRET:
+      env_var: FAKE_RUNTIME_CONFIG
+      default: ''
+  env:
+    FAKE_SERVER_SECRET:
+      env_var: FAKE_RUNTIME_CONFIG
+      default: ''
+""",
+        )
+        self.assertIn(
+            "normal_env binding FAKE_SERVER_SECRET is secret; expected config or public_build",
+            "\n".join(self.errors()),
+        )
+
+    def test_dynamic_non_secret_target_in_secret_section_is_rejected(self) -> None:
+        for target in ("FAKE_RUNTIME_CONFIG", "FAKE_PUBLIC_BUILD"):
+            with self.subTest(target=target):
+                self.write(
+                    "backend/deploy/runtime_env.yaml",
+                    f"""desktop_backend:
+  secrets:
+    {target}:
+      env_var: FAKE_RUNTIME_CONFIG
+      default: ''
+""",
+                )
+                self.assertIn(f"cloud_run_secret binding {target} is ", "\n".join(self.errors()))
+                self.assertIn("expected secret", "\n".join(self.errors()))
+
+    def test_dynamic_secret_reference_must_be_config_not_credential_or_public_build(self) -> None:
+        for reference, kind in (("FAKE_SERVER_SECRET", "secret"), ("FAKE_PUBLIC_BUILD", "public_build")):
+            with self.subTest(reference=reference):
+                self.write(
+                    "backend/deploy/runtime_env.yaml",
+                    f"""desktop_backend:
+  secrets:
+    FAKE_SERVER_SECRET:
+      env_var: {reference}
+      default: ''
+""",
+                )
+                self.assertIn(
+                    f"secret_reference binding {reference} is {kind}; expected config",
+                    "\n".join(self.errors()),
+                )
+
+    def test_dynamic_secret_descriptor_does_not_exempt_workflow_env(self) -> None:
+        self.write(
+            ".github/workflows/deploy.yml",
+            """secrets:
+  FAKE_SERVER_SECRET:
+    env_var: FAKE_RUNTIME_CONFIG
+    default: ''
+""",
+        )
+        self.assertIn("normal_env binding FAKE_SERVER_SECRET is secret", "\n".join(self.errors()))
+
+    def test_literal_value_in_runtime_secret_section_is_not_a_secret_reference(self) -> None:
+        self.write(
+            "backend/deploy/runtime_env.yaml",
+            """desktop_backend:
+  secrets:
+    FAKE_SERVER_SECRET:
+      value: harmless-fixture
+""",
+        )
+        self.assertIn("normal_env binding FAKE_SERVER_SECRET is secret", "\n".join(self.errors()))
+
     def test_rejects_public_build_setting_from_github_secret(self) -> None:
         self.write(".github/workflows/deploy.yml", "BUILD: ${{ secrets.FAKE_PUBLIC_BUILD }}\n")
 

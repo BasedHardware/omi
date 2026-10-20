@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate one user's completed conversation summary vectors (Pinecone ns1).
 
-Repairs the JIT/finalization gap: folder/apps obligations never owned summary
+Repairs the finalization gap: folder/apps obligations never owned summary
 vectors. Deterministic IDs make reruns overwrite safely with fresh embeddings.
 Dry-run (default) reads only conversation metadata/summary fields, never
 transcripts, embeddings or Pinecone. --apply costs one fresh embedding per row.

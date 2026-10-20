@@ -9,7 +9,9 @@
     "backend/utils/batch_pipeline/speech_redrive.py",
     "backend/tests/unit/test_batch_pipeline_speech_redrive.py",
     "backend/database/batch_pipeline_terminal_empty.py",
-    "backend/tests/unit/test_batch_pipeline_terminal_empty.py"
+    "backend/tests/unit/test_batch_pipeline_terminal_empty.py",
+    "backend/tests/unit/test_sync_empty_recovery.py",
+    "backend/tests/unit/test_sync_empty_recovery_intent.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

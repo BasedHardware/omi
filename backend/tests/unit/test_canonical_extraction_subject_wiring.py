@@ -312,7 +312,6 @@ def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkey
 
 
 def test_extraction_write_does_not_default_third_party_to_primary_user(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-scope"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -322,7 +321,6 @@ def test_extraction_write_does_not_default_third_party_to_primary_user(monkeypat
         "content": "Sam is a teammate on the launch",
         "conversation_id": "conv-scope",
         "subject_attribution": "third_party",
-        "belief_class": "relationship",
         "memory_tier": MemoryTier.short_term.value,
         "created_at": now,
         "updated_at": now,
@@ -345,12 +343,9 @@ def test_extraction_write_does_not_default_third_party_to_primary_user(monkeypat
     write_canonical_extraction_memory(uid, payload, db_client=db)
     stored = db.docs[f"users/{uid}/memory_items/mem_third_party"]
     assert stored["subject_scope"] == "third_party"
-    assert stored["belief_class"] == "relationship"
-    assert stored.get("half_life_days") is None
 
 
 def test_extraction_write_stores_named_date_valid_to_from_invalid_at(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-valid-to"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     valid_to = datetime(2026, 12, 15, tzinfo=timezone.utc)
@@ -361,7 +356,6 @@ def test_extraction_write_stores_named_date_valid_to_from_invalid_at(monkeypatch
         "content": "Ship the launch on Friday",
         "conversation_id": "conv-valid-to",
         "subject_attribution": "user",
-        "belief_class": "plan",
         "invalid_at": valid_to,
         "memory_tier": MemoryTier.short_term.value,
         "created_at": now,
@@ -385,20 +379,18 @@ def test_extraction_write_stores_named_date_valid_to_from_invalid_at(monkeypatch
     write_canonical_extraction_memory(uid, payload, db_client=db)
     stored = db.docs[f"users/{uid}/memory_items/mem_named_date"]
     assert stored["subject_scope"] == "primary_user"
-    assert stored["belief_class"] == "plan"
     assert stored["valid_to"] == valid_to
 
 
-def test_extraction_write_keeps_primary_user_default_when_flag_off(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
-    uid = "uid-scope-off"
+def test_extraction_write_preserves_explicit_third_party_attribution(monkeypatch_trusted_account):
+    uid = "uid-third-party"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
     payload = {
-        "id": "mem_flag_off",
+        "id": "mem_third_party",
         "uid": uid,
         "content": "Sam is a teammate on the launch",
-        "conversation_id": "conv-scope-off",
+        "conversation_id": "conv-third-party",
         "subject_attribution": "third_party",
         "memory_tier": MemoryTier.short_term.value,
         "created_at": now,
@@ -406,23 +398,22 @@ def test_extraction_write_keeps_primary_user_default_when_flag_off(monkeypatch_t
         "evidence": [
             {
                 "evidence_id": "ev-off",
-                "source_id": "conv-scope-off",
+                "source_id": "conv-third-party",
                 "source_type": "conversation",
                 "source_signal": "transcription",
                 "extractor_id": "test",
                 "extractor_version": "v1",
                 "artifact_ref": {},
                 "capture_confidence": 0.5,
-                "independence_group": "conv-scope-off",
+                "independence_group": "conv-third-party",
                 "redaction_status": "active",
                 "created_at": now,
             }
         ],
     }
     write_canonical_extraction_memory(uid, payload, db_client=db)
-    stored = db.docs[f"users/{uid}/memory_items/mem_flag_off"]
-    assert stored["subject_scope"] == "primary_user"
-    assert stored.get("belief_class") is None
+    stored = db.docs[f"users/{uid}/memory_items/mem_third_party"]
+    assert stored["subject_scope"] == "third_party"
 
 
 def _evidence(source_id: str, now: datetime, *, source_type: str = "conversation") -> dict:
@@ -441,11 +432,7 @@ def _evidence(source_id: str, now: datetime, *, source_type: str = "conversation
     }
 
 
-def test_automated_api_create_without_attribution_does_not_claim_user_ownership(
-    monkeypatch_trusted_account, monkeypatch
-):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
+def test_automated_api_create_without_attribution_does_not_claim_user_ownership(monkeypatch_trusted_account):
     uid = "uid-api-scope"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -465,9 +452,7 @@ def test_automated_api_create_without_attribution_does_not_claim_user_ownership(
     assert stored["subject_scope"] == "third_party"
 
 
-def test_x_post_legacy_assumption_does_not_establish_user_ownership(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", lambda *a, **k: None)
+def test_x_post_legacy_assumption_does_not_establish_user_ownership(monkeypatch_trusted_account):
     uid = "uid-x-scope"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -489,7 +474,6 @@ def test_x_post_legacy_assumption_does_not_establish_user_ownership(monkeypatch_
 
 
 def test_conversation_about_user_name_is_primary_user(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-about-user"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -515,7 +499,6 @@ def test_conversation_about_user_name_is_primary_user(monkeypatch_trusted_accoun
 
 
 def test_conversation_about_other_person_is_third_party(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-about-sam"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -541,7 +524,6 @@ def test_conversation_about_other_person_is_third_party(monkeypatch_trusted_acco
 
 
 def test_extractor_media_screen_is_stored_as_third_party(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     uid = "uid-media"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -564,18 +546,7 @@ def test_extractor_media_screen_is_stored_as_third_party(monkeypatch_trusted_acc
     assert stored["subject_scope"] == "third_party"
 
 
-def test_api_create_does_not_block_on_admission_judge(monkeypatch_trusted_account, monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    scheduled = []
-
-    def _schedule(*args, **kwargs):
-        scheduled.append((args, kwargs))
-
-    def _admit(*_args, **_kwargs):
-        raise AssertionError("admission judge must not run on the API create path")
-
-    monkeypatch.setattr("utils.memory.belief_evidence.schedule_belief_admission", _schedule)
-    monkeypatch.setattr("utils.memory.belief_evidence.admit_claim_against_neighbors", _admit)
+def test_automated_api_create_persists_without_belief_admission(monkeypatch_trusted_account):
     uid = "uid-api-defer"
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     db = _FakeDb(_control_seed(uid))
@@ -591,6 +562,6 @@ def test_api_create_does_not_block_on_admission_judge(monkeypatch_trusted_accoun
         },
         db_client=db,
     )
-    assert scheduled
-    assert scheduled[0][0][:3] == (uid, "mem_api_defer", "I prefer dark mode")
-    assert f"users/{uid}/memory_items/mem_api_defer" in db.docs
+    stored = db.docs[f"users/{uid}/memory_items/mem_api_defer"]
+    assert stored["content"] == "I prefer dark mode"
+    assert stored["subject_scope"] == "third_party"

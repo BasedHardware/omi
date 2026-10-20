@@ -129,6 +129,7 @@ def _calendar_module():
         "models": _package("models"),
         "models.calendar_mutation": calendar_mutation,
         "utils": _package("utils"),
+        "utils.conversations": _package("utils.conversations"),
         "utils.executors": executors,
         "utils.http_client": http_client,
         "utils.retrieval": _package("utils.retrieval"),
@@ -142,6 +143,10 @@ def _calendar_module():
     with stub_modules(stubs):
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
+        load_module_fresh(
+            "utils.conversations.datetime_utils",
+            str(BACKEND_DIR / "utils" / "conversations" / "datetime_utils.py"),
+        )
         load_module_fresh(
             "utils.retrieval.tools.calendar_render",
             str(BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py"),

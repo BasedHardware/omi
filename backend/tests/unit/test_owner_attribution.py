@@ -195,7 +195,6 @@ def test_canonical_capture_owner_gate_and_shared_prefix(monkeypatch, pc, owners)
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'David')
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda _uid: 'UTC')
     monkeypatch.setattr(pc, '_stored_meeting_context', lambda _conversation: None)
-    monkeypatch.setattr(pc, 'belief_model_enabled', lambda: False)
     monkeypatch.setattr(pc, 'build_conversation_prompt_prefix', lambda **kwargs: captured.update(kwargs) or object())
     monkeypatch.setattr(
         pc,

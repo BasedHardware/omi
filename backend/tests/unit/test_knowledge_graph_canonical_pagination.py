@@ -550,13 +550,12 @@ def test_canonical_route_fails_closed_for_invalid_cursor(monkeypatch):
     assert response.json()["detail"] == "invalid_or_stale_cursor"
 
 
-def test_canonical_route_maps_read_unavailable_to_503(monkeypatch):
+@pytest.mark.parametrize('reason', ['missing_state_head', 'malformed_memory_state_head', 'missing_cursor_secret'])
+def test_canonical_route_maps_read_unavailable_to_503(monkeypatch, reason):
     monkeypatch.setattr(
         kg_router.canonical_graph_service,
         "get_canonical_knowledge_graph",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            kg.CanonicalGraphReadUnavailable("malformed_memory_state_head")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(kg.CanonicalGraphReadUnavailable(reason)),
     )
     app = FastAPI()
     app.include_router(kg_router.router)
@@ -566,6 +565,9 @@ def test_canonical_route_maps_read_unavailable_to_503(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["detail"] == "canonical_graph_unavailable"
+    assert response.headers.get('x-omi-knowledge-graph-state') == (
+        'unestablished' if reason == 'missing_state_head' else None
+    )
 
 
 def test_canonical_graph_retries_once_when_revision_changes_during_read(monkeypatch):

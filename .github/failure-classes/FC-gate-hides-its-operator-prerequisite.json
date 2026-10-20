@@ -9,7 +9,12 @@
     "backend/scripts/verify_pusher_live_alert_route.py",
     "backend/tests/unit/test_pusher_deployment_control_workflow.py",
     "backend/tests/unit/test_firebase_release_probe_token.py",
-    "backend/tests/unit/test_verify_pusher_live_alert_route.py"
+    "backend/tests/unit/test_verify_pusher_live_alert_route.py",
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/scripts/preflight-cloud-run-deploy.py",
+    "backend/tests/unit/test_attach_cloud_run_gmp_sidecar.py",
+    "backend/tests/unit/test_preflight_cloud_run_deploy.py",
+    "backend/tests/unit/test_fleet_deployment.py"
   ],
   "evidence_prs": [
     13667,

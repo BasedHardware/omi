@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
-from config.batch_pipeline import speech_empty_multilingual_enabled, terminal_empty_disposition_enabled
+from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 
@@ -117,9 +117,10 @@ def register_batch_artifact(
             and bool(disposition.get('token'))
             and uri.endswith(f"/{disposition['token']}.enc")
         )
+        policy = RecoveryPolicy.from_dict((job.get('policy_parts') or {}).get('recovery', {}))
         terminal = job.get('terminal_disposition') or {}
         terminal_write = (
-            terminal_empty_disposition_enabled()
+            policy.terminal_empty_disposition
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') in {'held', 'failed_held'}
             and terminal.get('state') == 'prepared'
@@ -129,7 +130,7 @@ def register_batch_artifact(
         )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
-            speech_empty_multilingual_enabled()
+            policy.speech_empty_multilingual
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') in {'held', 'failed_held'}
             and redrive.get('state') == 'running'

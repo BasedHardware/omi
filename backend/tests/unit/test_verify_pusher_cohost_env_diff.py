@@ -176,22 +176,6 @@ def test_queue_age_publisher_rejects_unexpected_values(
     assert any(error in message for message in gate.validate_preflight(chart_fixture))
 
 
-def test_missing_required_flag_on_pusher_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        "",
-    )
-
-    errors = gate.validate_preflight(chart_fixture)
-
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED is missing on pusher" in error
-        for error in errors
-    )
-
-
 @pytest.mark.parametrize("env", ("dev", "prod"))
 def test_ledger_switch_missing_on_pusher_fails(gate: SimpleNamespace, chart_fixture: Path, env: str) -> None:
     """Free-tier program Move 1: both process_conversation hosts read the ledger switch.
@@ -227,21 +211,6 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
     errors = gate.validate_preflight(chart_fixture)
 
     assert any(f"[{env}] required identical flag LLM_GATEWAY_ACCOUNTING_ENABLED disagrees" in error for error in errors)
-
-
-def test_required_flag_value_disagreement_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "false"\n',
-    )
-
-    errors = gate.validate_preflight(chart_fixture)
-
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees" in error for error in errors
-    )
 
 
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
@@ -319,8 +288,13 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
 
 @pytest.mark.parametrize('env', ('dev', 'prod'))
 def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
-    assert gate._BATCH_PIPELINE_LISTEN_ONLY <= gate.LISTEN_ONLY_ALLOWED[env]
+    batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
+    if env == 'prod':
+        batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
+    assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
+    assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY

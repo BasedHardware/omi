@@ -148,7 +148,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "4",
-      "threshold": ">20 rps for 10m. Supplied production Prometheus/Cloud Monitoring pre-storm triage, 2026-09-28..2026-10-07 at 1h steps: p50 3.6 / p99 7.2 / max 9.8 rps; threshold above the measured normal maximum.",
+      "threshold": ">20 rps for 10m. Direct Cloud Monitoring 1m RPS, 2026-10-04 07:25Z..2026-10-07 12:00Z (sync-poll-storm days excluded): p50 4.23 / p99 14.33 / max 36.28; longest run >20 was 1m.",
       "summary": "Omi API alert: Backend - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",

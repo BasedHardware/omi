@@ -63,9 +63,21 @@ def test_success_stream_ignores_redis_while_transport_presence_still_dedupes(loc
     emit(at + timedelta(seconds=1))
     assert capture.call_count == 33
     assert not list(local_redis.scan_iter('mcp:tool-success:*'))
-    # Only the unchanged presence diagnostic uses the daily Redis claim.
-    assert analytics._claim_daily_active_marker('local-test', now=at) is True
-    assert analytics._claim_daily_active_marker('local-test', now=at) is False
+    # Presence is claimed independently for each normalized client and UTC day.
+    assert analytics._claim_daily_active_marker('local-test', 'codex', now=at) is True
+    assert analytics._claim_daily_active_marker('local-test', 'codex', now=at) is False
+    assert analytics._claim_daily_active_marker('local-test', 'chatgpt', now=at) is True
+    assert analytics._claim_daily_active_marker('local-test', 'chatgpt', now=at) is False
+    tomorrow = at + timedelta(seconds=1)
+    assert analytics._claim_daily_active_marker('local-test', 'codex', now=tomorrow) is True
+    assert analytics._claim_daily_active_marker('local-test', 'codex', now=tomorrow) is False
+    markers = list(local_redis.scan_iter('mcp:active:*'))
+    assert set(markers) == {
+        b'mcp:active:20261015:local-test:codex',
+        b'mcp:active:20261015:local-test:chatgpt',
+        b'mcp:active:20261016:local-test:codex',
+    }
+    assert all(0 < local_redis.ttl(key) <= 48 * 60 * 60 for key in markers)
     local_redis.close()
     monkeypatch.setattr(analytics.redis_db, 'r', Mock(set=Mock(side_effect=ConnectionError('offline'))))
     emit()

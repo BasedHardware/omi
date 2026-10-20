@@ -1999,12 +1999,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryHistory => 'చరిత్ర';
 
   @override
-  String get memoryAllowUse => 'ఉపయోగాన్ని అనుమతించు';
-
-  @override
-  String get memoryDontUse => 'ఉపయోగించవద్దు';
-
-  @override
   String get undo => 'మరలుచేయండి';
 
   @override
@@ -9365,6 +9359,14 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationకి వెళ్లండి';
+  }
+
+  @override
+  String get quoteShowSources => 'మూలాలను చూపించు';
+
+  @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
 
   @override
@@ -11106,7 +11108,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBannerTitle => 'Omi ఆడియో పంపడం లేదు';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11117,6 +11119,23 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది';
+
+  @override
+  String get captureBannerTryReconnect => 'మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి';
+
+  @override
+  String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'మీ Omiకి బ్లూటూత్ లింక్ ఆగిపోయింది, కాబట్టి ఆడియో యాప్‌ను చేరడం లేదు. Omi పరికరంలో రికార్డ్ చేయడం కొనసాగిస్తుంది మరియు లింక్ పునరుద్ధరించబడినప్పుడు సింక్ అవుతుంది. మళ్లీ ప్రయత్నించడం వల్ల లింక్ తిరిగి కనెక్ట్ అవుతుంది; అది నిరంతరం విఫలమైతే, సెట్టింగ్‌లు > పరికరంలో మీ పరికరాన్ని తనిఖీ చేయండి.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'ఆడియో యాప్‌ను చేరడం లేదు — మీ Omiని మళ్లీ కనెక్ట్ చేయండి';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'యాప్ ఇక Omi పరికరం నుండి ఆడియోను స్వీకరించలేకపోతోంది మరియు కనెక్షన్‌ను స్వయంచాలకంగా పునరుద్ధరించలేకపోయింది. పరికరాన్ని డిస్‌కనెక్ట్ చేసి మళ్లీ కనెక్ట్ చేయండి — పరికర సెట్టింగ్‌ల నుండి లేదా ఆఫ్ చేసి ఆన్ చేసి. పరికరంలో సేవ్ చేసిన ఆడియో తర్వాత సింక్ అవుతుంది.';
 
   @override
   String get captureStillRecording => 'ఇంకా రికార్డ్ అవుతోంది';
@@ -13147,6 +13166,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewProposalSuggested => 'సూచించినది';
 
   @override
+  String get reviewQuestionOutOfDate => 'ఈ ప్రశ్న పాతది అయిపోయింది, కాబట్టి ఏమీ మారలేదు.';
+
+  @override
   String get reviewProposalConflict => 'Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.';
 
   @override
@@ -13162,22 +13184,22 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'సిఫార్సు చేయబడింది';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'అన్ని ప్లాన్‌లు చూడండి';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'ప్లాన్‌లను చూడండి';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'మీ ప్లాన్';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ఇప్పుడు కాదు';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13205,6 +13227,19 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureConnectTitle => 'మీ Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'మీ Omiని జత చేయండి, రోజంతా హ్యాండ్స్-ఫ్రీగా సంభాషణలను రికార్డ్ చేస్తుంది.';
+
+  @override
+  String get firstCaptureConnect => 'నా Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureNoDevice => 'నాకు ఇంకా Omi లేదు';
 
   @override
   String get firstCaptureSkip => 'Skip for Now';
@@ -13313,6 +13348,112 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'మీ ఉచిత ట్రయల్ ఎలా పనిచేస్తుందో ఇక్కడ ఉంది.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited సారాంశాలు, శాశ్వతంగా భద్రపరచబడతాయి';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'ప్రతి సంభాషణ తదుపరి దశలతో కూడిన స్పష్టమైన సారాంశంగా మారుతుంది, కాబట్టి ఏదీ తప్పిపోదు.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'ఉత్తమమైన ట్రాన్స్‌క్రిప్షన్';
+
+  @override
+  String get paywallTrialChipDetails => 'మరిన్ని వివరాలను పసిగడుతుంది';
+
+  @override
+  String get paywallTrialChipSpeakers => 'మాట్లాడేవారిని వేరు చేస్తుంది';
+
+  @override
+  String get paywallTrialChipNoise => 'శబ్దంతో కూడిన గదులలో కూడా పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialChipAccents => 'యాసలను గుర్తిస్తుంది';
+
+  @override
+  String get paywallTrialChipJargon => 'మీ పరిభాష మరియు పేర్లను తెలుసుకుంటుంది';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'మాట్లాడేవారి పేర్లు, స్వయంచాలకంగా గుర్తించబడతాయి';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'ప్రతి సంభాషణలో Unlimited ప్రశ్నలు';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'ఈ మీటింగ్ నుండి ఫాలో-అప్ ఇమెయిల్‌ను రూపొందించండి.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'జాన్ మంగళవారం చెప్పినదానితో ఏమైనా విభేదాలు ఉన్నాయా?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'మనల్ని నెమ్మదింపజేసే ఏదైనా కనుగొనండి.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'మీకు ఇష్టమైన యాప్‌లతో పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialTodayTitle => 'ఈరోజు';
+
+  @override
+  String get paywallTrialTodayBody => 'Proలోని ప్రతిదీ అన్‌లాక్ చేయబడింది.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days రోజులు ఉచితం';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days రోజుల Omi Pro, మా ఖర్చుతో.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days రోజులలో';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'ట్రయల్ ముగుస్తుంది. మీరు రద్దు చేయకపోతే మీకు ఛార్జ్ చేయబడుతుంది.';
+
+  @override
+  String get paywallTrialFeatureModels => 'తాజా AI మోడల్స్';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'నెలవారీ బిల్ చేయబడుతుంది';
+
+  @override
+  String get paywallTrialBilledYearly => 'వార్షికంగా బిల్ చేయబడుతుంది';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amount ఆదా చేయండి';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$priceకి ప్రారంభించండి';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'ఉచిత ప్లాన్‌తో కొనసాగండి';
+
+  @override
+  String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'మీ $days-రోజుల Omi Pro ఉచిత ట్రయల్ ప్రారంభమైంది.';
+  }
 
   @override
   String get paywallCancelAnytime => 'ఎప్పుడైనా రద్దు చేసుకోవచ్చు.';
@@ -13528,6 +13669,43 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onTheWayAlmostReady => 'దాదాపు సిద్ధం';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '1 రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals మార్గంలో ఉంది';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'అప్‌లోడ్ అవుతోంది: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'దాదాపు సిద్ధం: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లకు శ్రద్ధ అవసరం',
+      one: '1 రికార్డింగ్‌కు శ్రద్ధ అవసరం',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
 
   @override
@@ -13546,7 +13724,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'నిల్వను తనిఖీ చేయలేము';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'అప్‌లోడ్ ఆగిపోయింది';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
+      one: '1 రికార్డింగ్ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
+
+  @override
+  String get activityAttentionSemantics => 'యాక్టివిటీ, శ్రద్ధ అవసరం';
 
   @override
   String get connectAgentHeadline => 'ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి';
@@ -13824,6 +14025,420 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది.';
+
+  @override
+  String get noContentToDisplay => 'చూపించడానికి సామగ్రి లేదు';
+
+  @override
+  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
+
+  @override
+  String get onDeviceAtCapTitle => 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Omi ఇంకా రికార్డ్ చేస్తోంది. ఈ నెలలో మిగిలిన భాగాన్ని ఎలా ట్రాన్‌స్క్రైబ్ చేయాలో ఎంచుకోండి.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'మీ వినియోగం $dateన రీసెట్ అవుతుంది.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'ఈ ఫోన్‌లోనే ట్రాన్‌స్క్రైబ్ చేయండి';
+
+  @override
+  String get onDeviceIncluded => 'చేర్చబడింది';
+
+  @override
+  String get onDeviceOptionChargingBody => 'ఫోన్ ఛార్జ్ అవుతున్నప్పుడు నడుస్తుంది.';
+
+  @override
+  String get onDeviceUpgradeBody => 'మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'ఏ విధంగానైనా ఏదీ కోల్పోరు. దీన్ని సెట్టింగ్‌లు › ట్రాన్‌స్క్రిప్షన్‌లో మార్చవచ్చు.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'దశ $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi స్పీచ్ మోడల్‌ను ఒక్కసారి డౌన్‌లోడ్ చేస్తుంది. ఆ తర్వాత మీ రికార్డింగ్‌లు ఇక్కడే టెక్స్ట్‌గా మారతాయి, మీ వినియోగంలో లెక్కించబడకుండా.';
+
+  @override
+  String get onDeviceSpeechModel => 'స్పీచ్ మోడల్';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fiలో డౌన్‌లోడ్ అవుతోంది · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'డౌన్‌లోడ్ అవుతోంది · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'సుమారు $time మిగిలి ఉంది';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi కోసం వేచి ఉంది';
+
+  @override
+  String get onDeviceDownloadFailed => 'డౌన్‌లోడ్ పూర్తి కాలేదు';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'డౌన్‌లోడ్ కాలేదు';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'ఇన్‌స్టాల్ అయింది · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'ఈ ఫోన్‌లో ఇంకా అందుబాటులో లేదు';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'డౌన్‌లోడ్ అవుతున్నప్పుడు రికార్డ్ చేస్తూనే ఉండండి. దీని కోసం ఏదీ ఆగదు.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'ట్రాన్‌స్క్రైబ్ అయ్యే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fiలో మాత్రమే డౌన్‌లోడ్ చేయండి';
+
+  @override
+  String get onDeviceDownloadModel => 'స్పీచ్ మోడల్‌ను డౌన్‌లోడ్ చేయండి';
+
+  @override
+  String get onDeviceScheduleTitle => 'ఎప్పుడు ట్రాన్‌స్క్రైబ్ చేయాలి';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi ఎప్పుడు ట్రాన్‌స్క్రైబ్ చేయాలి?';
+
+  @override
+  String get onDeviceScheduleBody => 'దీన్ని ఎప్పుడైనా మార్చవచ్చు.';
+
+  @override
+  String get onDeviceScheduleCharging => 'ఛార్జ్ అవుతున్నప్పుడు';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'ఛార్జర్ పెట్టిన తర్వాత, సాధారణంగా రాత్రిపూట, ట్రాన్‌స్క్రిప్ట్‌లు కనిపిస్తాయి.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'బ్యాటరీ: దాదాపు ఏమీ లేదు';
+
+  @override
+  String get onDeviceScheduleHours => 'కొన్ని గంటలకు ఒకసారి';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'బ్యాటరీపై చిన్న విడతలుగా పూర్తి చేస్తుంది, కాబట్టి ట్రాన్‌స్క్రిప్ట్‌లు అరుదుగా కొన్ని గంటలకు మించి ఆలస్యమవుతాయి.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'బ్యాటరీ: రోజుకు సుమారు $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'మీరు మాట్లాడుతున్నప్పుడే';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi తెరిచి ఉన్నప్పుడు క్రమం తప్పకుండా లిప్యంతరీకరిస్తుంది.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'బ్యాటరీ: గంట సంభాషణకు సుమారు $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'మీ ఫోన్‌కు ఛార్జర్ పెట్టిన తర్వాత అవి సిద్ధమవుతాయి. రికార్డింగ్ యథావిధిగా కొనసాగుతుంది.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi కొన్ని గంటలకు ఒకసారి పూర్తి చేస్తుంది. రికార్డింగ్ యథావిధిగా కొనసాగుతుంది.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'బ్యాటరీ తక్కువగా ఉన్నందున ఛార్జర్ కోసం వేచి ఉంది. రికార్డింగ్ యథావిధిగా కొనసాగుతుంది.';
+
+  @override
+  String get onDeviceTranscribeNow => 'ఇప్పుడే ట్రాన్‌స్క్రైబ్ చేయండి';
+
+  @override
+  String get onDeviceUsesBattery => 'బ్యాటరీని వాడుతుంది';
+
+  @override
+  String get onDeviceTranscribing => 'ట్రాన్‌స్క్రైబ్ చేస్తోంది…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'ఛార్జర్ కోసం వేచి ఉంది';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది';
+
+  @override
+  String get onDeviceWaitingForSetup => 'సేవ్ అయింది, సెటప్ కోసం వేచి ఉంది';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'ఈ iPhone‌లో ట్రాన్‌స్క్రైబ్ చేయబడింది';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'ఈ ఫోన్‌లో ట్రాన్‌స్క్రైబ్ చేయబడింది';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'ఈ iPhone‌లో ట్రాన్‌స్క్రైబ్ చేసి సారాంశం రూపొందించబడింది';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud సారాంశం రూపొందించింది';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'ఇది మీ ఫోన్‌లో ఎందుకు జరిగింది';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'మీరు ఈ నెల పరిమితిని చేరుకున్నారు, కాబట్టి Omi దీన్ని మీ ఫోన్‌లో ట్రాన్స్‌క్రైబ్ చేసింది.';
+
+  @override
+  String get onDeviceWhySavingLiveHours =>
+      'వినియోగాన్ని ఆదా చేయడానికి మీరు ఈ ఫోన్‌లో ట్రాన్స్‌క్రైబ్ చేయడం ఎంచుకున్నారు.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'సారాంశం కూడా ఈ iPhone‌లోనే రాయబడింది.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'మీరు అన్నింటినీ ఈ ఫోన్‌లోనే ఉంచుతారు, కాబట్టి సారాంశం లేదు.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'ఈ సారాంశాన్ని Omi Cloud ఎందుకు రాసింది';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'ఈ iPhone స్వయంగా సారాంశం రూపొందించలేదు (దానికి iPhone 15 Pro లేదా తర్వాతి మోడల్ అవసరం). ట్రాన్‌స్క్రిప్ట్ మీ ఫోన్‌లో రూపొందించబడింది, సారాంశం కోసం దాని టెక్స్ట్ మాత్రమే Omiకి పంపబడింది. ఇది మీ వినియోగంలో లెక్కించబడదు.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'ఈ ఫోన్ స్వయంగా సారాంశం రూపొందించలేదు. ట్రాన్‌స్క్రిప్ట్ మీ ఫోన్‌లో రూపొందించబడింది, సారాంశం కోసం దాని టెక్స్ట్ మాత్రమే Omiకి పంపబడింది. ఇది మీ వినియోగంలో లెక్కించబడదు.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloudతో మళ్లీ చేయండి';
+
+  @override
+  String get onDeviceRedoHint => 'మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి';
+
+  @override
+  String get onDeviceKeepEverything => 'అన్నింటినీ ఈ ఫోన్‌లోనే ఉంచండి';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'ట్రాన్‌స్క్రిప్ట్‌లు మాత్రమే, సారాంశాలు ఉండవు';
+
+  @override
+  String get onDeviceAfterLiveHours => 'మీరు పరిమితిని చేరుకున్నప్పుడు';
+
+  @override
+  String get onDeviceWhen => 'ఎప్పుడు';
+
+  @override
+  String get onDeviceSummaries => 'సారాంశాలు';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'ఈ iPhone‌లో';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud ద్వారా';
+
+  @override
+  String get onDeviceSaveLiveHours => 'ఎల్లప్పుడూ ఈ ఫోన్‌లో ట్రాన్స్‌క్రైబ్ చేయి';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'మీ వినియోగాన్ని ఆదా చేస్తుంది. మాట్లాడేవారి లేబుల్స్ లేవు.';
+
+  @override
+  String get onDeviceOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String get onDeviceAudioWaiting => 'ఫోన్‌లో వేచి ఉన్న ఆడియో';
+
+  @override
+  String get onDeviceRemoveModel => 'స్పీచ్ మోడల్‌ను తీసివేయండి';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'స్పీచ్ మోడల్‌ను తీసివేయాలా?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'మీరు దాన్ని మళ్లీ డౌన్‌లోడ్ చేసే వరకు లేదా వినియోగం రీసెట్ అయ్యే వరకు రికార్డింగ్‌లు ఈ ఫోన్‌లో వేచి ఉంటాయి.';
+
+  @override
+  String get onDeviceRemove => 'తీసివేయండి';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'మీ ట్రాన్‌స్క్రిప్ట్‌లను చూడటానికి సెటప్ పూర్తి చేయండి';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. Omi ఇంకా మీ ఫోన్‌లో ఆడియోను రికార్డ్ చేసి సేవ్ చేస్తోంది. స్పీచ్ మోడల్‌ను డౌన్‌లోడ్ చేయండి, అది వెనుకబడినది పూర్తి చేస్తుంది.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size డౌన్‌లోడ్';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'ఈ ఫోన్ ఇంకా స్పీచ్ మోడల్‌ను నడపదు. వినియోగం రీసెట్ అయ్యే వరకు లేదా మీరు అప్‌గ్రేడ్ చేసే వరకు ఆడియో సేవ్‌గా ఉంటుంది.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'పరిమితిని చేరుకున్నప్పుడు ఈ ఫోన్‌లో ట్రాన్స్‌క్రైబ్ చేయండి';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% ఉపయోగించబడింది · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% ఉపయోగించబడింది · దాదాపు $hours గంటల రికార్డింగ్ మిగిలి ఉంది · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'మరింత వినియోగం పొందండి';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'మాట సిద్ధమవుతోంది · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. మీ రికార్డింగ్‌లు సేవ్ అయ్యాయి మరియు పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం చేయబడతాయి.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'కొత్త రికార్డింగ్‌లు ఈ ఫోన్‌లో లిప్యంతరం చేయబడతాయి. వేచి ఉన్న రికార్డింగ్‌లు పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం చేయబడతాయి.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'రికార్డింగ్, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · లిప్యంతరం కోసం వేచి ఉంది';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'క్లౌడ్ లిప్యంతరం పాజ్ చేయబడింది';
+
+  @override
+  String get heldAudioLiveBody => 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. Omi రికార్డ్ చేస్తూనే ఉంటుంది.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'పరిమితి తర్వాత $minutes నిమిషాలు రికార్డ్ అయ్యాయి';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration వేచి ఉంది';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'మరో $count',
+      one: 'మరో 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'వేచి ఉన్న మీ రికార్డింగ్‌లు లిప్యంతరీకరించబడుతున్నాయి';
+
+  @override
+  String get processingPaused => 'ప్రాసెసింగ్ నిలిపివేయబడింది. మీరు ఈ నెల పరిమితిని చేరుకున్నారు.';
+
+  @override
+  String get processingStored =>
+      'మీ రికార్డింగ్‌లు మరియు లిప్యంతరీకరణలు సేవ్ చేయబడ్డాయి. మీరు ప్రాసెస్ చేయాలని ఎంచుకునే వరకు వేచి ఉన్న రికార్డింగ్‌లు అలాగే ఉంటాయి.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration వేచి ఉంది · ఇప్పుడు ప్రాసెస్ చేస్తే ఈ నెలలో సుమారు $percent% ఉపయోగించబడుతుంది';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'సుమారు $hours గంటల ప్రాసెసింగ్ · ఈ నెల కోటాలో $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'అందుబాటులో ఉన్న కోటాలో కొత్త రికార్డింగ్‌లను ముందుగా ప్రాసెస్ చేస్తాము. మిగిలినవి వేచి ఉంటాయి.';
+
+  @override
+  String get processingAction => 'వేచి ఉన్న రికార్డింగ్‌లను ప్రాసెస్ చేయండి';
+
+  @override
+  String get processingProgress => 'మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…';
+
+  @override
+  String get processingDeferred => 'ప్రాసెసింగ్ కోసం వేచి ఉంది';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count సంభాషణలు వేచి ఉన్నాయి',
+      one: '1 సంభాషణ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
+  }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omiలో రికార్డింగ్ కొనసాగుతోంది';
 
   @override
   String get consentShortMessage => 'Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.';

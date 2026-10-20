@@ -694,7 +694,6 @@ export type OmiBridgeApi = {
   getLocalConversation: (id: string) => Promise<LocalConversation | null>
   listLocalConversations: () => Promise<LocalConversation[]>
   deleteLocalConversation: (id: string) => Promise<void>
-  deleteJitConversationKeyframe: (id: string) => Promise<void>
   updateLocalConversationTitle: (id: string, title: string) => Promise<void>
   /** Persist an outbox transition for a local conversation (cloud sync). */
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) => Promise<void>
@@ -978,18 +977,10 @@ export type OmiBridgeApi = {
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   /** Total captured frames, all time — a COUNT(*), not a row fetch. */
   rewindFrameCount: () => Promise<number>
-  /** Resolve one local frame for a JIT evidence deep link. */
-  rewindFrameById: (id: number) => Promise<RewindFrame | null>
-  /** Main-process focus/navigation to the exact Rewind frame. */
-  rewindFocusFrame: (id: number) => Promise<{
-    ok: boolean
-    state: 'available' | 'unavailable' | 'pruned'
-  }>
   /** Fires (no payload) each time a frame is actually stored, so a live view of
    *  the frame count (the Hub's "Screenshots" stat) can re-read `rewindFrameCount`
    *  instead of freezing at its mount-time value. */
   onRewindCaptured: (cb: () => void) => () => void
-  onRewindFocusFrame: (cb: (frameId: number) => void) => () => void
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
@@ -1058,7 +1049,6 @@ export type OmiBridgeApi = {
   insightHoverEnd: () => void
   /** Settings → main: deliver an example insight (a test). */
   insightTest: () => void
-  /** Explicit JIT feedback; silence is never interpreted as feedback. */
 
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
@@ -1291,10 +1281,6 @@ export type OmiBridgeApi = {
   mainChatCancel: (runId: string) => Promise<boolean>
   /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
-  /** Report the renderer-visible chat/session selected by the user. This is
-   * independent of sending so proactive JIT artifacts can retain the exact
-   * deletion key for their owning surface. Optional for older preload builds. */
-  setJitRendererConversationKey?: (key: string | null) => Promise<boolean>
   // --- shared-thread agent cards (B4, INV-CHAT-1) ---
   /** The durable spawn/completion cards for a main_chat thread, oldest-first. Read
    *  on chat load so a completion that landed while the window was closed still

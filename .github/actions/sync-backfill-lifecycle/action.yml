@@ -49,7 +49,7 @@ inputs:
     required: false
     default: ''
   backfill_env_vars:
-    description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
+    description: Manifest-rendered backend-sync-backfill env overlay (worker env; platform and dispatch read its SYNC_BACKFILL_TASKS_QUEUE)
     required: false
     default: ''
   backfill_secrets:
@@ -91,13 +91,19 @@ runs:
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
+        # The manifest owns the live backfill queue (prod: sync-backfill-fresh since the 10-19
+        # 04:52Z stall); sync-backfill is only the default when the manifest declares none.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"
-          echo "SYNC_BACKFILL_TASKS_QUEUE=sync-backfill"
+          echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"
           echo "SYNC_BACKFILL_TASKS_HANDLER_URL=${URL}/v2/sync-jobs/run"
           echo "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=${URL}/v2/sync-jobs/run"
           echo "EOF"
@@ -109,12 +115,12 @@ runs:
       shell: bash
       env:
         ENV_OVERLAY: |-
-          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_QUEUE=sync-backfill
+          ${{ inputs.backfill_env_vars }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
-        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH${{ inputs.project_id == 'based-hardware' && ',CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' || '' }}
+        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS
         FORBIDDEN_ENV_NAMES: ${{ inputs.forbidden_env_names }}
         IDENTITY_FLAGS: ${{ inputs.identity_flags }}
       run: |
@@ -206,7 +212,7 @@ runs:
           --concurrency=6
           --cpu=2
           --memory=8Gi
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
@@ -243,8 +249,13 @@ runs:
       shell: bash
       env:
         BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
+        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
+        # retired sync-backfill queue is left as it is.
+        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
         # The 15/s rate caps starts, not in-flight work; the concurrency limit below
         # independently prevents dispatch beyond worker capacity, including bursts.
@@ -259,22 +270,42 @@ runs:
         # sizing that compounded until queued recordings were scheduled almost
         # a day out. The bounded backoff keeps a transient rejection from
         # stranding a recording for hours.
-        if gcloud tasks queues describe sync-backfill --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
-          gcloud tasks queues update sync-backfill \
+        # --max-attempts must mirror utils/cloud_tasks.py
+        # get_sync_tasks_max_attempts() (default 5): omitted queue fields keep
+        # Google's default of 100, so a handler-budget deferral chain that has
+        # spent its attempt contract and ended through the 409 would keep
+        # retrying long after the preserved run lock expired, re-running
+        # whole-budget pipelines the code-side bound already gave up on.
+        if gcloud tasks queues describe "$BACKFILL_QUEUE" --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         else
-          gcloud tasks queues create sync-backfill \
+          gcloud tasks queues create "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
+        fi
+        # The fresh lane and the fallback route in _enqueue_sync_job_routed
+        # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
+        # throughput limits another team owns; update-only reconciliation
+        # here still caps attempts so a deferral chain ended through the 409
+        # cannot outlive the code-side contract the same way. Without this
+        # the queue keeps Google's default of 100 attempts.
+        if gcloud tasks queues describe sync-jobs --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update sync-jobs \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-attempts=5
         fi
 
     - name: Reconcile backfill UID sequencer sweep

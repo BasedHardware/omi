@@ -112,6 +112,9 @@ def emit_recorded_decision(uid: str, conversation_id: str, decision: RelevanceDe
         }
         if decision.arm is not None:
             properties['arm'] = decision.arm
+        if decision.jev_threshold is not None and decision.jev_comparison is not None:
+            properties['jev_threshold'] = decision.jev_threshold
+            properties['jev_comparison'] = decision.jev_comparison
         emit_posthog_event(uid, 'Relevance Decision Recorded', properties)
     except Exception as error:
         logger.warning('relevance analytics capture failed error=%s', type(error).__name__)

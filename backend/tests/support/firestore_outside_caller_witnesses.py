@@ -16,6 +16,7 @@ import pytest
 import routers.desktop_prompts as desktop_prompts_router
 import routers.desktop_tts_updates as desktop_tts_updates_router
 import routers.fair_use_admin as fair_use_admin_router
+import routers.sync as sync_router
 import utils.task_intelligence.chat_first_materialization_health as health
 from tests.support.firestore_caller_witnesses import (
     CallerWitness,
@@ -26,6 +27,7 @@ from tests.support.firestore_query_drivers import FROZEN_NOW, SHAPE_UID
 
 TARGETS = frozenset(
     {
+        'utils.sync.completed_status.get_completed_legacy_status',
         'database.serving_query_reads.list_active_desktop_prompt_snapshots',
         'database.serving_query_reads.list_desktop_release_snapshots',
         'database.serving_query_reads.find_fair_use_case_snapshots',
@@ -82,9 +84,24 @@ def _run_scheduled_health_check(monkeypatch: pytest.MonkeyPatch, capture: Helper
     return status, captured
 
 
+def _run_expired_sync_status(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    monkeypatch.setattr(sync_router, 'admit_sync_job_poll', lambda uid: True)
+    monkeypatch.setattr(sync_router, 'get_durable_job_status', lambda *args: None)
+    monkeypatch.setattr(sync_router, 'get_sync_job', lambda job_id: None)
+    trial(capture, sync_router.get_sync_job_status, 'legacy-job', uid=SHAPE_UID)
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/sync.py:get_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
+            'utils.sync.completed_status.get_completed_legacy_status',
+            'utils.sync.completed_status.get_completed_legacy_status',
+            ('expired-legacy-handle',),
+            1,
+            _run_expired_sync_status,
+        ),
         CallerWitness(
             'routers/desktop_prompts.py:get_desktop_prompts:database.serving_query_reads.list_active_desktop_prompt_snapshots',
             'database.serving_query_reads.list_active_desktop_prompt_snapshots',

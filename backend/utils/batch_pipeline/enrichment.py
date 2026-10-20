@@ -5,7 +5,7 @@ from typing import Callable
 
 from google.cloud import firestore
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 from utils.sync import reprocess
 
 
@@ -17,11 +17,19 @@ def discard_blocked(document_id: str) -> bool:
     @firestore.transactional
     def discard(transaction):
         row = ref.get(transaction=transaction).to_dict() or {}
-        if not row:
+        if not row or row.get('dormant'):
             return False
         try:
             assert_batch_write_allowed(client, transaction, row['uid'], conversation_ids=[row['conversation_id']])
-        except BatchPrivacyBlocked:
+        except BatchPrivacyBlocked as error:
+            if error.reason in {
+                BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+                BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+                BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+            }:
+                # Invalid topology is not evidence of user deletion. The real
+                # callback defers unresolved redirects without forgetting debt.
+                return False
             transaction.delete(ref)
             return True
         return False

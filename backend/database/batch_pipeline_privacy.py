@@ -6,6 +6,7 @@ hashed generation survives recursive account wipes and contains no content.
 
 from collections.abc import Iterable
 import hashlib
+from enum import Enum
 from typing import Any
 
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -13,8 +14,30 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 
 
+class BatchPrivacyReason(str, Enum):
+    ACCOUNT_DELETED = 'account_deleted'
+    ACCOUNT_MISSING = 'account_missing'
+    DATA_PROTECTION_CHANGED = 'data_protection_changed'
+    PRIVACY_GENERATION_CHANGED = 'privacy_generation_changed'
+    CONVERSATION_REDIRECT_CYCLE = 'conversation_redirect_cycle'
+    CONVERSATION_FENCE_BUDGET = 'conversation_fence_budget'
+    CONVERSATION_DELETED = 'conversation_deleted'
+    RECORDING_PRIVACY_CHANGED = 'recording_privacy_changed'
+    CONVERSATION_REDIRECT_MISSING = 'conversation_redirect_missing'
+    RESULT_LEASE_LOST = 'result_lease_lost'
+    UNKNOWN = 'unknown'
+
+
 class BatchPrivacyBlocked(RuntimeError):
     """A deleted, migrating or E2EE owner/source cannot accept server results."""
+
+    @property
+    def reason(self) -> BatchPrivacyReason:
+        """Bound telemetry even if a caller supplies an unsafe exception message."""
+        try:
+            return BatchPrivacyReason(self.args[0])
+        except (IndexError, ValueError, TypeError):
+            return BatchPrivacyReason.UNKNOWN
 
 
 def privacy_owner_key(uid: str) -> str:
@@ -65,17 +88,24 @@ def assert_batch_write_allowed(
         or (expected_generation is not None and expected_generation != generation)
     ):
         raise BatchPrivacyBlocked('privacy_generation_changed')
-    budget = 0
+    # Merge donors converge on shared redirect targets, so charge the budget per
+    # distinct document. A walk that reaches a document an earlier walk already
+    # passed stops there; cycle detection stays per source and every source is
+    # still read and checked itself.
+    verified: dict[str, bool] = {}  # conversation ID -> document existed
     for source_id in set(conversation_ids):
         conversation_id = source_id
-        chain = set()
+        chain: dict[str, bool] = {}
         redirected = False
         while True:
             if conversation_id in chain:
                 raise BatchPrivacyBlocked('conversation_redirect_cycle')
-            chain.add(conversation_id)
-            budget += 1
-            if budget > 256:
+            if conversation_id in verified:
+                if redirected and not verified[conversation_id]:
+                    raise BatchPrivacyBlocked('conversation_redirect_missing')
+                break
+            chain[conversation_id] = False
+            if len(verified) + len(chain) > 256:
                 raise BatchPrivacyBlocked('conversation_fence_budget')
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
@@ -83,6 +113,7 @@ def assert_batch_write_allowed(
                 raise BatchPrivacyBlocked('conversation_deleted')
             conversation = user.collection('conversations').document(conversation_id).get(transaction=transaction)
             row = conversation.to_dict() or {}
+            chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
                 snapshots.setdefault('conversations', {})[conversation_id] = row
             if row.get('record_lane_owner') == 'batch_live_v1' and (
@@ -101,6 +132,7 @@ def assert_batch_write_allowed(
             # Server-owned redirects are expected. Follow the target in this
             # transaction; user intent above always dominates a redirect.
             conversation_id, redirected = target, True
+        verified.update(chain)
     return generation
 
 
