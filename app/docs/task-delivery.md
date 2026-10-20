@@ -55,6 +55,33 @@ a full conversation cache round trip.
 Task Integrations keeps its Tasks header entry and gains a named overflow entry,
 a Settings → Integrations row, and a localized Settings search destination.
 
+## Backend compatibility and release order
+
+Every authenticated account is eligible for the existing Candidate APIs; workflow
+control supplies the generation fence and does not require enrollment or a UID
+allowlist. Real production FastAPI routers over a loopback Firestore emulator
+verify control, Suggested list, Candidate point read, summary prepare/accept,
+canonical task point read, Tasks refresh/pagination and Task Integrations reads.
+Concurrency, transaction retries, expiry, generation changes and replay retain
+one task and its durable summary link.
+
+The backend also accepts historical text summary rows. Preparation leaves them
+unchanged; acceptance converts only the selected row to an object retaining its
+description and canonical task link. Candidate create/accept use the shared
+bounded contention retry helper, without retrying unknown/ambiguous failures.
+No bulk migration or index change is needed. Deploy this PR's backend before
+releasing mobile: the text-row and contention fixes are new backend code.
+
+Read-only production logs checked on 2026-10-20 show successful responses from
+`/v1/candidates/control` and `/v1/candidates/from-conversation`. The production
+OpenAPI document also publishes all nine route boundaries used here. A local
+`curl` smoke through uvicorn and the production routers verified legacy-row
+prepare/accept, exact task read, refresh, integrations and one-task replay.
+That confirms existing route availability and source compatibility, not
+deployment of this PR or recovery of either
+customer's records. After backend deployment, run an authenticated synthetic
+prepare/accept/read/refresh smoke and verify the released app on a physical phone.
+
 ## Implementation and verification checklist
 
 - [x] Keep capture origin policy and canonical acceptance authority intact.
@@ -65,7 +92,10 @@ a Settings → Integrations row, and a localized Settings search destination.
 - [x] Make Task Integrations discoverable from Settings and localized search.
 - [x] Run provider/widget regression tests, mobile journeys and preflight.
 - [x] Capture native iOS UI evidence with synthetic transport.
-- [ ] Merge and release the mobile app; confirm production backend compatibility.
+- [x] Verify backend wire/route contracts and real Firestore transactions.
+- [x] Handle historical text rows and definite transaction contention safely.
+- [ ] Merge, deploy the backend and verify an authenticated synthetic smoke.
+- [ ] Release mobile and verify the complete flow on a physical phone.
 - [ ] Verify affected customer conversations appear and remain after reopening.
 
 `test/providers/task_delivery_test.dart` exercises production composition,
