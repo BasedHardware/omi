@@ -1135,16 +1135,12 @@ def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
         assert nodes["C"]["expression"] == "$A > 0", export_name
 
 
-def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
+def test_modulate_fallback_alert_names_the_operator_lever():
     for export_name, rules in _all_rule_exports().items():
-        for percent in (70, 90):
-            rule = rules[f"omi-soniox-runway-{percent}"]
-            assert "top up Soniox" in rule["annotations"]["summary"], export_name
-            assert f"$B >= 0.{percent}" in rule["data"][2]["model"]["expression"], export_name
-            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
-            assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
         incident = rules["omi-modulate-failing-soniox"]
         assert "Modulate failing" in incident["annotations"]["summary"], export_name
+        assert "Soniox availability" in incident["annotations"]["summary"], export_name
+        assert "Soniox runway" not in incident["annotations"]["summary"], export_name
         assert "traffic on Soniox" in incident["annotations"]["summary"], export_name
         assert incident["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
 

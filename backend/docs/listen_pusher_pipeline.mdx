@@ -225,7 +225,7 @@ their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
-Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
+read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
 
 Conversation processing adds a shared **Known spellings** block from Dream vocabulary

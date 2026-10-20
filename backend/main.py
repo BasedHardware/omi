@@ -155,7 +155,6 @@ from utils.executors import start_background_task
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
-from utils.stt.soniox_runway import poll_forever
 from utils.stt.live_health import health as live_stt_health
 from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -416,8 +415,6 @@ async def startup_event():
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
-    if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
-        start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
