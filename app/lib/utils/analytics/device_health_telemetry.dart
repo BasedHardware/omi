@@ -201,8 +201,8 @@ class DeviceHealthTelemetry {
   static bool hasObservation(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
-    final open = diagnostics['outage_open_since'] as num?;
-    if (open != null && open < end) return true;
+    final open = diagnostics['outage_open_since'];
+    if (open is int && open < end) return true;
     if ((diagnostics['outage_resolved_days'] as Map?)?.containsKey(start.toString()) == true) return true;
     for (final key in ['battery_history_v2', 'firmware_diagnostics', 'disconnect_history_v2', 'audio_packet_days']) {
       for (final point in (diagnostics[key] as List? ?? []).whereType<Map>()) {
@@ -223,7 +223,9 @@ class DeviceHealthTelemetry {
   static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
-    final observedAt = (diagnostics['observed_at'] as num?)?.toInt() ?? end;
+    // Writers emit integer millis; a fractional observed_at would shift both
+    // the exposure and retention bounds.
+    final observedAt = diagnostics['observed_at'] is int ? diagnostics['observed_at'] as int : end;
     final exposureEnd = observedAt.clamp(start, end);
     // Disconnect history is age-pruned to seven days. Catch-up can replay a
     // calendar day that starts before that horizon, so intervals which ended
@@ -242,7 +244,7 @@ class DeviceHealthTelemetry {
     double? lostAudioSeconds;
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
-    final openSince = diagnostics['outage_open_since'] as num?;
+    final openSince = diagnostics['outage_open_since'] is int ? diagnostics['outage_open_since'] as int : null;
     var unresolved =
         openSince == null ? null : (exposureEnd - openSince.clamp(start, exposureEnd)).clamp(0, 86400000) / 1000;
     if (unresolved != null) lostAudioSeconds = (lostAudioSeconds ?? 0) + unresolved;
@@ -295,7 +297,7 @@ class DeviceHealthTelemetry {
         expected += (event['audioPacketsExpected'] as num?)?.toInt() ?? 0;
       }
     }
-    final activeSince = (diagnostics['connected_at'] as num?)?.toInt() ?? 0;
+    final activeSince = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
     if (activeSince > 0 && activeSince < exposureEnd) {
       connectedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
       if (retentionHorizon > start) {

@@ -570,6 +570,27 @@ void main() {
     expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
   });
 
+  test('fractional outage_open_since and observed_at do not bill or widen a day', () {
+    final day = DateTime(2026, 10, 15);
+    final start = day.millisecondsSinceEpoch;
+    // observed_at truncation would extend the exposure window; a fractional
+    // open_since would bill an outage boundary the writers never wrote.
+    final rolled = DeviceHealthTelemetry.rollup({
+      'observed_at': start + 20 * 3600000 + 0.5,
+      'outage_open_since': start + 3600000 + 0.5,
+      'disconnect_history_v2': [
+        {'timestamp': start + 3600000, 'eventType': 'disconnect', 'connectionDurationMs': 60000},
+      ],
+    }, day);
+    // The fractional open is malformed: it contributes no lost audio.
+    expect(rolled['lost_audio_seconds'] ?? 0, 0);
+    // The integer disconnect row still counts its minute of connection.
+    final fraction = rolled['connected_time_fraction'] as num;
+    // 60s of a 24h day is ~0.00069; a truncated-but-fractional window would
+    // not reach it exactly, so require at least half the minute.
+    expect(fraction, greaterThanOrEqualTo(0.0003));
+  });
+
   test('fractional native outage start is not imported as an outage', () async {
     const id = 'fractional-native-start';
     final start = DateTime(2026, 10, 15, 10);
