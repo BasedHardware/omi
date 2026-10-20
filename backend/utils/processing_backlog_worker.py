@@ -262,7 +262,15 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
                         status_reader=cap_hold_reservations.batch_status,
                     ),
                 )
-                actual_remaining = max(0.0, actual_remaining - reserved_units)
+                # Re-read after settling: a projection that commits between the first allowance read
+                # and open_units drops its reservation, so only a later read sees its usage. A commit
+                # after open_units is counted twice, which under-admits (safe).
+                current = await run_blocking(db_executor, funded_processing.allowance, uid)
+                if not current.managed:
+                    return await finish()
+                actual_remaining, _ = funded_processing.capacity(current)
+                if actual_remaining is not None:
+                    actual_remaining = max(0.0, actual_remaining - reserved_units)
             if actual_remaining is not None and item['units'] > actual_remaining:
                 if not await save(updates):
                     return False

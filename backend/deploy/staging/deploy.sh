@@ -366,6 +366,6 @@ printf '%s sha=%s tree=%s services=%s worker=%s overrides=%s warm=%s worker_sets
     echo "${WARM[*]}"
   )" "$(
     IFS=,
-    echo "${WORKER_SETS[*]}"
+    echo "${WORKER_SETS[*]%%=*}"
   )" "${WORKER_PROBE:+yes}" >>"$DEPLOY_LOG"
 log "done: staging serves $SHORT (tree ${TREE:0:12})"

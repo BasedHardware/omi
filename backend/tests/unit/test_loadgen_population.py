@@ -7,6 +7,7 @@ import pytest
 
 from testing.loadgen import population as pop
 from testing.loadgen import refresh_profile as rp
+from utils.client_device import resolve_client_device
 from utils.sync.lanes import SyncLane, classify_sync_lane
 
 PROFILE = {
@@ -98,7 +99,10 @@ def test_fresh_uploads_classify_fresh_and_backlogs_backfill(plans):
     send = time.time() - 5  # parse_sync_filename_timestamp rejects future names
     for p in plans:
         names = [f'audio_omi_pcm16_16000_1_fs1600_{int((send + f.capture_offset_s) * 1000)}.bin' for f in p.files]
-        decision = classify_sync_lane(names, client_device_id=f'{p.platform}_{p.device_hash}', now=send)
+        # The device id the server derives from the X-App-Platform / X-Device-Id-Hash headers, not a prebuilt one.
+        device = resolve_client_device(x_app_platform=p.platform, x_device_id_hash=p.device_hash)
+        assert device.client_device_id == f'{p.platform}_{p.device_hash}', p
+        decision = classify_sync_lane(names, client_device_id=device.client_device_id, now=send)
         assert decision.lane == (SyncLane.FRESH if p.lane_hint == 'fresh' else SyncLane.BACKFILL), p
 
 
