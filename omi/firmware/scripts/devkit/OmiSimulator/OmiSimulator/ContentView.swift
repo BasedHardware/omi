@@ -9,18 +9,18 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
-    
+
     @State var audioEngine = AVAudioEngine()
     @ObservedObject var bleManager = BLEManager()
-   
+
     @State var recording = false
     var body: some View {
         // TODO: switches to choose between possible audio formats
         // and publish those on the proper characteristic
-        
+
         VStack {
             Text("Omi simulator")
-            
+
             Button() {
                 if recording {
                     stopRecording()
@@ -37,35 +37,35 @@ struct ContentView: View {
             setupAudio()
         }
     }
-    
+
     func setupAudio() {
         let friendFormat = AVAudioFormat.init(commonFormat: .pcmFormatInt16, sampleRate: 8000.0, channels: 1, interleaved: true)
 
         let input = audioEngine.inputNode
         let bus = 0
         let inputFormat = input.inputFormat(forBus: bus)
-        
+
         let formatConverter =  AVAudioConverter(from:inputFormat, to: friendFormat!)
-        
+
         input.installTap(onBus: bus, bufferSize: 160, format: inputFormat) { (buffer, time) in
             // Note: implementation may choose other size that requested (and in fact it does) -> need to split later before sending over BLE
 
             if !recording {
                 return
             }
-            
+
             if let formatConverter {
                 let ratio = friendFormat!.sampleRate / buffer.format.sampleRate
                 let pcmBuffer = AVAudioPCMBuffer(pcmFormat: friendFormat!, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * ratio))
                 var error: NSError? = nil
-                
+
                 let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
                     outStatus.pointee = AVAudioConverterInputStatus.haveData
                     return buffer
                 }
-                
+
                 formatConverter.convert(to: pcmBuffer!, error: &error, withInputFrom: inputBlock)
-                
+
                 if error != nil {
                     print(error!.localizedDescription)
                 }
@@ -75,16 +75,16 @@ struct ContentView: View {
                 }
             }
         }
-        
+
         //run the engine
         audioEngine.prepare()
         try! audioEngine.start()
     }
-    
+
     func startRecording() {
         recording = true
     }
-    
+
     func stopRecording() {
         recording = false
     }
