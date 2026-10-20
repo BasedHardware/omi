@@ -83,8 +83,7 @@ def configure(monkeypatch, config, uid):
 def clean_env(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
 
 

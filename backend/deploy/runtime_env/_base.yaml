@@ -124,8 +124,6 @@ environment_shared:
         AUDIO_MERGE_WORKER_URL:
           value: ''
           category: rollout
-        AUDIO_TIMELINE_SPANS:
-          category: rollout
         LIVE_SPEAKER_SPAN_RESOLUTION:
           category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
@@ -145,9 +143,6 @@ environment_shared:
           category: rollout
         SONIOX_WIRE_LEDGER:
           category: rollout
-        CAPTURE_EVIDENCE_V1_DARK_WRITE:
-          value: 'true'
-          category: rollout
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
           value: 'true'
           category: rollout
@@ -157,12 +152,6 @@ environment_shared:
         SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
           value: 'true'
           category: ops_kill
-        SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-          value: 'true'
-          category: rollout
-        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-          value: 'true'
-          category: rollout
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
@@ -627,8 +616,6 @@ environment_shared:
         AUDIO_MERGE_WORKER_URL:
           value: ''
           category: rollout
-        AUDIO_TIMELINE_SPANS:
-          category: rollout
         LIVE_SPEAKER_SPAN_RESOLUTION:
           category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
@@ -648,18 +635,12 @@ environment_shared:
           category: rollout
         SONIOX_WIRE_LEDGER:
           category: rollout
-        CAPTURE_EVIDENCE_V1_DARK_WRITE:
-          value: 'true'
-          category: rollout
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
-        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-          value: 'true'
-          category: rollout
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
@@ -1053,9 +1034,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
@@ -1079,9 +1057,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1094,13 +1069,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           TRANSLATION_DEMAND_SHADOW_ENABLED:
@@ -1455,9 +1424,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
@@ -1481,9 +1447,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1496,13 +1459,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:
@@ -1821,9 +1778,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
@@ -1847,9 +1801,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1862,13 +1813,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:
@@ -2181,9 +2126,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
           LIVE_SPEAKER_SPAN_RESOLUTION:
             category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
@@ -2207,9 +2149,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2222,13 +2161,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:

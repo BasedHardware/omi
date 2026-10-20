@@ -213,7 +213,6 @@ def test_bounded_receipt_overflow_and_changed_assignment_are_explicit():
 async def test_listen_receiver_pairs_control_with_actual_binary_frame(monkeypatch):
     from tests.unit.test_listen_audio_timeline_stack import _Stack, _run_receiver_frames, _disconnect_frame
 
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
     stack = _Stack(monkeypatch, v2=False, conversation_id='capture-test')
     frame = b'\x01\x00' * 160
     control = {

@@ -73,7 +73,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
           LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -82,7 +81,6 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
@@ -90,8 +88,6 @@ environments:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -388,7 +384,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
           LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -397,12 +392,10 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
@@ -833,7 +826,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -842,7 +834,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -851,9 +842,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -1101,7 +1090,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -1110,7 +1098,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1119,9 +1106,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1382,7 +1367,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -1391,7 +1375,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1400,9 +1383,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1650,7 +1631,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -1659,7 +1639,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1668,9 +1647,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2206,7 +2183,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
           LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -2215,7 +2191,6 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
@@ -2223,8 +2198,6 @@ environments:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -2600,7 +2573,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
           LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -2609,12 +2581,10 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
@@ -3017,7 +2987,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -3026,7 +2995,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3035,9 +3003,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
@@ -3374,7 +3340,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -3383,7 +3348,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3392,9 +3356,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -3737,7 +3699,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -3746,7 +3707,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3755,9 +3715,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -4082,7 +4040,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
@@ -4091,7 +4048,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -4100,9 +4056,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}

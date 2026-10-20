@@ -109,7 +109,16 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
 
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
-    assert captured['conversation'].external_data == {'conversation_role': 'meeting'}
+    assert captured['conversation'].external_data == {
+        'conversation_role': 'meeting',
+        'capture_evidence': {
+            'version': 1,
+            'capability': 'unknown',
+            'coverage': 'unknown',
+            'origin': 'from_segments',
+            'reason': 'missing',
+        },
+    }
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
 
@@ -746,7 +755,7 @@ def test_failed_creation_does_not_record_product_metric(monkeypatch):
     record.assert_not_called()
 
 
-def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_identical(monkeypatch):
+def test_s1_lineage_piggybacks_on_existing_from_segments_claim(monkeypatch):
     claim = MagicMock(return_value=True)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
@@ -766,14 +775,10 @@ def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_i
         'units': [{'id': '42', 'start_ms': 0, 'end_ms': 1500}],
     }
     request = _request(client_session_id='local-session-1', capture_evidence=lineage)
-    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
-    developer._create_conversation_from_segments('uid1', request)
-    assert 'capture_evidence' not in claim.call_args.args[1]['external_data']
 
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', '1')
     developer._create_conversation_from_segments('uid1', request)
     assert claim.call_args.args[1]['external_data']['capture_evidence'] == lineage
-    assert claim.call_count == 2  # no new Firestore claim/write operation
+    assert claim.call_count == 1  # no new Firestore claim/write operation
 
     mismatched = _request(client_session_id='local-session-1', capture_evidence={**lineage, 'capture_root': 'foreign'})
     developer._create_conversation_from_segments('uid1', mismatched)

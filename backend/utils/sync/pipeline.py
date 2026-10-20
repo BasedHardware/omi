@@ -86,7 +86,6 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
@@ -2492,7 +2491,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
             t0 = time.monotonic()
             try:
-                if capture_evidence_dark_write_enabled() and capture_evidence_claims:
+                if capture_evidence_claims:
                     wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths, decoded_frames)
                 else:
                     wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
@@ -2589,7 +2588,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             except asyncio.CancelledError:
                 preserve_retry_material = True
                 raise
-            if use_lineage and sync_recording_lineage.sync_lineage_s1_required():
+            if use_lineage:
                 if len(source_frame_maps) != len(wav_paths):
                     sync_recording_lineage.emit_s1_refusal('count_mismatch')
                     use_lineage = False
@@ -2702,8 +2701,6 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                                 else unknown_envelope('missing_source_position', origin='sync_pre_vad')
                             )
                         }
-                        if capture_evidence_dark_write_enabled()
-                        else {}
                     ),
                 },
             )

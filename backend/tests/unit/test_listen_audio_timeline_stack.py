@@ -364,7 +364,7 @@ class _Stack:
         self.v2 = v2
         self.spans = spans
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
-        monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true' if spans else 'false')
+
         # Control the receiver's arrival observations (module-scoped shim).
         self._real_time_module = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])

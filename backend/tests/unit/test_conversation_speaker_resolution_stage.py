@@ -225,7 +225,7 @@ def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
 
 
 def _span_flags(monkeypatch):
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
@@ -902,7 +902,7 @@ def test_shadow_placement_metrics_count_per_segment_and_reason_metrics_once_per_
 def test_off_shadow_metrics_measure_capture_readiness_without_changing_behavior(env, monkeypatch):
     """Consumer OFF: advisory locate still counts capture_span per embeddable
     segment while legacy resolution keeps sync-only behavior."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     _, diarizer = env
@@ -921,7 +921,7 @@ def test_off_shadow_metrics_measure_capture_readiness_without_changing_behavior(
 def test_off_shadow_records_sync_reason_without_span_manifest(env, monkeypatch):
     """Consumer OFF shadow queries the index even when no manifest exists:
     sync-scoped segments still measure sync, not a skipped measurement."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
     _, diarizer = env
     plan = [0, 1] * 4
@@ -939,7 +939,7 @@ def test_off_shadow_records_sync_reason_without_span_manifest(env, monkeypatch):
 def test_off_shadow_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
     """Consumer OFF shadow with an unvalidated (absent) manifest still
     measures each live segment's refusal instead of skipping it."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
     _, diarizer = env
     plan = [0, 1] * 4
@@ -957,7 +957,7 @@ def test_off_shadow_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
 def test_off_advisory_zero_budget_never_locates_even_with_empty_manifest(env, monkeypatch):
     """An already-spent shadow budget skips dumps, preparation and lookups
     entirely — an empty manifest must not open a free pass."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
+
     monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
     _, diarizer = env
     plan = [0, 1] * 4

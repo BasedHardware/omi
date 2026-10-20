@@ -20,10 +20,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
 from config.translation import resolve_ondemand_config
-from config.capture_evidence import (
-    capture_evidence_dark_write_enabled,
-    listen_committed_capture_coverage_enabled,
-)
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
 from routers.listen.demand_routing import attach_live_demand
@@ -362,17 +358,14 @@ class ListenReceiver(ReplayFilterMixin):
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = host.state.capture_timeline_v2 = audio_flags.audio_timeline_v2_enabled()
-            self.capture_timeline_spans = host.state.capture_timeline_spans = audio_flags.audio_timeline_spans_enabled()
+            self.capture_timeline_spans = host.state.capture_timeline_spans = True
             host.state.capture_timeline = self.capture_timeline
             # Conversation ownership of recent capture ranges. Entries are
             # *runs* (contiguous samples under one conversation), coalesced by
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
-            if capture_evidence_dark_write_enabled():
-                host.state.source_position_map = SourcePositionMap(
-                    committed=listen_committed_capture_coverage_enabled()
-                )
+            host.state.source_position_map = SourcePositionMap(committed=True)
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -490,7 +483,7 @@ class ListenReceiver(ReplayFilterMixin):
         is retained as explicitly unplaced under its provider SEND owner.
         """
         source_map = getattr(self.host.state, 'source_position_map', None)
-        if source_map is not None and capture_evidence_dark_write_enabled():
+        if source_map is not None:
             source_map.remember_transcripts(segments)
         _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
@@ -561,7 +554,7 @@ class ListenReceiver(ReplayFilterMixin):
         LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
         source_map = getattr(self.host.state, 'source_position_map', None)
-        if source_map is not None and capture_evidence_dark_write_enabled():
+        if source_map is not None:
             source_map.remember_transcripts(segments)
         _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
@@ -2301,7 +2294,7 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.spawn(
                             self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
                         )
-        elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
+        elif kind == 'capture_evidence_frame':
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
             self._pending_source_frame = payload
