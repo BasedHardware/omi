@@ -47,12 +47,20 @@ from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.local_vad import offline_pcm_speech_segments
 from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.sync.speaker_identity import build_person_embeddings_cache, identify_speakers_for_segments
 
 logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='transcription-shadow')
 _slots = threading.BoundedSemaphore(2)
+
+
+def _shadow_parakeet(speech_pcm: bytes) -> Any:
+    with parakeet_caller('shadow'):
+        return parakeet_prerecorded_from_bytes(speech_pcm, diarize=True, attempts=1, encoding='linear16')
+
+
 _OUTCOMES = {'ok', 'failed', 'timeout', 'partial_audio', 'no_audio', 'skipped_budget'}
 _PCM_BYTES_PER_SECOND = 32000
 _SILENCE_FRAME_BYTES = 3200  # 100 ms of 16 kHz mono PCM16
@@ -317,9 +325,7 @@ def _make_pass(
             part_start = chunk_start + offset / 32000
             words = transcribe_with_speech_compaction(
                 part,
-                lambda speech_pcm: parakeet_prerecorded_from_bytes(
-                    speech_pcm, diarize=True, attempts=1, encoding='linear16'
-                ),
+                _shadow_parakeet,
                 offline_pcm_speech_segments,
             )
             if isinstance(words, tuple):
