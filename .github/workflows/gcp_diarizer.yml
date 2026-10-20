@@ -38,6 +38,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: ${{ github.event.inputs.service || 'diarizer' }}
   REGION: us-central1
 
@@ -49,6 +53,9 @@ jobs:
       id-token: 'write'
 
     runs-on: ubuntu-latest
+    # Healthy runs take ~14 min (build ~12, verify ~4). The cap leaves room for the
+    # 45-minute verify backstop and still ends a wedged job with a verdict.
+    timeout-minutes: 75
     steps:
       - name: Validate Environment Input
         run: |
@@ -192,21 +199,36 @@ jobs:
               -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
           fi
 
+      # Every call here is bounded so the step always ends with a verdict and the
+      # always() summary/notify steps run. batch-pipeline-worker is Recreate with a
+      # 1500 s drain, so its wait covers drain plus GPU startup. A lost runner (run
+      # 39456573983, 2026-10-20) still ends with no conclusion: re-run the job.
       - name: Verify rollout
+        timeout-minutes: 45
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
+          EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest }}
         run: |
           rollout_timeout=600s
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
-            rollout_timeout=1800s
+            rollout_timeout=2400s
           fi
           if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
-            python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
+            timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
             exit 1
           fi
-          python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
+          if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+            deployed_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$TARGET_RELEASE" --request-timeout=30s \
+              -o jsonpath='{.spec.template.spec.containers[0].image}')"
+            if [[ "$deployed_image" != *"@$EXPECTED_DIGEST" ]]; then
+              echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the built digest $EXPECTED_DIGEST"
+              exit 1
+            fi
+            echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"
+          fi
+          timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
