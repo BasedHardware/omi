@@ -2055,7 +2055,16 @@ def _apply_late_from_segments_context(
     previous_folder = existing_conversation.get('folder_id')
     folder_id = getattr(request, 'folder_id', None)
     if folder_id is not None and folder_id != previous_folder:
-        updates['folder_id'] = folder_id
+        # The first attempt rejects an unknown folder with 422; a folder deleted
+        # between attempts must not come back as a dangling reference here.
+        if folders_db.get_folder(uid, folder_id):
+            updates['folder_id'] = folder_id
+        else:
+            logger.warning(
+                'from-segments retry names a folder that no longer exists uid=%s folder_id=%s; keeping the stored folder',
+                uid,
+                folder_id,
+            )
 
     calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
     external_data = dict(existing_conversation.get('external_data') or {})
