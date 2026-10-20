@@ -182,7 +182,6 @@ class RecordingTransferCoordinator {
   bool _periodicDrainInFlight = false;
   int _passGeneration = 0;
   Future<void>? _abandonedPass;
-  DateTime? _abandonedAt;
 
   /// Retire an expired OS window before any further discovery/upload stage.
   /// Returns true only while that window's own drain is running, the one
@@ -443,20 +442,13 @@ class RecordingTransferCoordinator {
       if (finished != null) await finished();
     });
     _abandonedPass = tracked;
-    _abandonedAt = _clock();
     tracked.ignore();
   }
 
-  /// An abandoned pass that has not exited yet blocks new discovery and drain,
-  /// so two drains never run at once. A body that outlives a second time limit
-  /// is presumed dead and stops blocking.
-  bool get _abandonedPassRunning {
-    final at = _abandonedAt;
-    if (_abandonedPass == null || at == null) return false;
-    if (_clock().difference(at) <= passTimeLimit) return true;
-    _abandonedPass = null;
-    return false;
-  }
+  /// An abandoned pass that has not exited yet blocks new discovery and drain
+  /// until it really exits, so two `syncAll`s never run at once. Its sync was
+  /// cancelled on timeout and every BLE/HTTP await below it is bounded.
+  bool get _abandonedPassRunning => _abandonedPass != null;
 
   Future<void> _runPassBody(WakeTrigger trigger, int generation) async {
     final periodicGeneration = _periodicGeneration;
@@ -502,12 +494,15 @@ class RecordingTransferCoordinator {
       }
       if (expired()) return;
       await _refreshPending();
+      if (expired()) return;
 
       // Partial upload success still leaves `uploaded` WALs that need the
       // reconciler before any failure/contention retry path runs.
       if (result.needsReconciliation) {
         reconcileFailed = !await _tryReconcile() || reconcileFailed;
+        if (expired()) return;
         await _refreshPending();
+        if (expired()) return;
       }
 
       if (result.failed) {
@@ -525,7 +520,7 @@ class RecordingTransferCoordinator {
       _failureStreak = 0;
     } catch (error, stackTrace) {
       Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
-      if (generation != _passGeneration) return;
+      if (expired()) return;
       _scheduleRetry('pass threw while recovering recording transfers');
     }
   }

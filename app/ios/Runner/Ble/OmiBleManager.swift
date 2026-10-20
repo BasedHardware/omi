@@ -62,6 +62,11 @@ final class OmiBleManager: NSObject {
     private var writeCompletions: [String: [PendingGattOperation<Void>]] = [:]
     private var nextGattOperationId: UInt64 = 0
     static let gattOperationTimeout: TimeInterval = 10
+    /// After a timeout CoreBluetooth still owes that op's reply. Until it arrives (or this
+    /// grace passes) the next op is not issued, and the late reply is not handed to it.
+    static let gattLateReplyGrace: TimeInterval = 5
+    private var lateReadReply: Set<String> = []
+    private var lateWriteReply: Set<String> = []
 
     private struct NotificationRequest {
         let characteristic: CBCharacteristic
@@ -574,7 +579,7 @@ final class OmiBleManager: NSObject {
 
         let key = "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
         nextGattOperationId &+= 1
-        let wasIdle = readCompletions[key, default: []].isEmpty
+        let wasIdle = readCompletions[key, default: []].isEmpty && !lateReadReply.contains(key)
         readCompletions[key, default: []].append(PendingGattOperation(
             id: nextGattOperationId,
             issue: { [weak self] in self?.peripherals[peripheralUuid]?.readValue(for: characteristic) },
@@ -593,7 +598,11 @@ final class OmiBleManager: NSObject {
             self.readCompletions[key] = queue.isEmpty ? nil : queue
             NSLog("[OmiBle] ble_op_timeout read \(key)")
             pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic read timed out", details: nil)))
-            self.issueNextRead(key)
+            self.lateReadReply.insert(key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattLateReplyGrace) { [weak self] in
+                guard let self, self.lateReadReply.remove(key) != nil else { return }
+                self.issueNextRead(key)
+            }
         }
         head.issue()
     }
@@ -607,7 +616,11 @@ final class OmiBleManager: NSObject {
             self.writeCompletions[key] = queue.isEmpty ? nil : queue
             NSLog("[OmiBle] ble_op_timeout write \(key)")
             pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic write timed out", details: nil)))
-            self.issueNextWrite(key)
+            self.lateWriteReply.insert(key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattLateReplyGrace) { [weak self] in
+                guard let self, self.lateWriteReply.remove(key) != nil else { return }
+                self.issueNextWrite(key)
+            }
         }
         head.issue()
     }
@@ -629,7 +642,7 @@ final class OmiBleManager: NSObject {
 
         if writeType == .withResponse {
             nextGattOperationId &+= 1
-            let wasIdle = writeCompletions[key, default: []].isEmpty
+            let wasIdle = writeCompletions[key, default: []].isEmpty && !lateWriteReply.contains(key)
             let payload = data.data
             writeCompletions[key, default: []].append(PendingGattOperation(
                 id: nextGattOperationId,
@@ -1444,6 +1457,8 @@ final class OmiBleManager: NSObject {
             let pending = readCompletions.removeValue(forKey: key) ?? []
             pending.forEach { $0.completion(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil))) }
         }
+        lateReadReply = lateReadReply.filter { !$0.hasPrefix(peripheralUuid.lowercased()) }
+        lateWriteReply = lateWriteReply.filter { !$0.hasPrefix(peripheralUuid.lowercased()) }
         let writeKeys = writeCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
         for key in writeKeys {
             let pending = writeCompletions.removeValue(forKey: key) ?? []
@@ -1770,8 +1785,16 @@ extension OmiBleManager: CBPeripheralDelegate {
         let charUuid = fullUuidString(characteristic.uuid)
         let key = "\(uuid):\(serviceUuid):\(charUuid)".lowercased()
 
+        // A timed-out read's late reply belongs to no waiter: issue the next op instead.
+        // On a notifying characteristic it is indistinguishable from a notification.
+        let lateReply = lateReadReply.remove(key) != nil
+        if lateReply {
+            DispatchQueue.main.async { [weak self] in self?.issueNextRead(key) }
+            if !characteristic.isNotifying { return }
+        }
+
         // Handle pending read completion
-        if var queue = readCompletions[key], !queue.isEmpty {
+        if !lateReply, var queue = readCompletions[key], !queue.isEmpty {
             let completion = queue.removeFirst().completion
             readCompletions[key] = queue.isEmpty ? nil : queue
             defer { issueNextRead(key) }
@@ -1857,7 +1880,9 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         let key = "\(uuid):\(fullUuidString(service.uuid)):\(fullUuidString(characteristic.uuid))".lowercased()
 
-        if var queue = writeCompletions[key], !queue.isEmpty {
+        if lateWriteReply.remove(key) != nil {
+            DispatchQueue.main.async { [weak self] in self?.issueNextWrite(key) }
+        } else if var queue = writeCompletions[key], !queue.isEmpty {
             let completion = queue.removeFirst().completion
             writeCompletions[key] = queue.isEmpty ? nil : queue
             defer { issueNextWrite(key) }

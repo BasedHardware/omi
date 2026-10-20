@@ -199,6 +199,9 @@ void main() {
       expect(discoveries, 1, reason: 'no second discovery runs beside the still-running body');
       expect(drains, 0);
       expect(holds - releases, 1, reason: 'the keep-alive is held while the abandoned body runs');
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(discoveries, 1, reason: 'still blocked: the gate holds until the body really exits');
+      expect(drains, 0);
 
       hang.complete();
       await _settle();

@@ -235,6 +235,25 @@ void main() {
       pass.coordinator.dispose();
     });
 
+    test('orphan packets never move the WAL off another source\'s codec', () async {
+      await disconnect();
+      await world.startLiveCapture();
+      await world.stopLiveCapture();
+      expect(world.wal.syncs.phone.currentCodec, isNot(BleAudioCodec.opus), reason: 'the phone was the last source');
+      final pass = await holdFencedPass();
+      await connect();
+      final before = await persistedFrames();
+      for (var i = 0; i < 20; i++) {
+        world.deviceConnection!.emitAudio(value: i);
+      }
+      await world.settle();
+      expect(await persistedFrames(), before);
+      expect(world.wal.syncs.phone.currentCodec, isNot(BleAudioCodec.opus));
+      pass.release.complete();
+      await pass.wake;
+      pass.coordinator.dispose();
+    });
+
     test('a muted pendant\'s packets stay unrecorded', () async {
       await world.controller.pauseCapture();
       await world.settle();

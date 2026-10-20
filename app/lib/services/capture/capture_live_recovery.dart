@@ -15,9 +15,7 @@ class _LiveRecoveryState {
   final List<DateTime> kicks = [];
 
   BleDeviceSource? orphanSource;
-  bool orphanWalPrimed = false;
-  bool orphanPriming = false;
-  final List<List<int>> orphanBacklog = [];
+  int orphanDropped = 0;
   DateTime? lastOrphanAt;
   DateTime? lastOrphanLogAt;
   DateTime? lastOrphanRestartAt;
@@ -53,7 +51,6 @@ extension _CaptureLiveRecovery on CaptureController {
   static const _kickWindow = Duration(minutes: 5);
   static const _orphanRestartInterval = Duration(seconds: 30);
   static const _orphanEpisodeGap = Duration(seconds: 5);
-  static const _orphanBacklogLimit = 3000; // ~30 s of pendant packets
   static const _codecReadTimeout = Duration(seconds: 35);
 
   /// Close codes the server sends for a session that cannot resume by itself.
@@ -142,28 +139,30 @@ extension _CaptureLiveRecovery on CaptureController {
   /// Pendant audio the transport received while capture held no listener.
   /// Persist it to the safety WAL (later uploaded like any recording), then
   /// try to bring live capture back.
+  ///
+  /// The write is synchronous and never moves a WAL session boundary: frames
+  /// are stored only while the WAL already tracks this pendant's codec (the
+  /// pendant was the last source). Otherwise they are counted and dropped, so
+  /// orphan audio can never race a live start or retag a phone session.
   void _onOrphanAudio(String deviceId, List<int> packet) {
     if (!_orphanAudioAdmitted(deviceId) || packet.length <= BleDeviceSource.headerSize) return;
     final state = _liveRecovery;
     final now = _now();
     final last = state.lastOrphanAt;
     state.lastOrphanAt = now;
-    if (last == null || now.difference(last) > _orphanEpisodeGap) {
-      state.orphanWalPrimed = false;
-      state.orphanSource = null;
-    }
+    if (last == null || now.difference(last) > _orphanEpisodeGap) state.orphanSource = null;
     state.orphanPackets++;
     final codec = state.codecByDevice[deviceId];
-    final persistable = codec != null && codec.isOpusSupported();
+    final phone = _wal.getSyncs().phone;
+    final persistable = codec != null && codec.isOpusSupported() && phone.currentCodec == codec;
     if (persistable) {
-      // While priming is stuck, keep the newest audio: drop the oldest packet.
-      if (state.orphanBacklog.length >= _orphanBacklogLimit) state.orphanBacklog.removeAt(0);
-      state.orphanBacklog.add(List<int>.from(packet));
-      if (state.orphanWalPrimed) {
-        _flushOrphanBacklog(deviceId, codec);
-      } else if (!state.orphanPriming) {
-        unawaited(_primeOrphanWal(deviceId, codec));
+      final source = state.orphanSource ??=
+          BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: _activeSource?.deviceModel ?? 'Omi');
+      for (final frame in source.processBytes(List<int>.from(packet))) {
+        phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
       }
+    } else {
+      state.orphanDropped++;
     }
     final lastLog = state.lastOrphanLogAt;
     if (lastLog == null || now.difference(lastLog) > const Duration(minutes: 10)) {
@@ -175,64 +174,10 @@ extension _CaptureLiveRecovery on CaptureController {
         'recording_state': recordingState.name,
         'persisted': persistable,
         'packets': state.orphanPackets,
+        'dropped': state.orphanDropped,
       }));
     }
     _restartFromOrphanAudio(now);
-  }
-
-  /// The WAL tracks one codec; a session boundary first, exactly as a fresh
-  /// pendant stream does, so orphan frames never inherit another source's codec.
-  ///
-  /// The boundary is only taken while the transport still has no listener and
-  /// no phone/call owns capture, rechecked after the await; when the WAL already
-  /// tracks this codec (the pendant was the last source) no boundary is needed.
-  Future<void> _primeOrphanWal(String deviceId, BleAudioCodec codec) async {
-    final state = _liveRecovery;
-    state.orphanPriming = true;
-    try {
-      final phone = _wal.getSyncs().phone;
-      bool orphaned() => _orphanAudioAdmitted(deviceId) && _bleBytesStream == null;
-      if (!orphaned()) {
-        state.orphanBacklog.clear();
-        return;
-      }
-      if (phone.currentCodec != codec) {
-        await phone.onAudioCodecChanged(codec);
-        if (!orphaned()) {
-          // A live start or phone session won the race; it owns the WAL now.
-          _flushOrphanBacklog(deviceId, codec);
-          return;
-        }
-      }
-      final model = _activeSource?.deviceModel ?? 'Omi';
-      phone.setDeviceInfo(deviceId, model);
-      state.orphanSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: model);
-      state.orphanWalPrimed = true;
-      _flushOrphanBacklog(deviceId, codec);
-    } catch (error, stack) {
-      Logger.error('[Capture] orphan audio WAL setup failed: $error\n$stack');
-    } finally {
-      state.orphanPriming = false;
-    }
-  }
-
-  /// Writes the backlog only while the WAL still tracks this pendant's codec
-  /// and no phone/call owns capture; otherwise the packets cannot be stored
-  /// without corrupting another session and are dropped.
-  void _flushOrphanBacklog(String deviceId, BleAudioCodec codec) {
-    final state = _liveRecovery;
-    final phone = _wal.getSyncs().phone;
-    if (!_orphanAudioAdmitted(deviceId) || phone.currentCodec != codec) {
-      state.orphanBacklog.clear();
-      return;
-    }
-    final source = state.orphanSource ??= BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: 'Omi');
-    for (final packet in state.orphanBacklog) {
-      for (final frame in source.processBytes(packet)) {
-        phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
-      }
-    }
-    state.orphanBacklog.clear();
   }
 
   /// A pendant that streams to nobody: re-install the stream if capture still
