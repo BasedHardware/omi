@@ -541,7 +541,7 @@
       "function": "initialize_live_stt_exhausted_children",
       "label": "reason",
       "shape": "name",
-      "count": 3,
+      "count": 4,
       "why": "pre-existing; unreviewed"
     },
     {
@@ -1073,6 +1073,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/stt/live_recovery.py",
+      "function": "release_session_local_exclusions",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "main #22734/#22647 via sync 10 (2026-10-20); provider label from the live provider registry, owner lane 14 to bound"
+    },
+    {
       "path": "utils/stt/live_router.py",
       "function": "propose",
       "label": "reason",
@@ -1087,6 +1095,14 @@
       "shape": "name",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_session.py",
+      "function": "LiveLegSocket.window_replay_settle_through",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main #22734/#22647 via sync 10 (2026-10-20); provider label from the live provider registry, owner lane 14 to bound"
     },
     {
       "path": "utils/stt/no_text_rescue.py",

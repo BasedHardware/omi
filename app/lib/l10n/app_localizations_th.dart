@@ -13052,6 +13052,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewProposalSuggested => 'ที่แนะนำ';
 
   @override
+  String get reviewQuestionOutOfDate => 'คำถามนี้ไม่เป็นปัจจุบันแล้ว จึงไม่มีการเปลี่ยนแปลงใดๆ';
+
+  @override
   String get reviewProposalConflict => 'รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ';
 
   @override

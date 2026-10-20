@@ -13164,6 +13164,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reviewProposalSuggested => 'Предложено';
 
   @override
+  String get reviewQuestionOutOfDate => 'Этот вопрос устарел, поэтому ничего не изменилось.';
+
+  @override
   String get reviewProposalConflict => 'Это изменилось после предложения Dream, поэтому ничего не применено.';
 
   @override

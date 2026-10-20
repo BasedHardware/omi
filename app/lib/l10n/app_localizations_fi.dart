@@ -13123,6 +13123,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewProposalSuggested => 'Ehdotettu';
 
   @override
+  String get reviewQuestionOutOfDate => 'Tämä kysymys on vanhentunut, joten mitään ei muutettu.';
+
+  @override
   String get reviewProposalConflict => 'Tämä on muuttunut Dreamin ehdotuksen jälkeen, joten mitään ei otettu käyttöön.';
 
   @override

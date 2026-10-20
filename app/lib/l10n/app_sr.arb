@@ -11446,6 +11446,7 @@
     "reviewProposalGeneric": "Primeniti ovu predloženu ispravku?",
     "reviewProposalApply": "Primeni",
     "reviewProposalSuggested": "Predloženo",
+    "reviewQuestionOutOfDate": "Ово питање је застарело, па ништа није промењено.",
     "reviewProposalConflict": "Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.",
     "itemLinkListTitle": "{count, plural, =0{Нема ставки} =1{1 ставка} other{{count} ставки}}",
     "paywallRecommended": "Препоручено",

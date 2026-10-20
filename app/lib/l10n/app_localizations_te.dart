@@ -13170,6 +13170,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewProposalSuggested => 'సూచించినది';
 
   @override
+  String get reviewQuestionOutOfDate => 'ఈ ప్రశ్న పాతది అయిపోయింది, కాబట్టి ఏమీ మారలేదు.';
+
+  @override
   String get reviewProposalConflict => 'Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.';
 
   @override
