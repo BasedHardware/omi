@@ -17,8 +17,10 @@ calls and drives the real process_pending. No patching and no sys.modules mutati
 """
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -220,6 +222,8 @@ _SIZE_LIMIT_MESSAGE = (
     "written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
 )
 
+_EXPIRED_ERROR_TEXT = 'The referenced transaction has expired or is no longer valid.'
+
 
 def _size_limit_error(cid: str, *, uid: str = 'uid-1', collection: str = 'conversations') -> InvalidArgument:
     message = _SIZE_LIMIT_MESSAGE.format(uid=uid, cid=cid)
@@ -246,6 +250,16 @@ class _RaisingController(_RecordingController):
         self.completed_events.append(conversation_id)
 
 
+class _RaisingScheduleController(_RaisingController):
+    """schedule_finalization (the `processing` stage's seam) raises instead."""
+
+    async def schedule_finalization(self, conversation_id: str) -> bool:
+        self.scheduled.append(conversation_id)
+        if conversation_id in self.errors:
+            raise self.errors[conversation_id]
+        return True
+
+
 class _CloseHost(_Host):
     """Host whose persistence also answers the lifecycle oversize close."""
 
@@ -264,7 +278,13 @@ class _CloseHost(_Host):
 
 
 def _messages(caplog) -> list[str]:
-    return [record.getMessage() for record in caplog.records if record.name == 'routers.listen.conversations']
+    # The boundary logs at ERROR and (for deferred transients) WARNING only;
+    # filtering by level keeps DEBUG-level runs free of unrelated INFO noise.
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == 'routers.listen.conversations' and record.levelno >= logging.WARNING
+    ]
 
 
 async def test_stale_row_at_the_size_ceiling_is_closed_instead_of_retried(caplog):
@@ -351,15 +371,24 @@ async def test_transient_failures_are_classified_and_left_for_the_next_sweep(cap
     host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}])
     controller = _RaisingController(host, errors={'conv-a': error})
 
-    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+    with caplog.at_level('DEBUG', logger='routers.listen.conversations'):
         await controller.process_pending(None)
 
     assert host.close_calls == []
     assert controller.completed_events == []
-    assert _messages(caplog) == [
-        f'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
-        f'type={type(error).__name__} reason={reason} document=none'
-    ]
+    if reason == 'expired_transaction':
+        # A rejected attempt that wrote nothing and whose id is already retired
+        # is deferred at WARNING: the row's retention is the retry, and the
+        # ERROR variant is the one that reached prod (2026-10-14).
+        assert _messages(caplog) == [
+            f'Listen pending finalization deferred stage=stale_in_progress conversation=conv-a '
+            f'type={type(error).__name__} reason={reason} document=none'
+        ]
+    else:
+        assert _messages(caplog) == [
+            f'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+            f'type={type(error).__name__} reason={reason} document=none'
+        ]
 
 
 async def test_failing_close_does_not_crash_the_sweep(caplog):
@@ -393,6 +422,461 @@ async def test_cancellation_still_propagates_out_of_the_sweep():
     with pytest.raises(asyncio.CancelledError):
         await controller.process_pending('conv-timed-out')
     assert controller.scheduled == []
+
+
+# ── A transient rejection must not kill the supervised lifecycle task ───────
+#
+# Failure-Class: FC-listen-finalizer-transient-exhaustion-crashes-supervised-task
+# (new class declared in this diff; the nearest existing classes own the
+# adjacent halves — FC-retired-transaction-treated-as-fatal owns the
+# transaction-id restart at the storage boundary, and
+# FC-recording-session-open-aborted-as-failed-write owns the recording-session
+# writers, whose missed fifth writer — the empty-generation delete — this diff
+# also moves onto the shared contention budget. Neither owns the isolation
+# boundary itself: when the bounded budget exhausts, the raise escapes into
+# the listen session's supervised `lifecycle` task through
+# `create_new_in_progress_conversation(rollover=True)` one line after the
+# finalize and tears the socket down — `BG task ws:...:lifecycle crashed:
+# InvalidArgument('The referenced transaction has expired...')`, ×32/30m —
+# and the rollover stage logged the same rejection at ERROR loudness
+# (`Listen pending finalization failed stage=lifecycle_rollover`, ×135/30m;
+# prod backend-listen 2026-10-14). The boundary now defers an expired
+# transaction at WARNING with the row retained: the rejected attempt wrote
+# nothing, and the next sweep/poll replays it on a brand-new transaction for
+# free. Cancellation is re-raised, not swallowed, so drain still owns
+# teardown.)
+#
+# Prod (backend-listen 2026-10-14, x32/30m): the rollover finalize's expired-id
+# rejection escaped `_finalize_isolated` into `create_new_in_progress_conversation(rollover=True)`
+# — one line later in the same `lifecycle_loop` iteration — so the supervised
+# `lifecycle` task crashed and the socket was torn down for a failure the next
+# 5-second poll replays for free. The x135/30m
+# `pending finalization failed stage=lifecycle_rollover` ERROR was the same
+# rejection at ERROR loudness instead of a crash; expired transactions are now
+# a deferred WARNING across every stage.
+
+
+class _TransientHost(_CloseHost):
+    """Host whose every persistence call raises the expired-id rejection."""
+
+    async def _call(self, fn, *args, **kwargs):
+        raise InvalidArgument(_EXPIRED_ERROR_TEXT)
+
+
+class _LifecycleHost(_CloseHost):
+    """Host for the real lifecycle_loop: one idle in_progress row, then shutdown."""
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.state.active = True
+        self.state.current_conversation_id = 'conv-live'
+        self.conversation_creation_timeout = 120.0
+        self.transcripts = SimpleNamespace(flush_speaker_assignments=AsyncMock())
+        self.rows = {
+            'conv-live': {
+                'id': 'conv-live',
+                'status': 'in_progress',
+                'finished_at': datetime.now(timezone.utc) - timedelta(hours=2),
+            }
+        }
+        self._wait_calls = 0
+
+    async def wait(self, seconds: float) -> bool:
+        self._wait_calls += 1
+        # First iteration: poll runs. Second: end the loop like a shutdown wake.
+        return self._wait_calls > 1
+
+    async def _call(self, fn, *args, **kwargs):
+        if fn.__name__ == 'get_conversation':
+            return self.rows.get(args[1])
+        return await super()._call(fn, *args, **kwargs)
+
+
+class _LifecycleController(_RaisingController):
+    """Drives the real lifecycle_loop with a failing rollover finalize."""
+
+    def __init__(self, host: _LifecycleHost, *, errors: dict[str, BaseException]) -> None:
+        super().__init__(host, errors=errors)
+        self.created_rollover = False
+
+    async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
+        if rollover:
+            self.created_rollover = True
+        self.host.state.active = False
+
+    async def flush_speaker_assignments(self, conversation_id) -> None:
+        return None
+
+    async def _continuity_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        # No calendar identity on these rows; skip the continuity transaction.
+        return row
+
+
+async def test_expired_transaction_does_not_crash_the_lifecycle_loop():
+    """A transient rejection is retained by the rollover stage; the loop survives
+    and proceeds to the new conversation instead of crashing the supervised task."""
+    host = _LifecycleHost()
+    controller = _LifecycleController(host, errors={'conv-live': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    await controller.lifecycle_loop()
+
+    assert controller.created_rollover is True
+    assert controller.processed == ['conv-live']
+
+
+async def test_size_limit_in_the_rollover_stage_still_routes_to_the_close_and_creates():
+    """The permanent arm is unchanged by the transient arm: close, then rollover."""
+    host = _LifecycleHost()
+    controller = _LifecycleController(host, errors={'conv-live': _size_limit_error('conv-live')})
+
+    await controller.lifecycle_loop()
+
+    assert [args for args, _ in host.close_calls] == [('uid-1', 'conv-live')]
+    assert controller.completed_events == ['conv-live']
+    assert controller.created_rollover is True
+
+
+async def test_error_escaping_the_rollover_stage_still_reaches_create_new():
+    """A non-expired, non-size failure keeps its ERROR but never kills the loop:
+    the pre-existing guarantee the crash fix must not quietly narrow."""
+    host = _LifecycleHost()
+    controller = _LifecycleController(host, errors={'conv-live': ValueError('something else')})
+
+    await controller.lifecycle_loop()
+
+    assert controller.created_rollover is True
+    assert controller.processed == ['conv-live']
+
+
+async def test_missing_conversation_row_rolls_over_without_finalizing():
+    """The create_new arm of the same loop is untouched by the finalize arm."""
+    host = _LifecycleHost()
+    host.rows.clear()
+    controller = _LifecycleController(host, errors={})
+
+    await controller.lifecycle_loop()
+
+    assert controller.created_rollover is True
+    assert controller.processed == []
+
+
+async def test_non_idle_conversation_continues_without_finalizing():
+    """The continue_current arm: a refreshed row finishes the poll untouched."""
+    host = _LifecycleHost()
+    host.rows['conv-live']['finished_at'] = datetime.now(timezone.utc) - timedelta(seconds=10)
+    controller = _LifecycleController(host, errors={})
+
+    await controller.lifecycle_loop()
+
+    assert controller.created_rollover is False
+    assert controller.processed == []
+    assert host.close_calls == []
+
+
+async def test_processing_status_row_is_not_finalized_by_the_lifecycle_loop():
+    """A row already in `processing` (dispatched) is left to its durable job."""
+    host = _LifecycleHost()
+    host.rows['conv-live']['status'] = 'processing'
+    controller = _LifecycleController(host, errors={})
+
+    await controller.lifecycle_loop()
+
+    assert controller.created_rollover is True
+    assert controller.processed == []
+    assert host.close_calls == []
+
+
+class _FinalizeHost(_LifecycleHost):
+    """Host that answers the three persistence calls `process_conversation` makes."""
+
+    def __init__(self, *, delete_result: bool, reread: dict[str, Any] | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.recording_session_ids_by_conversation = {'conv-live': 'session-1'}
+        self._delete_result = delete_result
+        self._reread = reread
+        self.is_multi_channel = False
+        self.state.first_audio_byte_timestamp = 1.0
+        self.delete_calls: list[tuple] = []
+
+    async def _call(self, fn, *args, **kwargs):
+        if fn.__name__ == 'delete_empty_recording_conversation':
+            self.delete_calls.append(args)
+            return self._delete_result
+        if fn.__name__ == 'get_conversation':
+            # process_conversation reads twice: the pre-delete read must see an
+            # empty row (or the schedule arm runs), the post-delete reread
+            # answers with the configured snapshot.
+            if kwargs.get('read_site') is not None and 'post_delete_reread' in str(kwargs['read_site']).lower():
+                return self._reread
+            return {'id': 'conv-live', 'status': 'in_progress'}
+        return await super()._call(fn, *args, **kwargs)
+
+
+class _PlainController(LiveConversationController):
+    """Real process_conversation/schedule_finalization; only the dispatch seam recorded."""
+
+    def __init__(self, host: Any) -> None:
+        super().__init__(host)
+        self.scheduled: list[str] = []
+
+    async def schedule_finalization(self, conversation_id: str) -> bool:
+        self.scheduled.append(conversation_id)
+        return True
+
+
+async def test_process_conversation_empty_delete_wins_and_skips_dispatch():
+    host = _FinalizeHost(delete_result=True)
+    controller = _PlainController(host)
+
+    assert await controller.process_conversation('conv-live') is True
+    assert controller.scheduled == []
+    assert [args[:3] for args in host.delete_calls] == [('uid-1', 'conv-live', 'session-1')]
+
+
+async def test_process_conversation_delete_refused_with_late_content_dispatches():
+    """Late content arriving before the delete keeps the row and dispatches it."""
+    host = _FinalizeHost(
+        delete_result=False,
+        reread={'id': 'conv-live', 'transcript_segments': [{'id': 'late'}]},
+    )
+    controller = _PlainController(host)
+
+    assert await controller.process_conversation('conv-live') is True
+    assert controller.scheduled == ['conv-live']
+
+
+async def test_process_conversation_delete_refused_still_empty_is_a_no_op():
+    host = _FinalizeHost(delete_result=False, reread={'id': 'conv-live'})
+    controller = _PlainController(host)
+
+    assert await controller.process_conversation('conv-live') is False
+    assert controller.scheduled == []
+
+
+async def test_expired_on_the_first_sweep_row_does_not_skip_the_rest(caplog):
+    """The sweep-level isolation composes with the transient arm."""
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-expired'}, {'id': 'conv-fine'}])
+    errors = {'conv-expired': InvalidArgument(_EXPIRED_ERROR_TEXT)}
+    controller = _RaisingController(host, errors=errors)
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert controller.processed == ['conv-expired', 'conv-fine']
+    assert [m for m in _messages(caplog) if 'deferred' in m] != []
+    assert [m for m in _messages(caplog) if 'pending finalization failed' in m] == []
+
+
+def test_contention_is_not_transient():
+    """An Aborted burst that exhausts the budget is contention, not a deferral:
+    it is a real operational event and keeps its ERROR."""
+    from utils.conversations.finalization_failure import classify_finalization_failure
+
+    failure = classify_finalization_failure(Aborted('Too much contention on these documents.'), 'conv-a')
+
+    assert failure.reason == 'contention'
+    assert failure.transient is False
+
+
+def test_size_limit_naming_another_row_is_not_transient():
+    from utils.conversations.finalization_failure import classify_finalization_failure
+
+    failure = classify_finalization_failure(_size_limit_error('conv-other'), 'conv-a')
+
+    assert failure.reason == 'document_size_limit'
+    assert failure.conversation_at_size_limit is False
+    assert failure.transient is False
+
+
+async def test_emit_lifecycle_event_without_durable_binding_is_suppressed(caplog):
+    """The completed-event emitter keeps its no-binding guard on the same path."""
+    host = _LifecycleHost()
+    host.recording_session_ids_by_conversation = {}
+    controller = _LifecycleController(host, errors={})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.emit_recording_lifecycle_event('conv-live', 'completed')
+
+    assert [m for m in _messages(caplog) if 'Suppressing lifecycle event' in m] != []
+
+
+async def test_expired_at_the_timed_out_stage_defers_and_still_redispatches_processing(caplog):
+    host = _Host(woken_by_shutdown=False, processing=[{'id': 'conv-processing'}])
+    controller = _RaisingController(host, errors={'conv-timed-out': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending('conv-timed-out')
+
+    assert controller.processed == ['conv-timed-out']
+    assert controller.scheduled == ['conv-processing']
+    assert [m for m in _messages(caplog) if 'deferred stage=timed_out' in m] != []
+
+
+async def test_expired_at_the_processing_stage_defers_and_keeps_the_stale_recovery(caplog):
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[{'id': 'conv-processing-bad'}],
+        stale_in_progress=[{'id': 'conv-orphan'}],
+    )
+    controller = _RaisingScheduleController(host, errors={'conv-processing-bad': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert controller.processed == ['conv-orphan']
+    assert controller.scheduled == ['conv-processing-bad']
+    assert [m for m in _messages(caplog) if 'deferred stage=processing' in m] != []
+
+
+async def test_the_expired_error_names_no_document_kind_of_its_own(caplog):
+    """document=none for a rejection that names no uid-bearing path at all."""
+    host = _CloseHost()
+    controller = _RaisingController(host, errors={'conv-live': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage='lifecycle_rollover')
+
+    assert [m for m in _messages(caplog) if 'document=none' in m] != []
+
+
+async def test_the_lifecycle_loop_polls_a_fresh_row_after_a_deferred_rollover(caplog):
+    """After the deferral the loop created the new generation: the deferred row's
+    content is now finalized by the NEXT session's sweep, not this loop."""
+    host = _LifecycleHost()
+    controller = _LifecycleController(host, errors={'conv-live': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.lifecycle_loop()
+
+    assert controller.created_rollover is True
+    assert [m for m in _messages(caplog) if 'deferred stage=lifecycle_rollover' in m] != []
+
+
+async def test_shutdown_wake_before_the_first_poll_ends_the_loop_quietly(caplog):
+    """The wait-owns-the-loop guarantee is unchanged: a woken loop never polls."""
+    host = _LifecycleHost()
+    host._wait_calls = 0
+
+    async def wake_immediately(seconds: float) -> bool:
+        return True
+
+    host.wait = wake_immediately
+    controller = _LifecycleController(host, errors={})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.lifecycle_loop()
+
+    assert controller.created_rollover is False
+    assert controller.processed == []
+
+
+async def test_composed_expired_rows_across_stages_in_one_sweep(caplog):
+    """timed-out and stale rows can both defer in one sweep; both still run."""
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[],
+        stale_in_progress=[{'id': 'conv-stale-expired'}],
+    )
+    errors = {
+        'conv-timed-out': InvalidArgument(_EXPIRED_ERROR_TEXT),
+        'conv-stale-expired': InvalidArgument(_EXPIRED_ERROR_TEXT),
+    }
+    controller = _RaisingController(host, errors=errors)
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending('conv-timed-out')
+
+    assert controller.processed == ['conv-timed-out', 'conv-stale-expired']
+    deferred = [m for m in _messages(caplog) if 'deferred' in m]
+    assert len(deferred) == 2
+
+
+async def test_expired_transaction_is_deferred_not_error_logged(caplog):
+    host = _TransientHost()
+    controller = _RaisingController(host, errors={'conv-live': InvalidArgument(_EXPIRED_ERROR_TEXT)})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage='lifecycle_rollover')
+
+    messages = [record.getMessage() for record in caplog.records if record.name == 'routers.listen.conversations']
+    assert messages == [
+        'Listen pending finalization deferred stage=lifecycle_rollover conversation=conv-live '
+        'type=InvalidArgument reason=expired_transaction document=none'
+    ]
+    # The uid-bearing Firestore message never reaches the log.
+    assert not [line for line in caplog.text.splitlines() if 'conv-live' in line and 'expired or is no longer' in line]
+
+
+@pytest.mark.parametrize('stage', ['lifecycle_rollover', 'timed_out', 'processing', 'stale_in_progress'])
+async def test_expired_transaction_defers_at_every_stage(caplog, stage):
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}] if stage == 'stale_in_progress' else [])
+    errors = {'conv-live': InvalidArgument(_EXPIRED_ERROR_TEXT)}
+    if stage == 'stale_in_progress':
+        errors = {'conv-a': InvalidArgument(_EXPIRED_ERROR_TEXT)}
+    controller = _RaisingController(host, errors=errors)
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        if stage == 'stale_in_progress':
+            await controller.process_pending(None)
+        else:
+            await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage=stage)
+
+    deferred = [m for m in _messages(caplog) if 'deferred' in m]
+    assert deferred, 'expired transaction must be deferred, not ERROR-logged'
+    assert not [m for m in _messages(caplog) if 'pending finalization failed' in m]
+
+
+async def test_permanent_and_unknown_failures_keep_the_error(caplog):
+    """Loudness regression guard: only expired transactions are deferred."""
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}])
+    controller = _RaisingController(
+        host,
+        errors={
+            'conv-live': ValueError('something else'),
+            'conv-a': Aborted('Too much contention on these documents. Please try again.'),
+        },
+    )
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage='lifecycle_rollover')
+        await controller.process_pending(None)
+
+    failed = [m for m in _messages(caplog) if 'pending finalization failed' in m]
+    assert failed == [
+        'Listen pending finalization failed stage=lifecycle_rollover conversation=conv-live '
+        'type=ValueError reason=other document=none',
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+        'type=Aborted reason=contention document=none',
+    ]
+
+
+def test_size_limit_failure_is_never_transient():
+    from utils.conversations.finalization_failure import classify_finalization_failure
+
+    failure = classify_finalization_failure(_size_limit_error('conv-own'), 'conv-own')
+
+    assert failure.conversation_at_size_limit is True
+    assert failure.transient is False
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        InvalidArgument(_EXPIRED_ERROR_TEXT),
+        Aborted(f'409 {_EXPIRED_ERROR_TEXT}'),
+        InvalidArgument(f"Document 'projects/p/d' cannot be written: {_EXPIRED_ERROR_TEXT}"),
+    ],
+)
+def test_expired_transaction_is_transient_across_envelopes(error):
+    from utils.conversations.finalization_failure import classify_finalization_failure
+
+    failure = classify_finalization_failure(error, 'conv-a')
+
+    assert failure.reason == 'expired_transaction'
+    assert failure.transient is True
+    # The boundary must never log this error's message directly: it names the
+    # rejected document by its uid-bearing path.
+    assert 'uid-1' not in str(failure)
 
 
 def test_select_stale_in_progress_filters_sorts_and_bounds():

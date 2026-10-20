@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -745,15 +746,38 @@ class LiveConversationController:
         """
         try:
             await finalize(conversation_id)
+        except asyncio.CancelledError:
+            # Drain owns cancellation, not the isolation boundary (drain_tasks
+            # force-cancels stragglers and counts a suppressed cancellation as
+            # an "ignored cancellation" ERROR).
+            raise
         except Exception as error:
             failure = classify_finalization_failure(error, conversation_id)
             if failure.conversation_at_size_limit:
                 await self._close_oversized(conversation_id, stage=stage)
                 return
-            # Bounded tokens, never the message: Firestore names the rejected
-            # document by its path, which carries the uid.
-            logger.error(
-                'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
+            # A single failed transaction is replayed by the persistence layer's
+            # own budgets (fresh-transaction contention, expired-id restart),
+            # but that budget is bounded: an exhausted burst raises out of the
+            # transaction boundary. The rollover stage fires once per idle
+            # conversation per session, so raising here would crash the
+            # supervised ``lifecycle`` task — logging "expired transaction"
+            # tracebacks from ``create_new_in_progress_conversation`` and
+            # killing the socket for a failure the next poll replays for free.
+            # Transient rejections stay logged-and-retained; the row's status
+            # and this loop's next 5s poll are the retry.
+            if not failure.transient:
+                logger.error(
+                    'Listen pending finalization failed stage=%s conversation=%s type=%s reason=%s document=%s',
+                    stage,
+                    conversation_id,
+                    type(error).__name__,
+                    failure.reason,
+                    failure.document,
+                )
+                return
+            logger.warning(
+                'Listen pending finalization deferred stage=%s conversation=%s type=%s reason=%s document=%s',
                 stage,
                 conversation_id,
                 type(error).__name__,

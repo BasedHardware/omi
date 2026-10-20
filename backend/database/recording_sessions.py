@@ -310,7 +310,6 @@ def tombstone_and_delete_empty_conversation(
         client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
     )
     session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
 
     @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
@@ -355,7 +354,19 @@ def tombstone_and_delete_empty_conversation(
         transaction.delete(conversation_ref)
         return True
 
-    deleted = _delete_empty(transaction)
+    # The same contention story as the session's other writers: the SDK replays
+    # a commit abort on the same (often retired) transaction id and never
+    # retries an abort raised by the body's read, so a rollover that races a
+    # late segment write or the lease renewal surfaced as a permanent rejection
+    # instead of a replay. Every rejection here is atomic — the body either
+    # reaches a refusal without writing or commits its delete — so replaying on
+    # fresh transactions is safe, and ``run_transactional`` restarts an
+    # expired-transaction rejection on a brand-new id.
+    deleted = run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: run_transactional(client, _delete_empty, initial_transaction=transaction),
+        operation_name='recording_session_empty_delete',
+    )
     if deleted:
         invalidate_people_stats_cache(uid)
     return deleted

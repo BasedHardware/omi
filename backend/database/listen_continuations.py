@@ -8,8 +8,9 @@ from typing import Any, Mapping
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 from database.document_ids import calendar_meeting_doc_id
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils.observability.fallback import record_fallback
 from utils.conversation_continuity import (
     calendar_continuity_identity,
@@ -173,4 +174,14 @@ def resolve_live_continuation(
             for ref, external in cache_updates:
                 transaction.update(ref, {'external_data': external})
 
-    return resolve(client.transaction())
+    # The adoption races the session's other writers on the same session
+    # document for the life of a recording, so it runs on the same shared
+    # bounded contention budget with the expired-transaction restart as the
+    # open, event, tombstone and lease writers. Replaying is safe: every
+    # rejection is atomic — the body either reaches a refusal without writing
+    # or commits its single pointer update plus cache writes.
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: run_transactional(client, resolve, initial_transaction=transaction),
+        operation_name='live_continuation_resolve',
+    )

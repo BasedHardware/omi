@@ -12,9 +12,14 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from google.api_core.exceptions import Aborted, InvalidArgument, PermissionDenied
 
 from database import conversations as conversations_db
 from database import recording_sessions
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    run_with_transaction_contention_retry,
+)
 from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from utils.conversations import lifecycle as lifecycle_service
@@ -378,6 +383,383 @@ def test_conflicting_retry_returns_the_original_conversation(recording_store):
 
     assert result['conversation_id'] == 'first-conversation'
     assert result['mapping_conflict'] is True
+
+
+# ── The empty-delete transaction survives a contention burst ────────────────
+#
+# Prod (backend-listen 2026-10-14): the rollover stage's finalize path calls
+# this transaction while a late segment write or the lease renewal holds the
+# same session document. The bare ``firestore.transactional`` call replayed a
+# commit abort on the same — often already retired — transaction id and never
+# retried an abort raised by the body's read, so the burst surfaced as
+# ``Listen pending finalization failed stage=lifecycle_rollover`` (x135/30m)
+# and its ``delete_empty_recording_conversation`` traceback sibling instead of
+# a replay on a fresh transaction.
+
+_EXPIRED_TRANSACTION_MESSAGE = 'The referenced transaction has expired or is no longer valid'
+
+
+@dataclass
+class _DeleteStoreCollection:
+    store: '_ContendingDeleteStore'
+    path: tuple[str, ...]
+
+    def document(self, document_id: str) -> '_DeleteStoreDoc':
+        return _DeleteStoreDoc(self.store, self.path + (document_id,))
+
+
+@dataclass
+class _DeleteStoreDoc:
+    store: '_ContendingDeleteStore'
+    path: tuple[str, ...]
+
+    def get(self, transaction: object = None) -> Any:
+        del transaction
+        data = self.store.documents.get(self.path)
+        return SimpleNamespace(exists=data is not None, to_dict=lambda: copy.deepcopy(data))
+
+    def collection(self, name: str) -> '_DeleteStoreCollection':
+        return _DeleteStoreCollection(self.store, self.path + tuple(name.split('/')))
+
+
+@dataclass
+class _ContendingDeleteStore:
+    """Fake Firestore whose transactional boundary fails until the queue drains.
+
+    ``boundary_errors`` fires from the decorated call — a read-time ``Aborted``
+    (the SDK never retries it) or an expired-id rejection raised from the store
+    side. Committed transactions are recorded so tests can count real commits.
+    """
+
+    documents: dict[tuple[str, ...], dict[str, Any]] = field(default_factory=dict)
+    boundary_errors: list[BaseException] = field(default_factory=list)
+    commits: list[Any] = field(default_factory=list)
+    fresh_transactions: list[Any] = field(default_factory=list)
+    budget_calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def collection(self, name: str) -> _DeleteStoreCollection:
+        return _DeleteStoreCollection(self, tuple(name.split('/')))
+
+    def transaction(self) -> '_DeleteStoreTransaction':
+        transaction = _DeleteStoreTransaction(self)
+        self.fresh_transactions.append(transaction)
+        return transaction
+
+
+@dataclass
+class _DeleteStoreTransaction:
+    store: '_ContendingDeleteStore'
+
+    def update(self, document: _DeleteStoreDoc, updates: dict[str, Any]) -> None:
+        self.store.documents[document.path].update(copy.deepcopy(updates))
+
+    def delete(self, document: _DeleteStoreDoc) -> None:
+        self.store.documents.pop(document.path, None)
+
+
+@pytest.fixture
+def contending_delete_store(monkeypatch):
+    store = _ContendingDeleteStore(boundary_errors=[Aborted('contention'), Aborted('contention')])
+
+    def transactional(func):
+        def locked(transaction, *args, **kwargs):
+            if store.boundary_errors:
+                raise store.boundary_errors.pop(0)
+            result = func(transaction, *args, **kwargs)
+            store.commits.append(transaction)
+            return result
+
+        return locked
+
+    monkeypatch.setattr(recording_sessions.firestore, 'transactional', transactional)
+
+    def budget_retry(*a, **kw):
+        store.budget_calls.append({'operation_name': kw.get('operation_name'), 'args': len(a)})
+        kw.setdefault('sleep', lambda _delay: None)
+        kw.setdefault('random_value', lambda: 0)
+        return run_with_transaction_contention_retry(*a, **kw)
+
+    monkeypatch.setattr(recording_sessions, 'run_with_transaction_contention_retry', budget_retry)
+    return store
+
+
+def _seed_empty_conversation(store: _ContendingDeleteStore, uid: str = 'uid', conversation_id: str = 'conversation'):
+    store.documents[('users', uid, 'conversations', conversation_id)] = _stored_conversation([])
+
+
+def test_empty_delete_replays_read_abort_on_fresh_transactions_and_commits_once(contending_delete_store):
+    """A read-time abort — which the SDK never retries — still deletes the row."""
+    _seed_empty_conversation(contending_delete_store)
+    path = ('users', 'uid', 'conversations', 'conversation')
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is True
+    assert path not in contending_delete_store.documents
+    # One real commit: two aborted attempts, then the successful one.
+    assert len(contending_delete_store.commits) == 1
+    # Every attempt got a brand-new transaction from the budget's factory.
+    assert len(contending_delete_store.fresh_transactions) == 3
+
+
+def test_empty_delete_restarts_a_store_side_expired_id(contending_delete_store):
+    """The expired-id 400 raised at the boundary is restarted, not surfaced."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [InvalidArgument(_EXPIRED_TRANSACTION_MESSAGE)]
+    path = ('users', 'uid', 'conversations', 'conversation')
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is True
+    assert path not in contending_delete_store.documents
+    assert len(contending_delete_store.commits) == 1
+
+
+def test_empty_delete_survives_a_mixed_abort_then_expired_burst(contending_delete_store):
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [
+        Aborted('contention'),
+        InvalidArgument(_EXPIRED_TRANSACTION_MESSAGE),
+    ]
+    path = ('users', 'uid', 'conversations', 'conversation')
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is True
+    assert path not in contending_delete_store.documents
+
+
+def test_exhausted_empty_delete_still_refuses_a_real_write_failure(contending_delete_store):
+    """Non-contention rejections are not replayed; the caller keeps its signal."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [PermissionDenied('the caller cannot write this row')]
+
+    with pytest.raises(PermissionDenied):
+        recording_sessions.tombstone_and_delete_empty_conversation(
+            'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+        )
+    # Nothing was deleted and no attempt committed.
+    assert ('users', 'uid', 'conversations', 'conversation') in contending_delete_store.documents
+    assert contending_delete_store.commits == []
+
+
+def test_empty_delete_late_content_refusal_is_not_replayed_as_a_delete(contending_delete_store):
+    """Content that arrived before the delete keeps the row across every attempt."""
+    path = ('users', 'uid', 'conversations', 'conversation')
+    contending_delete_store.documents[path] = _stored_conversation([{'id': 'late-segment', 'text': 'persisted'}])
+    sessions_path = ('users', 'uid', 'recording_sessions', 'recording')
+    now = datetime.now(timezone.utc)
+    contending_delete_store.documents[sessions_path] = {
+        'schema_version': recording_sessions.RECORDING_SESSION_SCHEMA_VERSION,
+        'uid': 'uid',
+        'recording_session_id': 'recording',
+        'conversation_id': 'conversation',
+        'lifecycle_version': recording_sessions.LIFECYCLE_ENVELOPE_VERSION,
+        'lifecycle_phase': 'in_progress',
+        'lifecycle_sequence': 0,
+        'created_at': now,
+        'updated_at': now,
+    }
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is False
+    assert path in contending_delete_store.documents
+    # The refusal is a read-only transaction (no update, no delete), so the
+    # committing attempt leaves the bound session exactly as it was.
+    session = contending_delete_store.documents[('users', 'uid', 'recording_sessions', 'recording')]
+    assert session['lifecycle_phase'] == 'in_progress'
+    assert session['lifecycle_sequence'] == 0
+
+
+def test_empty_delete_tombstone_still_lands_after_a_contended_first_attempt(contending_delete_store):
+    """The session tombstone written by the committing attempt is the durable one."""
+    _seed_empty_conversation(contending_delete_store)
+    sessions_path = ('users', 'uid', 'recording_sessions', 'recording')
+    now = datetime.now(timezone.utc)
+    contending_delete_store.documents[sessions_path] = {
+        'schema_version': recording_sessions.RECORDING_SESSION_SCHEMA_VERSION,
+        'uid': 'uid',
+        'recording_session_id': 'recording',
+        'conversation_id': 'conversation',
+        'lifecycle_version': recording_sessions.LIFECYCLE_ENVELOPE_VERSION,
+        'lifecycle_phase': 'in_progress',
+        'lifecycle_sequence': 0,
+        'created_at': now,
+        'updated_at': now,
+    }
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is True
+    session = contending_delete_store.documents[sessions_path]
+    assert session['lifecycle_phase'] == 'discarded'
+    assert session['lifecycle_sequence'] == 1
+
+
+def test_empty_delete_runs_on_the_named_shared_budget(contending_delete_store):
+    """The delete uses the same named budget as the session's other writers."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = []
+
+    recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert contending_delete_store.budget_calls == [{'operation_name': 'recording_session_empty_delete', 'args': 2}]
+
+
+def test_exhausted_empty_delete_budget_raises_contention_exhausted(contending_delete_store, caplog):
+    """A fully contended burst surfaces the exhaustion, not a bare SDK error."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [Aborted('contention')] * 50
+
+    with caplog.at_level('ERROR', logger='database.firestore_transaction_retry'):
+        with pytest.raises(FirestoreContentionExhausted):
+            recording_sessions.tombstone_and_delete_empty_conversation(
+                'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+            )
+
+    exhausted = [r for r in caplog.records if r.getMessage().endswith('outcome=exhausted')]
+    assert exhausted, 'the exhausted burst must be correlated by operation name'
+    assert 'operation=recording_session_empty_delete' in exhausted[0].getMessage()
+    # The row survives; the caller (sweep or create) retries it later.
+    assert ('users', 'uid', 'conversations', 'conversation') in contending_delete_store.documents
+
+
+def test_deleted_conversation_snapshot_refilled_by_the_committing_attempt(contending_delete_store):
+    """A contended first attempt must not leave a stale snapshot in the out-param."""
+    _seed_empty_conversation(contending_delete_store)
+    published: dict[str, Any] = {'stale': 'value'}
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid',
+        'conversation',
+        'recording',
+        firestore_client=contending_delete_store,
+        deleted_conversation=published,
+    )
+
+    assert deleted is True
+    # The pre-fix contract: the snapshot belongs to the attempt that commits.
+    assert published.get('id') == 'conversation'
+    assert 'stale' not in published
+
+
+def test_empty_delete_without_a_session_binding_still_deletes(contending_delete_store):
+    """The legacy route deletes without touching any session document."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [Aborted('contention')]
+    path = ('users', 'uid', 'conversations', 'conversation')
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', None, firestore_client=contending_delete_store
+    )
+
+    assert deleted is True
+    assert path not in contending_delete_store.documents
+
+
+@pytest.mark.parametrize(
+    ('fence_field', 'fence_value'),
+    [
+        ('status', 'processing'),
+        ('discarded', True),
+        ('deleted', True),
+        ('is_locked', True),
+        ('sync_content_revision', 7),
+    ],
+    ids=['status', 'discarded', 'deleted', 'locked', 'sync-revision'],
+)
+def test_empty_delete_fence_survives_a_contended_first_attempt(contending_delete_store, fence_field, fence_value):
+    """Every refusal fence holds on the attempt that finally commits."""
+    path = ('users', 'uid', 'conversations', 'conversation')
+    row = _stored_conversation([])
+    if fence_field == 'status':
+        row['status'] = fence_value
+    else:
+        row[fence_field] = fence_value
+    contending_delete_store.documents[path] = row
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is False
+    assert path in contending_delete_store.documents
+    # The refusal short-circuits before the session tombstone is touched, so a
+    # session document seeded by the caller stays exactly as it was.
+
+
+def test_empty_delete_missing_row_is_replayed_and_reports_false(contending_delete_store):
+    """A row already gone is a clean no-op that still survives the burst."""
+    contending_delete_store.boundary_errors = [Aborted('contention')]
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is False
+    # The read-only refusal still commits (Firestore commits empty
+    # transactions), but nothing was written anywhere.
+    assert len(contending_delete_store.commits) == 1
+
+
+def test_empty_delete_budget_writes_nothing_when_attempts_expire_the_row_read(contending_delete_store):
+    """A store-side expired rejection on every attempt leaves the row intact."""
+    _seed_empty_conversation(contending_delete_store)
+    contending_delete_store.boundary_errors = [InvalidArgument(_EXPIRED_TRANSACTION_MESSAGE)] * 5
+
+    with pytest.raises(InvalidArgument):
+        recording_sessions.tombstone_and_delete_empty_conversation(
+            'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+        )
+
+    assert ('users', 'uid', 'conversations', 'conversation') in contending_delete_store.documents
+    assert contending_delete_store.commits == []
+
+
+def test_empty_delete_content_guard_holds_across_the_replayed_attempts(contending_delete_store):
+    """A row whose stored segments decode to real content is refused every time."""
+    path = ('users', 'uid', 'conversations', 'conversation')
+    contending_delete_store.documents[path] = _stored_conversation([{'id': 'real', 'text': 'words'}])
+    contending_delete_store.boundary_errors = [Aborted('contention')]
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid', 'conversation', 'recording', firestore_client=contending_delete_store
+    )
+
+    assert deleted is False
+    assert path in contending_delete_store.documents
+
+
+def test_empty_delete_published_snapshot_is_untouched_by_a_refusal(contending_delete_store):
+    """A refused delete publishes nothing into the out-param."""
+    path = ('users', 'uid', 'conversations', 'conversation')
+    contending_delete_store.documents[path] = _stored_conversation([{'id': 'real', 'text': 'words'}])
+    contending_delete_store.boundary_errors = []
+    published: dict[str, Any] = {}
+
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid',
+        'conversation',
+        'recording',
+        firestore_client=contending_delete_store,
+        deleted_conversation=published,
+    )
+
+    assert deleted is False
+    assert published == {}
 
 
 def test_same_recording_id_is_scoped_to_each_user(recording_store):

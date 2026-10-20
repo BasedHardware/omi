@@ -25,6 +25,18 @@ class FinalizationFailure:
     def conversation_at_size_limit(self) -> bool:
         return self.reason == 'document_size_limit' and self.names_conversation
 
+    @property
+    def transient(self) -> bool:
+        """A later attempt against this same row can still succeed.
+
+        ``expired_transaction`` means Firestore retired the transaction id
+        mid-flight — the rejected attempt wrote nothing, and the next poll
+        starts a brand-new transaction. Every other classification is either
+        permanent for the row (``document_size_limit``) or a state the row
+        will not leave on its own (``other``), and keeps its ERROR.
+        """
+        return self.reason == 'expired_transaction'
+
 
 def classify_finalization_failure(error: BaseException, conversation_id: str) -> FinalizationFailure:
     segments = firestore_error_document_path(error)

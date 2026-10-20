@@ -8,8 +8,10 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from google.api_core.exceptions import Aborted, InvalidArgument
 
 from database import listen_continuations
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.structured import Structured
@@ -773,3 +775,324 @@ def test_reconnect_window_cache_defers_writes_until_candidate_reads(monkeypatch)
         store.rows[('users', 'u', 'conversations', 'old')]['external_data']['calendar_meeting_context']['start_time']
         == now
     )
+
+
+# ── The adoption transaction survives a contention burst ────────────────────
+#
+# Failure-Class: FC-live-continuation-aborted-as-failed-write (new class in
+# this diff): the continuation adoption is a read-write transaction on the
+# same `recording_sessions` document as the open/event/tombstone/lease
+# writers, driven from `create_new_in_progress_conversation(rollover=True)` —
+# the exact rollover seam whose bounded budget exhausts into the supervised
+# `lifecycle` task. The SDK replays a commit abort on the same, often retired,
+# transaction id and never retries an abort raised by the body's read, so a
+# burst surfaced as a permanent rejection there. Every rejection here is
+# atomic (the body either refuses without writing or commits the pointer
+# update plus its cache writes), so replay on fresh transactions is safe.
+
+
+class _ContendingContinuationStore:
+    """StrictFirestore with a failing transactional boundary until drained."""
+
+    def __init__(self, base: StrictFirestore, errors: list[BaseException]) -> None:
+        self._base = base
+        self.errors = list(errors)
+        self.commits = 0
+        self.fresh_transactions = 0
+        self.budget_names: list[str | None] = []
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+    def transaction(self):
+        self.fresh_transactions += 1
+        return self._base.transaction()
+
+    def run_transactional(self, decorated):
+        def boundary(transaction, *args, **kwargs):
+            if self.errors:
+                raise self.errors.pop(0)
+            result = decorated(transaction, *args, **kwargs)
+            self.commits += 1
+            return result
+
+        return boundary
+
+
+def _continuation_store(monkeypatch, errors):
+    base = StrictFirestore()
+    store = _ContendingContinuationStore(base, errors)
+    monkeypatch.setattr(listen_continuations.firestore, 'transactional', store.run_transactional)
+    # Import the original directly: calling the module attribute here would
+    # recurse through this very patch.
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry as budget
+
+    def budget_retry(*a, **kw):
+        store.budget_names.append(kw.get('operation_name'))
+        kw.setdefault('sleep', lambda _delay: None)
+        kw.setdefault('random_value', lambda: 0)
+        return budget(*a, **kw)
+
+    monkeypatch.setattr(listen_continuations, 'run_with_transaction_contention_retry', budget_retry)
+    return store
+
+
+def _seed_adoptable_candidate(store, cid='new', sid='new'):
+    store.rows[('users', 'u', 'recording_sessions', 'origin')] = dict(
+        uid='u', recording_session_id='origin', conversation_id='old', lifecycle_phase='completed'
+    )
+    store.rows[('users', 'u', 'conversations', cid)] = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id=None,
+        finished_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+    )
+
+
+@pytest.mark.parametrize(
+    'burst',
+    [
+        [Aborted('contention'), InvalidArgument('The referenced transaction has expired or is no longer valid.')],
+        [InvalidArgument('The referenced transaction has expired or is no longer valid.'), Aborted('contention')],
+    ],
+    ids=['abort-then-expired', 'expired-then-abort'],
+)
+def test_continuation_adoption_survives_a_mixed_burst(monkeypatch, burst):
+    store = _continuation_store(monkeypatch, burst)
+    _seed_adoptable_candidate(store)
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected == {'conversation_id': 'new', 'recording_session_id': 'new'}
+    assert store.commits == 1
+    assert store.fresh_transactions == 3
+
+
+def test_continuation_adoption_refusal_is_replayed_not_invented(monkeypatch):
+    """A candidate that is not resumable is refused on every attempt the same way."""
+    store = _continuation_store(monkeypatch, [Aborted('contention')])
+    store.rows[('users', 'u', 'recording_sessions', 'origin')] = dict(
+        uid='u', recording_session_id='origin', conversation_id='old', lifecycle_phase='completed'
+    )
+    store.rows[('users', 'u', 'conversations', 'new')] = dict(
+        status='completed', source='omi', client_device_id=None, finished_at=datetime(2026, 9, 19, tzinfo=timezone.utc)
+    )
+
+    selected, retired = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected is None and retired is None
+    assert store.commits == 1
+    assert 'live_continuation' not in store.rows[('users', 'u', 'recording_sessions', 'origin')]
+
+
+def test_continuation_adoption_budget_writes_nothing_when_every_attempt_fails(monkeypatch):
+    store = _continuation_store(monkeypatch, [Aborted('contention')] * 5)
+    _seed_adoptable_candidate(store)
+
+    with pytest.raises(FirestoreContentionExhausted):
+        listen_continuations.resolve_live_continuation(
+            'u',
+            'origin',
+            source='omi',
+            device_id=None,
+            now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+            timeout=120,
+            proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+            firestore_client=store,
+        )
+
+    assert 'live_continuation' not in store.rows[('users', 'u', 'recording_sessions', 'origin')]
+
+
+def test_continuation_adoption_commits_exactly_once_without_contention(monkeypatch):
+    """The happy path stays single-commit under the budget's first attempt."""
+    store = _continuation_store(monkeypatch, [])
+    _seed_adoptable_candidate(store)
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected == {'conversation_id': 'new', 'recording_session_id': 'new'}
+    assert store.commits == 1
+    assert store.fresh_transactions == 1
+
+
+def test_continuation_adoption_of_a_foreign_uid_session_is_refused_replayed(monkeypatch):
+    """The uid guard on the session document survives a replayed attempt."""
+    store = _continuation_store(monkeypatch, [Aborted('contention')])
+    store.rows[('users', 'u', 'recording_sessions', 'origin')] = dict(
+        uid='someone-else',
+        recording_session_id='origin',
+        conversation_id='old',
+        lifecycle_phase='completed',
+    )
+
+    selected, retired = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected is None and retired is None
+    assert store.commits == 1
+    assert 'live_continuation' not in store.rows[('users', 'u', 'recording_sessions', 'origin')]
+
+
+def test_continuation_adoption_device_mismatch_refusal_is_replayed(monkeypatch):
+    """A candidate from another device is refused identically on the retry."""
+    store = _continuation_store(monkeypatch, [Aborted('contention')])
+    store.rows[('users', 'u', 'recording_sessions', 'origin')] = dict(
+        uid='u', recording_session_id='origin', conversation_id='old', lifecycle_phase='completed'
+    )
+    store.rows[('users', 'u', 'conversations', 'new')] = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id='tablet',
+        finished_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+    )
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id='phone',
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected is None
+    assert store.commits == 1
+    assert 'live_continuation' not in store.rows[('users', 'u', 'recording_sessions', 'origin')]
+
+
+def test_continuation_adoption_replays_read_abort_on_fresh_transactions(monkeypatch):
+    store = _continuation_store(monkeypatch, [Aborted('contention'), Aborted('contention')])
+    _seed_adoptable_candidate(store)
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected == {'conversation_id': 'new', 'recording_session_id': 'new'}
+    assert store.commits == 1
+    # Two aborted attempts, then the committing one: three fresh transactions.
+    assert store.fresh_transactions == 3
+    assert store.rows[('users', 'u', 'recording_sessions', 'origin')]['live_continuation'] == {
+        'conversation_id': 'new',
+        'recording_session_id': 'new',
+    }
+
+
+def test_continuation_adoption_restarts_an_expired_transaction_id(monkeypatch):
+    store = _continuation_store(
+        monkeypatch, [InvalidArgument('The referenced transaction has expired or is no longer valid.')]
+    )
+    _seed_adoptable_candidate(store)
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert selected == {'conversation_id': 'new', 'recording_session_id': 'new'}
+    assert store.commits == 1
+
+
+def test_continuation_adoption_runs_on_the_named_budget(monkeypatch):
+    store = _continuation_store(monkeypatch, [])
+    _seed_adoptable_candidate(store)
+
+    listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    assert store.budget_names == ['live_continuation_resolve']
+
+
+def test_continuation_refusal_still_loses_to_a_committed_winner_after_retries(monkeypatch):
+    """The adoption fences stay authoritative across a replayed burst."""
+    store = _continuation_store(monkeypatch, [Aborted('contention')])
+    _seed_adoptable_candidate(store)
+    # A competing pointer already adopted 'b': the replay must adopt nothing.
+    store.rows[('users', 'u', 'recording_sessions', 'origin')]['live_continuation'] = {
+        'conversation_id': 'b',
+        'recording_session_id': 'b',
+    }
+    store.rows[('users', 'u', 'conversations', 'b')] = dict(
+        status='in_progress',
+        source='omi',
+        client_device_id=None,
+        finished_at=datetime(2026, 9, 19, tzinfo=timezone.utc),
+    )
+
+    selected, _ = listen_continuations.resolve_live_continuation(
+        'u',
+        'origin',
+        source='omi',
+        device_id=None,
+        now=datetime(2026, 9, 19, tzinfo=timezone.utc),
+        timeout=120,
+        proposed={'conversation_id': 'new', 'recording_session_id': 'new'},
+        firestore_client=store,
+    )
+
+    # The still-resumable committed winner wins before our proposal is read.
+    assert selected == {'conversation_id': 'b', 'recording_session_id': 'b'}
+    assert store.commits == 1
+    assert store.rows[('users', 'u', 'recording_sessions', 'origin')]['live_continuation'] == {
+        'conversation_id': 'b',
+        'recording_session_id': 'b',
+    }
