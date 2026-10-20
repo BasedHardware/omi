@@ -941,11 +941,15 @@ class ListenSessionRuntime:
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
+        # STT cap held (untranscribed) receipt spans are metered once, by recovery.
+        # Without a cap admission, or with no held spans, billing is unchanged.
+        admission = getattr(self.receiver, 'cap_admission', None)
         seconds = billable_transcription_seconds(
             self.state.last_usage_record_timestamp,
             self.state.last_audio_received_time,
             now,
             getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
