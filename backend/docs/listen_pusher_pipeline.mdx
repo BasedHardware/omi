@@ -1630,6 +1630,21 @@ Each session that reaches teardown counts once in `omi_listen_ws_close_total{cod
 
 `omi_listen_ws_close_finalize_seconds{initiator, held}` measures the time from that first observed close (or teardown start, if none was observed) to the end of teardown. Pre-session rejections in `_admit`/`_bootstrap` and the decoder-initialisation close never reach teardown, so they aren't counted. No series carries uid, session or conversation labels, and every series is zero-initialised at import.
 
+### Provider STT stream ends
+
+The client side above is listen's own websocket. The provider side is every Modulate and Soniox stream, counted once per stream in `omi_stt_provider_stream_end_total{provider, closer, code_class}` (`utils/stt/provider_stream_end.py`) and logged as one `STT provider stream end` line.
+
+- `closer=vendor`: a vendor error frame, close frame, clean EOF or transport drop ended the stream. A drop with no close frame either way is `code_class=1006`.
+- `closer=us_timeout`: our keepalive ping went unanswered (sent `1011`), our drain gave up waiting for the vendor's done/finished frame, a failover serving check timed out, or Soniox idle-closed the socket.
+- `closer=us_drain`: the pod is draining. Either the listen session ended with `1012`, which uvicorn sends to every websocket at shutdown, or the `utils/stt/pod_drain.py` SIGTERM marker is set. A transport drop after SIGTERM counts here, not as `vendor`. A vendor error frame stays `vendor`.
+- `closer=us_failover`: we replaced the stream, or rejected a replacement candidate, mid-session.
+- `closer=us_client_gone`: any other session teardown (the client left).
+- `code_class` is `1000`, `1001`, `1006`, `1011`, `4xxx`, `other`, or `none` when no close frame was seen.
+
+The log line adds the received and sent codes, the typed reason, a sanitized close diagnostic, a session-age bucket and the vendor's `request_id`. The request id comes from an allow-listed handshake header (`x-request-id`, `cf-ray`, `x-amzn-trace-id` and others), or from a `request_id`/`trace_id`/`session_id` field in an error frame, and is logged only when it matches a strict id shape. The vendor error lines (`Modulate streaming error`, `Soniox stream closed`, and the others) and refused handshakes (`STT provider connect rejected`) carry the same `request_id`. Once per process and provider, `STT provider handshake header names` lists the header names the vendor returned (names only), so the allow-list can be checked against what the vendor actually sends.
+
+`omi_stt_provider_connect_seconds{provider}` measures successful connects, from the first attempt (Soniox retries included) until the stream accepts audio. `omi_stt_provider_first_text_seconds{provider}` measures from the first audio written to the stream until its first text, partial or final.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted

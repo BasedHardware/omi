@@ -123,6 +123,7 @@ from utils.stt.resilient_stream import (
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import fallback_socket_is_serving
+from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, session_teardown_closer
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -1161,6 +1162,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
+            note_stream_close_intent(socket, session_teardown_closer(self.host))
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
@@ -1585,6 +1587,7 @@ class ListenReceiver(ReplayFilterMixin):
         outcome = getattr(raw, 'leg_outcome', None)
         if outcome is not None:
             outcome.claim(live_stt_terminal_reason(raw, 'connection_lost'))
+        note_stream_close_intent(raw, US_FAILOVER)
         try:
             await abort_replay_socket(raw)
         except asyncio.CancelledError:
@@ -1592,6 +1595,7 @@ class ListenReceiver(ReplayFilterMixin):
                 outcome.settle()
             raise
         if previous is not None:
+            note_stream_close_intent(previous, US_FAILOVER)
             try:
                 await abort_replay_socket(previous)
             finally:
@@ -1667,6 +1671,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self._stt_failed_providers.add(provider_for_service(timed_out) or timed_out.value)
                 if raw is not None:
                     retire_window_replay_socket(self, raw)
+                    note_stream_close_intent(raw, US_TIMEOUT)
                     await abort_replay_socket(raw)
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
                 hop.note_failure(None, continuing=True)
@@ -1753,6 +1758,7 @@ class ListenReceiver(ReplayFilterMixin):
             if window_ring is not None and callable(retire):
                 retire()
             if previous is not None:
+                note_stream_close_intent(previous, US_FAILOVER)
                 try:
                     await abort_replay_socket(previous)
                 except Exception:
@@ -2734,6 +2740,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
+                note_stream_close_intent(socket, session_teardown_closer(self.host))
                 try:
                     socket.finish()
                 except Exception:
