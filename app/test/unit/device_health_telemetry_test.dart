@@ -570,6 +570,33 @@ void main() {
     expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
   });
 
+  test('fractional audio_recovered history row is not imported as a resolution', () async {
+    const id = 'fractional-history-row';
+    final start = DateTime(2026, 10, 15, 10);
+    final resolved = DateTime(2026, 10, 15, 12);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              'audio_outage_started_at': start.millisecondsSinceEpoch,
+              'disconnect_history_v2': [
+                {
+                  'eventType': 'audio_recovered',
+                  'timestamp': start.millisecondsSinceEpoch + 0.5,
+                  'lostAudioResolvedAt': resolved.millisecondsSinceEpoch + 0.5,
+                }
+              ],
+            }),
+        emit: (_, props) => events.add(props));
+    // The malformed row proves nothing: the outage stays open.
+    expect(events.single['unresolved_outage_open'], isTrue);
+    final record =
+        jsonDecode((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id))!) as Map;
+    expect(record['open_since'], start.millisecondsSinceEpoch);
+  });
+
   test('fractional recovery stamp values never close an outage', () async {
     const id = 'fractional-stamp';
     final start = DateTime(2026, 10, 15, 10);

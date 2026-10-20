@@ -554,10 +554,12 @@ class DeviceHealthTelemetry {
       if (historyPresent) diagnostics['disconnect_history_v2'] = keptHistory;
       keptHistory.sort((a, b) => ((a['timestamp'] as num?) ?? 0).compareTo((b['timestamp'] as num?) ?? 0));
       for (final event in keptHistory) {
-        final recovered = event['lostAudioResolvedAt'] as num?;
-        final start = event['timestamp'] as num?;
-        if (recovered == null || start == null) continue;
-        await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered.toInt()));
+        // Writers emit integer millis. A fractional timestamp is malformed and
+        // must not truncate into a billable resolution.
+        final recovered = event['lostAudioResolvedAt'];
+        final start = event['timestamp'];
+        if (recovered is! int || start is! int) continue;
+        await _resolveOutage(device.id, nativeStart: start, at: DateTime.fromMillisecondsSinceEpoch(recovered));
       }
       for (final stamp in stamps) {
         await _resolveOutage(device.id, nativeStart: stamp.start, at: DateTime.fromMillisecondsSinceEpoch(stamp.at));

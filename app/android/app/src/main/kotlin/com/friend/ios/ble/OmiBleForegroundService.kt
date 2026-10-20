@@ -1063,7 +1063,7 @@ class OmiBleForegroundService : Service() {
             val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }
             for (i in history.length() - 1 downTo 0) {
                 val item = history.optJSONObject(i) ?: continue
-                if (item.optLong("timestamp", 0L) == marker && item.optString("eventType") != "audio_recovered") {
+                if (item.validTimestamp() == marker && item.optString("eventType") != "audio_recovered") {
                     item.put("lostAudioSeconds", (now - marker).coerceAtLeast(0L) / 1000.0)
                     item.put("lostAudioResolvedAt", now)
                     prefs.edit().putString(key, history.toString()).remove("audio_outage_$addr")
