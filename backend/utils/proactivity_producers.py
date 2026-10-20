@@ -579,7 +579,7 @@ def mentor_context(uid: str, frequency: int, threshold: float) -> dict:
         integration.conversations_to_string([conversation]).replace('Conversation #1\n', f'Conversation #{i + 1}\n', 1)
         for i, conversation in enumerate(integration.deserialize_conversations(visible))
     ]
-    # TODO(episodes): mentor re-reads the whole buffered transcript on every
+    # TODO(#22870): mentor re-reads the whole buffered transcript on every
     # evaluation. utils.episodes.service.mentor_episode_state(uid) returns the
     # compact live-episode state (a few hundred tokens); a mentor prompt version
     # that reads it instead belongs behind the existing mentor gates once it is
