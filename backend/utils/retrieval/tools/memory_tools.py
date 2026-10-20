@@ -469,5 +469,7 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"❌ Error searching memories: {e}", exc_info=True)
+        # The exception text can carry provider keys and user content; keep the
+        # type for diagnosis and leave the message out of the log.
+        logger.error("search_memories_tool failed error_type=%s", type(e).__name__, exc_info=True)
         return "Error searching memories. Please try again."

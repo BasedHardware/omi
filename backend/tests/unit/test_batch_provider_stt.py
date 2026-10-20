@@ -504,6 +504,7 @@ def test_provider_enqueue_writes_the_outbox_row_in_the_admission_transaction(wor
     enqueue = provider_stt.provider_enqueue(JA, outbox, wakes)
     batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 100.0, namespace=store.namespace, enqueue=enqueue)
     assert outbox.enqueued == [('p1', OWNER, {'segment_id': 'p1'}, 100.0)]
+    assert 'adopted_legacy_job_id' not in store.get('content', f'{OWNER}/content-p')
     assert wakes == {'p1': 'wake-p1'}
     # A retried upload finds the batch ledger and enqueues nothing new.
     batch_pipeline_intake.admit(store, [item('p1', 10)], binding, 101.0, namespace=store.namespace, enqueue=enqueue)
@@ -531,6 +532,8 @@ def test_admit_adopts_only_what_the_hook_re_validates(world):
     assert outcome == {'outcome': 'batch', 'job_id': 'bp_content-s'}
     ledger = store.get('content', f'{OWNER}/content-s')
     assert ledger['dispatch_protocol'] == 'batch_v1' and ledger['job_id'] == 'bp_content-s'
+    # The zero-lost census attributes the takeover (scripts/legacy_dark/lost_recordings.py).
+    assert ledger['adopted_legacy_job_id'] == 'legacy-1'
     assert job(store, 's1')['state'] == 'ready'
     # Once only: a second adoption attempt sees the batch owner.
     again = batch_pipeline_intake.admit(

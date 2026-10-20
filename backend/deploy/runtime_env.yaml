@@ -175,10 +175,7 @@ environments:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '0'}
-          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
-          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
@@ -2273,10 +2270,7 @@ environments:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '10000'}
-          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
-          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}

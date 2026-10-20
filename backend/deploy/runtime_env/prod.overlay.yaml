@@ -73,8 +73,6 @@ overlay:
           value: 'on'
         STT_ROUTING_ON_PERCENT:
           value: '90'
-        SONIOX_MONTHLY_CEILING_USD:
-          value: '10000'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:

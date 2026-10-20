@@ -309,16 +309,8 @@ environment_shared:
         STT_NO_TEXT_SECONDS:
           value: '30'
           category: rollout
-        SONIOX_MONTHLY_CEILING_USD:
-          category: rollout
-        SONIOX_ESTIMATED_USD_PER_HOUR:
-          value: '0.07537'
-          category: rollout
         STT_MULTI_LANGUAGE_HINTS:
           value: 'true'
-          category: rollout
-        SONIOX_CONTEXT_TERMS:
-          value: 'false'
           category: rollout
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'true'

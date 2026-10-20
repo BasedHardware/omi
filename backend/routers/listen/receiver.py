@@ -1008,7 +1008,6 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
                     idle_budget=self.soniox_idle_budget,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
@@ -1034,7 +1033,6 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
                     idle_budget=self.soniox_idle_budget,
                 ),
                 connect_modulate=(
