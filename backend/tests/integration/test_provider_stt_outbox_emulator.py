@@ -13,7 +13,7 @@ import uuid
 import pytest
 
 from database.outbox import Claim, Outcome
-from testing.store_fixtures import BackendUnavailable, ClientCustomerData, _emulator_client, required_backends
+from testing.store_fixtures import BackendUnavailable, ClientCustomerData, make_emulator, required_backends
 
 pytestmark = pytest.mark.integration
 
@@ -21,18 +21,19 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def emulator():
     try:
-        client = _emulator_client()
+        harness = make_emulator()
     except BackendUnavailable as exc:
         if 'emulator' in required_backends():
             pytest.fail(f'required store backend emulator unavailable: {exc}')
         pytest.skip(f'emulator unavailable: {exc}')
-    collection = f'batch_pipeline_test_{uuid.uuid4().hex[:12]}_provider_stt_outbox'
+    client = harness.customer.client
+    collection = f'{harness.namespace}_provider_stt_outbox'
     try:
         yield client, collection
     finally:
         for doc in client.collection(collection).stream():
             doc.reference.delete()
-        client.close()
+        harness.close()
 
 
 def _outbox(client, collection, wakes):
@@ -58,11 +59,13 @@ def test_default_privacy_fence_claims_an_allowed_owner_and_discards_a_deleted_on
 
     live = _segment('live')
     queued = outbox.enqueue(live, allowed, {'segment_id': live}, 100.0, now=100.0)
+    assert queued.wake_token
     claim = outbox.claim_key(live, queued.wake_token, 1800.0, now=101.0)
     assert isinstance(claim, Claim) and claim.owner_id == allowed
 
     gone = _segment('gone')
     fenced = outbox.enqueue(gone, deleted, {'segment_id': gone}, 100.0, now=100.0)
+    assert fenced.wake_token
     customer.delete_account(deleted)
     assert outbox.claim_key(gone, fenced.wake_token, 1800.0, now=101.0) is Outcome.DISCARDED
     row = client.collection(collection).document(gone).get().to_dict()
