@@ -191,6 +191,11 @@ def run_listen(frames: List[bytes], enc: Encoding, profile: str) -> Tuple[Record
             score = gain.apply(chunk) if gain is not None else None
             wall += len(chunk) / (2 * enc.sample_rate)
             gate.process_audio(chunk, wall, score, start_sample=buffer_start)
+    if buffer:
+        # Teardown force-flushes the partial buffer (decide_stt_buffer_flush(force=True)).
+        chunk = bytes(buffer)
+        score = gain.apply(chunk) if gain is not None else None
+        gate.process_audio(chunk, wall + len(chunk) / (2 * enc.sample_rate), score, start_sample=buffer_start)
     return rec, {'listen_windows': gate._vad_windows_scored}  # type: ignore[reportPrivateUsage]
 
 

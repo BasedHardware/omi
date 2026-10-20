@@ -7,6 +7,8 @@ window agreement per codec and variant, the gate-open offset p95 and the
 edge's decode+VAD time per mirrored audio second, and checks plan D's D2 gate:
 
 - window agreement >= 99.5% over compared windows (agree / (agree + disagree));
+- coverage >= 95%: compared windows over all listen windows (not_comparable and unmatched
+  ones, e.g. failover gates, are outside the ratio and must stay small);
 - gate-open offset p95 <= 32 ms;
 - edge decode+VAD <= 7.92 ms per audio second (6.6 ms/s within 20%).
 
@@ -24,6 +26,9 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Sequence, Tuple
 
 AGREEMENT_GATE = 0.995
+# Windows from later listen gates (failover replacements) and unmatched ones
+# are outside the agreement ratio; they must stay a small share of the total.
+COVERAGE_GATE = 0.95
 OPEN_OFFSET_P95_GATE_MS = 32.0
 EDGE_MS_PER_AUDIO_SECOND_GATE = 6.6 * 1.2
 
@@ -49,10 +54,20 @@ def parse(text: str) -> Series:
     return out
 
 
+class CounterReset(ValueError):
+    """A counter went down between scrapes (pod restart); the delta is meaningless."""
+
+
 def delta(after: Series, before: Optional[Series]) -> Series:
     if before is None:
         return after
-    return {k: v - before.get(k, 0.0) for k, v in after.items()}
+    out: Series = {}
+    for k, v in after.items():
+        d = v - before.get(k, 0.0)
+        if d < 0 and k[0].endswith(('_total', '_count', '_sum', '_bucket')):
+            raise CounterReset(f'{k[0]} went down between scrapes; scrape one pod across the hold')
+        out[k] = d
+    return out
 
 
 def p95(values: Sequence[float]) -> float:
@@ -99,6 +114,8 @@ def evaluate(series: Series) -> Tuple[bool, List[str]]:
                 f'edge_only {r["edge_speech_only"]:.0f} listen_only {r["listen_speech_only"]:.0f} '
                 f'not_comparable {r["not_comparable"]:.0f} unmatched {r["unmatched"]:.0f}'
             )
+    uncovered = sum(r['not_comparable'] + r['unmatched'] for r in compare.values())
+    coverage = compared / (compared + uncovered) if compared + uncovered else 0.0
     agreement = agreed / compared if compared else 0.0
     open_p95 = histogram_quantile(series, 'omi_edge_shadow_gate_open_offset_seconds', 0.95)
     processing = sum(v for (n, _), v in series.items() if n == 'omi_edge_shadow_processing_seconds_total')
@@ -106,11 +123,16 @@ def evaluate(series: Series) -> Tuple[bool, List[str]]:
     ms_per_s = processing * 1000 / audio if audio else 0.0
 
     agree_ok = compared > 0 and agreement >= AGREEMENT_GATE
+    coverage_ok = compared > 0 and coverage >= COVERAGE_GATE
     open_ok = open_p95 is not None and open_p95 * 1000 <= OPEN_OFFSET_P95_GATE_MS
     cpu_ok = audio > 0 and ms_per_s <= EDGE_MS_PER_AUDIO_SECOND_GATE
     lines.append(
         f'agreement {agreement:.4%} over {compared:.0f} windows: {"PASS" if agree_ok else "FAIL"} '
         f'(>= {AGREEMENT_GATE:.1%})'
+    )
+    lines.append(
+        f'coverage {coverage:.2%} (compared / all listen windows, rest not_comparable or unmatched): '
+        f'{"PASS" if coverage_ok else "FAIL"} (>= {COVERAGE_GATE:.0%})'
     )
     lines.append(
         f'gate-open offset p95 <= {"n/a" if open_p95 is None else f"{open_p95 * 1000:.0f}"} ms: '
@@ -120,7 +142,7 @@ def evaluate(series: Series) -> Tuple[bool, List[str]]:
         f'edge decode+VAD {ms_per_s:.2f} ms per audio second: {"PASS" if cpu_ok else "FAIL"} '
         f'(<= {EDGE_MS_PER_AUDIO_SECOND_GATE:.2f})'
     )
-    return agree_ok and open_ok and cpu_ok, lines
+    return agree_ok and coverage_ok and open_ok and cpu_ok, lines
 
 
 def main() -> int:
@@ -134,7 +156,12 @@ def main() -> int:
     if args.before:
         with open(args.before) as f:
             before = parse(f.read())
-    ok, lines = evaluate(delta(after, before))
+    try:
+        series = delta(after, before)
+    except CounterReset as reset:
+        print(f'GATE FAIL: {reset}')
+        return 2
+    ok, lines = evaluate(series)
     print('\n'.join(lines))
     print('GATE', 'PASS' if ok else 'FAIL')
     return 0 if ok else 1

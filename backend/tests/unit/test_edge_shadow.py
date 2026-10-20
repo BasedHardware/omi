@@ -2,13 +2,13 @@
 
 import asyncio
 import struct
-import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
+import scripts.edge_shadow_gate as gate_script
 import utils.stt.edge_shadow as edge_shadow
 from utils.metrics import OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL
 from utils.stt.edge_shadow import (
@@ -42,8 +42,10 @@ class FakeSocket:
         self.stall = stall
         self.closed_by_edge = closed
         self.closed = False
+        self.send_entered = asyncio.Event()
 
     async def send(self, message):
+        self.send_entered.set()
         if self.closed_by_edge:
             raise edge_shadow.websockets.ConnectionClosed(None, None)
         if self.stall:
@@ -149,12 +151,13 @@ def test_close_flushes_in_order_then_completes():
 
 
 def test_stalled_edge_never_blocks_the_live_session():
-    """The live loop keeps its cadence while the edge accepts nothing.
+    """A send stuck on the edge never reaches the live session.
 
-    A "live" task ticks every millisecond while the session offers 20k
-    frames against an edge whose send never completes. Every offer returns
-    without awaiting, the queue stays bounded, the mirror stops itself on
-    overflow, and the live task's worst tick gap stays small.
+    The fake edge's first send never completes. Once that send is pending,
+    the session keeps offering frames: every offer is a plain call (no
+    await), the queue never exceeds its bound, a concurrent "live" task keeps
+    running between frames, and on overflow the mirror stops itself and
+    cancels the stuck sender. No wall-clock thresholds.
     """
 
     async def run():
@@ -167,40 +170,52 @@ def test_stalled_edge_never_blocks_the_live_session():
             queue_messages=64,
             connect=_connect_returning(socket),
         )
+        assert not asyncio.iscoroutinefunction(mirror.frame)
+        assert not asyncio.iscoroutinefunction(mirror.offer)
         before = _outcome_count('queue_full')
         mirror.start(_spawn)
-        await asyncio.sleep(0)  # the sender connects and blocks in send
+        payload = b'\x00' * 640
+        mirror.frame(0, 320, payload)
+        await asyncio.wait_for(socket.send_entered.wait(), 2)  # the sender is now stuck in send
 
-        gaps = []
-        stop = asyncio.Event()
+        live_steps = 0
 
         async def live():
-            last = time.perf_counter()
-            while not stop.is_set():
-                await asyncio.sleep(0.001)
-                now = time.perf_counter()
-                gaps.append(now - last)
-                last = now
+            nonlocal live_steps
+            while True:
+                live_steps += 1
+                await asyncio.sleep(0)
 
         ticker = asyncio.create_task(live())
-        payload = b'\x00' * 640
-        worst_offer = 0.0
-        for i in range(20000):
-            t0 = time.perf_counter()
+        for i in range(1, 200):
             mirror.frame(i * 320, 320, payload)
-            worst_offer = max(worst_offer, time.perf_counter() - t0)
             assert mirror._queue.qsize() <= 64
-            if i % 200 == 0:
-                await asyncio.sleep(0)  # the receive loop awaits the next client frame
-        stop.set()
-        await ticker
-        await asyncio.wait({mirror._task}, timeout=2)
+            steps = live_steps
+            await asyncio.sleep(0)  # the receive loop awaits the next client frame
+            await asyncio.sleep(0)
+            assert live_steps > steps  # the live task ran while the send stays stuck
+        ticker.cancel()
+        await asyncio.wait({mirror._task, ticker}, timeout=2)
 
+        assert socket.sent == []  # the stalled send never completed
         assert not mirror.active and mirror.outcome == 'queue_full'
         assert _outcome_count('queue_full') == before + 1
         assert mirror._task.done()  # the stuck sender was cancelled
-        assert worst_offer < 0.05
-        assert max(gaps) < 0.25
+
+    asyncio.run(run())
+
+
+def test_unexpected_errors_stop_the_mirror_not_the_session():
+    async def run():
+        mirror = EdgeShadowMirror(
+            URL, codec='opus', sample_rate=16000, session_id='s5', connect=_connect_returning(FakeSocket())
+        )
+        mirror.start(_spawn)
+        mirror.frame(-1, 320, b'x')  # unencodable position: must not raise
+        assert not mirror.active
+        mirror.frame(0, 320, b'x')
+        mirror.close()
+        await asyncio.wait({mirror._task}, timeout=2)
 
     asyncio.run(run())
 
@@ -419,6 +434,39 @@ def test_receiver_starts_one_mirror_and_taps_each_gate(monkeypatch):
     no_clock.edge_shadow = None
     no_clock.capture_timeline = None  # multi-channel / custom STT: never mirrored
     assert edge_shadow.session_mirror(no_clock) is None
+
+
+def _scrape(agree=990, disagree=2, not_comparable=0, unmatched=0, cpu=0.004, audio=1.0, opens=10):
+    c = 'omi_edge_shadow_window_compare_total{codec="opus",result="%s",variant="plain"} %s'
+    lines = [
+        c % ('agree_speech', agree // 2),
+        c % ('agree_silence', agree - agree // 2),
+        c % ('edge_speech_only', disagree),
+        c % ('listen_speech_only', 0),
+        c % ('not_comparable', not_comparable),
+        c % ('unmatched', unmatched),
+        'omi_edge_shadow_gate_open_offset_seconds_bucket{le="0.016"} %s' % opens,
+        'omi_edge_shadow_gate_open_offset_seconds_bucket{le="0.032"} %s' % opens,
+        'omi_edge_shadow_gate_open_offset_seconds_bucket{le="+Inf"} %s' % opens,
+        'omi_edge_shadow_gate_open_offset_seconds_count %s' % opens,
+        'omi_edge_shadow_processing_seconds_total{stage="vad"} %s' % cpu,
+        'omi_edge_shadow_audio_seconds_total{codec="opus"} %s' % audio,
+    ]
+    return gate_script.parse('\n'.join(lines))
+
+
+def test_gate_script_checks_agreement_coverage_offset_and_cpu():
+    assert gate_script.evaluate(_scrape())[0]
+    assert not gate_script.evaluate(_scrape(disagree=10))[0]  # 99.0% agreement
+    assert not gate_script.evaluate(_scrape(not_comparable=100))[0]  # coverage < 95%
+    assert not gate_script.evaluate(_scrape(cpu=0.01))[0]  # 10 ms per audio second
+    assert not gate_script.evaluate(_scrape(agree=0, disagree=0))[0]  # nothing compared
+    # Over a hold: the delta, and a counter reset refuses to compute.
+    before = _scrape(agree=100, disagree=0, audio=0.1, cpu=0.0004, opens=0)
+    after = _scrape(agree=1100, disagree=1, audio=1.1, cpu=0.0044, opens=10)
+    assert gate_script.evaluate(gate_script.delta(after, before))[0]
+    with pytest.raises(gate_script.CounterReset):
+        gate_script.delta(before, after)
 
 
 def test_attach_tap_uses_the_receiver_class_only():

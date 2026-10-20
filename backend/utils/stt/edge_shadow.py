@@ -187,10 +187,19 @@ class EdgeShadowMirror:
             self._queue.put_nowait(message)
         except asyncio.QueueFull:
             self._stop('queue_full')
+        except Exception as error:
+            self._abandon(error)
 
     def frame(self, start_sample: int, decoded_samples: int, payload: bytes) -> None:
-        if self.active:
-            self.offer(encode_frame(start_sample, decoded_samples, payload))
+        """Copy one client frame. Never raises into the session."""
+        if not self.active:
+            return
+        try:
+            message = encode_frame(start_sample, decoded_samples, payload)
+        except Exception as error:
+            self._abandon(error)
+            return
+        self.offer(message)
 
     def tap(self) -> GateTap:
         """A tap for a newly built gate; each gets the next generation."""
@@ -198,15 +207,25 @@ class EdgeShadowMirror:
         return GateTap(self, self._gates)
 
     def close(self) -> None:
-        """Session over: flush what is queued, then close the socket."""
+        """Session over: flush what is queued, then close the socket. Never raises."""
         if not self.active:
             return
         self.active = False
         try:
             self._queue.put_nowait(None)
         except asyncio.QueueFull:
-            self._finish('queue_full')
-            self._cancel()
+            self._stop('queue_full')
+        except Exception as error:
+            self._abandon(error)
+
+    def _abandon(self, error: Exception) -> None:
+        """Last resort: anything unexpected ends the mirror, never the session."""
+        self.active = False
+        logger.warning('edge shadow mirror stopped type=%s', type(error).__name__)
+        try:
+            self._stop('send_failed')
+        except Exception:
+            pass
 
     def _stop(self, outcome: str) -> None:
         self.active = False
@@ -215,13 +234,22 @@ class EdgeShadowMirror:
 
     def _cancel(self) -> None:
         task = self._task
-        if task is not None and not task.done() and task is not asyncio.current_task():
+        if task is None or task.done():
+            return
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:  # called off the loop
+            current = None
+        if task is not current:
             task.cancel()
 
     def _finish(self, outcome: str) -> None:
         if self.outcome is None:
             self.outcome = outcome
-            OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL.labels(outcome=outcome).inc()
+            try:
+                OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL.labels(outcome=outcome).inc()
+            except Exception:
+                logger.warning('edge shadow outcome metric failed')
 
     async def _run(self) -> None:
         try:
