@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -217,7 +218,11 @@ def from_segments(
         ) from exc
     except FileNotFoundError as exc:
         # Windows reports a path under a regular file as not found (POSIX: ENOTDIR).
-        blocker = next((parent for parent in segments_file.parents if _probe(parent.is_file)), None)
+        # Win32 collapses `..` before the filesystem sees it (except for \\?\ and
+        # \\.\ paths), so walk the path the OS actually resolved.
+        raw = str(segments_file)
+        resolved = segments_file if raw.startswith(("\\\\?\\", "\\\\.\\")) else Path(os.path.normpath(raw))
+        blocker = next((parent for parent in resolved.parents if _probe(parent.is_file)), None)
         if blocker is not None:
             raise UsageError(
                 message=f"Cannot read file {segments_file}", detail=f"Not a directory: {blocker}"
