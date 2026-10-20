@@ -96,6 +96,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SttCapLiveHeldEvent;
 
 part 'capture_uplink_policy.dart';
+part 'capture_live_recovery.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
@@ -215,6 +216,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Timer? _keepAliveTimer;
+  final _liveRecovery = _LiveRecoveryState();
 
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
   DateTime? _lastRejectedTokenRefreshAt;
@@ -420,6 +422,7 @@ class CaptureController extends ChangeNotifier
     }
     _syncCaptureHealthTimer(null);
     _installIngressByteObserver();
+    _installLiveRecovery();
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -662,6 +665,7 @@ class CaptureController extends ChangeNotifier
     _syncCalendarGapTimer();
     unawaited(_resumeSilenceLogged());
     unawaited(_dispatchLogged(const AppForegrounded()));
+    _recoverCaptureOnResume();
   }
 
   Future<void> _probeStallBody() async {
@@ -2267,12 +2271,12 @@ class CaptureController extends ChangeNotifier
       ServiceManager.instance().device.ensureConnection(deviceId, force: force);
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
+    if (_audioCodecLoader != null) return _rememberingCodec(deviceId, () => _audioCodecLoader!(deviceId));
     var connection = await _ensureDeviceConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
-    return connection.getAudioCodec();
+    return _rememberingCodec(deviceId, connection.getAudioCodec);
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
@@ -2741,6 +2745,7 @@ class CaptureController extends ChangeNotifier
     // synchronously).
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _liveRecovery.kickTimer?.cancel();
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();
@@ -3173,8 +3178,10 @@ class CaptureController extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    _liveRecovery.deviceStoppedByCaller = false;
     if (SyncWakeScope.syncOnly) {
       if (device != null) updateRecordingDevice(device);
+      _deferDeviceStartPastSyncPass();
       return;
     }
     final outcome = await _capture.dispatch(DeviceStartRequested(device: device));
@@ -3215,6 +3222,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    _liveRecovery.deviceStoppedByCaller = !cleanDevice;
     final outcome = await _capture.dispatch(DeviceStopRequested(cleanDevice: cleanDevice));
     outcome.throwIfFailed();
   }
@@ -3290,6 +3298,7 @@ class CaptureController extends ChangeNotifier
     }
 
     _startKeepAliveServices();
+    _kickLiveRecoveryAfterClose(closeCode);
     notifyListeners();
   }
 
@@ -3423,6 +3432,7 @@ class CaptureController extends ChangeNotifier
 
     notifyListeners();
     _startKeepAliveServices();
+    _kickLiveRecovery('socket_error');
   }
 
   @override
@@ -4298,6 +4308,7 @@ class CaptureController extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
+    if (isConnected) _kickLiveRecovery('connectivity_restored');
     notifyListeners();
   }
 

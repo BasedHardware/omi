@@ -179,6 +179,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
+  BleAudioCodec get currentCodec => _codec;
   String? _deviceId;
   String? _deviceModel;
   Geolocation? _sessionGeolocation;

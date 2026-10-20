@@ -48,6 +48,18 @@ class ConnectivityService {
   final _connectionChangeController = StreamController<bool>.broadcast();
   Stream<bool> get onConnectionChange => _connectionChangeController.stream;
 
+  /// Fires when the set of active interfaces changes while one remains (wifi ->
+  /// cellular). [onConnectionChange] stays silent for those: the phone never
+  /// reported offline, yet sockets and uploads on the old interface are dead.
+  final _networkChangeController = StreamController<void>.broadcast();
+  Stream<void> get onNetworkChange => _networkChangeController.stream;
+  String? _networkSignature;
+
+  /// Order-independent identity of the active interfaces.
+  @visibleForTesting
+  static String networkSignature(List<ConnectivityResult> result) =>
+      (result.map((r) => r.name).toList()..sort()).join(',');
+
   bool _isConnected = true;
   bool get isConnected => _isConnected;
   bool _isInitialized = false;
@@ -104,6 +116,7 @@ class ConnectivityService {
     _connectivitySubscription?.cancel();
     _probeSubscription?.cancel();
     _connectionChangeController.close();
+    _networkChangeController.close();
   }
 
   Future<void> _handleConnectivityChange(List<ConnectivityResult> result) async {
@@ -113,6 +126,10 @@ class ConnectivityService {
     // VPN, Bluetooth tethering and other interfaces can carry internet too.
     // Reachability still has to pass before they are considered online.
     _hasInterface = result.any((interface) => interface != ConnectivityResult.none);
+    final signature = networkSignature(result);
+    final changed = _networkSignature != null && signature != _networkSignature;
+    _networkSignature = signature;
+    if (changed && _hasInterface && !_networkChangeController.isClosed) _networkChangeController.add(null);
     await _refreshInternet();
   }
 
