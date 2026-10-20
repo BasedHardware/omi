@@ -31,7 +31,6 @@ from models.memories import MemoryCategory, Memory, MemoryDB
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
@@ -2228,8 +2227,7 @@ def _create_conversation_from_segments(
     # validated metadata payload enters the existing conversation write.
     capture_evidence = None
     evidence_status = 'missing'
-    evidence_enabled = capture_evidence_dark_write_enabled()
-    if evidence_enabled and request.capture_evidence is not None:
+    if request.capture_evidence is not None:
         candidate = request.capture_evidence.model_dump()
         if (
             candidate['capture_root'] != request.client_session_id
@@ -2242,7 +2240,7 @@ def _create_conversation_from_segments(
         else:
             capture_evidence = candidate
             evidence_status = 'lineage' if candidate['lineage'] == 'complete' else 'incomplete'
-    if evidence_enabled and capture_evidence is None:
+    if capture_evidence is None:
         capture_evidence = {
             'version': 1,
             'capability': 'unknown',
@@ -2250,8 +2248,7 @@ def _create_conversation_from_segments(
             'origin': 'from_segments',
             'reason': evidence_status,
         }
-    if evidence_enabled:
-        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
     # Create conversation object with transcript segments
     if conversation_id:

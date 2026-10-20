@@ -232,6 +232,13 @@
       "why": "reviewed safe: circuit gauge refresh daemon; telemetry only"
     },
     {
+      "path": "utils/stt/soniox_usage.py",
+      "function": "start_if_configured",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
+    },
+    {
       "path": "utils/sync/pipeline.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",

@@ -6,6 +6,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/note_citations.dart';
 
 /// The server's deterministic title budget in code points (`TITLE_MAX_CHARS` in
 /// `backend/utils/conversations/deterministic_minimum.py`).
@@ -42,7 +43,8 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
 /// The display title of a kept (not discarded) conversation: its title, else transcript text,
 /// else a localized recording date/time. The last case reports [ConversationUntitledRendered]
 /// so missing server titles remain observable. [title] overrides the raw structured title
-/// when a surface already normalized it.
+/// when a surface already normalized it. Citation debris (`[s01234]`, `Speaker_00`) is
+/// repaired for display; edit fields keep the stored title.
 String conversationDisplayTitle(
   ServerConversation conversation,
   AppLocalizations l10n, {
@@ -50,12 +52,28 @@ String conversationDisplayTitle(
   String? title,
   OmiDateFormat? dates,
 }) {
-  final trimmed = (title ?? conversation.structured.title).trim();
+  final trimmed = presentableConversationTitle(conversation, title: title);
   if (trimmed.isNotEmpty) return trimmed;
   final fallback = transcriptFallbackTitle(conversation);
   if (fallback != null) return fallback;
   UntitledConversationTelemetry.report(conversation, surface);
   return recordingFallbackTitle(conversation, l10n, dates: dates);
+}
+
+/// [title] (default: the stored title) with citation debris repaired against the conversation's
+/// transcript, trimmed. Display only: never save it as the user's title.
+String presentableConversationTitle(ServerConversation conversation, {String? title}) {
+  final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
+  return presentableNoteTitle(title ?? conversation.structured.title, knownIDs).trim();
+}
+
+/// The repaired title for secondary surfaces (rows, search, share subject), with no untitled
+/// telemetry. A stored title that repairs to nothing (it was only debris) falls back like an untitled
+/// one; an empty stored title stays empty, as these surfaces always rendered it.
+String presentableConversationTitleOrFallback(ServerConversation conversation, AppLocalizations l10n) {
+  final repaired = presentableConversationTitle(conversation);
+  if (repaired.isNotEmpty || conversation.structured.title.trim().isEmpty) return repaired;
+  return transcriptFallbackTitle(conversation) ?? recordingFallbackTitle(conversation, l10n);
 }
 
 /// A presentation-only label; never save this placeholder as a user title.

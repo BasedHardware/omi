@@ -567,12 +567,12 @@ def coordinator():
 async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, monkeypatch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
     pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
+    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
     pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
     pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
     pipeline.users_db = MagicMock()
@@ -597,7 +597,28 @@ async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, mo
         '_candidate_rows',
         lambda *_args, **_kwargs: [generation(0)],
     )
+    claims = {
+        'f.opus': {
+            'capture_root': '12345678-1234-4234-8234-123456789abc',
+            'clock_epoch': 0,
+            'source_frame_start': 0,
+            'frame_count': 1,
+            'rate_hz': 16000,
+            'channel': 'mono',
+            'codec': 'opus',
+        }
+    }
+
+    async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
+        return (
+            wav_paths,
+            {path: {'claim': claims['f.opus'], 'offsets': [0, 16000], 'incomplete': False} for path in wav_paths},
+            False,
+        )
+
+    monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
     kwargs = SimpleNamespace(
+        capture_evidence_claims=claims,
         target_conversation_id='STAMP',
         client_device_id='pendant',
         recording_session_id=ORIGIN,

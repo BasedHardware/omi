@@ -50,8 +50,6 @@ const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
 
-const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
-
 class WalRetentionRisk {
   const WalRetentionRisk({
     required this.engagedAt,
@@ -179,6 +177,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
+  BleAudioCodec get currentCodec => _codec;
   String? _deviceId;
   String? _deviceModel;
   Geolocation? _sessionGeolocation;
@@ -666,7 +665,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
-    if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+    if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
       _storeSelectedRuns(
         evidenceFrames,
         _frameSynced.sublist(low, high),
@@ -912,7 +911,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final evidence = stableCaptureEvidence(frames);
         final live = _liveEvidenceFor(frames);
 
-        if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, frames)) {
+        if (partitionsEvidenceRuns(true, _codec, frames)) {
           _storeSelectedRuns(
             frames,
             synced,
@@ -1564,7 +1563,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     if (shouldStored) {
-      if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+      if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
         _storeSelectedRuns(
           evidenceFrames,
           _frameSynced.sublist(0, high),

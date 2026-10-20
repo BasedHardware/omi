@@ -286,6 +286,36 @@ verification. Roll back to off to stop new dispatches; accepted normal
 projection still drains. Failed/ambiguous intents require a separately reviewed
 operator decision, never a blind reset to prepared.
 
+### Client status for held uploads
+
+The upload ledger stays `processing` while a unit is held. The status poll and a
+re-upload of the same content (`durable_status`) used to answer `failed` with
+`batch_worker_quarantined`; the phone re-uploaded, received the same answer and
+looped. Kill switch `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` (default on)
+answers instead:
+
+- `completed` with an empty result and `reason_code: batch_unit_held` when every
+  failed unit is `failed_held` with no open `speech_redrive`,
+  `terminal_disposition` or `silence_disposition` intent, and every other unit
+  is `committed`. Released apps ACK the WAL. A re-upload cannot change the
+  outcome, and the held unit's encrypted audio stays server-side for the
+  operator path above. Committed siblings are already projected; no
+  conversation ID is named. Nothing is written: the ledger, jobs and
+  retention keep their held state.
+- `processing` when such an intent is open or a sibling is still in flight.
+- Any other quarantine failure keeps `failed`/`batch_worker_quarantined`.
+
+Completed content whose conversation the user has since deleted answers
+`completed` with an empty result and `reason_code: conversation_deleted`, on
+both the poll and the re-upload claim (a legacy receipt re-upload answers the
+synchronous all-success 200 shape). Every other privacy denial keeps its 409.
+
+A unit admitted while recovery was off records `recovery_enabled=false` and used
+to sit `held` forever. Kill switch `BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED`
+(default on) lets the sweep and dispatch re-resolve that part while the unit is
+`held` with no `recovery` intent (no paid call authorized). It adopts the fresh
+part only when it is enabled; an enabled snapshot is never re-resolved.
+
 ### Dark empty-ASR disposition
 
 `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=false` is the default on all roles.
@@ -675,6 +705,25 @@ its `projection_watermark`, following `previous_segment_id` links (and erased
 receipts) in chain order. It stops at the first row whose assignment does not
 advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
 afterwards as before, and any error in the wake falls back to it.
+
+`BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` defaults to `true` (kill
+switch: `false`). The wake's merge drain releases the recovered unit at once.
+Without it, a recovered unit whose owner had an unready, earlier-captured
+head waited out the head wait from its settle time (`ready_at`) plus a
+maintenance tick. In the 2026-10-20 5% run 18, 46 of 54 wakes advanced no row
+and held recovered units took 65–86 s from settle to commit; projection then
+waited for the next 20 s sweep. The wake passes a release set: the recovered
+unit, then up to 32 of its content's other units. When strict order,
+fresh-first and the head wait commit nothing, the first row in the set that is
+still the owner's pending, ready job commits past the head wait; the commit
+transaction re-verifies the row. Only the recovered unit itself also passes
+the catch-up depth hold; its siblings keep it, so a wake cannot push a burst
+of catch-up rows past the cap ahead of a later fresh row. The
+commit body, late marking, log chain and projection order are unchanged, and
+an unready or fenced row is dropped from the set. Release commits carry
+`recovered_release: true` and log `event=batch_merge outcome=recovered_release
+source= head_state=` (closed labels only). `python -m
+testing.recovered_release_scenario` replays the run 18 shape.
 
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For

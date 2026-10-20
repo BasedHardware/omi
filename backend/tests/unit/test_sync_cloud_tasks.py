@@ -1441,21 +1441,26 @@ def _load_sync_router_for_fast_path():
     journeys_mod.record_journey_accepted = MagicMock()
     shape_mod = types.ModuleType('utils.conversation_shape')
     shape_mod.observe_completed_conversation_shape = MagicMock()
-    saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
-    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
     saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
     saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
-    sys.modules['utils.observability.fallback'] = fallback_mod
-    sys.modules['utils.observability.transcription'] = transcription_mod
-    sys.modules['utils.observability.journeys'] = journeys_mod
+    # Empty __path__ hides new observability modules. Derive the rest from disk
+    # so held_content (and the next sibling) resolve; spies above stay in place.
+    from testing.import_isolation import install_package_submodule_stubs
+
+    install_package_submodule_stubs(
+        'utils.observability',
+        saved_modules,
+        overrides={
+            'utils.observability.fallback': fallback_mod,
+            'utils.observability.transcription': transcription_mod,
+            'utils.observability.journeys': journeys_mod,
+        },
+    )
     sys.modules['utils.conversation_shape'] = shape_mod
-    obs_pkg.fallback = fallback_mod
-    obs_pkg.transcription = transcription_mod
-    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock

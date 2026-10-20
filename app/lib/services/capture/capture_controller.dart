@@ -18,7 +18,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:uuid/uuid.dart';
+import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -96,6 +96,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SttCapLiveHeldEvent;
 
 part 'capture_uplink_policy.dart';
+part 'capture_live_recovery.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
@@ -166,25 +167,11 @@ class CaptureController extends ChangeNotifier
   Timer? _calendarGapTimer;
   Timer? _captureHealthTimer;
 
-  String? _sourceCaptureRoot;
-  LocalWalSync? _captureEvidenceSync;
-  int? _captureEvidenceGeneration;
-  String? _captureEvidenceUid;
+  final _captureEvidenceIdentity = CaptureEvidenceIdentity();
 
-  String? get _captureEvidenceRoot {
-    if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) return null;
-    final LocalWalSync sync = _wal.getSyncs().phone;
-    final generation = sync.captureEvidenceGeneration;
-    final uid = _preferences.uid;
-    if (!identical(sync, _captureEvidenceSync) ||
-        generation != _captureEvidenceGeneration ||
-        uid != _captureEvidenceUid) {
-      _sourceCaptureRoot = null;
-      _captureEvidenceSync = sync;
-      _captureEvidenceGeneration = generation;
-      _captureEvidenceUid = uid;
-    }
-    return _sourceCaptureRoot ??= const Uuid().v4();
+  String get _captureEvidenceRoot {
+    final sync = _wal.getSyncs().phone;
+    return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
   CaptureExternalActions externalActions;
@@ -215,6 +202,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Timer? _keepAliveTimer;
+  final _liveRecovery = _LiveRecoveryState();
 
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
   DateTime? _lastRejectedTokenRefreshAt;
@@ -420,6 +408,7 @@ class CaptureController extends ChangeNotifier
     }
     _syncCaptureHealthTimer(null);
     _installIngressByteObserver();
+    _installLiveRecovery();
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -662,6 +651,7 @@ class CaptureController extends ChangeNotifier
     _syncCalendarGapTimer();
     unawaited(_resumeSilenceLogged());
     unawaited(_dispatchLogged(const AppForegrounded()));
+    _recoverCaptureOnResume();
   }
 
   Future<void> _probeStallBody() async {
@@ -1179,7 +1169,7 @@ class CaptureController extends ChangeNotifier
   void _rollCaptureSession(String identity) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _sourceCaptureRoot = null;
+    _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -1643,8 +1633,10 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
-        ? LocalSttFailure(FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
-            canProbeRecovery: true)
+        ? LocalSttFailure(
+            FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
+            canProbeRecovery: true,
+          )
         : null;
     if (decision.blockSocket) {
       Logger.warning('[SttMode] Blocking transcription socket (${decision.reason})');
@@ -1919,8 +1911,13 @@ class CaptureController extends ChangeNotifier
     _voiceCommandStartedDuringOnboarding = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
-    unawaited(DebugLogManager.logEvent(
-        'pendant_voice_question', {'phase': 'submitted', 'frames': data.length, 'auto_submitted': autoSubmitted}));
+    unawaited(
+      DebugLogManager.logEvent('pendant_voice_question', {
+        'phase': 'submitted',
+        'frames': data.length,
+        'auto_submitted': autoSubmitted,
+      }),
+    );
     _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
   }
 
@@ -2267,12 +2264,12 @@ class CaptureController extends ChangeNotifier
       ServiceManager.instance().device.ensureConnection(deviceId, force: force);
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
+    if (_audioCodecLoader != null) return _rememberingCodec(deviceId, () => _audioCodecLoader!(deviceId));
     var connection = await _ensureDeviceConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
-    return connection.getAudioCodec();
+    return _rememberingCodec(deviceId, connection.getAudioCodec);
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
@@ -2331,8 +2328,10 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
-        ? LocalSttFailure(FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
-            canProbeRecovery: true)
+        ? LocalSttFailure(
+            FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
+            canProbeRecovery: true,
+          )
         : null;
     if (decision.blockSocket) {
       await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
@@ -2650,7 +2649,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _sourceCaptureRoot = null;
+    _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];
     hasTranscripts = false;
@@ -2741,6 +2740,7 @@ class CaptureController extends ChangeNotifier
     // synchronously).
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+    _liveRecovery.kickTimer?.cancel();
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();
@@ -3173,8 +3173,10 @@ class CaptureController extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    _liveRecovery.deviceStoppedByCaller = false;
     if (SyncWakeScope.syncOnly) {
       if (device != null) updateRecordingDevice(device);
+      _deferDeviceStartPastSyncPass();
       return;
     }
     final outcome = await _capture.dispatch(DeviceStartRequested(device: device));
@@ -3215,6 +3217,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    _liveRecovery.deviceStoppedByCaller = !cleanDevice;
     final outcome = await _capture.dispatch(DeviceStopRequested(cleanDevice: cleanDevice));
     outcome.throwIfFailed();
   }
@@ -3290,6 +3293,7 @@ class CaptureController extends ChangeNotifier
     }
 
     _startKeepAliveServices();
+    _kickLiveRecoveryAfterClose(closeCode);
     notifyListeners();
   }
 
@@ -3423,6 +3427,7 @@ class CaptureController extends ChangeNotifier
 
     notifyListeners();
     _startKeepAliveServices();
+    _kickLiveRecovery('socket_error');
   }
 
   @override
@@ -3792,10 +3797,8 @@ class CaptureController extends ChangeNotifier
       request = _processInProgressOutcomeOverride!();
     } else if (_processInProgressConversationOverride != null) {
       request = _processInProgressConversationOverride!().then(
-        (result) => InProgressProcessOutcome(
-          response: result,
-          absence: result == null ? ProcessAbsence.transport : null,
-        ),
+        (result) =>
+            InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null),
       );
     } else {
       request = processInProgressConversationOutcome();
@@ -4298,6 +4301,7 @@ class CaptureController extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
+    if (isConnected) _kickLiveRecovery('connectivity_restored');
     notifyListeners();
   }
 

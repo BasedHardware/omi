@@ -57,6 +57,10 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from utils.memory.index_window_cursor import (
+    encode_cursor as encode_memory_window_cursor,
+    query_scope as memory_window_scope,
+)
 from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
@@ -1644,14 +1648,54 @@ _add(
         reason='existence probe run for both stores on every count driver call',
     )
 )
+
+
+def _memory_window_bookmark(client, combo, trial):
+    if combo.get('cursor') == 'valid':
+        combo['cursor'] = encode_memory_window_cursor(
+            T0, 'mem-1', memory_window_scope({'uid': UID, 'order': combo['order_field']})
+        )
+
+
 _add(
-    CoveredByEntry(
+    DriverEntry(
         'database.memories._stream_memory_list_index_window',
-        covered_by=(
-            'database.memories.get_memories',
-            'database.memories.list_memory_updated_or_created_index',
+        base={'memories_ref': ref_collection(f'users/{UID}/memories')},
+        domains={
+            'uid': [None, UID],
+            'order_field': ['updated_at', 'created_at'],
+            'cursor': [None, '', 'invalid', 'valid'],
+            'full_documents': [False, True],
+        },
+        neutrals={
+            'candidate_limit': _LIMIT,
+            'budget': _BUDGET,
+            'cursor_snapshot': (None, 'legacy snapshot seeks covered by list consumer'),
+        },
+        setup=_memory_window_bookmark,
+        patchers=(
+            _stub('config.firestore_read_levers.lever_enabled', True),
+            lambda client: unittest.mock.patch(
+                'utils.memory.index_window_cursor.time.time', return_value=int(T0.timestamp())
+            ),
+            lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
         ),
-        reason='candidate window streamer observed inside both listed consumers',
+    )
+)
+_add(
+    DriverEntry(
+        'database.memories.scan_memory_list_index_window',
+        base={'uid': UID},
+        domains={'order_field': ['updated_at', 'created_at'], 'cursor': [None, '', 'invalid', 'valid']},
+        neutrals={'limit': _LIMIT, 'budget': _BUDGET},
+        setup=_memory_window_bookmark,
+        patchers=(
+            _stub('config.firestore_read_levers.lever_enabled', True),
+            lambda client: unittest.mock.patch(
+                'utils.memory.index_window_cursor.time.time', return_value=int(T0.timestamp())
+            ),
+            lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
+        ),
     )
 )
 _add(DriverEntry('database.memories.count_default_visible_memories', base={'uid': UID}))
@@ -3266,5 +3310,66 @@ _add(
     DriverEntry(
         'database.cap_hold_redrive.discover',
         domains={'kind': ['choices', 'staging', 'cleanup']},
+    )
+)
+_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))
+
+
+# WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as
+# __name__ IN document-reference queries (<=30 per batch) over the two owner
+# collections: memory_items first, then memory_historical_overrides for IDs still
+# missing. Queue order per trial matches that read order for the combo's ID list
+# (the queue is FIFO across both collections, so every queued row must be consumed).
+from utils.memory.memory_service import MemoryService as _WQ7MemoryService
+
+_WQ7_IDS = [f'mem-{i}' for i in range(31)]
+
+
+def _seed_canonical_status_pairs(client, combo, trial):
+    items = f'users/{UID}/memory_items'
+    overrides = f'users/{UID}/memory_historical_overrides'
+    ids = combo.get('memory_ids') or []
+    # Every trial below consumes its whole queue for either combo size.
+    if trial == 0:
+        return  # both queries stream empty
+    if len(ids) < 31:
+        # small combos: trial 1 items answers everything; trial 2 overrides answer everything.
+        if trial == 1:
+            client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids])
+        else:
+            client.queue_results([])
+            client.queue_results(
+                [client.snapshot(f'{overrides}/{i}', {'id': i, 'suppression': 'tombstoned'}) for i in ids]
+            )
+        return
+    if trial == 1:
+        # 31 IDs, batch 1 (ids[0:30]) fully answered by items; batch 2 misses, overrides answer.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:30]])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
+        return
+    if trial == 2:
+        # 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
+        client.queue_results([])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'tombstoned'})])
+        return
+    # trial 3 + 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+    client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
+
+
+_add(
+    DriverEntry(
+        'utils.memory.memory_service.MemoryService._canonical_statuses_by_query',
+        base={'self': _WQ7MemoryService(), 'uid': UID},
+        domains={'memory_ids': [['mem-1'], _WQ7_IDS]},
+        neutrals={'budget': _BUDGET},
+        setup=_seed_canonical_status_pairs,
+        trials=4,
+        patchers=(_stub('config.firestore_read_levers.lever_enabled', True),),
     )
 )
