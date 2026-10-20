@@ -3752,29 +3752,6 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// A clip is sampled on device (frames + audio) so the whole file never uploads.
-  private func uploadVideoAttachment(id: String, url: URL, fileName: String, appId: String?) async {
-    do {
-      let video = try await ChatVideoSampler.sample(url: url)
-      let resp = try await APIClient.shared.uploadChatVideo(video, fileName: fileName, appId: appId)
-      guard let server = resp.first else { throw APIError.invalidResponse }
-      await MainActor.run {
-        if let idx = self.pendingAttachments.firstIndex(where: { $0.id == id }) {
-          self.pendingAttachments[idx].serverId = server.id
-          self.pendingAttachments[idx].thumbnailURL = server.thumbnail
-          if let mime = server.mimeType { self.pendingAttachments[idx].mimeType = mime }
-          if let name = server.name { self.pendingAttachments[idx].fileName = name }
-          self.pendingAttachments[idx].state = .uploaded
-        }
-      }
-    } catch {
-      logError("ChatProvider: video attachment upload failed", error: error)
-      await MainActor.run {
-        self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
-      }
-    }
-  }
-
   private func setAttachmentState(id: String, state: ChatAttachment.State) {
     guard let idx = pendingAttachments.firstIndex(where: { $0.id == id }) else { return }
     pendingAttachments[idx].state = state

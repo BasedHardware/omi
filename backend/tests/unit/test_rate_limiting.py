@@ -721,16 +721,13 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
-        # send_message, device_tool_result, initial(x2), voice_message, voice_transcribe,
-        # file_upload(v1+v2+v2 video frames) = 9
-        self.assertEqual(len(matches), 9, f"chat.py expected 9 rate limits, got {len(matches)}")
+        # send_message, device_tool_result, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 8
+        self.assertEqual(len(matches), 8, f"chat.py expected 8 rate limits, got {len(matches)}")
 
     def test_legacy_file_upload_rate_limited(self):
         """Legacy v1/files must also be rate limited to prevent bypass."""
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*file:upload")
-        self.assertEqual(
-            len(matches), 3, f"chat.py expected 3 file:upload limits (v1+v2+video frames), got {len(matches)}"
-        )
+        self.assertEqual(len(matches), 2, f"chat.py expected 2 file:upload limits (v1+v2), got {len(matches)}")
 
     def test_developer_dependencies_have_rate_limits(self):
         source = open("dependencies.py", encoding='utf-8').read()

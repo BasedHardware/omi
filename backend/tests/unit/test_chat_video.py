@@ -3,6 +3,7 @@
 import asyncio
 import json
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -14,9 +15,10 @@ from PIL import Image
 # Imported at collection: the fast-unit guard times the call phase, not first imports.
 import utils.http_client  # noqa: F401  (prepare_video's STT semaphore)
 from database import chat as chat_db
+from routers import chat_video
 from models.chat import FileChat
 from utils import encryption
-from utils.media import video_frames
+from utils.media import video_frames, video_upload
 from utils.messaging.adapters.media import (
     VOICE_REPLY,
     ChatMediaStore,
@@ -309,3 +311,61 @@ def test_client_dump_hides_transcript_and_filmstrip():
     dumped = file.client_dump()
     assert dumped['video'] == {'duration_seconds': 12}
     assert json.dumps(dumped, default=str).count('we fixed it') == 0
+
+
+def _video_client(monkeypatch, calls):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    def fake_store(uid, name, frames, times, duration, audio_path):
+        calls.append((uid, name, len(frames), times, duration, audio_path and audio_path.read_bytes()))
+        file, _ = _video_file()
+        row = file.model_dump()
+        row['size'] = 10
+        return row
+
+    monkeypatch.setattr(video_upload, 'video_from_frames', fake_store)
+    app = FastAPI()
+    app.include_router(chat_video.router)
+    route = next(r for r in app.routes if getattr(r, 'path', '') == '/v2/files/video')
+    uid_dependency = next(d.call for d in route.dependant.dependencies if d.name == 'uid')
+    app.dependency_overrides[uid_dependency] = lambda: 'u'
+    return TestClient(app)
+
+
+def test_device_frames_route_validates_and_hides_private_fields(monkeypatch, tmp_path):
+    calls = []
+    client = _video_client(monkeypatch, calls)
+    frames = [('frames', (f'f{i}.jpg', _jpeg((i, 0, 0)), 'image/jpeg')) for i in range(2)]
+    form = {'frame_times': '[0, 1.5]', 'duration_seconds': '2', 'name': '../clip.mov'}
+    ok = client.post('/v2/files/video', files=frames + [('audio', ('a.m4a', b'aac', 'audio/mp4'))], data=form)
+    assert ok.status_code == 200, ok.text
+    (body,) = ok.json()
+    assert body['video']['transcript'] == '' and body['video']['strip_file_id'] == ''
+    assert body['video']['duration_seconds'] == 12
+    ((uid, name, count, times, duration, audio),) = calls
+    assert (uid, name, count, times, duration, audio) == ('u', 'clip.mov', 2, [0, 1.5], 2.0, b'aac')
+    assert not list(Path(tempfile.gettempdir()).glob('*_audio'))  # temp audio removed
+
+    for bad in ('[0]', '{"a": 1}', 'nope', '[0, true]'):
+        response = client.post('/v2/files/video', files=frames, data={**form, 'frame_times': bad})
+        assert response.status_code == 400, bad
+    too_many = [('frames', (f'f{i}.jpg', b'x', 'image/jpeg')) for i in range(MAX_CANDIDATES + 1)]
+    response = client.post(
+        '/v2/files/video', files=too_many, data={**form, 'frame_times': json.dumps(list(range(MAX_CANDIDATES + 1)))}
+    )
+    assert response.status_code == 400 and len(calls) == 1
+
+
+def test_uploaded_clip_route_maps_unreadable_video_to_400(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+
+    def unreadable(uid, path, name):
+        raise VideoFramesError('no video stream')
+
+    monkeypatch.setattr(video_upload, 'video_from_file', unreadable)
+    assert chat_video.is_video_upload('IMG_1.MOV', None) and chat_video.is_video_upload('x', 'video/mp4')
+    assert not chat_video.is_video_upload('a.png', 'image/png')
+    with pytest.raises(HTTPException) as error:
+        chat_video.store_uploaded_clip('u', tmp_path / 'clip.mp4', 'clip.mp4')
+    assert error.value.status_code == 400
