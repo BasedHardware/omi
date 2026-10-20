@@ -49,7 +49,7 @@ class _LoggerErrorSheetState extends State<LoggerErrorSheet> {
           ),
         ),
         const SizedBox(height: OmiSpacing.md),
-        OmiButton.primary(
+        OmiButton(
           label: context.l10n.submit,
           onPressed: () {
             Intercom.instance.displayMessageComposer(_controller.text);
