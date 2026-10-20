@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-chatgpt-reconnect-disconnect.png",
+      "platform": "mobile-ios",
+      "description": "Reconnect sheet for a partial ChatGPT grant now offers Disconnect",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

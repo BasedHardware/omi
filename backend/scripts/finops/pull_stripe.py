@@ -28,6 +28,9 @@ import urllib.parse
 import urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import auth_http  # noqa: E402
+
 CATALOG = HERE.parent.parent / "config" / "plan_catalog.json"
 ENV = pathlib.Path.home() / ".hermes/skills/omi/omi-stripe/references/.env"
 COUNTED_STATUSES = ("active", "trialing", "past_due")
@@ -83,7 +86,11 @@ def main() -> None:
     def get(path: str, **params):
         q = urllib.parse.urlencode(params, doseq=True)
         req = urllib.request.Request("https://api.stripe.com/v1" + path + "?" + q, headers={"Authorization": hdr})
-        return json.load(urllib.request.urlopen(req, timeout=60))
+        try:
+            with auth_http.open_authenticated(req, timeout=60) as response:
+                return json.load(response)
+        except auth_http.RedirectRefused:
+            raise SystemExit("stripe redirect refused") from None
 
     price_plan = {}
     if CATALOG.exists():

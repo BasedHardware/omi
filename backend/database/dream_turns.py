@@ -136,8 +136,8 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         hold = lease.get('minute_hold') or {}
         capacities = []
         held_shards = list((hold.get('shards') or {}).items())
-        # Minute headroom is reserved-capacity burndown, matching reserve(): the price-weighted tokens
-        # (cached input at its fraction, unknown tail at full) plus output topped up to the output ratio.
+        # Post actual burndown, including reported cache savings and output's price ratio.
+        # Admission is enforced by the uncached hold in reserve(), not by settlement.
         weighted = getattr(turn, 'price_weighted_tokens', None)
         completion = (
             turn.completion_tokens if type(turn.completion_tokens) is int and turn.completion_tokens >= 0 else 0

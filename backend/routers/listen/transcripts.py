@@ -349,7 +349,7 @@ class TranscriptProcessor:
                 context = coordinator.result_context(segment_id, conversation_id) if coordinator else None
                 if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
                     return False
-                if config.gate_enabled and config.admits(self.host.request.uid):
+                if config.gate_enabled:
                     if context is None:
                         current = await self.cache.get(conversation_id, force_refresh=True)
                         source = next(
@@ -720,12 +720,12 @@ class TranscriptProcessor:
             return
         coordinator.demand_changed()
         config = resolve_ondemand_config()
-        if not config.gate_enabled or not config.admits(self.host.request.uid) or coordinator.realtime_interpreter:
+        if not config.gate_enabled or coordinator.realtime_interpreter:
             return
         demand = coordinator.demand
         if demand is None:
             return
-        snapshot = demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+        snapshot = demand.snapshot()
         if snapshot.policy != DemandPolicy.viewed:
             return
         conversation_id = self.host.state.current_conversation_id
@@ -753,15 +753,15 @@ class TranscriptProcessor:
             current = resolve_ondemand_config()
             if (
                 not current.gate_enabled
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).policy != DemandPolicy.viewed
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).generation != snapshot.generation
+                or demand.snapshot().policy != DemandPolicy.viewed
+                or demand.snapshot().generation != snapshot.generation
                 or self.host.state.current_conversation_id != conversation_id
             ):
                 return
             page = raw_segments[max(0, end - config.max_segments) : end]
             end -= config.max_segments
             pages_done += 1
-            policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
+            policy = 'viewed_v1'
             segments = [
                 TranscriptSegment(**raw)
                 for raw in page

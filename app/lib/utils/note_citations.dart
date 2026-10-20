@@ -72,7 +72,7 @@
           content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
     }
     if (tokens.isEmpty ||
-        RegExp(r'^(?:spk|speaker)[ _]\d+:?$', caseSensitive: false).hasMatch(content) ||
+        RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true).hasMatch(content) ||
         RegExp(r'^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$').hasMatch(content)) {
       return remove();
     }
@@ -84,9 +84,15 @@
       (match) => unit(match[0]!));
   final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
-    text = text.replaceAll(RegExp('(?<![\\w-])${RegExp.escape(id)}(?![\\w-])'), marker);
+    text =
+        text.replaceAll(RegExp('(?<![\\p{L}\\p{N}_-])${RegExp.escape(id)}(?![\\p{L}\\p{N}_-])', unicode: true), marker);
   }
-  text = text.replaceAll(RegExp(r'\b(?:spk|speaker)[ _]\d+\b:?[ \t]*', caseSensitive: false), marker);
+  // Word boundaries and digits are Unicode, as in Python generation and Swift (ICU): an ID or
+  // speaker label glued to CJK text is part of a word, not a citation, and `Speaker_١٢` is a label.
+  text = text.replaceAll(
+      RegExp(r'(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*',
+          caseSensitive: false, unicode: true),
+      marker);
   while (true) {
     final cleaned = text.replaceAllMapped(RegExp(r'\([^()\n]*\)'), (match) {
       final value = match[0]!;

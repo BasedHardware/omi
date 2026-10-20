@@ -6040,7 +6040,7 @@
             "thresholdsStyle": {
               "mode": "off"
             },
-            "insertNulls": 172800000
+            "insertNulls": 129600000
           },
           "noValue": "Loading\u2026",
           "decimals": 2
@@ -6129,7 +6129,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Oldest data-through day (UTC) across every chart on the wall, and how many series are still filling; the wall shows stale-but-real data rather than waiting. Sources without a defensible read path (crash-free, answer ratings, payer churn, activated \u2192 paid, gross margin) stay off the wall; the full classified reasons are in /api/omi/stats/wall/series/headline.",
+      "description": "Day before the oldest source read behind the wall's charts (UTC), how many series are still filling, and how many headline stats are a retained earlier value because their source failed; the wall shows stale-but-real data rather than waiting. A chart's own last point can be older (cost settles D\u22122; Margin by plan has its own line). Sources without a defensible read path (crash-free, answer ratings, payer churn, activated \u2192 paid, gross margin) stay off the wall; the full classified reasons are in /api/omi/stats/wall/series/headline.",
       "targets": [
         {
           "refId": "A",
