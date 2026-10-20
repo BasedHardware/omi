@@ -410,7 +410,14 @@ def expected_cloud_run_env(
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
         for key, entry in secrets_map.items():
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=True, environ=environ)
-        rendered_service = render_backend_runtime_env._as_config_dict(rendered_services.get(service_name)) or {}
+        raw_rendered = rendered_services.get(service_name)
+        if rendered_state_path is not None and not isinstance(raw_rendered, Mapping):
+            # The rendered state is all-or-nothing per service: a missing or
+            # malformed entry must not silently fall back to the raw manifest,
+            # where deploy-time env_var bindings degrade to name-only checks
+            # while the command claims to validate the exact renderer output.
+            raise ValueError(f'Rendered state {rendered_state_path} has no valid entry for service {service_name!r}')
+        rendered_service = render_backend_runtime_env._as_config_dict(raw_rendered) or {}
         if rendered_service:
             # The rendered state is the exact deploy contract. A provisional
             # env_var binding the renderer omitted (unset at deploy time, or a

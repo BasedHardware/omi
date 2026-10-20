@@ -471,7 +471,13 @@ def test_rendered_state_supplies_exact_expected_values(checker, tmp_path: Path) 
     rendered = tmp_path / 'state.json'
     rendered.write_text(
         json.dumps(
-            {'services': {'backend-sync': {'env': [{'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://other/run'}]}}}
+            {
+                'services': {
+                    # The renderer emits every manifest service; a partial state is rejected.
+                    'backend': {'env': []},
+                    'backend-sync': {'env': [{'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://other/run'}]},
+                }
+            }
         ),
         encoding='utf-8',
     )
@@ -497,6 +503,24 @@ def test_rendered_state_file_must_exist_and_have_services(checker, tmp_path: Pat
     bad.write_text(json.dumps({'jobs': {}}), encoding='utf-8')
     with pytest.raises(ValueError, match='services'):
         checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=bad)
+
+
+def test_rendered_state_must_carry_every_checked_service(checker, tmp_path: Path) -> None:
+    # A rendered state with a valid top-level services mapping but no entry (or
+    # a non-mapping entry) for a checked service must be rejected: falling back
+    # to the raw manifest would silently degrade deploy-time bindings to
+    # name-only checks while the command claims exact-state validation.
+    manifest_path = _two_service_manifest(tmp_path)
+    missing = tmp_path / 'missing-service.json'
+    missing.write_text(json.dumps({'services': {'backend': {'env': []}}}), encoding='utf-8')
+    with pytest.raises(ValueError, match="no valid entry for service 'backend-sync'"):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=missing)
+    malformed = tmp_path / 'malformed-service.json'
+    malformed.write_text(
+        json.dumps({'services': {'backend': {'env': []}, 'backend-sync': 'not-a-mapping'}}), encoding='utf-8'
+    )
+    with pytest.raises(ValueError, match="no valid entry for service 'backend-sync'"):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=malformed)
 
 
 def test_rendered_state_drops_omitted_provisional_bindings(checker, tmp_path: Path) -> None:
