@@ -132,11 +132,21 @@ from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from utils.observability.fallback import record_fallback
+from utils.conversations import paid_lock_recovery
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:
+    try:
+        paid_lock_recovery.heal_conversations(uid, conversations)
+    except paid_lock_recovery.RecoveryUnavailable as error:
+        raise HTTPException(
+            status_code=503, detail="Saved conversation access could not be restored. Please retry."
+        ) from error
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
@@ -158,6 +168,7 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+    _heal_locked_conversations_if_eligible(uid, [conversation])
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
@@ -967,6 +978,7 @@ def get_conversations(
         list_fields_only=True,
     )
 
+    _heal_locked_conversations_if_eligible(uid, conversations)
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -2021,6 +2033,7 @@ async def _search_exact_conversation_reference(
         [exact_conversation_id],
         include_discarded=bool(search_request.include_discarded),
     )
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     conversations = [
         conversation
@@ -2070,6 +2083,7 @@ async def _browse_speaker_conversations(
             budget=budget,
         ),
     )
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, browse_results.get('items', []))
     redact_conversations_for_list(browse_results['items'])
     finish_list_budget(response, budget)
     return browse_results
@@ -2108,6 +2122,8 @@ async def search_conversations_endpoint(
     )
 
     def _typesense_page() -> Dict[str, Any]:
+        # These owner-scoped candidates stay server-side until authoritative
+        # hydration/recovery below. Only locked rows need an entitlement read.
         search_results = search_conversations(
             query=search_request.query,
             page=effective_page,
@@ -2117,6 +2133,7 @@ async def search_conversations_endpoint(
             start_date=start_timestamp,
             end_date=end_timestamp,
             speaker_id=search_request.speaker_id,
+            include_locked=True,
         )
         return search_results
 
@@ -2166,8 +2183,9 @@ async def search_conversations_endpoint(
     # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
     by_id = {c.get('id'): c for c in conversations if c.get('id')}
     conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
-    # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
-    # so search never leaks that a locked conversation matched a query.
+    # The index can lag Firestore. Restore an eligible owner's historical
+    # access, then filter all remaining locks before returning any matches.
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
