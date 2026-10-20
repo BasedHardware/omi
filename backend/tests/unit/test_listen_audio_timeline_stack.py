@@ -1286,6 +1286,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Historical red comparisons still exercise the graduated consumer path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module
