@@ -44,23 +44,28 @@ Future<bool> confirmConversationDelete(BuildContext context, {Rect? anchor}) asy
   }
   final prefs = SharedPreferencesUtil();
   if (!prefs.showConversationDeleteConfirmation) return true;
-  final result = anchor != null
-      ? await showOmiConfirmMenu(
-          context,
-          anchor: anchor,
-          title: l10n.deleteConversationTitle,
-          message: l10n.deleteConversationMessage,
-          confirmLabel: l10n.deleteConversation,
-          confirmIcon: const FaIcon(FontAwesomeIcons.trashCan),
-          offerOptOut: true,
-        )
-      : await showOmiConfirmWithOptOut(
-          context,
-          title: l10n.deleteConversationTitle,
-          message: l10n.deleteConversationMessage,
-          confirmLabel: l10n.delete,
-          destructive: true,
-        );
+  final OmiConfirmResult result;
+  if (anchor != null) {
+    if (!context.mounted) return false;
+    result = await showOmiConfirmMenu(
+      context,
+      anchor: anchor,
+      title: l10n.deleteConversationTitle,
+      message: l10n.deleteConversationMessage,
+      confirmLabel: l10n.deleteConversation,
+      confirmIcon: const FaIcon(FontAwesomeIcons.trashCan),
+      offerOptOut: true,
+    );
+  } else {
+    if (!context.mounted) return false;
+    result = await showOmiConfirmWithOptOut(
+      context,
+      title: l10n.deleteConversationTitle,
+      message: l10n.deleteConversationMessage,
+      confirmLabel: l10n.delete,
+      destructive: true,
+    );
+  }
   if (result.confirmed && result.dontAskAgain) prefs.showConversationDeleteConfirmation = false;
   return result.confirmed;
 }
