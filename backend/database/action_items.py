@@ -489,7 +489,7 @@ def _list_scan_budget(row_budget: int) -> int:
     return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
-def _coerce_item_datetime(val: Any, default: datetime) -> datetime:
+def _coerce_item_datetime(val: Any, default: Optional[datetime]) -> Optional[datetime]:
     if val is None:
         return default
     if isinstance(val, datetime):
@@ -1405,7 +1405,10 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
         data['id'] = doc.id
         synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
-    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    synced_items.sort(
+        key=lambda x: _coerce_item_datetime(x.get('updated_at'), datetime.min.replace(tzinfo=timezone.utc)),
+        reverse=True,
+    )
 
     return {"pending_export": pending_export, "synced_items": synced_items}
 
@@ -1585,12 +1588,12 @@ def get_scores(
 
     for data in deleted_items:
         completed = data.get('completed') is True
-        due_at = data.get('due_at')
-        if isinstance(due_at, datetime) and day_start <= due_at < day_end:
+        due_at = _coerce_item_datetime(data.get('due_at'), None)
+        if due_at is not None and day_start <= due_at < day_end:
             daily_total -= 1
             daily_completed -= int(completed)
-        created_at = data.get('created_at')
-        if isinstance(created_at, datetime) and week_start <= created_at < day_end:
+        created_at = _coerce_item_datetime(data.get('created_at'), None)
+        if created_at is not None and week_start <= created_at < day_end:
             weekly_total -= 1
             weekly_completed -= int(completed)
         overall_total -= 1
