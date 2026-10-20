@@ -1632,6 +1632,17 @@ The lag probe is a process-wide task started from an empty `contextvars.Context`
 
 D0b gate: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h before the HPA retune proceeds.
 
+### Listen websocket close metrics
+
+Each session that reaches teardown counts once in `omi_listen_ws_close_total{code_class, initiator, held}` (`utils/observability/listen_close.py`). The labels record the **first** close the server observed; a later close-frame echo of the same end doesn't change them.
+
+- `initiator=client`: a `websocket.disconnect` frame or a `WebSocketDisconnect` on receive, heartbeat or event send, carrying the client's code. ASGI reports a peer that left without a close frame as `1006`.
+- `initiator=server`: teardown's own `websocket.close(code=close_code)` succeeded, or a terminal STT failure closed the socket in `utils/stt/live_failure.py` (teardown then skips its own close).
+- `initiator=unknown`: no close was observed and the server close failed or was never attempted. `code_class` is then the server's intended `close_code`.
+- `code_class` is one of `1000`, `1001`, `1006`, `1011` or `other` (application codes such as `1008` and `4xxx` count as `other`). `held` is `true` when the session was cap-held at teardown start (`receiver.cap_paused` or `live_hold.paused`).
+
+`omi_listen_ws_close_finalize_seconds{initiator, held}` measures the time from that first observed close (or teardown start, if none was observed) to the end of teardown. Pre-session rejections in `_admit`/`_bootstrap` and the decoder-initialisation close never reach teardown, so they aren't counted. No series carries uid, session or conversation labels, and every series is zero-initialised at import.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted
