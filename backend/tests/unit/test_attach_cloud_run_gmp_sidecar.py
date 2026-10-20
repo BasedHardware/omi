@@ -1393,6 +1393,8 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_legacy_sync_admissions_total',
         'omi_legacy_dark_ack_total',
         'omi_legacy_sync_mode_read_total',
+        # A2 job-store shadow: lane 12 parity_read.sh (the A2 sample gate).
+        'omi_jobstore_shadow_parity_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):

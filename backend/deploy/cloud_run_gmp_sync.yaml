@@ -18,10 +18,11 @@ spec:
         # directly (batch, accept-to-summary, summary debt/terminal, live outcome).
         # Legacy dark (contract (h)): drain_census and the 12h soak gates read
         # omi_legacy_sync_mode / _admissions_total / _dark_ack_total / _mode_read_total.
+        # A2 job-store shadow (lane 12): parity_read.sh reads omi_jobstore_shadow_parity_total.
         - action: keep
           sourceLabels:
             - __name__
-          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|legacy_sync_.*|legacy_dark_.*)'
+          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|legacy_sync_.*|legacy_dark_.*|jobstore_.*)'
         # These eagerly initialized live-STT combinations dominate empty series
         # on sync workers. Keep fallbacks from sync/summary/storage components.
         - action: drop
