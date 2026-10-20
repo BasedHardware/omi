@@ -28,8 +28,12 @@ extension AppState {
       mode: mode,
       onInitialStateObserved: { [weak self] in
         Task { @MainActor in
-          guard let self, let active = self.meetingDetector?.isMeetingConfirmed else { return }
-          await self.handleMeetingObservation(active: active)
+          guard let self, let detector = self.meetingDetector else { return }
+          if let active = MeetingConversationBoundaryPolicy.initialObservation(
+            captureActive: detector.isMeetingActive, meetingConfirmed: detector.isMeetingConfirmed)
+          {
+            await self.handleMeetingObservation(active: active)
+          }
           await self.reconcileCapture()
         }
       },
@@ -38,13 +42,19 @@ extension AppState {
         Self.noteMeetingContext(active: true)
         Task { @MainActor in await self?.handleMeetingObservation(active: true) }
       },
-      onChange: { [weak self] _ in
-        Task { @MainActor in await self?.reconcileCapture() }
+      onChange: { [weak self] active in
+        Task { @MainActor in
+          guard let self else { return }
+          // Finalize and flush meeting tails before closing the capture gate, as before.
+          if !active { await self.handleMeetingObservation(active: false) }
+          await self.reconcileCapture()
+        }
       },
       onConfirmedChange: { [weak self] active in
         Self.noteMeetingContext(active: active)
-        Task { @MainActor in
-          await self?.handleMeetingObservation(active: active)
+        // Off shares the capture edge above so shutdown waits for boundary finalization.
+        if active {
+          Task { @MainActor in await self?.handleMeetingObservation(active: true) }
         }
       },
       onNoteTakingNoticeReady: { [weak self] in

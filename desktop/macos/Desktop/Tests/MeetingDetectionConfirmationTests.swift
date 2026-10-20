@@ -239,6 +239,25 @@ final class MeetingDetectionConfirmationTests: XCTestCase {
     XCTAssertEqual(changes, 0)
   }
 
+  func testInitialProvisionalProbeDoesNotRotateAnExistingMeetingDuringModeChange() throws {
+    defer { UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName) }
+    let detector = try detector()
+    detector.applyDetected(true)
+    XCTAssertNil(
+      MeetingConversationBoundaryPolicy.initialObservation(
+        captureActive: detector.isMeetingActive, meetingConfirmed: detector.isMeetingConfirmed))
+    now += 10
+    detector.applyDetected(true)
+    let confirmed = MeetingConversationBoundaryPolicy.initialObservation(
+      captureActive: detector.isMeetingActive, meetingConfirmed: detector.isMeetingConfirmed)
+    XCTAssertEqual(confirmed, true)
+    if let confirmed {
+      XCTAssertNil(MeetingConversationBoundaryPolicy.transition(previousRole: .meeting, meetingActive: confirmed))
+    }
+    XCTAssertEqual(
+      MeetingConversationBoundaryPolicy.initialObservation(captureActive: false, meetingConfirmed: false), false)
+  }
+
   func testConfirmationTelemetryHasOnlyBoundedEvidence() {
     let evidence = MeetingDetectionEvidence(
       snapshot: shot(title: "Meet - abc-defg-hij private title"), mode: .onlyMeetings, processInputAPIAvailable: true)
