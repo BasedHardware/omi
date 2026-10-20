@@ -380,6 +380,46 @@ class ProviderStreamEnd:
         return True
 
 
+class _DetachedStreamEnd(ProviderStreamEnd):
+    """Class-level stand-in for a socket built without ``__init__``: observes and records nothing."""
+
+    def __init__(self) -> None:
+        self.provider = 'unknown'
+        self.request_id_header = self.request_id = None
+
+    @property
+    def recorded(self) -> bool:
+        return True
+
+    @property
+    def closing(self) -> bool:
+        return False
+
+    def begin_close(self) -> None:
+        pass
+
+    def note_intent(self, closer: str) -> None:
+        pass
+
+    def note_frame(self, msg: Mapping[str, Any]) -> None:
+        pass
+
+    def note_vendor_error(self, reason: Optional[str]) -> None:
+        pass
+
+    def note_audio_sent(self) -> None:
+        pass
+
+    def note_text(self) -> None:
+        pass
+
+    def record(self, ws: Any = None, **_kwargs: Any) -> bool:
+        return False
+
+
+DETACHED_STREAM_END: ProviderStreamEnd = _DetachedStreamEnd()
+
+
 def stream_end_of(socket: Any) -> Optional[ProviderStreamEnd]:
     """The innermost provider latch under listen's socket wrappers, if any."""
     current = socket

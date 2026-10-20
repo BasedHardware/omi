@@ -47,6 +47,7 @@ from utils.stt.failure_diagnostics import connection_loss_cause
 from utils.stt.provider_stream_end import (
     US_TIMEOUT,
     VENDOR,
+    DETACHED_STREAM_END,
     ProviderStreamEnd,
     log_connect_rejection,
     observe_connect_seconds,
@@ -1451,6 +1452,7 @@ def modulate_death_reason(err: Any) -> Optional[str]:
 
 class SafeModulateSocket(STTSocket):
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    stream_end: ProviderStreamEnd = DETACHED_STREAM_END  # Replaced in __init__.
     replay_limits = ReplayLimits()
 
     def __init__(

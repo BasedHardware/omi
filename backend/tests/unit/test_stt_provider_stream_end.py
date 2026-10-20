@@ -523,6 +523,20 @@ def test_a_cancelled_soniox_drain_still_counts():
     assert after - before == 1
 
 
+@pytest.mark.parametrize('cls', [streaming.SafeModulateSocket, soniox.SafeSonioxSocket])
+def test_a_socket_built_without_init_has_a_detached_latch_that_records_nothing(cls):
+    socket = object.__new__(cls)
+    end = socket.stream_end
+    end.note_audio_sent()
+    end.note_text()
+    end.note_vendor_error('x')
+    end.begin_close()
+    assert end.record(error=ConnectionClosedError(None, None)) is False
+    assert end.record() is False
+    assert not end.closing
+    assert pse.stream_end_of(socket) is end
+
+
 def test_idle_wrapper_drain_marks_its_transport_owner_closing():
     end = ProviderStreamEnd('soniox', None)
     transport = SimpleNamespace(stream_end=end)
