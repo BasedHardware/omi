@@ -87,6 +87,9 @@ FORMAT
 
 ACTION ITEMS
 - Only new, concrete commitments made in this conversation. Most meetings have zero to five.
+- The packet's task_intelligence_capture says how strict to be. When it is true (the owner reviews proposals),
+  capture clear commitments and direct requests. When it is false, the items become tasks directly: apply the
+  conservative filter and emit only explicit commitments the owner made, or nothing.
 - An item already covered by an entry in open_tasks is not new: leave it out. Do not update or complete existing
   tasks; another process reconciles them.
 - Verb-led, at most 15 words, owner_name set. Leave due_at empty unless an explicit completion date was committed.
