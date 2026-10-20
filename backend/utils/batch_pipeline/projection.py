@@ -15,11 +15,12 @@ import logging
 from typing import Callable
 from uuid import NAMESPACE_URL, uuid5
 
+from config.batch_pipeline import projection_pending_page_enabled, sweep_owner_chain_enabled
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
-from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from database import conversations as conversations_db
-from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
@@ -27,7 +28,9 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 logger = logging.getLogger(__name__)
-# One recovery wake's owner-chain bound; the periodic sweep resumes beyond it.
+# One owner-chain walk's bound (recovery wake or sweep continuation); the
+# periodic sweep resumes beyond it. One sweep spends at most the same budget on
+# continuations across all owners, so a heavy owner cannot stall the loop.
 OWNER_CHAIN_LIMIT = 64
 OWNER_CHAIN_SECONDS = 30.0
 
@@ -204,7 +207,20 @@ class Projector:
         self.fetch_audio = fetch_audio
         self.followups = None
         self.has_async_followups = False
+        # Async rows a sweep walk persisted. Handed to the follow-up queue
+        # behind work already queued, never ahead of it, so discovery's cursor
+        # position cannot strand them and other owners are not starved.
+        self.chain_followups: list[str] = []
         self.discovery = ProjectionDiscovery(store)
+        # Pending-page mode: assignment never spends page slots on rows it can
+        # only replay, and persisted/ready rows advance on their own cursor.
+        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
+        self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
+
+    @property
+    def owes_followups(self) -> bool:
+        """Walk-owed follow-ups are waiting even if no async row was seen this pass."""
+        return bool(self.chain_followups) or bool(self.followups is not None and self.followups.owed)
 
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
@@ -224,7 +240,8 @@ class Projector:
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
-        await self.followups.schedule(priority)
+        tail, self.chain_followups = self.chain_followups, []
+        await self.followups.schedule(priority, tail=tail)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
@@ -354,6 +371,7 @@ class Projector:
             validate_plan=session.validate_plan,
             after_assign=lambda transaction, planned: session.persist(transaction, planned),
             retry_contention=session.policy.projection_contention,
+            timing=session.policy.projection_timing,
         )
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None):
@@ -362,7 +380,8 @@ class Projector:
         from utils.batch_pipeline.context import ResolvedContext, resolve_context
         from utils.batch_pipeline.projection_parts import split_result
 
-        payload = self.load_result(item, entry['result']['result_uri'])
+        with projection_phase('load_result', policy):
+            payload = self.load_result(item, entry['result']['result_uri'])
         if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
             raise ProjectionBlocked('recovery result requires recovery handoff')
         speech = payload.get('speech_seconds')
@@ -382,7 +401,8 @@ class Projector:
                 raise ProjectionBlocked('authenticated intake manifest loader required')
             from utils.batch_pipeline.audio import read_context
 
-            manifest = read_context(self.fetch_audio(item))
+            with projection_phase('manifest', policy):
+                manifest = read_context(self.fetch_audio(item))
         for index, (part, part_payload) in enumerate(parts):
             session = self.store.session(
                 item.segment_id,
@@ -401,18 +421,20 @@ class Projector:
                 self.store.check(session)
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None:
-                    context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
+                    with projection_phase('context', policy):
+                        context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
-                    incoming = build_incoming(
-                        part,
-                        binding,
-                        part_payload,
-                        geolocation=context.geolocation,
-                        batch_segment_id=item.segment_id,
-                        policy=policy,
-                    )
+                    with projection_phase('build', policy):
+                        incoming = build_incoming(
+                            part,
+                            binding,
+                            part_payload,
+                            geolocation=context.geolocation,
+                            batch_segment_id=item.segment_id,
+                            policy=policy,
+                        )
                     session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
                         incoming['_batch_replace_live'] = {
@@ -431,11 +453,12 @@ class Projector:
 
                     candidate = None
                     if context.target_id is None:
-                        candidate = get_closest_conversation_to_timestamps(
-                            binding.owner_id,
-                            int(incoming['started_at'].timestamp()),
-                            int(incoming['finished_at'].timestamp()),
-                        )
+                        with projection_phase('candidate', policy):
+                            candidate = get_closest_conversation_to_timestamps(
+                                binding.owner_id,
+                                int(incoming['started_at'].timestamp()),
+                                int(incoming['finished_at'].timestamp()),
+                            )
                     assigned = conversations_db.assign_sync_conversation(
                         binding.owner_id,
                         incoming,
@@ -446,6 +469,7 @@ class Projector:
                         validate_plan=session.validate_plan,
                         after_assign=persisted,
                         retry_contention=policy.projection_contention,
+                        timing=policy.projection_timing,
                     )
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
@@ -602,21 +626,91 @@ class Projector:
         plus their contents' persisted, not-yet-ready siblings, grouped by
         content with the ``recovered`` unit's content first.
         """
+        followups, advanced = self._walk_owner(
+            owner_id, recovered=recovered, limit=limit, budget_seconds=budget_seconds
+        )
+        logger.info(
+            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
+            len(advanced),
+            len(followups),
+        )
+        return followups
+
+    def _walk_owner(
+        self,
+        owner_id: str,
+        *,
+        recovered: str | None,
+        limit: int,
+        budget_seconds: float,
+        seed: tuple[str, ProjectionBinding] | None = None,
+    ) -> tuple[list[str], list[str]]:
+        """Returns (follow-ups, rows this walk advanced in chain order).
+
+        ``seed`` is an async row the caller just persisted. It is owed a
+        follow-up when the watermark shows it advanced (a partial multipart
+        did not), or when the watermark cannot be read.
+        """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         key = owner_key(owner_id)
         deadline = time.monotonic() + budget_seconds
         groups: dict[str, dict[str, None]] = {}
         first = None
-        advanced = 0
-        previous = self.store.projection_watermark(key)
+        advanced: list[str] = []
+
+        def failed(error: BaseException) -> None:
+            # Keep what this walk already persisted; the sweep resumes later.
+            logger.error(
+                'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+            )
+
+        def owe(segment_id: str, binding: ProjectionBinding) -> bool:
+            """Queue this row and its content's persisted, not-ready siblings.
+
+            The sibling scan stops at the walk deadline, and a seed-only walk
+            (no budget) skips it: unscanned siblings stay durable and are
+            rediscovered.
+            """
+            group = groups.get(binding.content_id)
+            if group is None:
+                group = groups[binding.content_id] = {}
+                try:
+                    for sibling in binding.segment_ids:
+                        if time.monotonic() >= deadline:
+                            break
+                        receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
+                        if receipt and receipt.get('state') != 'ready':
+                            group[sibling] = None
+                except Exception as error:
+                    group[segment_id] = None  # The persisted row is still owed.
+                    failed(error)
+                    return False
+            group[segment_id] = None
+            return True
+
+        try:
+            previous = self.store.projection_watermark(key)
+        except Exception as error:
+            if seed is not None:
+                owe(*seed)
+            failed(error)
+            return list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced
+        if seed is not None and previous == seed[0] and not owe(*seed):
+            return list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced
         for _ in range(max(1, limit)):
             if time.monotonic() >= deadline:
                 break
-            segment_id = self.store.store.projection_successor(key, previous)
+            try:
+                segment_id = self.store.store.projection_successor(key, previous)
+                row = {}
+                if segment_id is not None:
+                    row = self.store.ref('results', segment_id).get().to_dict() or {}
+            except Exception as error:
+                failed(error)
+                break
             if segment_id is None:
                 break
-            row = self.store.ref('results', segment_id).get().to_dict() or {}
             if row.get('projection_state') == 'erased':
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
@@ -631,32 +725,28 @@ class Projector:
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 break
             except Exception as error:
-                logger.error(
-                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
-                )
+                failed(error)
                 break
-            if self.store.projection_watermark(key) != segment_id:
+            try:
+                watermark = self.store.projection_watermark(key)
+            except Exception as error:
+                # Persist succeeded but its advance is unknown: still owe it.
+                if policy.async_projection:
+                    owe(segment_id, binding)
+                failed(error)
+                break
+            if watermark != segment_id:
                 break  # Busy claim or partial multipart: the sweep retries it.
-            previous, advanced = segment_id, advanced + 1
+            previous = segment_id
+            advanced.append(segment_id)
             if policy.async_projection:
-                group = groups.get(binding.content_id)
-                if group is None:
-                    group = groups[binding.content_id] = {}
-                    for sibling in binding.segment_ids:
-                        receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
-                        if receipt and receipt.get('state') != 'ready':
-                            group[sibling] = None
-                group[segment_id] = None
                 if segment_id == recovered:
                     first = binding.content_id
+                if not owe(segment_id, binding):
+                    break
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        logger.info(
-            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
-            advanced,
-            len(followups),
-        )
-        return followups
+        return followups, advanced
 
     def sweep(self, limit: int = 100) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
@@ -665,7 +755,23 @@ class Projector:
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
         contention = False
         self.has_async_followups = False
-        for segment_id in self.discovery.next(limit=max(1, min(limit, 100))):
+        size = max(1, min(limit, 100))
+        pending_page = projection_pending_page_enabled()
+        chain = sweep_owner_chain_enabled()
+        discovery = self.assignment_discovery if pending_page else self.discovery
+        # At most one walk per owner per sweep. Page rows a walk already
+        # persisted are skipped unread and left out of ``counts``: the
+        # sweep_chain summary owns them. Every other row is attempted as before.
+        # ``touched`` rows were assigned or finished this sweep; the finish page
+        # does not repeat them.
+        walked: set[str] = set()
+        chained: set[str] = set()
+        touched: set[str] = set()
+        # The shared budget starts with the first walk, not the page.
+        chain_deadline: float | None = None
+        for segment_id in discovery.next(limit=size):
+            if segment_id in chained:
+                continue
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
@@ -677,13 +783,54 @@ class Projector:
                 else:
                     result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
+                touched.add(segment_id)
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
+                continue
             except Exception as error:
                 counts['error'] += 1
                 logger.error(
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
+                continue
+            if chain and entry.get('projection_state') == 'pending':
+                # This row was assignable and passed every fence: keep walking
+                # the owner's chain now instead of waiting for the cursor to
+                # wrap. Each row still takes the owner claim and predecessor
+                # fence one at a time; nothing runs concurrently per owner.
+                # The page row itself is owed a follow-up too. Only the first
+                # row per owner walks; later rows, or rows with no budget left,
+                # get a seed-only walk (one watermark read, persists nothing).
+                budget = 0.0
+                if binding.owner_id not in walked:
+                    if chain_deadline is None:
+                        chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
+                    budget = max(0.0, min(OWNER_CHAIN_SECONDS, chain_deadline - time.monotonic()))
+                seed = (segment_id, binding) if policy.async_projection else None
+                if budget > 0 or seed is not None:
+                    if budget > 0:
+                        walked.add(binding.owner_id)
+                    try:
+                        followups, advanced = self._walk_owner(
+                            binding.owner_id,
+                            recovered=None,
+                            limit=OWNER_CHAIN_LIMIT,
+                            budget_seconds=budget,
+                            seed=seed,
+                        )
+                        # Walked async rows are owed follow-ups even when no
+                        # other async row is on either page this pass.
+                        if followups:
+                            self.has_async_followups = True
+                            self.chain_followups.extend(followups)
+                        chained.update(advanced)
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
+                            type(error).__name__,
+                        )
+        if pending_page:
+            contention = self._sweep_finish(size, counts, touched | chained) or contention
         if contention:
             logger.info(
                 'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
@@ -692,4 +839,41 @@ class Projector:
                 counts['blocked'],
                 counts['error'],
             )
+        if chain and walked:
+            logger.info(
+                'event=batch_projection action=sweep_chain outcome=summary owners=%d advanced=%d',
+                len(walked),
+                len(chained),
+            )
         return counts
+
+    def _sweep_finish(self, size: int, counts: dict[str, int], touched: set[str]) -> bool:
+        """Advance persisted/ready rows that the pending-only assignment page skips.
+
+        Async rows belong to the follow-up drain; seeing one keeps it scheduled.
+        Synchronous-policy rows replay assignment and finish exactly as the
+        mixed page did, so no persisted or ready obligation loses its retry.
+        """
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+        contention = False
+        for segment_id in self.finish_discovery.next(limit=size):
+            if segment_id in touched:
+                continue
+            try:
+                job, entry, binding = self.store.read(segment_id)
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                contention = contention or policy.projection_contention
+                if policy.async_projection:
+                    self.has_async_followups = True
+                    continue
+                result = self._project_read(segment_id, job, entry, binding)
+                counts['completed' if result is not None else 'waiting'] += 1
+            except (ProjectionBlocked, BatchPrivacyBlocked):
+                counts['blocked'] += 1
+            except Exception as error:
+                counts['error'] += 1
+                logger.error(
+                    'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
+                )
+        return contention
