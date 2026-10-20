@@ -594,8 +594,12 @@ transactional predecessor, privacy and receipt fences one at a time, so no
 owner gains concurrency. Walked async rows do not use the wake's priority
 queue. They are held (at most 256, durable either way) until the next
 follow-up discovery pass and queued behind its page, without moving its
-rotation. They are never stranded behind the discovery cursor, and they never
-jump discovered work or keep discovery from running. The finish page skips rows
+rotation. Serving keeps scheduling follow-ups while any are owed, and a pass whose
+queue drains on launch runs discovery at once. An overflow past the bound
+restarts follow-up discovery at the head. So owed rows are never stranded
+behind the discovery cursor, and they never jump discovered work or keep
+discovery from running. A read failure inside a walk ends it with the rows it
+already persisted still handed off. The finish page skips rows
 this sweep already assigned or finished. The log line is `event=batch_projection action=sweep_chain
 outcome=summary owners=N advanced=N`.
 

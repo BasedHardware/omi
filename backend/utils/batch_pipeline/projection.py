@@ -217,6 +217,11 @@ class Projector:
         self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
         self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
 
+    @property
+    def owes_followups(self) -> bool:
+        """Walk-owed follow-ups are waiting even if no async row was seen this pass."""
+        return bool(self.chain_followups) or bool(self.followups is not None and self.followups.owed)
+
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
         with projection_phase('read'):
@@ -646,10 +651,19 @@ class Projector:
         for _ in range(max(1, limit)):
             if time.monotonic() >= deadline:
                 break
-            segment_id = self.store.store.projection_successor(key, previous)
+            try:
+                segment_id = self.store.store.projection_successor(key, previous)
+                row = {}
+                if segment_id is not None:
+                    row = self.store.ref('results', segment_id).get().to_dict() or {}
+            except Exception as error:
+                # Keep what this walk already persisted; the sweep resumes later.
+                logger.error(
+                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+                )
+                break
             if segment_id is None:
                 break
-            row = self.store.ref('results', segment_id).get().to_dict() or {}
             if row.get('projection_state') == 'erased':
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
@@ -668,7 +682,14 @@ class Projector:
                     'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
                 )
                 break
-            if self.store.projection_watermark(key) != segment_id:
+            try:
+                watermark = self.store.projection_watermark(key)
+            except Exception as error:
+                logger.error(
+                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+                )
+                break
+            if watermark != segment_id:
                 break  # Busy claim or partial multipart: the sweep retries it.
             previous = segment_id
             advanced.append(segment_id)

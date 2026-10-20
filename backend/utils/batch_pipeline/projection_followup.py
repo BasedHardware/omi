@@ -63,8 +63,14 @@ class ProjectionFollowups:
         # cursor. They wait for the next discovery pass and join behind its page,
         # so they never jump discovered work and never keep discovery from running.
         for segment in tail:
-            if segment not in self.owed and len(self.owed) < MAX_OWED:
+            if segment in self.owed:
+                continue
+            if len(self.owed) < MAX_OWED:
                 self.owed[segment] = None
+            else:
+                # Over the bound: restart discovery at the head once so the next
+                # page rediscovers the durable rows we could not hold.
+                self.discovery.after = None
         if priority:
             # A targeted owner-chain wake goes ahead of discovered rows. Slots,
             # segment claims and receipt fences are unchanged; discovery resumes
@@ -73,12 +79,15 @@ class ProjectionFollowups:
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
-            return
+            if self.pending or not self.owed:
+                return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
-        if self.pending:
+        # Owed rows fall through to discovery once the queue has launched.
+        elif self.pending:
             self.launch()
-            return
+            if self.pending or not self.owed:
+                return
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:

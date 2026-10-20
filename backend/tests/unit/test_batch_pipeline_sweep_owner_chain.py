@@ -236,6 +236,98 @@ async def test_walked_async_tails_behind_parked_cursors_still_start_followups(mo
 
 
 @pytest.mark.asyncio
+async def test_owed_tails_start_even_when_the_queue_was_busy_at_handoff(monkeypatch):
+    """The queue is busy when the walk hands off; the next pass sees no async row."""
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    log = ResultLog(async_projection=False)
+    log.commit(BURST, 'h', 'head', ['head'])
+    async_policy = projection.ProjectionPolicy(async_projection=True).to_dict()
+    tails = chain(log, BURST, 'a', 3)
+    for sid in tails:
+        log.jobs[sid]['policy_parts'] = {'projection': async_policy}
+    # Enough synchronous receipts that the finish page cannot wrap back to
+    # the tails within this test's passes.
+    for n in range(800):
+        sid = f'sync-{n}'
+        log.commit(f'owner-{n}', f's{n}', sid, [sid], state='persisted')
+    projector = projector_for(log)
+    projector._finish = Mock(return_value=None)
+    parked = (log.results['sync-0']['committed_at'], 'sync-0')
+    projector.finish_discovery.after = parked
+    projector.followups = projection_followup.ProjectionFollowups(projector)
+    projector.followups.discovery.after = parked
+    projector.followups.pending.extend(['busy-0', 'busy-1'])
+    service = Serving(MemoryStore(), projector=projector)
+    release, started = asyncio.Event(), []
+
+    async def run(self, segment):
+        if segment.startswith('busy'):
+            await release.wait()
+        started.append(segment)
+
+    monkeypatch.setattr(projection_followup.ProjectionFollowups, 'run', run)
+    await service.reconcile_async(periodic=True)
+    assert set(tails) <= set(projector.followups.owed)
+    release.set()
+    for _ in range(4):
+        await asyncio.sleep(0)
+        while projector.followups.tasks:
+            await asyncio.gather(*list(projector.followups.tasks.values()))
+        await service.reconcile_async(periodic=True)
+    while projector.followups.tasks:
+        await asyncio.gather(*list(projector.followups.tasks.values()))
+    assert set(tails) <= set(started)
+
+
+def test_walk_read_failure_after_a_persisted_async_row_still_hands_it_off():
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    real = log.projection_successor
+
+    def flaky(key, previous):
+        if previous == ids[1]:
+            raise RuntimeError('synthetic index outage')
+        return real(key, previous)
+
+    log.projection_successor = flaky
+    projector = projector_for(log)
+    projector.sweep(limit=1)
+    assert log.persist_order == ids[:2]
+    # The walked row plus its content's persisted, not-ready sibling.
+    assert projector.chain_followups == ids[:2]
+    assert projector.owes_followups
+
+
+@pytest.mark.asyncio
+async def test_owed_rows_fall_through_to_discovery_once_the_queue_launches():
+    runner = projection_followup.ProjectionFollowups(Mock())
+    runner.candidates = lambda: ['page-a']
+    snapshots = []
+
+    def launch():
+        snapshots.append(list(runner.pending))
+        runner.pending.clear()  # free slots took every queued row
+
+    runner.launch = launch
+    runner.pending.append('queued')
+    await runner.schedule(tail=['owed-1'])
+    # Same call: the queue launched, then discovery ran with the owed row behind it.
+    assert snapshots == [['queued'], ['page-a', 'owed-1']]
+    assert not runner.owed
+
+
+@pytest.mark.asyncio
+async def test_owed_overflow_restarts_followup_discovery_at_the_head():
+    runner = projection_followup.ProjectionFollowups(Mock())
+    runner.discovery.after = (5.0, 'parked')
+    runner.launch = lambda: None
+    runner.pending.append('queued')
+    await runner.schedule(tail=[f't-{n}' for n in range(projection_followup.MAX_OWED + 10)])
+    assert len(runner.owed) == projection_followup.MAX_OWED
+    assert runner.discovery.after is None
+
+
+@pytest.mark.asyncio
 async def test_owed_rows_join_behind_the_discovered_page_and_never_block_discovery():
     projector = Mock()
     runner = projection_followup.ProjectionFollowups(projector)
