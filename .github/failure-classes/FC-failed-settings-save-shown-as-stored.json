@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-failed-settings-save-shown-as-stored",
+  "violated_contract": "A settings control that changes on screen before the account confirms the write must put the last confirmed value back, and say the change was not saved, when the write fails. Logging the error and leaving the new value on screen shows a setting the account never stored.",
+  "canonical_prevention": "Route the write through a saver that returns saved, failed(restore) or superseded, and drive that saver with a write that throws. The failed outcome carries the value the account last confirmed.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/BooleanSettingSaverTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/"
+  ],
+  "status": "open"
+}

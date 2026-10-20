@@ -24,11 +24,39 @@ extension SettingsContentView {
   }
 
   func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) {
+    if let enabled {
+      saveDailySummaryEnabled(enabled)
+    }
+    guard hour != nil else { return }
     Task {
       do {
-        try await APIClient.shared.updateDailySummarySettings(enabled: enabled, hour: hour)
+        try await APIClient.shared.updateDailySummarySettings(hour: hour)
       } catch {
         logError("Failed to update daily summary settings", error: error)
+      }
+    }
+  }
+
+  func saveDailySummaryEnabled(_ enabled: Bool) {
+    dailySummaryEnabledRevision += 1
+    let revision = dailySummaryEnabledRevision
+    dailySummaryEnabledError = nil
+    Task {
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        lastConfirmed: { savedDailySummaryEnabled },
+        isLatestEdit: { dailySummaryEnabledRevision == revision },
+        write: { try await APIClient.shared.updateDailySummarySettings(enabled: $0) }
+      )
+      switch outcome {
+      case .saved(let value):
+        savedDailySummaryEnabled = value
+        dailySummaryEnabledError = nil
+      case .failed(let restore):
+        dailySummaryEnabled = restore
+        dailySummaryEnabledError = BooleanSettingSaver.failureMessage
+      case .superseded:
+        break
       }
     }
   }
@@ -85,21 +113,49 @@ extension SettingsContentView {
   }
 
   func updateRecordingPermission(_ enabled: Bool) {
+    recordingPermissionRevision += 1
+    let revision = recordingPermissionRevision
+    recordingPermissionError = nil
     Task {
-      do {
-        try await APIClient.shared.setRecordingPermission(enabled: enabled)
-      } catch {
-        logError("Failed to update recording permission", error: error)
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        lastConfirmed: { savedRecordingPermissionEnabled },
+        isLatestEdit: { recordingPermissionRevision == revision },
+        write: { try await APIClient.shared.setRecordingPermission(enabled: $0) }
+      )
+      switch outcome {
+      case .saved(let value):
+        savedRecordingPermissionEnabled = value
+        recordingPermissionError = nil
+      case .failed(let restore):
+        recordingPermissionEnabled = restore
+        recordingPermissionError = BooleanSettingSaver.failureMessage
+      case .superseded:
+        break
       }
     }
   }
 
   func updatePrivateCloudSync(_ enabled: Bool) {
+    privateCloudSyncRevision += 1
+    let revision = privateCloudSyncRevision
+    privateCloudSyncError = nil
     Task {
-      do {
-        try await APIClient.shared.setPrivateCloudSync(enabled: enabled)
-      } catch {
-        logError("Failed to update private cloud sync", error: error)
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        lastConfirmed: { savedPrivateCloudSyncEnabled },
+        isLatestEdit: { privateCloudSyncRevision == revision },
+        write: { try await APIClient.shared.setPrivateCloudSync(enabled: $0) }
+      )
+      switch outcome {
+      case .saved(let value):
+        savedPrivateCloudSyncEnabled = value
+        privateCloudSyncError = nil
+      case .failed(let restore):
+        privateCloudSyncEnabled = restore
+        privateCloudSyncError = BooleanSettingSaver.failureMessage
+      case .superseded:
+        break
       }
     }
   }
@@ -232,6 +288,47 @@ enum TranscriptionVocabularySaver {
       logError("Settings: failed to save custom vocabulary", error: error)
       guard isLatestEdit() else { return .superseded }
       return .failed(restore: lastConfirmed())
+    }
+  }
+}
+
+/// Account-backed Settings switches that the pane flips before the account has stored them.
+///
+/// The Daily Summary, Store Recordings and Private Cloud Sync switches change on screen as soon as
+/// they are flipped, then send that value to the account. A failed request used to be only logged, so
+/// the pane kept a setting the account never stored. A failed save puts back the value the account
+/// last confirmed and says the change was not saved.
+@MainActor
+enum BooleanSettingSaver {
+  static let failureMessage = "Couldn't save that setting. Try again."
+
+  enum Outcome: Equatable {
+    /// The account stored `value`.
+    case saved(Bool)
+    /// The account did not store the change. Show `restore` again.
+    case failed(restore: Bool)
+    /// The save failed, but a newer flip was made while it ran. That flip's save decides what shows.
+    case superseded
+  }
+
+  /// Stores `requested` through `write`.
+  ///
+  /// `isLatestEdit` and `lastConfirmed` are read only once the save has failed, so they see a flip
+  /// made, or a save confirmed, while it ran. When Settings has not read the account's value yet,
+  /// the restore is the opposite of the flip the account refused.
+  static func save(
+    _ requested: Bool,
+    lastConfirmed: () -> Bool?,
+    isLatestEdit: () -> Bool,
+    write: (Bool) async throws -> Void
+  ) async -> Outcome {
+    do {
+      try await write(requested)
+      return .saved(requested)
+    } catch {
+      logError("Settings: failed to save a switch", error: error)
+      guard isLatestEdit() else { return .superseded }
+      return .failed(restore: lastConfirmed() ?? !requested)
     }
   }
 }

@@ -855,6 +855,9 @@ extension SettingsContentView {
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
     let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
+    let dailySummaryEnabledRevisionAtLoadStart = dailySummaryEnabledRevision
+    let recordingPermissionRevisionAtLoadStart = recordingPermissionRevision
+    let privateCloudSyncRevisionAtLoadStart = privateCloudSyncRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
     Task {
       do {
@@ -880,7 +883,11 @@ extension SettingsContentView {
         )
 
         await MainActor.run {
-          dailySummaryEnabled = dailySummary.enabled
+          if dailySummaryEnabledRevision == dailySummaryEnabledRevisionAtLoadStart {
+            savedDailySummaryEnabled = dailySummary.enabled
+            dailySummaryEnabled = dailySummary.enabled
+            dailySummaryEnabledError = nil
+          }
           dailySummaryHour = dailySummary.hour
           if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
             savedDailySummaryDepth = dailySummary.depth
@@ -893,8 +900,16 @@ extension SettingsContentView {
           notificationsEnabled = NotificationService.areNotificationsEnabled()
           notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
-          recordingPermissionEnabled = recording.enabled
-          privateCloudSyncEnabled = cloudSync.enabled
+          if recordingPermissionRevision == recordingPermissionRevisionAtLoadStart {
+            savedRecordingPermissionEnabled = recording.enabled
+            recordingPermissionEnabled = recording.enabled
+            recordingPermissionError = nil
+          }
+          if privateCloudSyncRevision == privateCloudSyncRevisionAtLoadStart {
+            savedPrivateCloudSyncEnabled = cloudSync.enabled
+            privateCloudSyncEnabled = cloudSync.enabled
+            privateCloudSyncError = nil
+          }
           singleLanguageMode = transcription.singleLanguageMode
           // Do not let a GET that began before a local/PATCH mutation overwrite
           // the newer vocabulary when it finally completes.

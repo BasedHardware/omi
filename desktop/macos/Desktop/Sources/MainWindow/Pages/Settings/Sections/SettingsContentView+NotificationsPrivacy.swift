@@ -199,6 +199,13 @@ extension SettingsContentView {
               }
           }
 
+          if let dailySummaryEnabledError {
+            Text(dailySummaryEnabledError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("daily-summary-save-error")
+          }
+
           Text("Receive a daily summary of your conversations and activities")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -343,6 +350,13 @@ extension SettingsContentView {
             updateRecordingPermission(newValue)
           }
 
+          if let recordingPermissionError {
+            Text(recordingPermissionError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("store-recordings-save-error")
+          }
+
           GlassSeparator()
 
           privacyToggleRow(
@@ -352,6 +366,13 @@ extension SettingsContentView {
             isOn: $privateCloudSyncEnabled
           ) { newValue in
             updatePrivateCloudSync(newValue)
+          }
+
+          if let privateCloudSyncError {
+            Text(privateCloudSyncError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("private-cloud-sync-save-error")
           }
 
           GlassSeparator()
