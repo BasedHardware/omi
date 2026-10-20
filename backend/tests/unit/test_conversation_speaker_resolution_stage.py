@@ -235,8 +235,6 @@ def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
 
 
 def _span_flags(monkeypatch):
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
 
@@ -848,7 +846,6 @@ def test_shadow_placement_metrics_count_per_segment_and_reason_metrics_once_per_
 
 def test_graduated_consumer_resolves_capture_windows_by_default(env, monkeypatch):
     """The graduated consumer resolves proven live windows with no env opt-in."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
 
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     _, diarizer = env
@@ -866,7 +863,6 @@ def test_graduated_consumer_resolves_capture_windows_by_default(env, monkeypatch
 
 def test_consumer_records_sync_reason_without_span_manifest(env, monkeypatch):
     """Sync-scoped segments still resolve without a span manifest."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
 
     _, diarizer = env
     plan = [0, 1] * 4
@@ -883,7 +879,6 @@ def test_consumer_records_sync_reason_without_span_manifest(env, monkeypatch):
 
 def test_consumer_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
     """An absent manifest records refusal for every unproven live window."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
 
     _, diarizer = env
     plan = [0, 1] * 4
