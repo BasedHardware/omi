@@ -254,7 +254,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
         "SONIOX_WIRE_LEDGER": "false",
         "SONIOX_ORDERED_FINALIZE": "false",
-        "AUDIO_TIMELINE_SPANS": "false",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEMORY_ENABLED": "on",
         "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
