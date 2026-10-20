@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Chat history date groups (Today / Yesterday) now update when midnight passes, even if the chat list itself did not change."
+  ]
+}
