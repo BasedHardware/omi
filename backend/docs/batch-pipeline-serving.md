@@ -321,12 +321,14 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   `failed_segments == held_segments` (the held span) and the projected
   siblings' visible conversation IDs. These go through the same redirect and
   privacy fences as completion. `usage_committed_seconds` records the projected
-  speech that was charged, and `usage_previous_seconds` the step's start. The
-  held span is never charged. Hourly usage commits in the partial transaction.
-  Fair use records that durable step only after the commit; a scan replay
-  re-issues the same once-key, so a lost Redis write lands exactly once.
-  Accounting returns nothing while any unit can still change, so an
-  ineligible upload is never charged.
+  speech that was charged, and `usage_steps` every charge boundary
+  (`[0, s1, s2, …]`). The held span is never charged. Hourly usage commits in
+  the partial transaction. Fair use records only after the commit, and every
+  record (a scan replay, a newer partial, the ordinary upgrade) re-issues each
+  stored step under its own once-key (`<content_id>` for the first,
+  `<content_id>:<start_ms>` after). A Redis write lost after any commit
+  therefore lands exactly once on a later attempt. Accounting returns nothing
+  while any unit can still change, so an ineligible upload is never charged.
 - **Client.** The status poll and a re-upload answer `completed` with
   `reason_code: batch_unit_held`, the partial result, and
   `failed_segments` set to the held count. Released apps ACK the WAL. A

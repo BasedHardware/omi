@@ -1253,7 +1253,7 @@ def test_terminally_held_upload_completes_partial_once_without_touching_held_uni
     ledger = ledger_row(client, binding)
     assert ledger['status'] == 'partial' and ledger['result'] == result
     assert ledger['usage_committed_seconds'] == 3 and ledger['job_id'] == binding.job_id
-    assert step == (0.0, 3) and ledger['usage_previous_seconds'] == 0.0
+    assert step == [0.0, 3] and ledger['usage_steps'] == [0.0, 3]
     # Paid-once and ordered-head: no provider call, no job/intent/merge write,
     # the parked sibling keeps its receipt, and the held audio is not touched.
     assert {key: value for key, value in client.rows.items() if key[0].endswith('_jobs')} == jobs_before
@@ -1362,7 +1362,7 @@ def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(s
     ledger = ledger_row(client, binding)
     assert ledger['status'] == 'completed' and ledger['result'] == upgraded
     assert upgraded['failed_segments'] == 0 and upgraded['total_segments'] == 2
-    assert ledger['usage_committed_seconds'] == 5.0
+    assert ledger['usage_committed_seconds'] == 5.0 and ledger['usage_steps'] == [0.0, 3, 5.0]
     # A held span already settled as partial is never re-partialed after completion.
     assert projection.complete_partial(binding, 105, PARTIAL_ACCOUNTING) is None
     assert stt.call_count == 1
@@ -1457,9 +1457,56 @@ def test_fair_use_charge_after_partial_uses_a_distinct_once_key(monkeypatch):
     monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append((args, kwargs)))
     binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
     record_speech(binding, {'seconds': 3, 'source': 'sync_fresh', 'completed': False})
-    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'charged': 3})
-    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'charged': 5})
+    calls.clear()
+    # After a partial at 3 s (stored steps [0, 3]) the upgrade re-issues the base
+    # step under its own key, then the remainder: a base lost to a Redis failure
+    # after the partial commit still lands, and one that landed is a SET NX no-op.
+    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'steps': [0.0, 3]})
     assert [(args[1], kwargs['idempotency_key']) for args, kwargs in calls] == [
         (3000, 'content'),
         (2000, 'content:3000'),
     ]
+    calls.clear()
+    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': True, 'steps': [0.0, 3]})
+    assert calls == []
+
+
+def test_lost_base_charge_lands_after_a_newer_partial_step(setup, monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    landed = {}
+
+    def once(uid, ms, source, idempotency_key, raise_on_error):
+        if fail[0]:
+            fail[0] = False
+            raise RuntimeError('synthetic redis')
+        landed.setdefault(idempotency_key, ms)
+
+    fail = [True]
+    monkeypatch.setattr(fair_use, 'record_speech_ms', once)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'charged': 0.0,
+        'steps': [0.0],
+    }
+    with pytest.raises(RuntimeError):
+        projector.complete_held(binding)
+    # The partial committed (0 -> 3) but its fair-use write was lost. A newer
+    # step (3 -> 5) commits next: both keys land, base included.
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3]
+    # Stand in for an earlier partial over a wider held span, so this pass rewrites it.
+    ledger_row(client, binding)['result'] = {**ledger_row(client, binding)['result'], 'superseded_segments': 1}
+    row(client, 'results', 'good')['projection']['speech_seconds'] = 5
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'seconds': 5,
+        'charged': 3,
+        'steps': [0.0, 3],
+    }
+    assert projector.complete_held(binding) is not None
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3, 5]
+    assert landed == {'content': 3000, 'content:3000': 2000}

@@ -257,10 +257,23 @@ def record_speech_step(binding, source: str, previous: float, committed: float) 
     )
 
 
+def record_speech_steps(binding, source: str, steps) -> None:
+    """Re-issue every durable charge step; each once-key lands at most once.
+
+    A step whose Redis write was lost after its commit is repaired by any later
+    attempt, even one that charges a newer step.
+    """
+    for previous, committed in zip(steps, steps[1:]):
+        record_speech_step(binding, source, previous, committed)
+
+
 def record_speech(binding, accounting: dict) -> None:
     """Fair-use speech before an ordinary completion; after a partial only the remainder."""
     if not accounting['completed']:
-        record_speech_step(binding, accounting['source'], accounting.get('charged', 0.0), accounting['seconds'])
+        steps = list(accounting.get('steps') or [0.0])
+        if accounting['seconds'] > steps[-1]:
+            steps.append(accounting['seconds'])
+        record_speech_steps(binding, accounting['source'], steps)
 
 
 class Projector:
@@ -535,12 +548,12 @@ class Projector:
         outcome = self.store.complete_partial(binding, self.clock(), accounting)
         if outcome is None:
             return None
-        result, (previous, committed) = outcome
-        # Fair use follows the durable step, never an uncommitted attempt. A
-        # crash before this call is repaired by the next scan's replay, which
-        # reads the same step and key.
+        result, steps = outcome
+        # Fair use follows the durable steps, never an uncommitted attempt. A
+        # crash before this call is repaired by the next scan or the ordinary
+        # completion, which re-issue every stored step under the same keys.
         if not accounting['completed']:
-            record_speech_step(binding, accounting['source'], previous, committed)
+            record_speech_steps(binding, accounting['source'], steps)
         return result
 
     def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
