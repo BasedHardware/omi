@@ -1,32 +1,29 @@
-# Bounty Objective: Bounty Proposal: Reusable Deploy Ancestry Guard & CI Pipeline Hardening ($100 - $125 USD)
-Target: BasedHardware/omi Issue #22860
-URL: https://github.com/BasedHardware/omi/issues/22860
+# Bounty Objective: [Bounty proposal] fix(mcp_oauth): coerce naive and ISO-8601 timestamps to UTC in grant and token paths ($50 proposed)
+Target: BasedHardware/omi Issue #22660
+URL: https://github.com/BasedHardware/omi/issues/22660
 
 ## Issue Description
-### Bounty Proposal: Reusable Deploy Ancestry Guard & CI Pipeline Hardening ($100 - $125 USD)
+## Problem
 
-**Pull Request:** https://github.com/BasedHardware/omi/pull/21192
-**Closes Issue:** https://github.com/BasedHardware/omi/issues/20941
-**Target Maintainers:** @kodjima33 @nikpetrovic @josancamon19
+In `backend/database/mcp_oauth.py`, several OAuth grant, authorization code, access token, and refresh token operations compare or sort Firestore-stored timestamp fields directly against `datetime.now(timezone.utc)` or `datetime.min.replace(tzinfo=timezone.utc)`:
 
-#### Description
-Implements an end-to-end reusable ancestry guard and verification CLI for backend deployments as requested in #20941. Mechanically verifies whether a given release SHA actually contains the intended merge/commit SHA using GitHub's Commits Compare API (avoiding heavy git checkouts).
+1. **`_grant_recency_key` / `list_user_grants`**:
+   - `_grant_recency_key` returns `candidate` whenever `isinstance(candidate, datetime)` without checking `candidate.tzinfo`, and falls back to `datetime.min.replace(tzinfo=timezone.utc)` when neither `updated_at` nor `created_at` is a `datetime` (e.g. an ISO-8601 string or `None`).
+   - When `list_user_grants` sorts grants (`grants.sort(key=_grant_recency_key, reverse=True)`) across records where one grant has an offset-naive `datetime` and another has an offset-aware `datetime` (or ISO-8601 string fallback), Python raises `TypeError: can't compare offset-naive and offset-aware datetimes`.
+2. **`consume_authorization_code` & `exchange_authorization_code_for_tokens`**:
+   - Both compare `expires_at <= now` after only checking `isinstance(expires_at, datetime)`. If `expires_at` is stored as a naive `datetime`, `expires_at <= now` raises `TypeError: can't compare offset-naive and offset-aware datetimes`. If `expires_at` is stored as an ISO-8601 string, valid authorization codes are falsely rejected as expired.
+3. **`_is_unexpired`, `validate_access_token`, & `rotate_refresh_token`**:
+   - `_is_unexpired` compares `expires_at > _utcnow()` without normalizing naive `datetime` objects or parsing ISO-8601 strings, crashing with `TypeError: can't compare offset-naive and offset-aware datetimes` on naive `expires_at`.
+   - `validate_access_token` checks `isinstance(expires_at, datetime)` and returns `expires_at.astimezone(timezone.utc).isoformat()`, which omits ISO-8601 string timestamps.
+   - `rotate_refresh_token` checks `isinstance(used_at, datetime)` and computes `(now - used_at).total_seconds()`, which raises `TypeError: can't subtract offset-naive and offset-aware datetimes` when `used_at` is a naive `datetime` and skips grace-window replay protection when `used_at` is an ISO-8601 string.
 
-#### Key Improvements Delivered
-1. **Ancestry Verification CLI (`backend/scripts/verify_deploy_ancestry.py`)**:
-   - Exit code `0` iff `<contains>` is a true ancestor of `<release>`.
-   - Defensive validation: rejects non-40-hex inputs, nil sentinels, and sanitizes authorization tokens from all diagnostic logs.
-2. **Workflow Wiring (`.github/workflows/gcp_backend_pusher.yml` & `gcp_backend.yml`)**:
-   - Integrated optional `expected_ancestor_sha` input into workflow dispatch.
-   - Non-blocking advisory warnings on verification mismatches, recording structured release metadata into `$GITHUB_STEP_SUMMARY`.
-3. **Hermetic Test Suite (`backend/tests/unit/test_verify_deploy_ancestry.py`)**:
-   - 14/14 unit tests passing hermetically with full network/API mocking.
-   - Re-verified and dismissed previous changes-requested review; confirmed `mergeable: true` with zero conflicts.
-4. **Runbook Documentation (`backend/docs/runbooks/backend-deploy-rollout-safety.md`)**:
-   - Added operator documentation on CLI usage flags, exit codes (0/1/2), and emergency release verification protocols.
+## Proposed Fix
 
-#### Designated Payout Rail
-- **EVM (Base / Arbitrum / Polygon USDC)**: `0x2821d6003ceE245C4997Ff908029aa0116177b69`
+- Introduce `_coerce_utc_datetime(value)` in `backend/database/mcp_oauth.py` to normalize naive `datetime` values (assuming UTC), non-UTC aware `datetime` values (`.astimezone(timezone.utc)`), and ISO-8601 timestamp strings (including `Z` suffixes) into timezone-aware UTC `datetime` objects.
+- Use `_coerce_utc_datetime` in `_grant_recency_key`, `consume_authorization_code`, `exchange_authorization_code_for_tokens`, `_is_unexpired`, `validate_access_token`, and `rotate_refresh_token`.
+- Add unit tests in `backend/tests/unit/test_mcp_oauth.py` covering mixed naive/aware/ISO-8601 timestamps across grant sorting, authorization code consumption/exchange, access token validation, and refresh token rotation.
+
+Bounty settlement address (Base Mainnet USDC): `0xb9f3765aeb1974c27a193463f655a1a57b3aec94`
 
 
 ## Instructions for Kuro (Autonomous Solver):

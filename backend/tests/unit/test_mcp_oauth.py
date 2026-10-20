@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import timedelta
+from datetime import timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -10,6 +10,7 @@ from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgumen
 from google.cloud.firestore_v1.transaction import transactional
 
 from testing.import_isolation import load_module_fresh, stub_modules
+import database.mcp_token_cache as mcp_token_cache
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
@@ -1564,3 +1565,326 @@ def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
     survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
     assert survivors[other_client['id']]['status'] == 'active'
     assert survivors[other_host['id']]['status'] == 'active'
+
+
+def _naive(moment):
+    """Strip tzinfo the way a legacy or emulator-written document can."""
+    return moment.replace(tzinfo=None)
+
+
+def _seed_grant_with_timestamps(uid, client_id, grant_id, *, updated_at, created_at=None):
+    """Write a grant doc with the exact timestamp shapes a migration can leave."""
+    mcp_oauth.db.collection('mcp_oauth_grants').document(grant_id).set(
+        {
+            'id': grant_id,
+            'uid': uid,
+            'client_id': client_id,
+            'resource': mcp_oauth.MCP_RESOURCE_URL,
+            'scopes': ['memories.read'],
+            'created_at': updated_at if created_at is None else created_at,
+            'updated_at': updated_at,
+            'last_used_at': updated_at,
+            'revoked_at': None,
+            'status': 'active',
+        }
+    )
+    return grant_id
+
+
+def test_grant_listing_sorts_mixed_naive_aware_and_iso_timestamps():
+    """Recency sorting must survive the timestamp shapes Firestore can hold.
+
+    Legacy migrations and the emulator can leave offset-naive datetimes or
+    ISO-8601 strings in ``updated_at`` / ``created_at``; comparing those with
+    the aware ``datetime.min`` sentinel raised
+    ``TypeError: can't compare offset-naive and offset-aware datetimes``
+    (issue #22660).
+    """
+    uid = 'user-mixed-recency'
+    now = mcp_oauth._now()
+    naive_newest = _seed_grant_with_timestamps(
+        uid, 'omi-chatgpt-prod', 'grant-naive', updated_at=_naive(now - timedelta(minutes=1))
+    )
+    aware_middle = _seed_grant_with_timestamps(
+        uid, 'omi-mcp-public', 'grant-aware', updated_at=now - timedelta(minutes=2)
+    )
+    iso_oldest = _seed_grant_with_timestamps(
+        uid,
+        'claude-iso',
+        'grant-iso',
+        updated_at=(now - timedelta(minutes=3)).isoformat().replace('+00:00', 'Z'),
+    )
+    # ``updated_at`` missing entirely: the key falls back to a naive ``created_at``.
+    naive_created_fallback = _seed_grant_with_timestamps(
+        uid,
+        'omi-chatgpt-dev',
+        'grant-created-only',
+        updated_at=None,
+        created_at=_naive(now - timedelta(minutes=4)),
+    )
+    # No usable timestamp at all: the aware ``datetime.min`` sentinel sorts last.
+    untimestamped = _seed_grant_with_timestamps(uid, 'claude-untimed', 'grant-untimed', updated_at=None, created_at='')
+
+    assert [grant['id'] for grant in mcp_oauth.list_user_grants(uid)] == [
+        naive_newest,
+        aware_middle,
+        iso_oldest,
+        naive_created_fallback,
+        untimestamped,
+    ]
+
+
+def _issue_code(grant, scopes, verifier):
+    return mcp_oauth.issue_authorization_code(
+        grant['uid'],
+        grant['id'],
+        grant['client_id'],
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+
+
+def _code_ref(code):
+    return mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code))
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now + timedelta(minutes=5)), id='naive'),
+        pytest.param(
+            lambda now: (now + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), id='iso-8601-z'
+        ),
+        pytest.param(
+            lambda now: (now + timedelta(minutes=5)).astimezone(timezone(timedelta(hours=2))).isoformat(),
+            id='iso-8601-offset',
+        ),
+    ],
+)
+def test_authorization_code_consumption_accepts_non_utc_timestamp_shapes(expires_at_factory):
+    """A code that expires in the future is valid whatever shape its
+    ``expires_at`` was persisted in; comparing a naive value or a string with
+    ``datetime.now(timezone.utc)`` raised ``TypeError`` (issue #22660)."""
+    uid = 'user-code-shapes'
+    scopes = ['memories.read']
+    verifier = 'b' * 64
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    code = _issue_code(grant, scopes, verifier)
+    _code_ref(code).set({'expires_at': expires_at_factory(mcp_oauth._now())}, merge=True)
+
+    consumed = mcp_oauth.consume_authorization_code(
+        code,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        verifier,
+    )
+
+    assert consumed is not None
+    assert consumed['grant_id'] == grant['id']
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now - timedelta(minutes=5)), id='naive-past'),
+        pytest.param(
+            lambda now: (now - timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), id='iso-8601-past'
+        ),
+        pytest.param(lambda now: 'not-a-timestamp', id='malformed'),
+    ],
+)
+def test_authorization_code_consumption_rejects_expired_or_unparseable(expires_at_factory):
+    """Expiry stays fail-closed: past and unparseable values never validate."""
+    uid = 'user-code-expired-shapes'
+    scopes = ['memories.read']
+    verifier = 'c' * 64
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    code = _issue_code(grant, scopes, verifier)
+    _code_ref(code).set({'expires_at': expires_at_factory(mcp_oauth._now())}, merge=True)
+
+    assert (
+        mcp_oauth.consume_authorization_code(
+            code,
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            mcp_oauth.MCP_RESOURCE_URL,
+            verifier,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now + timedelta(minutes=5)), id='naive'),
+        pytest.param(
+            lambda now: (now + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), id='iso-8601-z'
+        ),
+    ],
+)
+def test_authorization_code_exchange_accepts_non_utc_timestamp_shapes(expires_at_factory):
+    """Exchange shares the code's expiry check, so a naive or ISO-8601
+    ``expires_at`` must not reject a valid code (issue #22660)."""
+    uid = 'user-code-exchange-shapes'
+    scopes = ['memories.read']
+    verifier = 'd' * 64
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    code = _issue_code(grant, scopes, verifier)
+    _code_ref(code).set({'expires_at': expires_at_factory(mcp_oauth._now())}, merge=True)
+
+    token_pair = mcp_oauth.exchange_authorization_code_for_tokens(
+        code,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        verifier,
+    )
+
+    assert token_pair is not None
+    assert mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)['uid'] == uid
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now + timedelta(minutes=5)), id='naive'),
+        pytest.param(
+            lambda now: (now + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), id='iso-8601-z'
+        ),
+        pytest.param(
+            lambda now: (now + timedelta(minutes=5)).astimezone(timezone(timedelta(hours=-7))).isoformat(),
+            id='iso-8601-offset',
+        ),
+    ],
+)
+def test_access_token_validation_accepts_non_utc_timestamp_shapes(expires_at_factory):
+    """``_is_unexpired`` used to reject (or crash on) naive and ISO-8601
+    ``expires_at`` values, and the token cache was only filled when the value
+    was already a ``datetime`` (issue #22660)."""
+    uid = 'user-token-shapes'
+    scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    token_ref = mcp_oauth.db.collection('mcp_oauth_access_tokens').document(
+        mcp_oauth.hash_secret(token_pair['access_token'])
+    )
+    token_ref.set({'expires_at': expires_at_factory(mcp_oauth._now())}, merge=True)
+
+    identity = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+
+    assert identity is not None
+    assert identity['uid'] == uid
+    # A normalized expiry also keeps the Redis cache warm for this token.
+    cached = mcp_token_cache.read_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    assert cached is not None and cached['uid'] == uid
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now - timedelta(minutes=5)), id='naive-past'),
+        pytest.param(
+            lambda now: (now - timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), id='iso-8601-past'
+        ),
+        pytest.param(lambda now: 'not-a-timestamp', id='malformed'),
+    ],
+)
+def test_access_token_validation_rejects_expired_or_unparseable(expires_at_factory):
+    uid = 'user-token-expired-shapes'
+    scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    mcp_oauth.db.collection('mcp_oauth_access_tokens').document(
+        mcp_oauth.hash_secret(token_pair['access_token'])
+    ).set({'expires_at': expires_at_factory(mcp_oauth._now())}, merge=True)
+
+    assert mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+
+
+@pytest.mark.parametrize(
+    ('used_at_factory', 'expires_at_factory', 'expected_outcome'),
+    [
+        pytest.param(
+            lambda now: _naive(now - timedelta(seconds=30)),
+            lambda now: _naive(now + timedelta(days=1)),
+            'replay_grace_reissued',
+            id='naive-in-grace',
+        ),
+        pytest.param(
+            lambda now: (now - timedelta(seconds=30)).isoformat().replace('+00:00', 'Z'),
+            lambda now: (now + timedelta(days=1)).isoformat().replace('+00:00', 'Z'),
+            'replay_grace_reissued',
+            id='iso-8601-in-grace',
+        ),
+        pytest.param(
+            lambda now: _naive(now - timedelta(minutes=10)),
+            lambda now: _naive(now + timedelta(days=1)),
+            'replay_revoked',
+            id='naive-outside-grace',
+        ),
+        pytest.param(
+            lambda now: (now - timedelta(minutes=10)).isoformat().replace('+00:00', 'Z'),
+            lambda now: (now + timedelta(days=1)).isoformat().replace('+00:00', 'Z'),
+            'replay_revoked',
+            id='iso-8601-outside-grace',
+        ),
+    ],
+)
+def test_refresh_rotation_handles_non_utc_timestamp_shapes(
+    monkeypatch, used_at_factory, expires_at_factory, expected_outcome
+):
+    """Replay grace must survive naive/ISO-8601 ``used_at`` and ``expires_at``:
+    the old subtraction raised ``TypeError`` on a naive ``used_at`` and skipped
+    grace entirely for an ISO-8601 string (issue #22660)."""
+    uid = 'user-refresh-shapes'
+    scopes = ['memories.read']
+    now = mcp_oauth._now()
+    monkeypatch.setattr(mcp_oauth, '_now', lambda: now)
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    assert mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None) is not None
+
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(
+        mcp_oauth.hash_secret(pair['refresh_token'])
+    ).set({'used_at': used_at_factory(now), 'expires_at': expires_at_factory(now)}, merge=True)
+    outcomes = []
+    rotated = mcp_oauth.rotate_refresh_token(
+        pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append
+    )
+
+    assert outcomes == [expected_outcome]
+    assert (rotated is not None) == (expected_outcome == 'replay_grace_reissued')
+
+
+@pytest.mark.parametrize(
+    'expires_at_factory',
+    [
+        pytest.param(lambda now: _naive(now - timedelta(days=1)), id='naive-past'),
+        pytest.param(
+            lambda now: (now - timedelta(days=1)).isoformat().replace('+00:00', 'Z'), id='iso-8601-past'
+        ),
+        pytest.param(lambda now: 'not-a-timestamp', id='malformed'),
+    ],
+)
+def test_refresh_rotation_rejects_expired_or_unparseable_refresh_token(monkeypatch, expires_at_factory):
+    uid = 'user-refresh-expired-shapes'
+    scopes = ['memories.read']
+    now = mcp_oauth._now()
+    monkeypatch.setattr(mcp_oauth, '_now', lambda: now)
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(
+        mcp_oauth.hash_secret(pair['refresh_token'])
+    ).set({'expires_at': expires_at_factory(now)}, merge=True)
+    outcomes = []
+
+    assert (
+        mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append)
+        is None
+    )
+    assert outcomes == ['invalid']
+    assert mcp_oauth.get_active_grant(grant['id']) is not None
