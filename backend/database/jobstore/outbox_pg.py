@@ -13,8 +13,9 @@ The row is the source of truth; a Cloud Task is only a wake. Semantics (conforma
   under a new wake token, create the task through the injected ``create_wake`` hook after commit, and a
   not-due delivery returns ``Outcome.DEFERRED`` (``run_push`` maps that to 200). Transactional enqueuers call
   ``wake(row_id, wake_token)`` after their own commit; it is idempotent on ``(row_id, wake_token)``.
-- A token stays ``wake_pending`` until its task create succeeded. ``sweep`` closes privacy-fenced rows,
-  re-arms expired leases under a new token and retries every pending wake; a hook error is counted, never
+- A token stays ``wake_pending`` until its task create succeeded. ``enqueue`` without ``tx`` creates its own
+  wake after commit. ``sweep`` pages only actionable rows: it re-arms expired leases under a new token,
+  retries every pending wake, and closes the privacy-fenced rows among them. A hook error is counted, never
   raised, and leaves the row pending for the next sweep (invariant 4: durable before wake).
 
 Time is always the caller's ``now`` (epoch seconds), never the database clock.
@@ -98,7 +99,12 @@ class PostgresOutbox:
                 raise TypeError('a Postgres outbox enqueues only inside a PostgresStore transaction')
             return self._enqueue(tx.conn, dedupe_key, owner_id, payload, available_at, policy_id, coalesce, now)
         with self.store.pool.connection() as conn, conn.transaction():
-            return self._enqueue(conn, dedupe_key, owner_id, payload, available_at, policy_id, coalesce, now)
+            result = self._enqueue(conn, dedupe_key, owner_id, payload, available_at, policy_id, coalesce, now)
+        # Contract (b) invariant 4: without tx the outbox owns the wake. The row is committed first; a failed
+        # task create leaves it wake_pending for the sweep, and callers never call wake() themselves.
+        if result.wake_token is not None:
+            self._try_wake(result.row_id, result.wake_token)
+        return result
 
     def _enqueue(
         self, conn: Any, dedupe_key: str, owner_id: str, payload: Any, available_at: float, policy_id, coalesce, now
@@ -213,15 +219,17 @@ class PostgresOutbox:
             numeric = int(row_id)
         except ValueError:
             return
+        # The task create is an RPC: never hold one of the pool's few connections across it.
         with self.store.pool.connection() as conn:
             row = conn.execute(
                 'SELECT available_at FROM outbox WHERE id = %s AND namespace = %s AND kind = %s '
                 'AND done_at IS NULL AND wake_token = %s',
                 (numeric, self.store.namespace, self.kind.value, wake_token),
             ).fetchone()
-            if row is None:
-                return
-            self.create_wake(row_id, wake_token, row[0])
+        if row is None:
+            return
+        self.create_wake(row_id, wake_token, row[0])
+        with self.store.pool.connection() as conn:
             conn.execute(
                 'UPDATE outbox SET wake_pending = false WHERE id = %s AND wake_token = %s', (numeric, wake_token)
             )
@@ -274,19 +282,33 @@ class PostgresOutbox:
         )
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
+        """Re-arm expired leases and retry pending wakes; privacy-fenced rows among them are closed instead.
+
+        Only actionable rows fill the page: an expired lease, or an unleased row whose wake is still pending.
+        A backlog of healthy, already-woken rows therefore cannot crowd them out (M1 L12-2); those rows are
+        closed on delivery, where ``claim`` and ``claim_key`` run the same privacy probe. The probe runs before
+        any row lock, and the locked pass re-checks the predicate, so claims never wait behind it.
+        """
         discarded = expired = 0
         to_wake: list[tuple[str, str]] = []
+        actionable = '((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s))'
+        with self.store.pool.connection() as conn:
+            candidates = conn.execute(
+                f'SELECT id, owner_id, payload FROM outbox WHERE namespace = %s AND kind = %s AND done_at IS NULL '
+                f'AND {actionable} ORDER BY available_at, id LIMIT %s',
+                (self.store.namespace, self.kind.value, now, now, limit),
+            ).fetchall()
+        if not candidates:
+            return SweepCounts(rewoken=0, expired_leases=0, discarded=0, errors=0)
+        fenced = {row_id for row_id, owner_id, payload in candidates if self._fenced(owner_id, payload)}
         with self.store.pool.connection() as conn, conn.transaction():
             rows = conn.execute(
-                'SELECT id, owner_id, payload, lease_until, wake_token, wake_pending FROM outbox '
-                'WHERE namespace = %s AND kind = %s AND done_at IS NULL '
-                'AND ((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s) '
-                'OR (available_at <= %s AND lease_until <= %s)) '
-                'ORDER BY available_at, id LIMIT %s FOR UPDATE SKIP LOCKED',
-                (self.store.namespace, self.kind.value, now, now, now, now, limit),
+                f'SELECT id, lease_until, wake_token, wake_pending FROM outbox WHERE id = ANY(%s) '
+                f'AND done_at IS NULL AND {actionable} ORDER BY id FOR UPDATE SKIP LOCKED',
+                ([row_id for row_id, _, _ in candidates], now, now),
             ).fetchall()
-            for row_id, owner_id, payload, lease_until, wake_token, pending in rows:
-                if self._fenced(owner_id, payload):
+            for row_id, lease_until, wake_token, pending in rows:
+                if row_id in fenced:
                     self._close(conn, row_id, 'privacy_fenced', now)
                     discarded += 1
                 elif 0 < lease_until <= now:

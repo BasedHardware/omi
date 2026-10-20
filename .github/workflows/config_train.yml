@@ -80,8 +80,17 @@ jobs:
             fi
             git merge-base --is-ancestor "$source_sha" origin/main
           else
-            git fetch --no-tags origin "$OPS_REF" || true
-            source_sha="$(git rev-parse --verify "${OPS_REF}^{commit}" 2>/dev/null || git rev-parse --verify FETCH_HEAD)"
+            # The requested ref or nothing: a failed fetch must not fall back to main's
+            # FETCH_HEAD and apply main's staging.yaml under the requested name (M1 L07-3).
+            if source_sha="$(git rev-parse --verify -q "${OPS_REF}^{commit}")"; then :
+            elif source_sha="$(git rev-parse --verify -q "refs/remotes/origin/${OPS_REF}^{commit}")"; then :
+            else
+              git fetch --no-tags origin "$OPS_REF"
+              source_sha="$(git rev-parse --verify "FETCH_HEAD^{commit}")"
+            fi
+            if [[ "$OPS_REF" =~ ^[0-9a-f]{7,40}$ && "$source_sha" != "$OPS_REF"* ]]; then
+              echo "requested $OPS_REF resolved to $source_sha" >&2; exit 1
+            fi
           fi
           git checkout --detach "$source_sha"
           echo "sha=$source_sha" >> "$GITHUB_OUTPUT"

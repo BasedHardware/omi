@@ -196,7 +196,9 @@ def total_rate_per_min(spec: PopulationSpec, profile: dict[str, Any]) -> float:
 def _platform_and_device(rng: random.Random, profile: dict[str, Any], owner: str) -> tuple[str, str]:
     mix = {k: v for k, v in (profile.get('platform_mix') or {'ios': 1.0}).items() if k in ('ios', 'android')}
     platform = rng.choices(sorted(mix), weights=[mix[k] for k in sorted(mix)])[0] if mix else 'ios'
-    return platform, hashlib.sha256(f'device:{owner}'.encode()).hexdigest()[:16]
+    # utils.client_device.build_client_device_id accepts exactly 8 hex characters; any other width
+    # resolves to no device, so every "fresh" upload would be admitted as untrusted backfill.
+    return platform, hashlib.sha256(f'device:{owner}'.encode()).hexdigest()[:8]
 
 
 def _split_uploads(

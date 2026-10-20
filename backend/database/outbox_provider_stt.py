@@ -84,10 +84,10 @@ def _holds(row: Mapping[str, Any] | None, claim: Claim) -> bool:
     )
 
 
-def _default_wake(row: Mapping[str, Any]) -> None:
+def _default_wake(row_id: str, wake_token: str, available_at: float) -> None:
     from utils.provider_stt_tasks import create_wake
 
-    create_wake(row['segment_id'], row['task_token'], due_at=float(row['due_at']))
+    create_wake(row_id, wake_token, due_at=available_at)
 
 
 class FirestoreProviderSttOutbox:
@@ -97,8 +97,8 @@ class FirestoreProviderSttOutbox:
         self,
         client: Any = None,
         *,
-        privacy_blocked: Callable[[str], bool] | None = None,
-        create_wake: Callable[[Mapping[str, Any]], None] | None = None,
+        privacy_blocked: Callable[[str, Mapping[str, Any]], bool] | None = None,
+        create_wake: Callable[[str, str, float], None] | None = None,
         collection: str | None = None,
     ):
         self._bound_client = client
@@ -142,16 +142,18 @@ class FirestoreProviderSttOutbox:
         raise AssertionError('provider-stt outbox CAS must return or raise within its retry budget')
 
     def _wake(self, row: Mapping[str, Any]) -> None:
-        self._create_wake(row)
+        self._create_wake(row['segment_id'], row['task_token'], float(row['due_at']))
 
     def _blocked(self, row_id: str, owner_id: str) -> bool:
         if self._privacy_blocked is not None:
-            return self._privacy_blocked(row_id)
+            # Contract (b) seam: (owner_id, payload). Provider rows carry no conversation in the payload.
+            return self._privacy_blocked(owner_id, {'segment_id': row_id})
         from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
         client = self._client()
         try:
-            assert_batch_write_allowed(client, client.transaction(), owner_id)
+            # Plain reads: an unstarted transaction raises 'Transaction not in progress' on real Firestore.
+            assert_batch_write_allowed(client, None, owner_id)
         except BatchPrivacyBlocked:
             return True
         return False

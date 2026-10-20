@@ -79,6 +79,8 @@ class LegacyDarkReason(StrEnum):
     ADMISSION_REFUSED = 'admission_refused'
     SEQUENCER_DARK = 'sequencer_dark'
     SEQUENCER_REGISTRATION_SKIPPED = 'sequencer_registration_skipped'
+    SEQUENCER_OWNS_JOB = 'sequencer_owns_job'
+    SEQUENCER_OWNER_ACTIVE = 'sequencer_owner_active'
 
 
 class LegacyOwnership(StrEnum):
@@ -256,11 +258,37 @@ def classify_ledger_row(
         if owner_job_present is False:
             return LegacyOwnership.STRANDED
         updated_at = _as_utc(row.get('updated_at'))
-        if updated_at is not None and (now - updated_at).total_seconds() >= CLAIM_STALE_SECONDS:
+        # ``_claim_transaction`` takes over a claim without a timestamp, and one
+        # past the stale window (M1 review L10-3).
+        if updated_at is None or (now - updated_at).total_seconds() >= CLAIM_STALE_SECONDS:
             return LegacyOwnership.STRANDED
         return LegacyOwnership.ACTIVE
     # Unknown or partial rows: legacy would replace them on the next claim.
     return LegacyOwnership.STRANDED
+
+
+def legacy_owner_job_present(row: Optional[Mapping[str, Any]]) -> Optional[bool]:
+    """Whether a processing claim's Redis legacy job still exists, else None.
+
+    The same existence check ``claim_sync_content`` makes before re-claiming:
+    Redis expires at 24h, the ledger claim at 48h, so a fresh-looking claim
+    whose owner job is gone is stranded (M1 review L10-3). Blocking: call from
+    the db executor.
+    """
+    if not row or row.get('status') != 'processing' or row.get('dispatch_protocol') in ('batch_v1', 'stt_cap_hold_v1'):
+        return None
+    job_id = row.get('job_id')
+    if not isinstance(job_id, str) or not job_id:
+        return None
+    try:
+        from database.sync_jobs import get_sync_job
+
+        return get_sync_job(job_id) is not None
+    except Exception as error:
+        # Unknown is not absent: trust the claim's age (ACTIVE answers 409, the
+        # client keeps the audio) rather than adopting a possibly live owner.
+        logger.warning('event=legacy_dark_owner_probe outcome=unavailable exception_type=%s', type(error).__name__)
+        return None
 
 
 def read_ledger_row(uid: str, content_id: str) -> Optional[Mapping[str, Any]]:
@@ -297,9 +325,10 @@ def fence_decision(
     In ``on`` legacy-owned content keeps today's route (the original claimant
     remains the sole authority). In ``draining``/``dark`` no legacy job is
     created and nothing legacy owns is re-admitted to batch, except STRANDED
-    and CAPPED rows: legacy will never finish those, so they are adopted by
-    batch when the caller supports the ledger takeover (lane 8's intake), and
-    otherwise answered 409 so the client keeps the audio (invariant 2).
+    rows: legacy will never finish those, so they are adopted by batch when
+    the caller supports the ledger takeover (lane 8's intake), and otherwise
+    answered 409 so the client keeps the audio (invariant 2). A CAPPED row
+    keeps its repeat-failure pause: 409 for the remaining pause.
     """
     ownership = classify_ledger_row(row, now=now, owner_job_present=owner_job_present)
     if ownership in (LegacyOwnership.NONE, LegacyOwnership.BATCH):
@@ -319,9 +348,9 @@ def fence_decision(
             else LegacyDarkReason.LEGACY_ACTIVE_IN_DARK
         )
         return FenceDecision(FenceAction.ACK, reason, ownership, job_id)
-    if batch_adopts_stranded:
-        return FenceDecision(FenceAction.ADMIT_BATCH, LegacyDarkReason.LEGACY_STRANDED_ADOPTED, ownership, job_id)
     retry_after = DARK_RETRY_AFTER_SECONDS
+    # A live repeat-failure pause is never adopted (M1 review L10-4): 409 for
+    # the remaining pause, whatever the caller supports.
     if ownership is LegacyOwnership.CAPPED:
         pause_until = _as_utc(row.get('repeat_failure_pause_until'))
         if pause_until is not None:
@@ -329,6 +358,8 @@ def fence_decision(
             if math.isfinite(seconds):
                 retry_after = max(1, min(86400, int(seconds) + 1))
         return FenceDecision(FenceAction.RETRY, LegacyDarkReason.LEGACY_CAPPED, ownership, job_id, None, retry_after)
+    if batch_adopts_stranded:
+        return FenceDecision(FenceAction.ADMIT_BATCH, LegacyDarkReason.LEGACY_STRANDED_ADOPTED, ownership, job_id)
     return FenceDecision(FenceAction.RETRY, LegacyDarkReason.LEGACY_STRANDED, ownership, job_id, None, retry_after)
 
 

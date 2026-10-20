@@ -87,8 +87,8 @@ def box():
     client, woken, blocked = Fake(), [], set()
     outbox = FirestoreProviderSttOutbox(
         client,
-        privacy_blocked=lambda row_id: row_id in blocked,
-        create_wake=lambda row: woken.append(row['task_token']),
+        privacy_blocked=lambda owner_id, payload: payload['segment_id'] in blocked,
+        create_wake=lambda row_id, token, available_at: woken.append(token),
         collection='batch_pipeline_test_provider_stt_outbox',
     )
     return SimpleNamespace(outbox=outbox, client=client, woken=woken, blocked=blocked)

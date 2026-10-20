@@ -24,7 +24,7 @@ import wave
 
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -47,6 +47,20 @@ logger = logging.getLogger(__name__)
 PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3'
 PENDING = 'provider_pending'
 RUNNING = 'provider_running'
+# Terminal: the content ledger no longer belongs to this unit's run, so its result can never project.
+SUPERSEDED = 'provider_superseded'
+# Invalid redirect topology is not evidence of deletion (utils/enrichment/custody.discard_blocked), and a
+# lost result-write race is not privacy: keep the unit and its wake. Every other fence releases the unit
+# terminally through the store's fence-bypass revoke (quarantine_fenced), because no purge is guaranteed to
+# follow (a deleted merge survivor tombstones only the survivor, never the donor this job may name).
+_TRANSIENT_FENCES = frozenset(
+    {
+        BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+        BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+        BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+        BatchPrivacyReason.RESULT_LEASE_LOST,
+    }
+)
 # A running intent older than this without a persisted result is settled as
 # failed, never re-dispatched (same bound as quarantine recovery).
 ABANDON_SECONDS = 900.0
@@ -256,6 +270,27 @@ class ProviderSttStore:
 
         return self.store.run(commit)
 
+    def supersede(self, segment_id: str, now: float) -> bool:
+        """Terminal release of a unit whose content run was superseded (ProjectionBlocked).
+
+        Clears ``merge_pending`` and bumps the owner revision in one transaction, as terminal
+        quarantine does, so OrderedMerge stops holding the owner's later captures behind it.
+        """
+
+        def commit(tx):
+            job = tx.get('jobs', segment_id)
+            if job.get('state') not in (PENDING, RUNNING) or not job.get('merge_pending') or job.get('result'):
+                return False
+            key = owner_key(job['owner_id'])
+            owner = tx.get('owners', key)
+            job.update(state=SUPERSEDED, merge_pending=False, superseded_at=now)
+            owner['revision'] = owner.get('revision', 0) + 1
+            tx.put('owners', key, owner)
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
 
 def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
     """One vendor call with client retries disabled (attempts=2), as quarantine recovery."""
@@ -340,9 +375,25 @@ class ProviderSttStage:
     def run(self, segment_id: str) -> UnitOutcome:
         try:
             return self._run(segment_id)
-        except BatchPrivacyBlocked:
+        except BatchPrivacyBlocked as error:
+            if error.reason in _TRANSIENT_FENCES:
+                # Keep the row: the GPU ring likewise re-checks a blocked head on every pull.
+                return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
+            # Ack the row only once the job no longer holds the owner's merge (the revoke rechecks the fence).
+            try:
+                self.protocol.store.quarantine_fenced(segment_id, self.clock())
+            except Exception:
+                return UnitOutcome('retry', 'dependency_warming')
             return UnitOutcome('discarded', 'privacy_blocked')
         except ProjectionBlocked:
+            # Closing the row alone would leave merge_pending set and stall the owner's later units.
+            try:
+                self.protocol.supersede(segment_id, self.clock())
+            except BatchPrivacyBlocked:
+                return UnitOutcome('discarded', 'privacy_blocked')
+            except Exception:
+                return UnitOutcome('retry', 'dependency_warming')
+            self._log('superseded', 'projection_blocked')
             return UnitOutcome('discarded', 'superseded')
 
     def _run(self, segment_id: str) -> UnitOutcome:
