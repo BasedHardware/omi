@@ -51,6 +51,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
@@ -97,6 +98,7 @@ import 'package:omi/backend/schema/message_event.dart'
 
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
+part 'capture_continuity_watch.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
@@ -166,6 +168,7 @@ class CaptureController extends ChangeNotifier
   DateTime? _appResumedAt;
   Timer? _calendarGapTimer;
   Timer? _captureHealthTimer;
+  Timer? _continuityTimer;
 
   final _captureEvidenceIdentity = CaptureEvidenceIdentity();
 
@@ -1214,6 +1217,7 @@ class CaptureController extends ChangeNotifier
     if (!phoneOwns) _rollCaptureSession(next?.id ?? 'none');
     _deviceIdentityRevision++;
     _recordingDevice = next;
+    _syncContinuityWatch();
     if (next == null && !phoneOwns) _endOfflineSession();
     notifyListeners();
   }
@@ -1227,6 +1231,7 @@ class CaptureController extends ChangeNotifier
       _rollCaptureSession(device?.id ?? 'none');
     }
     _recordingDevice = _recordingDevicePreservingNormalizedType(device);
+    _syncContinuityWatch();
     notifyListeners();
     unawaited(_dispatchLogged(DeviceUpdated(device)));
   }
@@ -2126,6 +2131,7 @@ class CaptureController extends ChangeNotifier
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
         deviceAudioTap?.call(snapshot);
+        CaptureContinuityMonitor.instance.onFrameInCustody();
 
         _metrics.addBleBytes(snapshot.length);
         _recordingTelemetry.observeAudio(snapshot.length);
@@ -2741,6 +2747,8 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     _liveRecovery.kickTimer?.cancel();
+    _continuityTimer?.cancel();
+    _continuityTimer = null;
     unawaited(_sessionOwner?.close());
     unawaited(lifetime.close());
     super.dispose();

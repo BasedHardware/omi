@@ -1,0 +1,13 @@
+{
+  "version": "1.0.568",
+  "date": "2026-10-20",
+  "changes": [
+    "Your Omi keeps recording after a network change or a reconnect during sync, and recordings waiting to sync upload on their own instead of waiting for a restart",
+    "Tapping the \"Omi isn't sending audio\" banner now reconnects in place instead of leaving the page",
+    "A full phone disk pausing recordings, or an upload stalled for hours, now shows up under Needs attention in the Activity bell",
+    "Pausing a recording in Transcribe Later mode no longer leaves the screen loading or the timer frozen",
+    "Mind Map shows your saved memories while connections are still loading, and can load more results",
+    "Summaries keep their headings, nested lists and spacing",
+    "Smaller fixes for tasks, device diagnostics and Connect an Agent"
+  ]
+}

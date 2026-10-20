@@ -364,6 +364,17 @@ def test_success_passthrough(monkeypatch):
     assert call['data'] == {'diarize': 'true'}
 
 
+def test_upstream_request_time_is_attributed_to_app_proxy(monkeypatch):
+    from prometheus_client import REGISTRY
+
+    labels = {'caller': 'app_proxy', 'route': 'v2'}
+    before = REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) or 0.0
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
+    response = _upload(_make_client(monkeypatch, fake))
+    assert response.status_code == 200
+    assert REGISTRY.get_sample_value('omi_parakeet_request_seconds_count', labels) == before + 1
+
+
 def test_diarize_false_forwarded(monkeypatch):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     client = _make_client(monkeypatch, fake)
