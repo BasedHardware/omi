@@ -51,10 +51,12 @@ Content already claimed in `sync_content_ledger` by legacy is never re-admitted 
 | Ledger row | `draining` / `dark` answer | Metric reason |
 |---|---|---|
 | completed (valid result) | 202 `completed` with the cached segment count, no job | `legacy_completed` |
-| cap hold `held` | 202 `completed`, no job | `legacy_held` |
-| processing, fresh, owner present | 409 `sync_content_in_progress` with the legacy job id (the shipped "follow the owner" response, lead ruling 10-19); the running legacy task finishes it | `legacy_active` (`legacy_active_in_dark` pages in `dark`) |
-| retryable, stale, owner missing, invalid completion | batch adopts it when the intake supports the ledger takeover; otherwise 409 retry-later, client keeps the audio | `legacy_stranded_adopted` / `legacy_stranded` |
-| repeat-failure pause active | 409 with `Retry-After` = the pause remaining | `legacy_capped` |
+| cap hold `held` | 202 `completed` with the ledger job id, no job; the status poll answers a valid hold as completed after the Redis TTL (`completed_status`) | `legacy_held` |
+| processing, fresh, Redis owner job present (or unknown) | 409 `sync_content_in_progress` with the legacy job id (the shipped "follow the owner" response, lead ruling 10-19); the running legacy task finishes it | `legacy_active` (`legacy_active_in_dark` pages in `dark`) |
+| retryable, stale or untimestamped claim, Redis owner job gone (the `claim_sync_content` check), invalid completion | batch adopts it when the intake supports the ledger takeover; otherwise 409 retry-later, client keeps the audio | `legacy_stranded_adopted` / `legacy_stranded` |
+| repeat-failure pause active | 409 with `Retry-After` = the pause remaining, never adopted | `legacy_capped` |
+
+An epoch-less backfill task in `draining`/`dark` never runs beside a live sequencer owner for the same uid: if the sequencer already holds the job and its sweep still dispatches (`draining`) the task is acked (`sequencer_owns_job`); while another job is the uid's active owner it answers 409 so the queue retries (`sequencer_owner_active`).
 
 Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced answer; `omi_legacy_sync_admissions_total{reason}` must stay flat outside `on`, and a non-`on` admission logs `event=legacy_dark action=legacy_admission outcome=invariant_violation`.
 

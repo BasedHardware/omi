@@ -136,19 +136,21 @@ def recreate(env: str, path: str, apply: bool) -> int:
         command += [f'--location={location}', *flags_from_spec(spec)]
         planned.append(command)
         print(('APPLY ' if apply else 'DRY-RUN ') + 'gcloud ' + ' '.join(command))
+        # ``queues update`` never changes state: restore it explicitly, both
+        # ways, so a rollback onto a paused queue resumes it (M1 review L10-5).
+        state_verb = {'PAUSED': 'pause', 'RUNNING': 'resume'}.get(spec.get('state'))
+        state_command = (
+            ['tasks', 'queues', state_verb, _queue_name(env, queue), f'--project={project}', f'--location={location}']
+            if state_verb
+            else None
+        )
+        if state_command:
+            planned.append(state_command)
+            print(('APPLY ' if apply else 'DRY-RUN ') + 'gcloud ' + ' '.join(state_command))
         if apply:
             _gcloud(command)
-            if spec.get('state') == 'PAUSED':
-                _gcloud(
-                    [
-                        'tasks',
-                        'queues',
-                        'pause',
-                        _queue_name(env, queue),
-                        f'--project={project}',
-                        f'--location={location}',
-                    ]
-                )
+            if state_command:
+                _gcloud(state_command)
     return 0 if planned else 1
 
 

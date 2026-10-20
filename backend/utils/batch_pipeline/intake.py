@@ -181,13 +181,15 @@ async def accept_upload(
             # Contract (h) invariant 4: legacy-owned content is acknowledged, never
             # re-admitted; only a row legacy can no longer finish is adopted, by a
             # ledger CAS inside the admission transaction.
-            decision = legacy_dark.fence_decision(previous, mode, batch_adopts_stranded=True)
-            if decision.ownership is legacy_dark.LegacyOwnership.CAPPED:
-                # A repeat-failure pause keeps its purpose until it expires.
-                decision = legacy_dark.fence_decision(previous, mode)
+            # The Redis owner's existence decides a fresh-looking claim, as in
+            # claim_sync_content; a live repeat-failure pause stays 409 (fence).
+            owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, previous)
+            decision = legacy_dark.fence_decision(
+                previous, mode, owner_job_present=owner_job_present, batch_adopts_stranded=True
+            )
             if decision.action is not legacy_dark.FenceAction.ADMIT_BATCH:
                 return legacy_dark.fence_response(decision, total_files=len(paths), lane=lane)
-            adopt = stranded_adopter(previous)
+            adopt = stranded_adopter(previous, owner_job_present=owner_job_present)
         # BYOK uploads are admitted like every other upload (David, 10-19); the
         # stage never needs request-scoped keys and enrichment runs on Omi's keys.
         seed = WorkItem(
@@ -395,15 +397,20 @@ async def accept_upload(
             await run_blocking(sync_executor, iterator.close)
 
 
-def stranded_adopter(observed: dict):
-    """admit() ``adopt`` hook: take over only the legacy row we classified, still stranded, unchanged."""
+def stranded_adopter(observed: dict, *, owner_job_present: bool | None = None):
+    """admit() ``adopt`` hook: take over only the legacy row we classified, still stranded, unchanged.
+
+    ``owner_job_present`` is the Redis probe made for ``observed``; the field
+    match pins the same owner job id, so it still applies inside the CAS.
+    """
     fields = ('dispatch_protocol', 'status', 'job_id', 'updated_at', 'repeat_failure_pause_until')
     expected = tuple(observed.get(name) for name in fields)
 
     def adopt(existing: dict) -> bool:
         return (
             tuple(existing.get(name) for name in fields) == expected
-            and legacy_dark.classify_ledger_row(existing) is legacy_dark.LegacyOwnership.STRANDED
+            and legacy_dark.classify_ledger_row(existing, owner_job_present=owner_job_present)
+            is legacy_dark.LegacyOwnership.STRANDED
         )
 
     return adopt

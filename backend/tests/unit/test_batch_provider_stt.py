@@ -678,6 +678,24 @@ async def test_active_legacy_owner_is_acknowledged_never_readmitted(dark_intake)
 
 
 @pytest.mark.asyncio
+async def test_fresh_claim_whose_redis_owner_expired_is_adopted(dark_intake, monkeypatch):
+    """M1 review L10-3: the same Redis existence check claim_sync_content makes."""
+    from datetime import datetime, timezone
+
+    from database import sync_jobs
+
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda job_id: None)
+    row = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': datetime.now(timezone.utc)}
+    dark_intake.store.run(lambda tx: tx.put('content', f'{OWNER}/content', row))
+    response = await dark_intake.intake.accept_upload(**UPLOAD)
+    assert response.status_code == 202
+    ((_, kwargs),) = dark_intake.calls
+    assert kwargs['adopt'](dict(row)) is True
+    # The same row with a live owner job stays legacy's (409, never re-admitted).
+    assert stranded_adopter(row, owner_job_present=True)(dict(row)) is False
+
+
+@pytest.mark.asyncio
 async def test_stranded_legacy_row_is_admitted_with_the_adoption_fence(dark_intake):
     dark_intake.store.run(
         lambda tx: tx.put('content', f'{OWNER}/content', {'status': 'retryable', 'job_id': 'legacy-1'})
