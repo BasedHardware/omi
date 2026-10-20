@@ -242,26 +242,34 @@ extension _CaptureLiveRecovery on CaptureController {
   Future<void> _runDeferredDeviceStart() async {
     final state = _liveRecovery;
     try {
-      while (SyncWakeScope.syncOnly) {
-        await SyncWakeScope.whenIdle;
-        if (_captureControllerDisposed) return;
+      // A coalesced periodic wake can raise the next fence in the same turn
+      // this one drops; a start swallowed again re-arms the flag and loops.
+      while (state.deferredStart) {
+        while (SyncWakeScope.syncOnly) {
+          await SyncWakeScope.whenIdle;
+          if (_captureControllerDisposed) return;
+        }
+        state.deferredStart = false;
+        // Replays exactly the start the pass swallowed, for any pendant and mode.
+        // A phone recording or call that owns capture now is not a reason to drop
+        // it: the reducer records the pendant as suspended and resumes it after.
+        final device = _recordingDevice;
+        final staged = _capture.stagedReadModel;
+        if (device == null || state.deviceStoppedByCaller || staged.pendantOwns || _pendantSuspension != null) {
+          return;
+        }
+        _emitCaptureRecovery(
+            CaptureRecoveryObservedKind.captureStartRedriven, CaptureRecoveryObservedTrigger.passEnded);
+        await streamDeviceRecording(device: device);
       }
-      if (!state.deferredStart) return;
-      state.deferredStart = false;
-      // Replays exactly the start the pass swallowed, for any pendant and mode.
-      // A phone recording or call that owns capture now is not a reason to drop
-      // it: the reducer records the pendant as suspended and resumes it after.
-      final device = _recordingDevice;
-      final staged = _capture.stagedReadModel;
-      if (device == null || state.deviceStoppedByCaller || staged.pendantOwns || _pendantSuspension != null) {
-        return;
-      }
-      _emitCaptureRecovery(CaptureRecoveryObservedKind.captureStartRedriven, CaptureRecoveryObservedTrigger.passEnded);
-      await streamDeviceRecording(device: device);
     } catch (error) {
       Logger.debug('[Capture] deferred device start failed: $error');
     } finally {
       state.deferredStartRunning = false;
+      if (state.deferredStart && !_captureControllerDisposed) {
+        state.deferredStartRunning = true;
+        unawaited(_runDeferredDeviceStart());
+      }
     }
   }
 }

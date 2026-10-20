@@ -223,8 +223,8 @@ void main() {
       for (var i = 0; i < 50; i++) {
         world.deviceConnection!.emitAudio(value: i);
       }
-      // The first orphan packet primes the WAL (a codec boundary flush to disk)
-      // asynchronously; observe completion rather than sleeping a fixed time.
+      // Orphan writes are synchronous; settle any WAL flush the writes scheduled
+      // and observe completion rather than sleeping a fixed time.
       for (var i = 0; i < 200 && await persistedFrames() < before + 50; i++) {
         await world.settle();
         await Future<void>.delayed(const Duration(milliseconds: 5));
