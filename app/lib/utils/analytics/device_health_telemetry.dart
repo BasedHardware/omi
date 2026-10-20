@@ -455,8 +455,10 @@ class DeviceHealthTelemetry {
   static List<({int start, int at})> _audioRecoveryStamps(Map<String, dynamic> diagnostics) {
     final stamps = <({int start, int at})>[];
     void add(Object? start, Object? at) {
-      if (start is! num || at is! num || start <= 0 || at <= 0) return;
-      final pair = (start: start.toInt(), at: at.toInt());
+      // Writers emit integer millis; a fractional value would truncate to a
+      // proof it never wrote, so only int counts here.
+      if (start is! int || at is! int || start <= 0 || at <= 0) return;
+      final pair = (start: start, at: at);
       if (stamps.any((stamp) => stamp.start == pair.start && stamp.at == pair.at)) return;
       stamps.add(pair);
     }
@@ -471,10 +473,10 @@ class DeviceHealthTelemetry {
   static bool _stampBacksRecovery(Map event, List<({int start, int at})> stamps) {
     final start = event['timestamp'];
     final resolved = event['lostAudioResolvedAt'];
-    if (start is! num || resolved is! num) return false;
-    final startMs = start.toInt();
-    final resolvedMs = resolved.toInt();
-    return stamps.any((stamp) => stamp.start == startMs && stamp.at == resolvedMs);
+    // Exact integer equality is the proof; a fractional timestamp never
+    // matches a stamp and must not truncate into one.
+    if (start is! int || resolved is! int) return false;
+    return stamps.any((stamp) => stamp.start == start && stamp.at == resolved);
   }
 
   /// An `audio_recovered` row is billable when a nearby disconnect records it,
@@ -484,12 +486,12 @@ class DeviceHealthTelemetry {
   static bool _isUnbackedAudioRecovery(Map event, List<Map> history, List<({int start, int at})> stamps) {
     if (event['eventType'] != 'audio_recovered') return false;
     final start = event['timestamp'];
-    if (start is! num || event['lostAudioResolvedAt'] == null) return false;
+    if (start is! int || event['lostAudioResolvedAt'] == null) return false;
     if (_stampBacksRecovery(event, stamps)) return false;
     for (final row in history) {
       if (row['eventType'] != 'disconnect') continue;
       final ts = row['timestamp'];
-      if (ts is num && (ts - start).abs() <= 5000) return false;
+      if (ts is int && (ts - start).abs() <= 5000) return false;
     }
     return true;
   }

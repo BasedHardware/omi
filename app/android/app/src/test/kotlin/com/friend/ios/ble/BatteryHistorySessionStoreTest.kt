@@ -326,6 +326,46 @@ class BatteryHistorySessionStoreTest {
         assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
     }
 
+    @Test fun `fractional started_at is not a session start and cannot clear an outage marker`() {
+        val disk = mutableMapOf<String, String>()
+        // started_at 90000.5 truncated to 90000 would turn the real outage
+        // marker at 90000 into a session-start echo and delete it.
+        val session = JSONObject().put("device", "device").put("started_at", 90000.5).put("identity_epoch", 7).toString()
+        disk["session_device"] = session
+        disk["audio_outage_epoch_device"] = "7"
+        disk["audio_outage_device"] = "90000"
+        disk["disconnect_history_device"] = JSONArray().toString()
+        val store = BatteryHistorySessionStore(
+            { disk[it] }, { key, value -> disk[key] = value }, { disk.remove(it) }, { 7L }, { true })
+        assertNull(store.openSince("device"))
+        // The malformed session row proves nothing: the marker survives.
+        assertEquals("90000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        val verdict = judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, 90000L, true)
+        assertEquals(AudioOutageMarkerVerdict.AMBIGUOUS, verdict)
+        assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
+    }
+
+    @Test fun `fractional recovery proof start or at is not a stamp`() {
+        val disk = mutableMapOf<String, String>()
+        disk["audio_recovery_proofs_device"] = JSONArray()
+            .put(
+                JSONObject()
+                    .put("start", 60000.5)
+                    .put("at", 91000)
+                    .put("identity_epoch", 7),
+            )
+            .put(
+                JSONObject()
+                    .put("start", 60000)
+                    .put("at", 92000.5)
+                    .put("identity_epoch", 7),
+            )
+            .toString()
+        // Neither fractional pair may back a recovery: no stamps survive.
+        assertTrue(audioRecoveryStamps(disk["audio_recovery_proofs_device"], 7, 100_000L).isEmpty())
+    }
+
     @Test fun `ambiguous marker within echo tolerance of the overwritten start is cleared`() {
         val disk = mutableMapOf<String, String>()
         val startedAt = 12_000L

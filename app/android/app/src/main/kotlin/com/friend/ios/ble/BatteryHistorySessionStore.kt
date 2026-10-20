@@ -31,8 +31,9 @@ internal fun provenSessionStartedAt(sessionJson: String?, epoch: Long): Long? {
     } catch (_: Exception) {
         return null
     }
-    if (!session.has("identity_epoch") || session.optLong("identity_epoch") != epoch) return null
-    val started = session.optLong("started_at", 0L)
+    val epochValue = session.validTimestamp("identity_epoch")
+    if (epochValue <= 0L || epochValue != epoch) return null
+    val started = session.validTimestamp("started_at")
     return started.takeIf { it > 0L }
 }
 
@@ -43,16 +44,15 @@ internal fun isSessionStartEcho(started: Long, marker: Long): Boolean {
 }
 
 /**
- * A row timestamp counts only as a JSON number greater than zero.
- * [JSONObject.optLong] coerces numeric strings, which would invent coverage
- * or direct evidence from a malformed row. Anything else contributes nothing.
+ * A timestamp field counts only as an integer JSON number greater than zero.
+ * [JSONObject.optLong] coerces numeric strings, and [Number.toLong] truncates
+ * fractions (90000.5 -> 90000): either could invent coverage, direct evidence,
+ * or a proof pair from malformed data. Writers emit integer millis, so any
+ * other shape contributes nothing.
  */
-internal fun JSONObject.validTimestamp(): Long {
-    if (isNull("timestamp")) return 0L
-    val value = get("timestamp")
-    // Only integer JSON numbers count. A fractional value (e.g. 90000.5) must
-    // contribute nothing rather than truncate toward the marker: writers emit
-    // integer millis, so any other shape is malformed data.
+internal fun JSONObject.validTimestamp(key: String = "timestamp"): Long {
+    if (isNull(key)) return 0L
+    val value = get(key)
     if (value !is Int && value !is Long) return 0L
     val timestamp = value.toLong()
     return if (timestamp > 0L) timestamp else 0L
@@ -147,9 +147,9 @@ internal fun audioRecoveryStamps(proofsJson: String?, epoch: Long, now: Long): L
     val stamps = mutableListOf<AudioRecoveryStamp>()
     for (i in 0 until source.length()) {
         val item = source.optJSONObject(i) ?: continue
-        if (item.optLong("identity_epoch", Long.MIN_VALUE) != epoch) continue
-        val start = item.optLong("start", 0L)
-        val at = item.optLong("at", 0L)
+        if (item.validTimestamp("identity_epoch") != epoch) continue
+        val start = item.validTimestamp("start")
+        val at = item.validTimestamp("at")
         if (start <= 0L || at <= 0L || now - at > AUDIO_RECOVERY_PROOF_RETENTION_MS) continue
         stamps.add(AudioRecoveryStamp(start, at))
     }
