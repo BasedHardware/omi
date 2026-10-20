@@ -408,6 +408,11 @@ from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
 
 install_loop_lease_sigterm_handler()
 
+# Live STT: deaths after SIGTERM are our rolling restart, not provider evidence.
+from utils.stt.pod_drain import install_drain_signal_marker, mark_draining
+
+install_drain_signal_marker()
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
@@ -663,6 +668,8 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
 async def shutdown_event():
     # Keep the shutdown cleanup self-contained for isolated lifecycle callers.
     import logging
+
+    mark_draining()
     from utils.executors import db_executor, run_blocking
 
     runtime = getattr(app.state, 'messaging_runtime', None)

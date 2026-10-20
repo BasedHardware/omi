@@ -75,6 +75,7 @@ class LiveRecoveryController:
         self._reentry_used: set[str] = set()
         self._cheap_reentry_granted = False
         self._cheap_reentry_used = False
+        self._retry_jitter: dict[str, float] = {}
         # The dial that killed the leg, normalized for bounded metric labels.
         self.source_family: str | None = None
         # Proof binding: text and adoption count only for the current
@@ -290,6 +291,14 @@ class LiveRecoveryController:
             return False
         self._reentry_grants.add(identity)
         return True
+
+    def note_retry_jitter(self, identity: str, seconds: float) -> None:
+        """Delay the next dial of a same-target retry (one pending per identity)."""
+        if len(self._retry_jitter) < MAX_RECOVERY_TARGETS:
+            self._retry_jitter[identity] = max(0.0, float(seconds))
+
+    def take_retry_jitter(self, identity: str) -> float:
+        return self._retry_jitter.pop(identity, 0.0)
 
     def grant_cheap_reentry(self, identity: str) -> bool:
         """One lease-expiry failback, independent of transient Soniox rescue."""
