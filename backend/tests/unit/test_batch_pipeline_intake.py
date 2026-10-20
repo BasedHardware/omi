@@ -292,7 +292,7 @@ def test_admitted_duration_emits_only_after_new_committed_ownership(cohort, monk
     metric.assert_called_once_with('admitted', seconds=works[0].duration_seconds)
 
 
-@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running', 'failed_held', 'cancelled', None])
+@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running', 'cancelled', None])
 def test_quarantine_poll_distinguishes_recoverable_and_terminal(cohort, recovery_state):
     store = MemoryStore()
     submit(store, *proposal())
@@ -304,3 +304,250 @@ def test_quarantine_poll_distinguishes_recoverable_and_terminal(cohort, recovery
     assert status['failed_segments'] == (0 if recoverable else 1)
     assert status['poll_after_ms'] == (3000 if recoverable else 0)
     assert status['errors'] == ([] if recoverable else ['batch_worker_quarantined'])
+    assert 'reason_code' not in status
+
+
+def held_upload(store, sibling_state='committed'):
+    """One terminally held unit beside one sibling in ``sibling_state``."""
+    works, binding = proposal()
+    sibling = replace(works[0], segment_id='sibling', capture_at=works[0].capture_at + 30)
+    submit(store, [works[0], sibling], replace(binding, segment_ids=('segment', 'sibling')))
+    store.rows['jobs', 'segment'].update(state='quarantined', recovery_state='failed_held', merge_pending=False)
+    store.rows['jobs', 'sibling'].update(state=sibling_state, conversation_id='projected-sibling')
+
+
+def test_terminally_held_upload_completes_without_ids_or_writes(cohort):
+    store = MemoryStore()
+    held_upload(store)
+    before = dict(store.rows)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+    assert status['poll_after_ms'] == 0 and status['errors'] == []
+    assert status['total_segments'] == 2 and status['failed_segments'] == 1
+    assert status['processed_segments'] == status['successful_segments'] == 1
+    assert status['result']['new_memories'] == status['result']['updated_memories'] == []
+    assert 'projected-sibling' not in repr(status)
+    assert store.rows == before
+    assert store.rows['content', 'synthetic-owner/content']['status'] == 'processing'
+
+
+@pytest.mark.parametrize(
+    'intent', ['speech_redrive', 'terminal_disposition', 'silence_disposition'], ids=lambda value: value
+)
+def test_open_operator_intent_waits_instead_of_completing(cohort, intent):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'segment'][intent] = {'state': 'prepared'}
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'processing' and status['poll_after_ms'] == 3000
+    assert status['result'] is None and 'reason_code' not in status
+
+
+@pytest.mark.parametrize('sibling_state', ['ready', 'leased', 'retry', 'result_ready'])
+def test_in_flight_sibling_waits_beside_held_unit(cohort, sibling_state):
+    store = MemoryStore()
+    held_upload(store, sibling_state)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'processing' and status['poll_after_ms'] == 3000
+
+
+@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running'])
+def test_recoverable_quarantined_sibling_waits_beside_held_unit(cohort, recovery_state):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'sibling'].update(state='quarantined', recovery_state=recovery_state)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'processing' and status['poll_after_ms'] == 3000
+    assert 'reason_code' not in status
+
+
+def test_operator_call_that_settled_failed_held_is_closed(cohort):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'segment']['speech_redrive'] = {'state': 'failed_held'}
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+
+
+def test_mixed_held_and_other_failure_keeps_failed(cohort):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'sibling'].update(state='quarantined', recovery_state='cancelled')
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'failed' and status['errors'] == ['batch_worker_quarantined']
+
+
+def test_held_terminal_kill_switch_restores_failed(cohort, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED', 'false')
+    store = MemoryStore()
+    held_upload(store)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'failed' and status['errors'] == ['batch_worker_quarantined']
+    assert 'reason_code' not in status
+
+
+def deleting_privacy(monkeypatch, reason='conversation_deleted'):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
+
+    def check(tx, uid, conversation_ids=(), expected_generation=None):
+        # Models the real walk's first-hit behaviour: a deletion may surface
+        # before another denied ID in the same receipt.
+        ids = set(conversation_ids)
+        if 'deleted' in ids:
+            raise BatchPrivacyBlocked(reason)
+        if 'redirect-missing' in ids:
+            raise BatchPrivacyBlocked('conversation_redirect_missing')
+        return expected_generation or 0
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', check)
+
+
+def completed_receipt(store):
+    result = {
+        'new_memories': ['deleted'],
+        'updated_memories': ['survivor'],
+        'failed_segments': 0,
+        'total_segments': 3,
+        'errors': [],
+    }
+    store.rows['content', 'synthetic-owner/content'] = {'status': 'completed', 'job_id': 'old', 'result': result}
+
+
+def test_deleted_conversation_completes_cached_alias_without_ids(cohort, monkeypatch):
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['intakes', 'bp_cached'] = {
+        'owner_id': 'synthetic-owner',
+        'content_id': 'content',
+        'segment_ids': [],
+        'total_files': 1,
+        'lane': 'backfill',
+    }
+    deleting_privacy(monkeypatch)
+    status = durable_status(store, 'synthetic-owner', 'bp_cached')
+    assert status['status'] == 'completed' and status['reason_code'] == 'conversation_deleted'
+    assert status['total_segments'] == status['successful_segments'] == 3
+    assert status['result'] == {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 0,
+        'total_segments': 3,
+        'errors': [],
+    }
+    assert 'deleted' not in repr(status['result']) and 'survivor' not in repr(status)
+
+
+@pytest.mark.parametrize('reason', ['account_deleted', 'privacy_generation_changed', 'conversation_redirect_missing'])
+def test_other_privacy_denials_still_raise(cohort, monkeypatch, reason):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['intakes', 'bp_cached'] = {
+        'owner_id': 'synthetic-owner',
+        'content_id': 'content',
+        'segment_ids': [],
+        'total_files': 1,
+        'lane': 'backfill',
+    }
+    deleting_privacy(monkeypatch, reason)
+    with pytest.raises(BatchPrivacyBlocked):
+        durable_status(store, 'synthetic-owner', 'bp_cached')
+
+
+def test_deletion_beside_another_denial_never_acks(cohort, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['content', 'synthetic-owner/content']['result']['updated_memories'] = ['redirect-missing']
+    store.rows['intakes', 'bp_cached'] = {
+        'owner_id': 'synthetic-owner',
+        'content_id': 'content',
+        'segment_ids': [],
+        'total_files': 1,
+        'lane': 'backfill',
+    }
+    deleting_privacy(monkeypatch)
+    with pytest.raises(BatchPrivacyBlocked) as raised:
+        durable_status(store, 'synthetic-owner', 'bp_cached')
+    assert raised.value.reason.value == 'conversation_redirect_missing'
+
+
+@pytest.mark.asyncio
+async def test_reupload_with_deletion_beside_another_denial_keeps_409(cohort, monkeypatch):
+    from utils.batch_pipeline import intake
+
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['content', 'synthetic-owner/content']['result']['updated_memories'] = ['redirect-missing']
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    deleting_privacy(monkeypatch)
+    response = await intake.accept_upload(**upload_arguments())
+    assert response is not None and response.status_code == 409
+
+
+def test_deleted_conversation_on_unfinished_upload_still_raises(cohort, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    store = MemoryStore()
+    submit(store, *proposal())
+    store.rows['jobs', 'segment']['conversation_id'] = 'deleted'
+    deleting_privacy(monkeypatch)
+    with pytest.raises(BatchPrivacyBlocked):
+        durable_status(store, 'synthetic-owner', 'bp_first')
+
+
+def upload_arguments():
+    return dict(
+        uid='synthetic-owner',
+        job_id='retry',
+        content_id='content',
+        paths=['retained.bin'],
+        lane='backfill',
+        recording_age_seconds=60,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+    )
+
+
+@pytest.mark.asyncio
+async def test_reupload_of_deleted_legacy_receipt_acks_synchronously(cohort, monkeypatch):
+    import json
+    from utils.batch_pipeline import intake
+
+    store = MemoryStore()
+    completed_receipt(store)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    deleting_privacy(monkeypatch)
+    response = await intake.accept_upload(**upload_arguments())
+    assert response is not None and response.status_code == 200
+    assert json.loads(response.body) == {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 0,
+        'total_segments': 3,
+        'errors': [],
+    }
+    assert not any(table in {'intakes', 'jobs'} for table, _ in store.rows)
+
+
+@pytest.mark.asyncio
+async def test_reupload_of_held_batch_upload_reads_completed(cohort, monkeypatch):
+    import json
+    from utils.batch_pipeline import intake
+
+    store = MemoryStore()
+    held_upload(store)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    response = await intake.accept_upload(**upload_arguments())
+    assert response is not None and response.status_code == 202
+    body = json.loads(response.body)
+    assert body['status'] == 'completed' and body['job_id'] == 'bp_first' and body['poll_after_ms'] == 0

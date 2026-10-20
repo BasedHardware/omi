@@ -232,6 +232,16 @@ def assign_in_transaction(
             read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         return read[cid]
 
+    tombstones: dict[str, bool] = {}
+
+    def tombstoned(cid: str) -> bool:
+        # Read only before creating a row, inside the same transaction.
+        if cid not in tombstones:
+            tombstones[cid] = (
+                user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
+            )
+        return tombstones[cid]
+
     # Read the incoming key too: retries and deleted canonical anchors must never
     # overwrite a tombstone. Redirects are server-authored, not user deletions.
     flatten = smart_merge_flatten_enabled()
@@ -336,6 +346,9 @@ def assign_in_transaction(
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
+        # A hard-deleted target leaves no row; its tombstone is the user's word.
+        if target_id and target is None and tombstoned(target_id):
+            raise SyncAssignmentSuperseded('sync target was deleted')
         target_id, target = None, None
     stamp_fallback_live = bool(
         lineage_binding == 'stamp_fallback'
@@ -412,6 +425,11 @@ def assign_in_transaction(
         )
         current = matched.get(canonical)
         created = current is None
+        if created and tombstoned(canonical):
+            # User deletion hard-deletes the row, so `own` cannot fence it. A
+            # re-upload segmented like the original reproduces the deleted
+            # conversation's deterministic ID; never recreate it.
+            raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
         try:

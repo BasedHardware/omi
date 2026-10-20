@@ -72,6 +72,16 @@ struct LocalSpeechReadiness {
 @MainActor
 struct LocalSpeechUnavailable: Error {
     let readiness: LocalSpeechReadiness
+    var cause: NSError? = nil
+
+    var wire: [String: Any] {
+        var details: [String: Any] = readiness.wire
+        if let cause {
+            details["nativeErrorDomain"] = cause.domain
+            details["nativeErrorCode"] = cause.code
+        }
+        return details
+    }
 }
 
 @MainActor
@@ -94,6 +104,19 @@ struct SpeechFallbackCoordinator {
         }
         let readiness = await legacyReady()
         guard readiness.ready else { throw LocalSpeechUnavailable(readiness: readiness) }
-        return try await legacy()
+        do {
+            return try await legacy()
+        } catch let error as LocalSpeechUnavailable {
+            throw error
+        } catch {
+            // Assets, permissions or Dictation can change after the probe.
+            // Recheck the actual recognizer before treating this as transient;
+            // never infer missing assets from a localized error message.
+            let current = await legacyReady()
+            guard current.ready else {
+                throw LocalSpeechUnavailable(readiness: current, cause: error as NSError)
+            }
+            throw error
+        }
     }
 }

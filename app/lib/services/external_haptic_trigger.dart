@@ -29,6 +29,10 @@ class ExternalHapticTrigger {
   }
 }
 
+/// Whether the app link stream drops [next] as a repeat of [previous]. A haptic link is a command,
+/// not a place to open: the same one sent twice buzzes twice, and the rate limiter bounds bursts.
+bool isRepeatedAppLink(Uri previous, Uri next) => previous == next && ExternalHapticTrigger.tryParse(next) == null;
+
 class ExternalHapticRateLimiter {
   ExternalHapticRateLimiter({
     Duration cooldown = const Duration(seconds: 2),

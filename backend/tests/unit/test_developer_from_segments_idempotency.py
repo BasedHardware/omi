@@ -1043,3 +1043,99 @@ def test_without_folder_id_ai_assignment_stays_in_charge(monkeypatch):
     assert captured['conversation'].calendar_meeting_context is None
     get_folder.assert_not_called()
     refresh.assert_not_called()
+
+
+def _late_request(folder_id=None, calendar_context=None):
+    return SimpleNamespace(folder_id=folder_id, calendar_meeting_context=calendar_context)
+
+
+def _calendar_context(title='Standup'):
+    context = {
+        'calendar_event_id': 'event-1',
+        'title': title,
+        'participants': [],
+        'start_time': None,
+        'duration_minutes': 30,
+    }
+    return SimpleNamespace(to_context=lambda: SimpleNamespace(model_dump=lambda mode='json': context))
+
+
+def test_idempotent_hit_binds_folder_the_retry_carries(monkeypatch):
+    """A retried upload must land in the folder it names, not stay in the AI-assigned one."""
+    existing = {'id': 'conv-1', 'folder_id': None, 'external_data': {}}
+    writes = []
+    refreshes = []
+    monkeypatch.setattr(
+        conversations_db, 'update_conversation', lambda uid, cid, data: writes.append((uid, cid, data)) or True
+    )
+    monkeypatch.setattr(
+        developer.folders_db, 'update_folder_conversation_count', lambda uid, fid: refreshes.append(fid)
+    )
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-2'}))
+
+    updated = developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-2'))
+
+    assert writes == [('uid1', 'conv-1', {'folder_id': 'folder-2'})]
+    assert refreshes == ['folder-2']
+    assert updated['folder_id'] == 'folder-2'
+
+
+def test_idempotent_hit_moves_folder_and_refreshes_both_counts(monkeypatch):
+    """Changing the folder on a retry must refresh the folder it left as well as the one it enters."""
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {}}
+    refreshes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: True)
+    monkeypatch.setattr(
+        developer.folders_db, 'update_folder_conversation_count', lambda uid, fid: refreshes.append(fid)
+    )
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-2'}))
+
+    developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-2'))
+
+    assert sorted(refreshes) == ['folder-1', 'folder-2']
+
+
+def test_idempotent_hit_stores_calendar_context_once(monkeypatch):
+    """The meeting block must reach the stored row, and a second retry must not rewrite it."""
+    existing = {'id': 'conv-1', 'folder_id': None, 'external_data': {'keep': 'me'}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+
+    updated = developer._apply_late_from_segments_context(
+        'uid1', existing, _late_request(calendar_context=_calendar_context())
+    )
+
+    assert len(writes) == 1
+    # Dotted write: the retry must not replace the map a concurrent writer owns.
+    stored = writes[0]['external_data.calendar_meeting_context']
+    assert stored['title'] == 'Standup'
+    assert updated['external_data']['keep'] == 'me'
+    assert updated['external_data']['calendar_meeting_context']['title'] == 'Standup'
+
+    # The row now carries the context, so a later retry is a no-op.
+    writes.clear()
+    developer._apply_late_from_segments_context('uid1', updated, _late_request(calendar_context=_calendar_context()))
+    assert writes == []
+
+
+def test_idempotent_hit_skips_a_folder_deleted_between_attempts(monkeypatch):
+    """A folder that no longer exists must not be written back as a dangling reference."""
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value=None))
+
+    updated = developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-gone'))
+
+    assert writes == []
+    assert updated['folder_id'] == 'folder-1'
+
+
+def test_idempotent_hit_without_new_context_writes_nothing(monkeypatch):
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {'calendar_meeting_context': {'title': 'x'}}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+
+    developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-1'))
+
+    assert writes == []
