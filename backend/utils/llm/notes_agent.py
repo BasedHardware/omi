@@ -26,7 +26,7 @@ from pydantic import ValidationError
 from models.structured_extraction import AgentNotesSubmission
 from utils.llm.notes_agent_policy import NotesAgentBudget, estimate_cost_usd
 from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT, TOOL_SCHEMAS, screenshot_message
-from utils.llm.notes_agent_validation import check_notes, repair_notes
+from utils.llm.notes_agent_validation import check_notes, normalize_submission, repair_notes
 from utils.llm.shaped_agent import Budget, LoopStop, Mount, Turn, run_loop
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,7 @@ async def run_notes_agent(
     transcript_words: int,
     open_tasks: Sequence[Any] = (),
     owner_names: Sequence[str] = (),
+    naming_leads: Sequence[str] = (),
     clock: Callable[[], float] = time.monotonic,
 ) -> NotesAgentResult:
     started = clock()
@@ -210,10 +211,12 @@ async def run_notes_agent(
                 responses.append(_tool_reply(call, {'error': 'arguments were not a JSON object; retry'}))
                 continue
             if name == SUBMIT:
+                arguments = normalize_submission(arguments)
                 verdict, payload = _review_submission(
                     arguments,
                     transcript_words=transcript_words,
                     lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
+                    naming_leads=naming_leads,
                     # One rejection, and only while a further turn still fits the budget.
                     may_reject=not result.rejections
                     and result.turns < budget.max_turns
@@ -223,7 +226,7 @@ async def run_notes_agent(
                     result.rejections.append(verdict)
                     REPAIRS.labels(kind='rejected').inc()
                     # A note sent back to investigate keeps its lookups; a format fix resubmits next turn.
-                    state['force'] = result.tool_calls >= budget.min_tool_calls
+                    state['force'] = result.tool_calls >= budget.min_tool_calls and 'No other speaker' not in verdict
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload
@@ -266,7 +269,12 @@ def _tool_reply(call: Mapping[str, Any], body: Mapping[str, Any]) -> dict[str, A
 
 
 def _review_submission(
-    arguments: dict[str, Any], *, transcript_words: int, lookups_missing: int, may_reject: bool
+    arguments: dict[str, Any],
+    *,
+    transcript_words: int,
+    lookups_missing: int,
+    may_reject: bool,
+    naming_leads: Sequence[str] = (),
 ) -> tuple[str, Optional[dict[str, Any]]]:
     try:
         AgentNotesSubmission.model_validate(arguments)
@@ -280,6 +288,18 @@ def _review_submission(
             f'Investigate before submitting: make at least {lookups_missing} more lookups to verify the people, '
             'unnamed speakers and uncertain names (search_people, view_screenshot, get_screen_activity, get_calendar, '
             'search_memories, search_past_meetings), then resubmit the complete notes.',
+        )
+    named = [
+        person
+        for person in arguments.get('participants') or []
+        if isinstance(person, dict) and str(person.get('name') or '').strip() and not person.get('is_ai_agent')
+    ]
+    if naming_leads and not named:
+        check.problems.append(
+            'No other speaker is named, but the evidence names possible participants: '
+            + ', '.join(naming_leads)
+            + '. Check them against the transcript; name the one who spoke in participants (with speaker key and '
+            'evidence), the title and the notes, or keep the role description only if none of them fits.'
         )
     if check.problems and may_reject:
         return ' '.join(check.problems), None

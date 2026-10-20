@@ -23,7 +23,7 @@ from models.conversation_enums import CategoryEnum
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 
-PROMPT_VERSION = 'notes-agent-v4'
+PROMPT_VERSION = 'notes-agent-v5'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -43,8 +43,9 @@ person committed to. Read-only tools reach the owner's own Omi data: screen acti
 taken during this conversation, their calendar, people they know, their memories, earlier meetings and their tasks.
 The EVIDENCE PACKET (calendar overlap, screen windows, screenshot ids, listed participants, likely related past
 meetings) is a set of leads to check, not answers. Investigate before you write:
-- For every person named in the transcript and every unnamed speaker, look them up (search_people, the call
-  screenshots, get_screen_activity, get_calendar) and settle who they are and how their name is spelled.
+- For every person named in the transcript and every unnamed speaker, settle who they are and how their name is
+  spelled: start from `people_on_screen`, `listed_participants` and the calendar, then confirm with search_people,
+  the call screenshots, get_screen_activity and earlier meetings.
 - For every uncertain company, product, project or term, check it against people, memories, screen activity or
   earlier meetings.
 - When the meeting continues earlier work, open the related past meeting and note what changed.
@@ -58,13 +59,17 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- You may name a speaker when evidence supports it, for example a call tile or calendar event naming the only
-  other participant while the transcript has two voices. Record each person you name in `participants` with that
-  evidence. Calendar invitees are expected, not proven attendees, and screen listings are observations: never
-  infer attendance, absence or a no-show from a listing alone.
-- `participants` lists the other people (and AI notetakers) whom evidence names, never the owner and never an
-  unnamed person. When identity stays unknown, leave them out of `participants` and describe them in the notes by
-  role ("the other founder"), never by an invented name.
+- NAME THE OTHER SPEAKER whenever the evidence supports it; a role description ("an unnamed candidate") is
+  a failure when the evidence names them. Strong evidence, especially when the transcript has one other voice:
+  a call window or chat titled with one person during the call (`people_on_screen` evidence `call_window`), a
+  profile page such as LinkedIn opened just before or during the call (`profile_page`), the human attendee on
+  the calendar event, a People record matching a name said aloud, or an earlier meeting with the same person.
+  Combine the transcript with this evidence; it does not have to be said aloud. AI notetakers and matchmakers
+  (Boardy, Otter, Fireflies, Read.ai and similar) are never the other speaker.
+- Record every person you name in `participants` with the transcript speaker key they map to and one line of
+  evidence, and use the name in the title and notes. Never list the owner, and never invent a name: when
+  evidence does not name someone, leave them out of `participants` and describe them by role.
+- A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is
   not a decision; "I'll add it" is an intention, not done work. Do not attach a detail to the wrong company,
   product or person because the statements were adjacent.
@@ -124,7 +129,10 @@ def _fn(name: str, description: str, properties: dict[str, Any], required: list[
 
 _STR = {'type': 'string'}
 _INT = {'type': 'integer'}
-_WHEN = {'type': 'string', 'description': 'ISO 8601 time with offset'}
+_WHEN = {
+    'type': 'string',
+    'description': 'ISO 8601 UTC time ending in Z, like the packet times; omit to use this conversation window',
+}
 _IDS = {'type': 'array', 'items': _STR}
 
 SUBMIT_SCHEMA = _fn(
@@ -200,7 +208,7 @@ READ_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
         "Screen observations (app, window title, text) from the owner's Mac between two times, at most 12 hours "
         'apart. Optional query keeps rows mentioning those words.',
         {'start': _WHEN, 'end': _WHEN, 'query': _STR, 'limit': _INT},
-        ['start', 'end'],
+        [],
     ),
     _fn(
         VIEW_SCREENSHOT,

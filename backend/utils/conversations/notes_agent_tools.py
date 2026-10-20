@@ -25,6 +25,7 @@ from database.users import get_ai_user_profile
 from models.agent_tools import Search
 from utils.agent_capabilities.search import OwnerSearch
 from utils.conversations.meeting_context_pack import gather_prior_meetings, load_people_documents
+from utils.conversations.screen_people_leads import LEAD_MINUTES_BEFORE, screen_people_leads
 from utils.conversations.screen_text_digest import MESSAGING_APPS
 from utils.executors import db_executor, run_blocking
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -261,6 +262,10 @@ class NotesToolbox:
         }
 
 
+def _utc_z(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+
 def calendar_row(meeting: Mapping[str, Any]) -> dict[str, Any]:
     participants = []
     for participant in meeting.get('participants') or []:
@@ -321,6 +326,7 @@ def build_packet(
     task_intelligence_capture: bool,
     open_tasks: Sequence[Any],
     roster: Any,
+    owner_names: Sequence[str] = (),
     background: Optional[str],
     frames: Sequence[NotesFrameImage],
     capture_sources: Sequence[str] = (),
@@ -338,9 +344,13 @@ def build_packet(
         calendar = [calendar_row(meeting) for meeting in meetings or [] if isinstance(meeting, Mapping)]
     except Exception as error:  # noqa: BLE001 - every packet source degrades independently
         logger.warning('notes agent packet calendar read failed uid=%s: %s', uid, type(error).__name__)
+    leads: list[dict[str, Any]] = []
     try:
-        rows = screen_activity_db.get_screen_activity(uid, start_date=start, end_date=end, limit=400)
+        rows: Any = screen_activity_db.get_screen_activity(
+            uid, start_date=start - timedelta(minutes=LEAD_MINUTES_BEFORE), end_date=end, limit=400
+        )
         windows = _top_windows(rows or [])
+        leads = screen_people_leads(rows or [], started_at=start, finished_at=end, owner_names=owner_names)
     except Exception as error:  # noqa: BLE001
         logger.warning('notes agent packet screen read failed uid=%s: %s', uid, type(error).__name__)
     listed = []
@@ -371,8 +381,8 @@ def build_packet(
     seen = {item['conversation_id'] for item in related if item['conversation_id']}
     packet = {
         'conversation': {
-            'started_at': start.isoformat(),
-            'finished_at': end.isoformat(),
+            'started_at': _utc_z(start),
+            'finished_at': _utc_z(end),
             'timezone': timezone_name or 'UTC',
             'transcript_words': transcript_words,
             'capture_sources': list(capture_sources) or None,
@@ -384,6 +394,7 @@ def build_packet(
         'open_tasks': list(open_tasks)[:30],
         'calendar_overlap': calendar,
         'listed_participants': listed,
+        'people_on_screen': leads,
         'top_windows_during_conversation': windows,
         'screenshots': [{'id': frame.frame_id, 'at': frame.offset_label} for frame in frames],
         'related_past_meetings': related,

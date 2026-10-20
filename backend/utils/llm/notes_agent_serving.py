@@ -41,6 +41,21 @@ logger = logging.getLogger(__name__)
 _WORDS_PER_MINUTE = 150
 
 
+def naming_leads(packet: Mapping[str, Any]) -> list[str]:
+    """Names strong enough that a note naming nobody is sent back once to check them."""
+    names = [
+        lead['name']
+        for lead in packet.get('people_on_screen') or []
+        if {'call_window', 'profile_page'} & set(lead.get('evidence') or ())
+    ]
+    names += [
+        entry['name']
+        for entry in packet.get('listed_participants') or []
+        if entry.get('kind') == 'human' and entry.get('name')
+    ]
+    return list(dict.fromkeys(names))[:6]
+
+
 def transport_ready(model: Any) -> bool:
     """Tools ride only the managed OpenAI-compatible gateway lane; BYOK and direct routes stay one-shot."""
     return isinstance(model, ChatOpenAI) and gpt56_explicit_cache_enabled() and not has_byok_keys()
@@ -106,6 +121,7 @@ def agentic_notes_payload(
             task_intelligence_capture=bool(kwargs.get('task_intelligence_capture')),
             open_tasks=open_tasks,
             roster=roster,
+            owner_names=owner_names,
             background=kwargs.get('meeting_context'),
             frames=frames,
             capture_sources=tuple(kwargs.get('capture_sources') or ()),
@@ -140,6 +156,7 @@ def agentic_notes_payload(
                     transcript_words=words,
                     open_tasks=open_tasks,
                     owner_names=owner_names,
+                    naming_leads=naming_leads(packet),
                 )
 
         result = asyncio.run(invoke())

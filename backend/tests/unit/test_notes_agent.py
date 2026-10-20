@@ -13,6 +13,7 @@ import pytest
 from llm_gateway.gateway.accounting import rate_card_for
 
 from utils.conversations import notes_agent_tools as tools
+from utils.conversations.screen_people_leads import screen_people_leads
 from utils.llm import conversation_processing as notes
 from utils.llm import notes_agent as agent
 from utils.llm import notes_agent_policy as policy
@@ -582,3 +583,99 @@ def test_writer_keeps_one_shot_when_agent_declines(monkeypatch):
         task_intelligence_capture=False,
     )
     assert structured.title == 'One shot' and len(one_shot) == 1 and not one_shot[0].tools
+
+
+# ---------------------------------------------------------------- naming the other speaker (v5 regression)
+
+
+CALL_ROWS = [
+    # A Telegram call window naming the other party, with the call controls in OCR.
+    {
+        'timestamp': (START + timedelta(minutes=2)).isoformat(),
+        'appName': 'Telegram',
+        'windowTitle': '⁨Maya Okafor⁩ – (59627)',
+        'ocrText': 'Maya Okafor last seen recently End call',
+    },
+    # A LinkedIn profile opened from the invite just before the call.
+    {
+        'timestamp': (START - timedelta(minutes=3)).isoformat(),
+        'appName': 'Google Chrome',
+        'windowTitle': '(7) Maya Okafor | LinkedIn - Google Chrome',
+        'ocrText': 'Founding Engineer',
+    },
+    {'timestamp': START.isoformat(), 'appName': 'Telegram', 'windowTitle': 'Omi System Updates – (1)', 'ocrText': ''},
+    {'timestamp': START.isoformat(), 'appName': 'Telegram', 'windowTitle': 'Redis – (2)', 'ocrText': ''},
+    {'timestamp': START.isoformat(), 'appName': 'Telegram', 'windowTitle': 'Riley Tan – (3)', 'ocrText': ''},
+    {'timestamp': START.isoformat(), 'appName': 'Google Chrome', 'windowTitle': 'Boardy Boardman | LinkedIn'},
+    # Outside the window: an hour before the call.
+    {'timestamp': (START - timedelta(hours=1)).isoformat(), 'appName': 'Telegram', 'windowTitle': 'Old Friend – (4)'},
+]
+
+
+def test_screen_leads_name_the_call_party_and_skip_groups_owner_bots_and_old_rows():
+    leads = screen_people_leads(
+        CALL_ROWS, started_at=START, finished_at=START + timedelta(minutes=30), owner_names=['Riley Tan']
+    )
+    assert [lead['name'] for lead in leads] == ['Maya Okafor']
+    assert leads[0]['evidence'] == ['call_window', 'profile_page'] and leads[0]['first_seen_min'] == -3
+
+
+def test_packet_carries_screen_leads_in_utc(monkeypatch):
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
+    monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: CALL_ROWS)
+    packet, _seen = tools.build_packet(
+        uid=OWNER,
+        conversation_id='conv-1',
+        started_at=START,
+        finished_at=START + timedelta(minutes=30),
+        timezone_name='America/Los_Angeles',
+        response_language='en',
+        length='LENGTH',
+        transcript_words=3000,
+        account_owner_name='Riley Tan',
+        task_intelligence_capture=False,
+        open_tasks=[],
+        roster=None,
+        owner_names=['Riley Tan'],
+        background=None,
+        frames=(),
+    )
+    assert [lead['name'] for lead in packet['people_on_screen']] == ['Maya Okafor']
+    assert packet['conversation']['started_at'] == '2026-10-01T15:00:00Z'
+    assert serving.naming_leads(packet) == ['Maya Okafor']
+
+
+def test_unnamed_speaker_is_sent_back_and_the_name_reaches_participants_and_notes():
+    named = submission(
+        title='Maya Okafor: pricing',
+        participants=[{'name': 'Maya Okafor', 'speaker': '1', 'evidence_kind': 'screen', 'evidence': 'Telegram call'}],
+        sections=[{'heading': 'Pricing', 'body_markdown': '- Maya proposed per-seat pricing\n  - $40 a seat'}],
+    )
+    unnamed = submission(
+        title='Pricing call',
+        sections=[{'heading': 'Pricing', 'body': '- The other founder proposed per-seat\n  - $40'}],
+    )
+
+    class Model(ScriptedModel):
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            told = any('Maya Okafor' in str(m.get('content')) and m.get('role') == 'tool' for m in messages)
+            payload = named if told else unnamed
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, payload, len(self.choices))], prompt_tokens=10)
+
+    model = Model()
+    result = run_agent(
+        model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=6), words=800, naming_leads=['Maya Okafor']
+    )
+    # One send-back, about naming only: the `body` key slip is normalized, not mistaken for prose.
+    assert len(result.rejections) == 1 and 'Maya Okafor' in result.rejections[0]
+    assert 'prose' not in result.rejections[0]
+    structured = agent.AgentNotesSubmission.model_validate(result.submission).to_structured()
+    assert [person.name for person in structured.participants] == ['Maya Okafor']
+    assert structured.participants[0].evidence == 'Telegram call'
+    assert 'Maya' in structured.title and 'Maya' in structured.sections[0].body_markdown
+
+
+def test_no_send_back_without_leads_or_when_someone_is_named():
+    model = ScriptedModel()
+    assert not run_agent(model, policy.NotesAgentBudget(max_turns=2, max_tool_calls=6)).rejections

@@ -38,6 +38,29 @@ class NotesCheck:
         return not self.problems
 
 
+_BODY_ALIASES = ('body', 'content', 'markdown', 'bullets', 'text')
+
+
+def normalize_submission(submission: Mapping[str, Any]) -> dict[str, Any]:
+    """Accept a section body under a near-miss key, so a key slip costs no turn and no section."""
+    normalized = dict(submission)
+    sections = []
+    for section in submission.get('sections') or []:
+        if not isinstance(section, Mapping):
+            continue
+        section = dict(section)
+        if not isinstance(section.get('body_markdown'), str):
+            alias = next((section[key] for key in _BODY_ALIASES if isinstance(section.get(key), (str, list))), None)
+            if isinstance(alias, list):
+                alias = '\n'.join(f'- {item}' for item in alias if isinstance(item, str))
+            if isinstance(alias, str):
+                section['body_markdown'] = alias
+        sections.append(section)
+    if 'sections' in submission:
+        normalized['sections'] = sections
+    return normalized
+
+
 def body_words(sections: Iterable[Mapping[str, Any]]) -> int:
     return sum(len(_WORD.findall(str(section.get('body_markdown') or ''))) for section in sections)
 
