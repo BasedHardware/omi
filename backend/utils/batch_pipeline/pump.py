@@ -224,6 +224,7 @@ class Pump:
         leases = await run_blocking(db_executor, claim)
         if not leases:
             return 0
+        claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
@@ -330,9 +331,24 @@ class Pump:
                 raise ValueError('worker returned duplicate or foreign results')
             await self._publish_flight(leases, result_map, lost)
             return len(leases)
+        except FatalGpuError:
+            raise  # Its handler already refunded every lease without an attempt charge.
+        except Exception:
+            # Nothing else will touch these leases before LEASE_SECONDS expiry.
+            # Release is fenced, so published, deferred or re-leased work is untouched.
+            await self._release(claimed)
+            raise
         finally:
             done.set()
             await renew
+
+    async def _release(self, leases: list[LeasedWork]) -> None:
+        for lease in leases:
+            try:
+                await run_blocking(db_executor, self.scheduler.release, lease.item.segment_id, lease.token, time.time())
+            except Exception as error:
+                # Ambiguous release leaves lease expiry as the durable fallback.
+                logger.error('event=batch_flight outcome=lease_release exception_type=%s', type(error).__name__)
 
     @contextlib.asynccontextmanager
     async def _owner_serial(self, owner_id: str):
