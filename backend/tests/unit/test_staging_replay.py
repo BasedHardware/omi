@@ -1,15 +1,19 @@
 """Staging replay driver: guards, materialization and the send loop (swarm lane 4)."""
 
 import asyncio
+import dataclasses
 import json
 import time
+from pathlib import Path
 
 import numpy  # noqa: F401  (imported at collection so synthetic_pcm's lazy import is not billed to a test)
 import pytest
+import yaml
 
 from scripts.staging import replay as rp
 from testing.loadgen import mirror_codec as mc
 from testing.loadgen import population as pop
+from utils.client_device import resolve_client_device
 from utils.request_validation import parse_sync_filename_timestamp
 
 PROFILE = {
@@ -109,15 +113,30 @@ class FakeResponse:
 
 
 class FakeClient:
-    def __init__(self):
+    """Mirrors the server's device and lane rules: the manifest route resolves the device from the
+    headers (403 when none), and an upload is fresh only with a bound manifest, else backfill."""
+
+    def __init__(self, manifest_status=200):
         self.posts = []
         self.gets = 0
+        self.manifest_status = manifest_status
 
     async def post(self, url, **kw):
         self.posts.append((url, kw))
+        headers = kw['headers']
         if url.endswith('/v2/sync-capture-manifest'):
+            device = resolve_client_device(
+                x_app_platform=headers.get('X-App-Platform'), x_device_id_hash=headers.get('X-Device-Id-Hash')
+            )
+            if device.client_device_id is None or self.manifest_status != 200:
+                return FakeResponse(self.manifest_status if self.manifest_status != 200 else 403, {})
             return FakeResponse(200, {'manifest': 'signed-manifest'})
-        return FakeResponse(202, {'job_id': f'bp_{len(self.posts)}', 'lane': 'fresh', 'status': 'queued'})
+        lane = (
+            'fresh'
+            if headers.get('X-Omi-Sync-Capture-Manifest') and kw['params'].get('conversation_id')
+            else 'backfill'
+        )
+        return FakeResponse(202, {'job_id': f'bp_{len(self.posts)}', 'lane': lane, 'status': 'queued'})
 
     async def get(self, url, **kw):
         self.gets += 1
@@ -141,10 +160,10 @@ async def _no_sleep(_):
     return None
 
 
-def _run(plans, seeder=None, poll=False):
+def _run(plans, seeder=None, poll=False, client=None):
     config = rp.ReplayConfig(target='http://127.0.0.1:1', admin_key='A' * 20, poll=poll, poll_interval_s=0)
     replay = rp.Replay(config, plans, seeder=seeder, sleep=_no_sleep)
-    client = FakeClient()
+    client = client or FakeClient()
     results = asyncio.run(replay.run(client))
     return results, client
 
@@ -182,12 +201,73 @@ def test_replay_seeds_capture_and_binds_manifest_for_fresh_only():
     assert record['run'] == 'rt'
     assert sum(len(o['uploads']) for o in record['owners'].values()) == len(results)
     json.dumps(record)
+    # The stub's device id is the one the server derives from the headers, so every fresh upload binds.
+    assert all(device_id and device_id.split('_', 1)[1] for _, _, device_id in seeder.captures)
+    summary = rp.summarize_results(results)
+    assert summary['lane_hint_mismatch'] == 0 and summary['failed_checks'] == []
+    assert summary['by_lane'].get('fresh') == len(fresh)
+
+
+def test_refused_manifest_skips_the_fresh_upload_and_fails_the_run():
+    plans = _plans()
+    client = FakeClient(manifest_status=403)
+    results, client = _run(plans, seeder=FakeSeeder(), client=client)
+    fresh = [r for r in results if r.lane_hint == 'fresh']
+    assert fresh and all(r.skipped and r.error == 'manifest_http_403' and not r.http_status for r in fresh)
+    uploads = [kw for url, kw in client.posts if url.endswith('/v2/sync-local-files')]
+    assert len(uploads) == len(results) - len(fresh)  # never sent as backfill
+    summary = rp.summarize_results(results)
+    assert summary['fresh_skipped'] == len(fresh) and 'fresh_skipped' in summary['failed_checks']
+
+
+def test_fresh_admitted_as_backfill_fails_the_run():
+    plans = _plans()
+    results, _ = _run(plans)  # no seeding: the server admits every upload as backfill
+    summary = rp.summarize_results(results)
+    assert summary['lane_hint_mismatch'] == sum(1 for p in plans if p.lane_hint == 'fresh') > 0
+    assert summary['failed_checks'] == ['lane_hint_mismatch']
+
+
+def test_plan_check_refuses_unbindable_or_unseeded_fresh():
+    plans = _plans()
+    assert any(p.lane_hint == 'fresh' for p in plans)
+    rp.check_plan_lanes(plans, seed_capture=True, unseeded_fresh=False)
+    rp.check_plan_lanes(plans, seed_capture=False, unseeded_fresh=True)
+    with pytest.raises(rp.ReplayRefused, match='--seed-capture'):
+        rp.check_plan_lanes(plans, seed_capture=False, unseeded_fresh=False)
+    old = [dataclasses.replace(p, device_hash=p.device_hash * 2) for p in plans]  # the 10-19 16-hex plans
+    with pytest.raises(rp.ReplayRefused, match='8 hex'):
+        rp.check_plan_lanes(old, seed_capture=True, unseeded_fresh=False)
+    backfill_only = [p for p in old if p.lane_hint == 'backfill']
+    rp.check_plan_lanes(backfill_only, seed_capture=False, unseeded_fresh=False)
 
 
 def test_seeder_refuses_outside_staging(monkeypatch):
     monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
     with pytest.raises(rp.ReplayRefused):
         rp.StagingFirestoreSeeder()
+
+
+def test_seeder_maps_a_fence_breach_to_a_clean_refusal(monkeypatch):
+    from utils import staging_fence
+
+    monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+    monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
+    monkeypatch.delenv('OMI_CUSTOMER_DATA_PROJECT', raising=False)
+    staging_fence.reset_for_tests()
+    try:
+        with pytest.raises(rp.ReplayRefused, match='OMI_CUSTOMER_DATA_PROJECT'):
+            rp.StagingFirestoreSeeder()
+    finally:
+        staging_fence.reset_for_tests()
+
+
+def test_job_template_env_passes_the_staging_fence():
+    from utils.staging_fence import staging_violations
+
+    job = yaml.safe_load((Path(rp.BACKEND_DIR) / 'testing/loadgen/staging_replay_job.yaml').read_text())
+    env = {e['name']: e['value'] for e in job['spec']['template']['spec']['containers'][0]['env'] if 'value' in e}
+    assert staging_violations(env) == []
 
 
 def test_cli_refuses_from_this_host_without_declaration(tmp_path, monkeypatch, capsys):

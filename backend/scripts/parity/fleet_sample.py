@@ -82,6 +82,7 @@ def row3_aggregates(sample: Mapping[str, Any], legacy: Mapping[str, Any] | None)
     return {
         'first_summary_dispatch_measured_count': _int(sample.get('first_summary_dispatch_measured_count')),
         'first_summary_dispatch_breaches_over_121s': breaches,
+        'first_summary_dispatch_max_seconds': max_dispatch,
         'first_summary_completion_p95_seconds': _num(sample.get('first_summary_completion_latency_p95_seconds')),
         # The gate measures conversation close -> summary present; that is the
         # batch side's accept -> summary for a finished recording.

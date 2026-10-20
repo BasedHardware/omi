@@ -48,6 +48,7 @@ ACTIVE_RUN_STATES = ('in_progress', 'queued', 'waiting', 'requested', 'pending')
 ACTIVE_DEPLOYMENT_STATES = frozenset({'queued', 'in_progress', 'pending', 'waiting'})
 RUN_URL = re.compile(r'/actions/runs/(\d+)')
 EXIT_FREE, EXIT_UNKNOWN, EXIT_HELD = 0, 1, 10
+RUN_PAGE_SIZE, MAX_RUN_PAGES = 100, 10
 
 Api = Callable[[str, Mapping[str, Any]], Any]
 
@@ -118,17 +119,59 @@ def _environments_by_run(api: Api, since: str) -> dict[int, set[str]]:
     return out
 
 
+def _registered_workflows(api: Api) -> dict[str, int]:
+    """path -> workflow id for workflows GitHub knows. A prod-train workflow GitHub does not list
+    (not yet on the default branch) cannot be dispatched, so it has no runs to hold the lock."""
+
+    out: dict[str, int] = {}
+    total = 0
+    for page in range(1, MAX_RUN_PAGES + 1):
+        payload = api(f'/repos/{REPO}/actions/workflows', {'per_page': RUN_PAGE_SIZE, 'page': page}) or {}
+        batch = payload.get('workflows') or []
+        total = int(payload.get('total_count', len(out) + len(batch)))
+        out.update({str(item['path']): int(item['id']) for item in batch})
+        if len(batch) < RUN_PAGE_SIZE or len(out) >= total:
+            break
+    if len(out) < total:
+        raise LockReadError(f'workflows: read {len(out)} of {total}')
+    return out
+
+
+def _active_runs(api: Api, workflow_id: int, workflow: str, state: str) -> list[Mapping[str, Any]]:
+    """Every run of one prod-train workflow in one state, all pages.
+
+    Read per workflow, not repo-wide: a repo-wide page of 100 active runs is newest-first, so
+    under a CI backlog a long prod train ages off it and the lock would read FREE (M1 L07-1).
+    A listing that ends short of its own total_count fails the read (exit UNKNOWN).
+    """
+
+    path = f'/repos/{REPO}/actions/workflows/{workflow_id}/runs'
+    out: list[Mapping[str, Any]] = []
+    total = 0
+    for page in range(1, MAX_RUN_PAGES + 1):
+        payload = api(path, {'status': state, 'per_page': RUN_PAGE_SIZE, 'page': page}) or {}
+        batch = payload.get('workflow_runs') or []
+        total = int(payload.get('total_count', len(out) + len(batch)))
+        out.extend(batch)
+        if len(batch) < RUN_PAGE_SIZE or len(out) >= total:
+            break
+    if len(out) < total:
+        raise LockReadError(f'{workflow} {state}: read {len(out)} of {total} runs')
+    return out
+
+
 def read_status(api: Api = gh_api) -> LockStatus:
     """Return the prod-train lock state. Raises LockReadError when GitHub cannot be read."""
 
     runs: dict[int, Mapping[str, Any]] = {}
-    for state in ACTIVE_RUN_STATES:
-        payload = api(f'/repos/{REPO}/actions/runs', {'status': state, 'per_page': 100}) or {}
-        for run in payload.get('workflow_runs') or []:
-            # Prod is reachable only through workflow_dispatch (environment input); push and
-            # workflow_run entry points always target development.
-            if run.get('path') in PROD_TRAIN_WORKFLOWS and run.get('event') == 'workflow_dispatch':
-                runs[int(run['id'])] = run
+    registered = _registered_workflows(api)
+    for workflow in sorted(PROD_TRAIN_WORKFLOWS & registered.keys()):
+        for state in ACTIVE_RUN_STATES:
+            for run in _active_runs(api, registered[workflow], workflow, state):
+                # Prod is reachable only through workflow_dispatch (environment input); push and
+                # workflow_run entry points always target development.
+                if run.get('event') == 'workflow_dispatch':
+                    runs[int(run['id'])] = run
     if not runs:
         return LockStatus(held=False)
     since = min(str(run.get('created_at', '')) for run in runs.values())
