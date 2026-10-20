@@ -2885,6 +2885,60 @@ test("request authority is captured before lookup and never leaves the machine",
   assert.equal(reports.length, 1);
 });
 
+test("withOmiProviderHeadersFetch preserves caller request IDs from Request and init headers", async () => {
+  const seen: Array<string | null> = [];
+  const wrappedFetch = withOmiProviderHeadersFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    relayContextRaw: async () => JSON.stringify({ requestId: "req_context" }),
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      seen.push(request.headers.get("x-omi-request-id"));
+      assert.equal(request.headers.get("x-omi-chat-contract-version"), "1");
+      return new Response(null, { status: 200 });
+    },
+  });
+  const request = new Request("http://127.0.0.1:9999/v2/chat/completions", {
+    headers: { "X-Omi-Request-Id": "req_caller" },
+  });
+  await wrappedFetch(request);
+  await wrappedFetch(request, { headers: { "X-Omi-Request-Id": "req_init" } });
+  assert.deepEqual(seen, ["req_caller", "req_init"]);
+});
+
+test("withOmiProviderHeadersFetch tolerates missing and malformed context files without inventing turn authority", async () => {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-context-headers-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  const seen: Array<string | null> = [];
+  const wrappedFetch = withOmiProviderHeadersFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    fetch: async (input, init) => {
+      const headers = new Request(input, init).headers;
+      assert.equal(headers.get("x-omi-chat-contract-version"), "1");
+      assert.equal(headers.has("x-omi-local-capability"), false);
+      assert.equal(headers.has("x-omi-reasoning-effort"), false);
+      seen.push(headers.get("x-omi-request-id"));
+      return new Response(null, { status: 200 });
+    },
+  });
+  try {
+    // Use the production file reader: the first path does not exist.
+    await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions");
+    await writeFile(contextPath, "{invalid-json");
+    await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions");
+    // Invalid relay context must not erase the caller's explicit turn ID either.
+    await wrappedFetch("http://127.0.0.1:9999/v2/chat/completions", {
+      headers: { "x-omi-request-id": "req_caller" },
+    });
+    assert.deepEqual(seen, [null, null, "req_caller"]);
+  } finally {
+    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
+    else process.env.OMI_CONTEXT_FILE = previousContextFile;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("withOmiProviderHeadersFetch attaches per-turn requestId across multi-round completions without before_provider_headers", async () => {
   let relayContext = JSON.stringify({
     capabilityRef: "cap_turn_1",
