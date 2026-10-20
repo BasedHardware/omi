@@ -244,13 +244,11 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str, *, ready_only: bool = False, fresh_only: bool = False) -> dict | None:
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
             if ready_only and row.get('state') != 'result_ready':
-                continue
-            if fresh_only and row.get('fresh_capture') is not True:
                 continue
             candidate = (row['capture_at'], segment_id)
             if best is None or candidate < best:
@@ -266,8 +264,13 @@ class SimStore:
         ]
         return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
-    def first_fresh_pending(self, owner_key: str) -> dict | None:
-        return self.first_pending(owner_key, fresh_only=True)
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        rows = sorted(
+            (row['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
+        )
+        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
     def service_frontier(self, priority: int) -> float:
         name = f'p{priority}_service'

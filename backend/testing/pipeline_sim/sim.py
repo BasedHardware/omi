@@ -514,7 +514,8 @@ class Simulation:
         Same lease-ownership and privacy checks and the same lease-bound
         ``compute_admission_token`` seal that the real ``Scheduler.complete``
         enforces. Fair-use restriction and the daily audio ceiling always allow;
-        backfill priorities reserve against a per-UID daily speech budget. Not
+        backfill-lane uploads (by recorded lane, else priority) reserve against a
+        per-UID daily speech budget. Not
         imported for real: its fair-use dependency chain costs ~5 s of imports.
         """
         now = self.clock.now
@@ -541,7 +542,8 @@ class Simulation:
                 retries[segment] = 30
                 continue
             job, intake = snapshot
-            if int(job['priority']) != 0:
+            fresh_lane = intake['lane'] == 'fresh' if intake.get('lane') else int(job['priority']) == 0
+            if not fresh_lane:
                 reservation = self._reserve_backfill_speech(
                     job['owner_id'],
                     job['projection_binding']['content_id'],

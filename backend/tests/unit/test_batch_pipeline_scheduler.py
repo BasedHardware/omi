@@ -126,13 +126,13 @@ class MemoryStore:
         ]
         return deepcopy(min(jobs, key=lambda v: (v['ready_at'], v['segment_id']))) if jobs else None
 
-    def first_fresh_pending(self, owner_key):
+    def fresh_pending(self, owner_key, limit):
         jobs = [
             v
             for (table, _), v in self.rows.items()
             if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v.get('fresh_capture') is True
         ]
-        return deepcopy(min(jobs, key=lambda v: (v['capture_at'], v['segment_id']))) if jobs else None
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
 
 
 def colliding_owner(owner):

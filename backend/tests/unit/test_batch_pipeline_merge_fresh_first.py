@@ -10,6 +10,7 @@ from google.api_core.exceptions import FailedPrecondition
 import pytest
 
 from config.batch_pipeline import MERGE_CATCH_UP_DEPTH_DEFAULT, merge_catch_up_depth
+from database.batch_pipeline_purge import _write_erased_result
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline.contracts import WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
@@ -121,6 +122,46 @@ def test_fresh_rows_keep_capture_order_among_themselves():
     assert [e['segment_id'] for e in drain(merge)] == ['f1', 'f2']
 
 
+def test_an_erased_watermark_row_still_bounds_the_catch_up_depth():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(8)}
+    store, queue, leases = admitted(rows)
+    for segment in rows:
+        complete(queue, leases, segment)
+    merge = merge_for(store, depth=4)
+    assert len(drain(merge)) == 4
+    project_through(store, 'c1')
+
+    class _Writes:
+        def set(self, ref, value):
+            store.rows['results', ref] = value
+
+        def update(self, ref, value):
+            store.rows['owners', OWNER].update(value)
+
+    _write_erased_result(_Writes(), 'c1', store.rows['results', 'c1'], None, store.rows['owners', OWNER])
+    assert store.rows['results', 'c1']['projection_state'] == 'erased'
+    assert 'result' not in store.rows['results', 'c1']
+    # Purge keeps the log position, so the hold still counts from the erased watermark.
+    assert [e['segment_id'] for e in drain(merge)] == ['c4', 'c5']
+    assert store.rows['jobs', 'c6']['merge_pending'] and store.rows['jobs', 'c7']['merge_pending']
+
+
+def test_a_stuck_fresh_head_releases_later_fresh_rows_after_the_head_wait():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(4)} | {'f1': (90_000, FRESH), 'f2': (90_010, FRESH)}
+    store, queue, leases = admitted(rows)
+    for segment in ('c0', 'c1', 'c2', 'c3'):
+        complete(queue, leases, segment)
+    merge = merge_for(store, depth=2, wait=60)
+    assert len(drain(merge)) == 2 and merge.held_owners == {'heavy'}
+    complete(queue, leases, 'f2', NOW)  # f1 stays leased (for example, a retry).
+    assert merge.commit_next('heavy', NOW + 59) is None
+    entry = merge.commit_next('heavy', NOW + 60)
+    assert entry['segment_id'] == 'f2' and entry['fresh_first'] is True and entry['head_wait_bypass'] is True
+    complete(queue, leases, 'f1', NOW + 61)
+    late = merge.commit_next('heavy', NOW + 61)
+    assert late['segment_id'] == 'f1' and late['late_capture'] is True and late['fresh_first'] is True
+
+
 def test_missing_watermark_row_never_holds_a_commit():
     rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(6)}
     store, queue, leases = admitted(rows)
@@ -144,7 +185,7 @@ def test_unclassified_rows_keep_the_plain_order():
 
 
 class _PlainStore(MemoryStore):
-    def first_fresh_pending(self, owner_key):
+    def fresh_pending(self, owner_key, limit):
         raise AssertionError('the kill switch must not issue the fresh-first query')
 
 
@@ -162,12 +203,12 @@ def test_kill_switch_restores_the_plain_merge_without_fresh_queries(monkeypatch)
 
 
 class _NoFreshIndexStore(MemoryStore):
-    def first_fresh_pending(self, owner_key):
+    def fresh_pending(self, owner_key, limit):
         raise FailedPrecondition('The query requires an index.')
 
 
 class _InTransactionFreshQuery(MemoryTransaction):
-    def first_fresh_pending(self, owner_key):
+    def fresh_pending(self, owner_key, limit):
         raise AssertionError('the fresh probe must stay outside the commit transaction')
 
 
@@ -262,7 +303,7 @@ def test_fresh_rows_never_wait_on_catch_up_completion_order(order):
 
 @pytest.mark.parametrize(
     'value,expected',
-    [(None, MERGE_CATCH_UP_DEPTH_DEFAULT), ('off', 0), ('0', 0), ('-3', 0), ('8', 8), ('1001', 32), ('x', 32)],
+    [(None, MERGE_CATCH_UP_DEPTH_DEFAULT), ('off', 0), ('0', 0), ('-3', 0), ('8', 8), ('1001', 16), ('x', 16)],
 )
 def test_catch_up_depth_config_is_bounded(monkeypatch, value, expected):
     monkeypatch.delenv('BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH', raising=False)

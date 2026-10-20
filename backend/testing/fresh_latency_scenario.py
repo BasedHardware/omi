@@ -40,20 +40,24 @@ LEVERS = {
     'lease_leak_fixed': ('leak', 0.0, 10.0),  # #22805 (merged; rides the next train)
     'head_wait': ('BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS', '60', 'off'),  # Fix C (#22820)
     'recovery_dispatch_loop': ('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', '5', 'off'),
-    'fresh_first': ('BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH', '32', 'off'),
+    'fresh_first': ('BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH', '16', 'off'),
     'fresh_gpu_priority': ('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true', 'false'),
 }
 
 
 WALK_ROWS = 64  # projection.py OWNER_CHAIN_LIMIT
+WALK_SECONDS = 30.0  # projection.py OWNER_CHAIN_SECONDS
 
 
 def _walking_projector(simulation: Simulation):
     """MODEL of the owner-chain walk: owner-serial projection in result-log order.
 
     Like ``Projector._walk_owner``, each step re-reads the owner's next log row,
-    so a row committed while the walk runs projects in the same walk. A record
-    with an uncommitted segment holds the chain. Sweeps start one walk per owner.
+    so a row committed while the walk runs projects in the same walk. A walk
+    stops after 64 rows or 30 s; the next sweep (serving interval) resumes it.
+    A record with an uncommitted segment holds the chain. Sweeps start one walk
+    per owner. Unlike production, the 30 s budget is per walk, not shared across
+    the owners of one sweep, which flatters many-owner sweeps.
     """
     walking: set[str] = set()
 
@@ -66,8 +70,11 @@ def _walking_projector(simulation: Simulation):
                 yield row['log_sequence'], record
 
     async def walk(owner: str) -> None:
+        deadline = simulation.clock.now + WALK_SECONDS
         try:
             for _ in range(WALK_ROWS):
+                if simulation.clock.now >= deadline:
+                    break
                 head = min(unprojected(owner), default=None, key=lambda pair: pair[0])
                 if head is None:
                     break

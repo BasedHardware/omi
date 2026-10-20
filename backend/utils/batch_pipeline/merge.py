@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 # A missing head-wait index falls back to strict order; retry the query after this.
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
+# Pending fresh rows read per probe; an owner rarely has more in flight.
+FRESH_PROBE_ROWS = 8
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
@@ -32,6 +34,21 @@ def _wait_bucket(seconds: float) -> str:
 def _catch_up(job: dict) -> bool:
     # Only rows classified at admission; record-lane and older rows keep the plain order.
     return job.get('fresh_capture') is False
+
+
+def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None, dict | None]:
+    """The earliest pending fresh row once ready. If it is not, and a ready fresh
+    row has waited ``wait`` behind it, the earliest ready one (the bounded head
+    wait among fresh rows; the skipped row appends later as late_capture)."""
+    if not rows:
+        return None, None
+    if rows[0].get('state') == 'result_ready':
+        return rows[0], None
+    ready = [row for row in rows if row.get('state') == 'result_ready']
+    waited = max((now - row['ready_at'] for row in ready if row.get('ready_at') is not None), default=None)
+    if wait > 0 and waited is not None and waited >= wait:
+        return ready[0], {'state': rows[0].get('state'), 'waited': waited}
+    return None, None
 
 
 def _awaiting_projection(tx, owner: dict) -> int:
@@ -87,7 +104,7 @@ class OrderedMerge:
         fresh_first: dict = {}
         held: dict = {}
 
-        def commit(tx, waiter: dict | None = None, fresh: dict | None = None):
+        def commit(tx, waiter: dict | None = None, fresh: dict | None = None, skipped: dict | None = None):
             blocked.clear()  # Firestore may retry this callback.
             bypass.clear()
             fresh_first.clear()
@@ -111,6 +128,8 @@ class OrderedMerge:
                 ):
                     return None
                 fresh_first.update(head_state=candidate['state'])
+                if skipped is not None:
+                    bypass.update(head_state=skipped['state'], waited=skipped['waited'])
                 candidate = current
             elif candidate and candidate['state'] != 'result_ready':
                 if waiter is None:
@@ -190,9 +209,9 @@ class OrderedMerge:
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
             try:
-                fresh = self.store.first_fresh_pending(key)
-                if fresh and fresh.get('state') == 'result_ready':
-                    entry = self.store.run(lambda tx: commit(tx, fresh=fresh))
+                fresh, skipped = _fresh_pick(self.store.fresh_pending(key, FRESH_PROBE_ROWS), now, wait)
+                if fresh is not None:
+                    entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
             except BatchPrivacyBlocked:
                 return None
             except FailedPrecondition:

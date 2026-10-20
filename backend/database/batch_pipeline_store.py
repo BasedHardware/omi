@@ -44,7 +44,7 @@ class Store(Protocol):
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
-    def first_fresh_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
 
 
 class FirestoreTransaction:
@@ -194,9 +194,9 @@ class FirestoreStore:
         # A hint read outside any transaction; the bypass transaction re-verifies it.
         return longest_ready_pending(self.client, self.namespace, owner_key)
 
-    def first_fresh_pending(self, owner_key: str) -> dict | None:
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
-        return first_fresh_pending(self.client, self.namespace, owner_key)
+        return fresh_pending(self.client, self.namespace, owner_key, limit)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -304,22 +304,22 @@ def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict |
     return docs[0].to_dict() if docs else None
 
 
-def first_fresh_pending(client: Any, namespace: str, owner_key: str) -> dict | None:
-    """The owner's earliest-captured pending fresh row, ready or not (fresh-first merge).
+def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
+    """The owner's earliest-captured pending fresh rows, ready or not (fresh-first merge).
 
     Non-transactional discovery hint: it takes no transactional query lock.
     """
-    docs = list(
+    docs = (
         client.collection(f'{namespace}_jobs')
         .where('owner_key', '==', owner_key)
         .where('merge_pending', '==', True)
         .where('fresh_capture', '==', True)
         .order_by('capture_at')
         .order_by('segment_id')
-        .limit(1)
+        .limit(max(1, min(limit, 32)))
         .stream()
     )
-    return docs[0].to_dict() if docs else None
+    return [doc.to_dict() for doc in docs]
 
 
 def ready_predecessor(

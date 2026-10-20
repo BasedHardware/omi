@@ -548,26 +548,34 @@ converge to the strict-order state. Only intermediate states change:
 David's fresh bar (2026-10-20): an upload whose capture ended at most 10 minutes
 before admission reaches a conversation within 2 minutes p95, and is never held
 by the same owner's catch-up backlog. Admission stamps `fresh_capture` on each
-job from its capture end. Rows without the stamp (record lane, written before
-this change) keep the plain ordered merge.
+job from its capture end; record-lane units are classified the same way. Rows
+written before this change carry no stamp and keep the plain ordered merge.
 
-`BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH` (default `32`; `off` or `<= 0` restores
+`BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH` (default `16`; `off` or `<= 0` restores
 the plain ordered merge) adds two rules to commit selection, never to the
 commit body:
 
-- when the owner's merge head is a catch-up row, the earliest pending fresh row
-  commits as soon as it is ready. Its catch-up predecessors append later as
-  `late_capture`, exactly as under the bounded head wait. Fresh rows keep
-  capture order among themselves. The commit carries `fresh_first: true` and
-  logs `event=batch_merge outcome=fresh_first` with the head state only;
 - a catch-up commit waits while the owner already has this many committed rows
   awaiting projection (`log_sequence` minus the projection watermark row's).
   Projection stays owner-serial in log order, so a fresh row lands at most this
-  many rows behind the projection head instead of behind the whole backlog. The
-  pump maintenance drain re-offers held rows every few seconds as projection
-  advances. A missing watermark row never holds a commit.
+  many rows behind the projection head instead of behind the whole backlog.
+  Privacy erase keeps `log_sequence` on the erased result so an erased
+  watermark still counts; a missing watermark row never holds a commit. Every
+  pump re-offers the owners it held on its 5-second maintenance tick, and the
+  serving pass re-offers its own after the projection sweep, so a held backlog
+  filling the global `result_ready` page cannot hide another held owner;
+- when a catch-up row heads the owner and the strict commit does not go
+  through, a non-transactional probe reads the owner's earliest pending fresh
+  rows. The earliest one commits as soon as it is ready, in a second,
+  re-verifying transaction; its catch-up predecessors append later as
+  `late_capture`, exactly as under the bounded head wait. Fresh rows keep
+  capture order among themselves, except that once a later ready fresh row has
+  waited the head-wait bound behind an unready earlier one, the earliest ready
+  fresh row commits (`head_wait_bypass` too). The commit carries
+  `fresh_first: true` and logs `event=batch_merge outcome=fresh_first` with the
+  head state only.
 
-The `merge_fresh` job index backs the fresh query; without it the merge logs
+The `merge_fresh` job index backs the fresh probe; without it the merge logs
 `outcome=fresh_first_unavailable` and keeps the plain order (no hold, since a
 hold would also hold fresh rows) for five minutes.
 
@@ -575,7 +583,10 @@ hold would also hold fresh rows) for five minutes.
 `FRESH` for the whole lane): the sync fresh lane admits audio up to 6 hours
 old, and the owner's GPU FIFO is per priority. Uploads in that lane whose
 oldest capture is over 10 minutes old are admitted at `RECENT`, so they lease
-after fresh uploads rather than ahead of the same owner's fresh audio.
+after fresh uploads rather than ahead of the same owner's fresh audio. GPU
+spend admission picks its policy from the upload's recorded lane, not the
+priority, so these rows keep the fresh-lane fair-use checks (hard restriction,
+daily audio ceiling) and never draw on the backfill speech budget.
 
 ### Recovery dispatch loop
 

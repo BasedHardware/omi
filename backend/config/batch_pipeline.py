@@ -379,7 +379,7 @@ def merge_head_wait_seconds() -> float:
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
 
 
-MERGE_CATCH_UP_DEPTH_DEFAULT = 32
+MERGE_CATCH_UP_DEPTH_DEFAULT = 16
 MERGE_CATCH_UP_DEPTH_MAX = 1000
 
 
