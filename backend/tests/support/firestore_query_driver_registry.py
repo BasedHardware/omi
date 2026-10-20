@@ -3303,3 +3303,45 @@ _add(
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
+
+
+# WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as
+# __name__ IN document-reference queries (<=30 per batch) over the two owner
+# collections: memory_items first, then memory_historical_overrides for IDs still
+# missing. Queue order per trial matches that read order.
+from utils.memory.memory_service import MemoryService as _WQ7MemoryService
+
+
+def _seed_canonical_status_pairs(client, combo, trial):
+    items = f'users/{UID}/memory_items'
+    overrides = f'users/{UID}/memory_historical_overrides'
+    if trial == 0:
+        combo['memory_ids'] = []
+        return
+    if trial == 1:
+        client.queue_results([client.snapshot(f'{items}/mem-1', {'id': 'mem-1', 'status': 'active'})])
+        return
+    if trial == 2:
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/mem-1', {'id': 'mem-1', 'suppression': 'deleted'})])
+        return
+    ids = [f'mem-{i}' for i in range(31)]
+    combo['memory_ids'] = ids
+    first = [client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]]
+    client.queue_results(first)
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([client.snapshot(f'{overrides}/mem-30', {'id': 'mem-30', 'suppression': 'hidden'})])
+
+
+_add(
+    DriverEntry(
+        'utils.memory.memory_service.MemoryService._canonical_statuses_by_query',
+        base={'self': _WQ7MemoryService(), 'uid': UID},
+        domains={'memory_ids': [['mem-1'], ['mem-1', 'mem-2', 'mem-3']]},
+        neutrals={'budget': _BUDGET},
+        setup=_seed_canonical_status_pairs,
+        trials=4,
+        patchers=(_stub('config.firestore_read_levers.lever_enabled', True),),
+    )
+)

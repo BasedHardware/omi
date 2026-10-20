@@ -28,6 +28,7 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
+from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import ValidationError
 
 import database.memories as memories_db
@@ -78,6 +79,7 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_get_all,
+    budgeted_stream_list,
     indexed_list_reads_enabled,
 )
 from utils.other.portability_read import check_portability_read
@@ -2487,6 +2489,10 @@ class MemoryService:
         client = self.db_client if self.db_client is not None else default_db_client
         get_all = getattr(client, "get_all", None)
         if callable(get_all):
+            if firestore_read_levers.lever_enabled('canonical_statuses_dedupe', uid) and callable(
+                getattr(client, 'collection', None)
+            ):
+                return self._canonical_statuses_by_query(uid, normalized_ids, budget=budget)
             collections = MemoryCollections(uid=uid)
             statuses: Dict[str, MemoryItemStatus] = {}
             # Item batch first. Override get_all runs only for the missing-item
@@ -2539,6 +2545,56 @@ class MemoryService:
                         statuses[memory_id] = self._present_override_status(override_snapshot)
             return statuses
         return {memory_id: status for memory_id in normalized_ids if (status := self._canonical_status(uid, memory_id))}
+
+    def _canonical_statuses_by_query(
+        self,
+        uid: str,
+        memory_ids: List[str],
+        *,
+        budget: Optional[ListReadBudget] = None,
+    ) -> Dict[str, MemoryItemStatus]:
+        """Amortize missing-document charges without retaining negative results.
+
+        Each document-name IN query has at most 30 alternatives (Firestore's
+        disjunction limit). An empty query bills one read for the whole batch,
+        instead of one NOT_FOUND read per ID. Both collections remain authority:
+        a missing item must still consult its historical suppression override.
+        No result survives this call, so mutations need no cache invalidation.
+        """
+        client = self.db_client if self.db_client is not None else default_db_client
+        collections = MemoryCollections(uid=uid)
+        statuses: Dict[str, MemoryItemStatus] = {}
+        for start in range(0, len(memory_ids), 30):
+            missing_ids = memory_ids[start : start + 30]
+            for collection, parse_status in (
+                (collections.memory_items, self._present_item_status),
+                (collections.memory_historical_overrides, self._present_override_status),
+            ):
+                if not missing_ids:
+                    break
+                refs = [client.document(f'{collection}/{memory_id}') for memory_id in missing_ids]
+                try:
+                    query = client.collection(collection).where(filter=FieldFilter('__name__', 'in', refs))
+                    snapshots = budgeted_stream_list(query, budget)
+                    if not snapshots and budget is not None:
+                        budget.charge(1)  # Empty-query billing floor.
+                except ListReadBudgetExhausted:
+                    raise
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+                by_path = self._snapshots_by_reference_path(snapshots)
+                expected_paths = {ref.path for ref in refs}
+                if by_path is None or not set(by_path).issubset(expected_paths):
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+                next_missing_ids: List[str] = []
+                for memory_id, ref in zip(missing_ids, refs):
+                    snapshot = by_path.get(ref.path)
+                    if getattr(snapshot, 'exists', False) is True:
+                        statuses[memory_id] = parse_status(snapshot)
+                    else:
+                        next_missing_ids.append(memory_id)
+                missing_ids = next_missing_ids
+        return statuses
 
     @staticmethod
     def _snapshots_by_reference_path(snapshots: Any) -> Optional[Dict[str, Any]]:
