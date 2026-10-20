@@ -10,6 +10,11 @@ Evidence shapes (all aggregates; ``None`` or a missing key means unmeasured):
                    "legacy": {...same...}},
      "baseline": {"speaker_accuracy": 0.921, "source": "main@<sha>"}}
 
+Each pipeline also carries ``missing_units`` and ``scored_wer_minutes`` (WER audio
+that had output and was scored). Rows 1 and 2 accept a corpus only when
+``pinned`` is true and no pipeline is missing a unit; row 1's 60-minute floor is
+on scored audio, not the index.
+
 ``replay`` (rows 1b and 2, replay half), computed in RAM by
 ``parity_gate.replay_aggregates`` from batch/legacy word pairs.
 
@@ -78,6 +83,22 @@ def _missing(row: str, surface: Surface) -> RowResult:
     return _result(row, Status.PENDING, R.INPUT_MISSING, surface)
 
 
+def corpus_defect(corpus: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Why a corpus scores file is not evidence, or None when it is. Absent fields fail closed.
+
+    Scores from an unpinned corpus (fetch-by-checksum, F6) are not evidence, and
+    neither are scores where a pipeline is missing unit outputs: a partial copy
+    would score only the remainder.
+    """
+    if corpus.get('pinned') is not True:
+        return {'pinned': corpus.get('pinned')}
+    pipelines = corpus.get('pipelines') or {}
+    missing = {name: _count(side, 'missing_units') for name, side in pipelines.items() if isinstance(side, Mapping)}
+    if not missing or any(v != 0 for v in missing.values()):
+        return {'missing_units': missing}
+    return None
+
+
 # --- Row 1: transcript accuracy on the corpus -------------------------------------------------
 
 
@@ -86,18 +107,18 @@ def row_1(corpus: Mapping[str, Any] | None, surface: Surface, t: Thresholds = TH
         return na
     if not corpus:
         return _missing('1', surface)
-    if corpus.get('pinned') is False:
-        # Scores from an unpinned corpus are not evidence (fetch-by-checksum, F6).
-        return _result('1', Status.PENDING, R.INPUT_INVALID, surface, {'pinned': False})
-    minutes = _num(corpus.get('corpus_minutes'))
+    if (defect := corpus_defect(corpus)) is not None:
+        return _result('1', Status.PENDING, R.INPUT_INVALID, surface, defect)
     pipelines = corpus.get('pipelines') or {}
+    scored = [_num((pipelines.get(name) or {}).get('scored_wer_minutes')) for name in ('batch', 'legacy')]
     batch = (pipelines.get('batch') or {}).get('wer') or {}
     legacy = (pipelines.get('legacy') or {}).get('wer') or {}
     b_words, l_words = _count(batch, 'reference_words'), _count(legacy, 'reference_words')
     b_err, l_err = _count(batch, 'errors'), _count(legacy, 'errors')
-    if None in (minutes, b_words, l_words, b_err, l_err):
+    if None in (*scored, b_words, l_words, b_err, l_err):
         return _result('1', Status.PENDING, R.INPUT_INVALID, surface)
-    sample = {'corpus_minutes': minutes, 'min_corpus_minutes': t.wer_min_corpus_minutes}
+    minutes = min(scored)  # type: ignore[type-var]
+    sample = {'scored_wer_minutes': minutes, 'min_corpus_minutes': t.wer_min_corpus_minutes}
     if minutes < t.wer_min_corpus_minutes or not b_words or not l_words:
         return _result('1', Status.PENDING, R.SAMPLE_BELOW_MINIMUM, surface, sample=sample)
     wer_b, wer_l = b_err / b_words, l_err / l_words
@@ -157,17 +178,22 @@ def row_2(corpus, replay, surface: Surface, t: Thresholds = THRESHOLDS) -> RowRe
     measured: dict[str, Any] = {'drop_limit_pp': t.speaker_accuracy_drop_pp, 'owner_limit': t.owner_agreement_min}
     sample: dict[str, Any] = {'min_owner_conversations': t.owner_agreement_min_conversations}
     pending_reason = None
-    if corpus and corpus.get('pinned') is False:
+    if surface is Surface.PROD_SHADOW:
+        # Prod shadow has no corpus half: owner agreement on David's own recordings only.
+        corpus = None
+    elif not corpus:
+        pending_reason = R.INPUT_MISSING
+    elif (defect := corpus_defect(corpus)) is not None:
         corpus, pending_reason = None, R.INPUT_INVALID
-    # Corpus half: batch accuracy >= baseline - 1pp.
+        measured['corpus_defect'] = defect
+    # Corpus half: batch accuracy >= the frozen main baseline - 1pp. The legacy score is never
+    # a stand-in for a missing baseline: a regression both pipelines share would cancel out.
     speaker = ((corpus or {}).get('pipelines') or {}).get('batch', {}).get('speaker') or {}
     words, correct = _count(speaker, 'words'), _count(speaker, 'correct_1to1')
     baseline = _num(((corpus or {}).get('baseline') or {}).get('speaker_accuracy'))
-    if baseline is None:
-        legacy = ((corpus or {}).get('pipelines') or {}).get('legacy', {}).get('speaker') or {}
-        lw, lc = _count(legacy, 'words'), _count(legacy, 'correct_1to1')
-        baseline = (lc / lw) if lw and lc is not None else None
-    if not words or correct is None or baseline is None:
+    if corpus is None:
+        pass
+    elif not words or correct is None or baseline is None:
         pending_reason = pending_reason or R.INPUT_MISSING
     else:
         accuracy = correct / words
@@ -398,10 +424,10 @@ def row_6(cost: Mapping[str, Any] | None, surface: Surface, t: Thresholds = THRE
         }
         if rate is None:
             return _result('6', Status.PENDING, R.INPUT_MISSING, surface, measured, sample)
-        if rate < t.leases_per_min_per_node_floor:
-            # Contract (j): PASS still allows ramping to the supported percent; the
-            # row FAILs so legacy dark waits for David's fifth-node decision.
-            return _result('6', Status.FAIL, R.THROUGHPUT_BELOW_FLOOR, surface, measured, sample)
+        # Contract (j): below the floor the row still PASSes, capped at the percent the measured
+        # throughput carries (the report's ``max_supported_percent``, printed before the terminal
+        # line); legacy dark then waits for David's fifth-node decision. ``capped`` records it.
+        measured['capped'] = rate < t.leases_per_min_per_node_floor
         return _result('6', Status.PASS, R.PASS, surface, measured, sample)
     batch, legacy = usd_per_audio_hour(cost.get('batch')), usd_per_audio_hour(cost.get('legacy'))
     measured = {

@@ -47,6 +47,7 @@ spec:
               for f in __init__ report_schema rows scorers fleet_sample parity_gate soak_check; do
                 cp /scripts/$f.py /app/scripts/parity/ 2>/dev/null || true
               done
+              gate=0  # the paired gate's exit status; the Job exits with it after the copy window
               export PYTHONPATH=/app QUALITY_CORPUS_CACHE=/corpus BATCH_PIPELINE_MODEL_BATCH_SIZE=8
               python testing/quality_corpus/corpus.py fetch --cache /corpus
               python testing/quality_corpus/corpus.py build --cache /corpus --out /corpus/built
@@ -69,13 +70,13 @@ spec:
                     python -c 'import json,sys; r=json.load(open(sys.argv[1])); print("\n".join("SPEAKER x 1 %.3f %.3f <NA> <NA> %s <NA> <NA>" % (t["start"], t["end"]-t["start"], t["speaker"]) for t in r["turns"]))' "$u" > /corpus/built/$id.rttm
                     set -- "$@" --pair /corpus/built/units/$id.wav:/corpus/built/$id.rttm
                   done
-                  python testing/quality_corpus/paired_short_speech.py "$@" --output /receipts/short-speech.json || echo "exit=$?"
+                  python testing/quality_corpus/paired_short_speech.py "$@" --output /receipts/short-speech.json || gate=$?
                   ;;
                 flight)
                   python testing/quality_corpus/paired_flight_batching.py run \
                     --audio /corpus/built/units/ami-ES2004a.wav /corpus/built/units/ami-IS1009a.wav \
                             /corpus/built/units/ami-TS3003a.wav /corpus/built/units/ami-EN2002a.wav \
-                    --output /receipts/flight-paired.json || echo "exit=$?"
+                    --output /receipts/flight-paired.json || gate=$?
                   ;;
                 baseline)
                   python testing/quality_corpus/corpus.py baseline --units /corpus/built --out /receipts/baseline-batch
@@ -84,7 +85,9 @@ spec:
                   ;;
               esac
               cat /receipts/*.json 2>/dev/null | head -c 200000
+              echo "gate_exit=$gate"
               sleep 3600  # window for kubectl cp; the Job deadline still bounds the node-hour
+              exit "$gate"  # 1 fail, 2 insufficient evidence: the Job must not read as Succeeded
           env:
             - name: HUGGINGFACE_TOKEN
               valueFrom:

@@ -47,6 +47,7 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.parity import fleet_sample  # noqa: E402
+from scripts.parity.report_schema import THRESHOLDS  # noqa: E402
 
 SCHEMA_VERSION = 1
 PASS, FAIL, PENDING = 'PASS', 'FAIL', 'PENDING'
@@ -226,15 +227,24 @@ def check_first_summary(sample: Mapping[str, Any] | None):
     if not sample:
         return _check('first_summary', PENDING, 'input_missing')
     breaches = _cnt(sample, 'first_summary_dispatch_breaches')
+    measured_count = _cnt(sample, 'first_summary_dispatch_measured_count')
+    max_seconds = _num(sample.get('first_summary_dispatch_max_seconds'))
     measured = {
         'dispatch_breaches': breaches,
-        'dispatch_measured': sample.get('first_summary_dispatch_measured_count'),
+        'dispatch_measured': measured_count,
+        'dispatch_max_seconds': max_seconds,
         'status': sample.get('first_summary_status'),
     }
-    if breaches is None:
+    if breaches is None or measured_count is None:
         return _check('first_summary', PENDING, 'input_invalid', measured)
-    if breaches or sample.get('first_summary_status') == 'FAIL':
+    # The gate's breach counter allows 120s + 5s; the contract's limit is strict 121s (parity row 3).
+    strict = fleet_sample.row3_aggregates(sample, None)['first_summary_dispatch_breaches_over_121s']
+    measured['dispatch_breaches_over_121s'] = strict
+    if strict or sample.get('first_summary_status') == 'FAIL':
         return _check('first_summary', FAIL, 'first_summary_dispatch_contract', measured)
+    if measured_count < THRESHOLDS.first_summary_min_dispatches:
+        # A zero breach count over too few measured dispatches is not evidence of the contract.
+        return _check('first_summary', PENDING, 'sample_below_minimum', measured)
     return _check('first_summary', PASS, 'pass', measured)
 
 

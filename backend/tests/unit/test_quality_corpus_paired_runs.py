@@ -212,6 +212,28 @@ def test_corpus_score_aggregates_without_text(tmp_path):
     assert 'hello' not in json.dumps(scores)
 
 
+def test_corpus_score_charges_silence_insertions_and_counts_missing_units(tmp_path):
+    units = tmp_path / 'built'
+    (units / 'refs').mkdir(parents=True)
+    index = {
+        'libri-a': {'use': ['wer'], 'seconds': 1800.0},
+        'libri-b': {'use': ['wer'], 'seconds': 1800.0},
+        'silence-00': {'use': ['silence'], 'seconds': 60.0},
+    }
+    (units / 'index.json').write_text(json.dumps(index))
+    for unit in ('libri-a', 'libri-b'):
+        (units / 'refs' / f'{unit}.json').write_text(json.dumps({'use': ['wer'], 'text': 'one two'}))
+    (units / 'refs' / 'silence-00.json').write_text(json.dumps({'use': ['silence']}))
+    batch = tmp_path / 'batch'
+    batch.mkdir()
+    (batch / 'libri-a.json').write_text(json.dumps({'words': [{'text': 'one two', 'start': 0, 'end': 1}]}))
+    (batch / 'silence-00.json').write_text(json.dumps({'words': [{'text': 'ghost words', 'start': 0, 'end': 1}]}))
+    side = corpus.score(units, batch, None, None, pinned=True)['pipelines']['batch']
+    assert side['missing_units'] == 1 and side['scored_wer_minutes'] == 30.0
+    # Two hallucinated words on the silence bed are insertion errors in the pooled WER.
+    assert side['wer']['errors'] == 2 and side['wer']['reference_words'] == 2
+
+
 def test_manifest_meets_the_row1_sixty_minute_floor():
     manifest = json.loads(corpus.MANIFEST.read_text())
     wer_minutes = sum(g['minutes'] for g in manifest['groups'] if 'wer' in g['use'])

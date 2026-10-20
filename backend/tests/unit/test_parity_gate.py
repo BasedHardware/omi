@@ -7,25 +7,43 @@ import pytest
 from scripts.parity import fleet_sample, parity_gate, rows
 from scripts.parity.report_schema import ParityReason as R, Status, Surface, combine
 from scripts.parity.scorers import normalize_text, owner_agreement, percentile, pooled_wer, word_errors
+from scripts.rollout import ramp_controller as rc
 
 S, P = Surface.STAGING, Surface.PROD_SHADOW
 
 
-def corpus(batch_err=780, legacy_err=760, words=10000, minutes=61.0, b_correct=9000, l_correct=9050, pinned=True):
-    return {
+def corpus(
+    batch_err=780,
+    legacy_err=760,
+    words=10000,
+    minutes=61.0,
+    b_correct=9000,
+    l_correct=9050,
+    pinned=True,
+    baseline=0.905,
+    missing=0,
+):
+    out = {
         'pinned': pinned,
         'corpus_minutes': minutes,
         'pipelines': {
             'batch': {
                 'wer': {'errors': batch_err, 'reference_words': words},
                 'speaker': {'words': 10000, 'correct_1to1': b_correct},
+                'missing_units': missing,
+                'scored_wer_minutes': minutes,
             },
             'legacy': {
                 'wer': {'errors': legacy_err, 'reference_words': words},
                 'speaker': {'words': 10000, 'correct_1to1': l_correct},
+                'missing_units': 0,
+                'scored_wer_minutes': minutes,
             },
         },
     }
+    if baseline is not None:
+        out['baseline'] = {'speaker_accuracy': baseline}
+    return out
 
 
 def replay(n=200, median=0.05, unreviewed=0, owner_conv=200, scored=10000, agree=9800):
@@ -146,15 +164,41 @@ def test_row1_pending_below_sixty_minutes_or_unpinned():
     assert rows.row_1(None, S).reason is R.INPUT_MISSING
 
 
-def test_rows_1_1b_2_7_8_are_not_applicable_on_prod_shadow():
-    for row in (
-        rows.row_1(corpus(), P),
-        rows.row_1b(replay(), P),
-        rows.row_2(corpus(), replay(), P),
-        rows.row_7(census(), P),
-        rows.row_8(census(), P),
-    ):
+def test_row1_corpus_without_pinned_true_or_with_missing_units_is_not_evidence():
+    unpinned = corpus()
+    del unpinned['pinned']
+    assert (rows.row_1(unpinned, S).status, rows.row_1(unpinned, S).reason) == (Status.PENDING, R.INPUT_INVALID)
+    partial = rows.row_1(corpus(missing=3), S)
+    assert (partial.status, partial.reason) == (Status.PENDING, R.INPUT_INVALID)
+    assert partial.measured['missing_units'] == {'batch': 3, 'legacy': 0}
+    absent = corpus()
+    del absent['pipelines']['legacy']['missing_units']
+    assert rows.row_1(absent, S).status is Status.PENDING
+    assert rows.row_2(corpus(missing=1), replay(), S).reason is R.INPUT_INVALID
+
+
+def test_row1_sixty_minute_floor_is_on_scored_audio_not_the_index():
+    c = corpus(minutes=72.0)
+    c['pipelines']['batch']['scored_wer_minutes'] = 40.0  # index says 72 min; only 40 were scored
+    assert rows.row_1(c, S).reason is R.SAMPLE_BELOW_MINIMUM
+    del c['pipelines']['legacy']['scored_wer_minutes']
+    assert rows.row_1(c, S).reason is R.INPUT_INVALID
+
+
+def test_rows_1_7_8_are_not_applicable_on_prod_shadow():
+    for row in (rows.row_1(corpus(), P), rows.row_7(census(), P), rows.row_8(census(), P)):
         assert row.status is Status.NOT_APPLICABLE
+
+
+def test_rows_1b_and_2_are_evaluated_on_prod_shadow_from_the_replay_half():
+    assert rows.row_1b(replay(), P).status is Status.PASS
+    assert rows.row_1b(replay(median=0.2), P).reason is R.AGREEMENT_MEDIAN_OVER_LIMIT
+    # Row 2 on prod shadow is owner agreement only; a corpus is ignored there.
+    assert rows.row_2(None, replay(), P).status is Status.PASS
+    assert rows.row_2(corpus(b_correct=5000), replay(), P).status is Status.PASS
+    assert rows.row_2(None, replay(agree=9000), P).reason is R.OWNER_AGREEMENT_BELOW_LIMIT
+    assert rows.row_2(None, replay(owner_conv=20), P).reason is R.SAMPLE_BELOW_MINIMUM
+    assert rows.row_2(None, None, P).reason is R.INPUT_MISSING
 
 
 def test_row1b_median_and_unreviewed_outliers():
@@ -177,6 +221,14 @@ def test_row2_uses_explicit_main_baseline_over_legacy():
     c = corpus(b_correct=9000, l_correct=9500)
     c['baseline'] = {'speaker_accuracy': 0.905}
     assert rows.row_2(c, replay(), S).status is Status.PASS
+
+
+def test_row2_missing_frozen_baseline_pends_instead_of_comparing_to_legacy():
+    # Batch and legacy both dropped 10pp against the frozen bench: the legacy score is no baseline.
+    shared_drop = corpus(b_correct=8000, l_correct=8000, baseline=None)
+    result = rows.row_2(shared_drop, replay(), S)
+    assert (result.status, result.reason) == (Status.PENDING, R.INPUT_MISSING)
+    assert rows.row_2(corpus(b_correct=8000, l_correct=8000), replay(), S).reason is R.SPEAKER_ACCURACY_REGRESSED
 
 
 def test_row3_dispatch_breach_uses_contract_121s_not_gate_tolerance():
@@ -228,9 +280,12 @@ def test_row5_lost_recordings_exactly_zero_and_consistent():
 
 def test_row6_throughput_on_staging_and_cost_on_prod_shadow():
     assert rows.row_6(COST, S).status is Status.PASS
+    # Contract (j): below 45/min/node staging still PASSes, capped at the percent the rate carries.
     slow = rows.row_6({**COST, 'leases_per_min_per_node': 30.0}, S)
-    assert slow.reason is R.THROUGHPUT_BELOW_FLOOR
+    assert (slow.status, slow.measured['capped']) == (Status.PASS, True)
     assert slow.measured['max_supported_percent'] == pytest.approx(100 * 4 * 30 / 174)
+    assert rows.row_6(COST, S).measured['capped'] is False
+    assert rows.row_6({**COST, 'leases_per_min_per_node': None}, S).reason is R.INPUT_MISSING
     assert rows.row_6(COST, P).status is Status.PASS
     pricey = {**COST, 'batch': {**COST['batch'], 'vendor_stt_usd': 100}}
     assert rows.row_6(pricey, P).reason is R.COST_ABOVE_LEGACY
@@ -251,14 +306,36 @@ def test_data_loss_fail_takes_precedence_for_rollback_zero():
         rows.row_3(fleet_sample.row3_aggregates(gate_sample(first_summary_dispatch_breaches=1), LEGACY), P),
         rows.row_5(census(receipted_or_terminal_content_ids=1190, lost_content_ids=10), P),
     ]
-    status, reason, data_loss = combine(results, P)
-    assert (status, reason, data_loss) == (Status.FAIL, R.LOST_RECORDINGS, True)
+    status, reason, data_loss, row = combine(results, P)
+    assert (status, reason, data_loss, row) == (Status.FAIL, R.LOST_RECORDINGS, True, '5')
+
+
+def test_fail_names_lowest_data_loss_row_then_lowest_row():
+    lost = rows.row_5(census(receipted_or_terminal_content_ids=1190, lost_content_ids=10), S)
+    privacy = rows.row_7(census(privacy_violations=1), S)
+    wer = rows.row_1(corpus(batch_err=900), S)
+    ordering = rows.row_8(census(ordering_violations=1), S)
+    assert combine([wer, lost, privacy, ordering], S)[3] == '5'
+    assert combine([wer, privacy, ordering], S)[3] == '7'
+    assert combine([wer, ordering], S)[2:] == (False, '1')
 
 
 def test_prod_shadow_verdict_gates_on_rows_3_to_6_only():
     report = parity_gate.evaluate(P, gate_sample=gate_sample(), legacy_baseline=LEGACY, census=census(), cost=COST)
     assert report.status is Status.PASS
-    assert {r.row for r in report.rows if r.status is Status.NOT_APPLICABLE} == {'1', '1b', '2', '7', '8'}
+    assert {r.row for r in report.rows if r.status is Status.NOT_APPLICABLE} == {'1', '7', '8'}
+    # Rows 1b and 2 on David's recordings are reported but cannot change ADVANCE.
+    bad = parity_gate.evaluate(
+        P,
+        replay=replay(median=0.2, agree=9000),
+        gate_sample=gate_sample(),
+        legacy_baseline=LEGACY,
+        census=census(),
+        cost=COST,
+    )
+    by_row = {r.row: r for r in bad.rows}
+    assert by_row['1b'].status is Status.FAIL and by_row['2'].status is Status.FAIL
+    assert bad.status is Status.PASS
 
 
 def test_staging_full_pass_and_missing_inputs_pend():
@@ -325,6 +402,81 @@ def test_cli_writes_content_free_report(tmp_path, capsys):
     body = json.loads(text)
     assert body['schema_version'] == 1 and body['inputs']['fleet_gate_status'] == 'PASS'
     assert body['replay_outlier_keys'] == [parity_gate.opaque_key('conv-raw-key')]
+
+
+@pytest.mark.parametrize(
+    ('census_changes', 'terminal'),
+    [
+        ({'receipted_or_terminal_content_ids': 1199, 'lost_content_ids': 1}, 'PARITY_FAIL row_5'),
+        ({'privacy_violations': 1}, 'PARITY_FAIL row_7'),
+        ({'ordering_violations': 1}, 'PARITY_FAIL row_8'),
+    ],
+)
+def test_cli_fail_terminal_line_names_the_row(tmp_path, capsys, census_changes, terminal):
+    """Contract (j): the controller keys ROLLBACK_ZERO on `PARITY_FAIL row_5` / `row_7`."""
+    fleet = tmp_path / 'fleet.txt'
+    fleet.write_text(json.dumps(gate_sample()) + '\nGATE_PASS\n')
+    (tmp_path / 'legacy.json').write_text(json.dumps(LEGACY))
+    (tmp_path / 'census.json').write_text(json.dumps(census(**census_changes)))
+    (tmp_path / 'cost.json').write_text(json.dumps(COST))
+    out = tmp_path / 'parity_report.json'
+    code = parity_gate.main(
+        [
+            '--surface',
+            'staging',
+            '--output',
+            str(out),
+            '--fleet-sample',
+            str(fleet),
+            '--legacy-baseline',
+            str(tmp_path / 'legacy.json'),
+            '--census',
+            str(tmp_path / 'census.json'),
+            '--cost',
+            str(tmp_path / 'cost.json'),
+        ]
+    )
+    assert code == 1
+    assert capsys.readouterr().out.strip().splitlines()[-1] == terminal
+    body = json.loads(out.read_text())
+    assert body['failing_row'] == terminal.rsplit('_', 1)[-1]
+    assert body['data_loss'] is (terminal != 'PARITY_FAIL row_8')
+
+
+@pytest.mark.parametrize(
+    ('census_changes', 'action'),
+    [
+        ({'receipted_or_terminal_content_ids': 1199, 'lost_content_ids': 1}, 'ROLLBACK_ZERO'),
+        ({'ordering_violations': 1}, 'ROLLBACK_ONE'),
+    ],
+)
+def test_prod_shadow_fail_line_maps_through_the_ramp_controller(tmp_path, capsys, census_changes, action):
+    """End to end with lane 6's parser: a row-5 parity FAIL must roll back to zero, not one step."""
+    fleet = tmp_path / 'fleet.txt'
+    fleet.write_text(json.dumps(gate_sample()) + '\nGATE_PASS\n')
+    (tmp_path / 'legacy.json').write_text(json.dumps(LEGACY))
+    (tmp_path / 'census.json').write_text(json.dumps(census(**census_changes)))
+    (tmp_path / 'cost.json').write_text(json.dumps(COST))
+    argv = ['--surface', 'staging', '--output', str(tmp_path / 'r.json'), '--fleet-sample', str(fleet)]
+    argv += ['--legacy-baseline', str(tmp_path / 'legacy.json'), '--census', str(tmp_path / 'census.json')]
+    argv += ['--cost', str(tmp_path / 'cost.json')]
+    code = parity_gate.main(argv)
+    stdout = capsys.readouterr().out
+    status, reason = rc.run_parity(['parity'], runner=lambda cmd, timeout: (code, stdout))
+    verdict = rc.compose_with_parity(rc.GateVerdict('PASS', '', 0.0, 0.0, 50.0), (status, reason))
+    assert rc.classify_fail(verdict.reason)[0].name == action
+
+
+def test_cli_runs_with_no_extra_arguments_and_prints_throughput_cap(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert parity_gate.main(['--surface', 'prod-shadow']) == 3
+    assert capsys.readouterr().out.strip().splitlines()[-1].startswith('PARITY_PENDING ')
+    assert (tmp_path / 'parity_report.json').exists()
+    (tmp_path / 'cost.json').write_text(json.dumps({**COST, 'leases_per_min_per_node': 30.0}))
+    parity_gate.main(['--surface', 'staging', '--cost', str(tmp_path / 'cost.json')])
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[-2] == f'max_supported_percent {round(100 * 4 * 30 / 174, 1)}'
+    assert lines[-1].startswith('PARITY_PENDING ')
 
 
 def test_cli_missing_inputs_exit_pending(tmp_path, capsys):

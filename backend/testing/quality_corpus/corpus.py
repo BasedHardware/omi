@@ -212,6 +212,7 @@ def score(
     result['corpus_minutes'] = round(wer_seconds / 60.0, 2)
     for name, directory in pipelines.items():
         wer_pairs, speaker_words, speaker_correct, silence_words, missing = [], 0, 0, 0, 0
+        scored_seconds = 0.0
         for unit_id, meta in sorted(index.items()):
             ref = json.loads((units_dir / 'refs' / f'{unit_id}.json').read_text())
             path = directory / f'{unit_id}.json'
@@ -221,8 +222,12 @@ def score(
             words = json.loads(path.read_text()).get('words') or []
             if 'wer' in meta['use']:
                 wer_pairs.append((ref['text'], words_text(words)))
+                scored_seconds += meta['seconds']
             if 'silence' in meta['use']:
                 silence_words += len(words)
+                # Empty reference: every word emitted on a silence bed is an insertion error in the
+                # pooled WER, so row 1's batch-vs-legacy delta charges hallucinated words.
+                wer_pairs.append(('', words_text(words)))
             if 'speaker' in meta['use']:
                 turns = (
                     [Turn(**t) for t in ref['turns']] if 'turns' in ref else turns_from_words(ref.get('words') or [])
@@ -243,6 +248,7 @@ def score(
             },
             'silence_inserted_words': silence_words,
             'missing_units': missing,
+            'scored_wer_minutes': round(scored_seconds / 60.0, 2),
         }
     if baseline_accuracy is not None:
         result['baseline'] = {'speaker_accuracy': baseline_accuracy}

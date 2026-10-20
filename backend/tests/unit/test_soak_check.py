@@ -133,6 +133,19 @@ def test_first_summary_breach_fails():
     assert by_check(run(evidence(), gate(breaches=1)))['first_summary']['status'] == 'FAIL'
 
 
+def test_first_summary_uses_the_strict_121s_limit_and_a_dispatch_floor():
+    late = gate()
+    late['sample']['first_summary_dispatch_max_seconds'] = 123.0  # inside the gate's 125s tolerance
+    assert by_check(run(evidence(), late))['first_summary']['status'] == 'FAIL'
+    thin = gate()
+    thin['sample']['first_summary_dispatch_measured_count'] = 0
+    check = by_check(run(evidence(), thin))['first_summary']
+    assert (check['status'], check['reason']) == ('PENDING', 'sample_below_minimum')
+    unmeasured = gate()
+    del unmeasured['sample']['first_summary_dispatch_measured_count']
+    assert by_check(run(evidence(), unmeasured))['first_summary']['status'] == 'PENDING'
+
+
 def test_upload_2xx_drop_over_one_point_for_a_judged_build():
     builds = {'b1': {'rate': 0.984, 'baseline_rate': 0.995, 'requests': 500}}
     assert by_check(run(evidence(upload_2xx_by_build=builds)))['upload_2xx']['status'] == 'FAIL'
