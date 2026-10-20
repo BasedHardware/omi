@@ -31,6 +31,7 @@ from utils.byok import (
     validate_byok_websocket_keys,
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
+from utils.metrics import record_api_rate_limit_throttled
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
@@ -592,6 +593,7 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
             remaining = requests_per_window
             timestamp = current_time
         elif remaining == 0:
+            record_api_rate_limit_throttled(scope='ip_window', policy=endpoint)
             raise HTTPException(status_code=429, detail="Too Many Requests")
 
         remaining -= 1
@@ -635,6 +637,7 @@ def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False
         if RATE_LIMIT_SHADOW:
             logger.warning(f"[shadow] rate_limit_exceeded policy={policy_name} key={key} retry_after={retry_after}")
             return
+        record_api_rate_limit_throttled(scope='redis_policy', policy=policy_name)
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after}s.",

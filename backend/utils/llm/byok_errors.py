@@ -34,6 +34,7 @@ except ImportError:
 from utils.byok import get_byok_key, get_byok_uid
 from utils.executors import storage_executor, submit_with_context
 from utils.log_sanitizer import sanitize
+from utils.metrics import record_direct_llm_rate_limit_error
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +52,32 @@ def get_llm_error_source(provider: Optional[str]) -> str:
     return 'platform'
 
 
+def _classify_rate_limit_or_quota_error(error: Exception) -> Optional[str]:
+    """Return 'quota' or 'rate_limit' when an LLM SDK exception represents a 429/quota failure."""
+    status_code = _get_status_code(error)
+    error_name = type(error).__name__
+    error_text = sanitize(str(error)).lower()
+
+    if status_code == 429 or error_name in _QUOTA_ERROR_NAMES:
+        if 'insufficient_quota' in error_text or 'quota' in error_text:
+            return 'quota'
+        return 'rate_limit'
+    if 'insufficient_quota' in error_text:
+        return 'quota'
+    return None
+
+
 def classify_byok_llm_error(error: Exception) -> Optional[str]:
     """Classify user-actionable BYOK failures for structured logging."""
     status_code = _get_status_code(error)
     error_name = type(error).__name__
-    error_text = sanitize(str(error)).lower()
 
     if status_code == 401 or error_name == 'AuthenticationError':
         return 'invalid'
     if status_code == 403 or error_name == 'PermissionDeniedError':
         return 'permission'
-    if status_code == 429 or error_name in _QUOTA_ERROR_NAMES:
-        if 'insufficient_quota' in error_text or 'quota' in error_text:
-            return 'quota'
+    if _classify_rate_limit_or_quota_error(error) == 'quota':
+        return 'quota'
     return None
 
 
@@ -77,6 +91,9 @@ def handle_llm_error(
     """Log LLM failures with source context."""
     source = get_llm_error_source(provider)
     reason = classify_byok_llm_error(error) if source == 'byok' else None
+    rate_limit_reason = _classify_rate_limit_or_quota_error(error)
+    if rate_limit_reason is not None:
+        record_direct_llm_rate_limit_error(provider=provider, source=source, reason=rate_limit_reason)
     uid = get_byok_uid()
     status_code = _get_status_code(error)
 
