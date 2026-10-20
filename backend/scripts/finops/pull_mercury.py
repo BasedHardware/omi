@@ -17,12 +17,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import auth_http
 from mercury_costs import MercuryError, aggregate_page, aggregate_rows, days, load_map
 
 FILENAME = 'mercury_vendor_spend_daily.json'
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
+class NoRedirect(auth_http.NoRedirect):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise MercuryError('Mercury redirect refused')
 

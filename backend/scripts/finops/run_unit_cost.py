@@ -251,10 +251,15 @@ def main() -> None:
     # Provider stderr normally stays in pull.log. Surface optional skips in Cloud Logging too.
     stt_invoice = raw / "stt_vendor_cost_daily.json"
     if stt_invoice.exists():
-        skipped = json.loads(stt_invoice.read_text()).get("skipped", [])
+        stt_payload = json.loads(stt_invoice.read_text())
+        skipped = stt_payload.get("skipped", [])
         for provider in ("soniox", "deepgram"):
             if provider in skipped:
                 sys.stderr.write("WARNING: %s measured STT unavailable; see pull.log\n" % provider)
+            if provider in (stt_payload.get("incomplete") or {}):
+                sys.stderr.write(
+                    "WARNING: %s measured STT incomplete; unclassified line items; see pull.log\n" % provider
+                )
 
     mercury_invoice = raw / "mercury_vendor_spend_daily.json"
     if mercury_invoice.exists() and json.loads(mercury_invoice.read_text()).get("status") == "skipped":
