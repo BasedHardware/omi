@@ -327,7 +327,11 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   record (a scan replay, a newer partial, the ordinary upgrade) re-issues each
   stored step under its own once-key (`<content_id>` for the first,
   `<content_id>:<start_ms>` after). A Redis write lost after any commit
-  therefore lands exactly once on a later attempt. Accounting returns nothing
+  therefore lands once on a later attempt, as long as that attempt comes
+  within six days. `usage_step_times` records each step's commit. A step older
+  than the fair-use once-key TTL (8 days) less a 2-day margin, or with no
+  recorded time, is never re-issued: its key may have expired, and that speech
+  is outside the 7-day fair-use read anyway. Accounting returns nothing
   while any unit can still change, so an ineligible upload is never charged.
 - **Client.** The status poll and a re-upload answer `completed` with
   `reason_code: batch_unit_held`, the partial result, and

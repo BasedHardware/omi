@@ -257,23 +257,36 @@ def record_speech_step(binding, source: str, previous: float, committed: float) 
     )
 
 
-def record_speech_steps(binding, source: str, steps) -> None:
-    """Re-issue every durable charge step; each once-key lands at most once.
+def reissue_window_seconds() -> float:
+    """Re-issue a step only while its once-key is certainly live (TTL less a two-day margin)."""
+    from utils.fair_use import FAIR_USE_REDIS_RETENTION_SECONDS
+
+    return max(0.0, FAIR_USE_REDIS_RETENTION_SECONDS - 2 * 86400)
+
+
+def record_speech_steps(binding, source: str, steps, times, now: float) -> None:
+    """Re-issue every recent durable charge step; each once-key lands at most once.
 
     A step whose Redis write was lost after its commit is repaired by any later
-    attempt, even one that charges a newer step.
+    attempt, even one that charges a newer step. A step of unknown age, or older
+    than the window, is skipped: its once-key may have expired, and re-admitting
+    it would count the same speech twice (it is outside the fair-use read anyway).
     """
-    for previous, committed in zip(steps, steps[1:]):
-        record_speech_step(binding, source, previous, committed)
+    window = reissue_window_seconds()
+    for (previous, committed), at in zip(zip(steps, steps[1:]), times):
+        if at is not None and now - at <= window:
+            record_speech_step(binding, source, previous, committed)
 
 
-def record_speech(binding, accounting: dict) -> None:
+def record_speech(binding, accounting: dict, now: float) -> None:
     """Fair-use speech before an ordinary completion; after a partial only the remainder."""
     if not accounting['completed']:
         steps = list(accounting.get('steps') or [0.0])
+        times: list[float | None] = list(accounting.get('step_times') or [None] * (len(steps) - 1))
         if accounting['seconds'] > steps[-1]:
             steps.append(accounting['seconds'])
-        record_speech_steps(binding, accounting['source'], steps)
+            times.append(now)
+        record_speech_steps(binding, accounting['source'], steps, times, now)
 
 
 class Projector:
@@ -516,7 +529,7 @@ class Projector:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
         with projection_phase('usage', policy):
-            record_speech(binding, accounting)
+            record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
         if result is not None:
@@ -548,12 +561,12 @@ class Projector:
         outcome = self.store.complete_partial(binding, self.clock(), accounting)
         if outcome is None:
             return None
-        result, steps = outcome
+        result, (steps, times) = outcome
         # Fair use follows the durable steps, never an uncommitted attempt. A
         # crash before this call is repaired by the next scan or the ordinary
         # completion, which re-issue every stored step under the same keys.
         if not accounting['completed']:
-            record_speech_steps(binding, accounting['source'], steps)
+            record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 
     def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:

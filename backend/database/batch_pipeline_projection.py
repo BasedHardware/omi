@@ -266,7 +266,7 @@ class ProjectionStore:
             # Charge nothing for a partial that cannot commit.
             return None
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
-        steps = usage_steps(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else [0.0]
+        steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
         if binding.native_record:
             return {
                 'seconds': seconds,
@@ -276,6 +276,7 @@ class ProjectionStore:
                 'completed': True,
                 'charged': charged,
                 'steps': steps,
+                'step_times': step_times,
             }
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
@@ -298,6 +299,7 @@ class ProjectionStore:
             'completed': ledger.get('status') == 'completed',
             'charged': charged,
             'steps': steps,
+            'step_times': step_times,
         }
 
     def complete(
@@ -445,15 +447,17 @@ class ProjectionStore:
                 .document(accounting['hour'])
             )
             transaction.set(usage_ref, accounting['updates'], merge=True)
-        # Every charge boundary, so fair use can re-issue each step's once-key:
-        # a write lost after any earlier commit still lands on a later attempt.
-        steps = usage_steps(ledger) if partial else [0.0]
+        # Every charge boundary and when it committed, so fair use can re-issue
+        # each recent step's once-key: a write lost after any earlier commit
+        # still lands on a later attempt while that key is live.
+        steps, times = extend_chain(*(charge_chain(ledger) if partial else ([0.0], [])), seconds, now)
         transaction.update(
             ledger_ref,
             {
                 'usage_committed_at': datetime.fromtimestamp(now, timezone.utc),
                 'usage_committed_seconds': seconds,
-                'usage_steps': steps + [seconds] if seconds > steps[-1] else steps,
+                'usage_steps': steps,
+                'usage_step_times': times,
             },
         )
 
@@ -540,10 +544,10 @@ class ProjectionStore:
             if superseded_count:
                 result['superseded_segments'] = superseded_count
             if ledger.get('status') == BATCH_PARTIAL_STATUS and ledger.get('result') == result:
-                return (result, usage_steps(ledger)), False
+                return (result, charge_chain(ledger)), False
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
-            steps = usage_steps(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else [0.0]
+            chain = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
             self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
             complete_batch_partial_in_transaction(
                 transaction,
@@ -555,7 +559,7 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
-            return (result, steps + [seconds] if seconds > steps[-1] else steps), True
+            return (result, extend_chain(*chain, seconds, now)), True
 
         with writing('usage_month_cache', binding.owner_id):
             outcome, changed = self.run(commit)
@@ -564,13 +568,26 @@ class ProjectionStore:
         return outcome
 
 
-def usage_steps(ledger: dict) -> list[float]:
-    """Charge boundaries of a partial ledger, starting at 0.0 and ending at the committed seconds."""
+def charge_chain(ledger: dict) -> tuple[list[float], list[float | None]]:
+    """A partial ledger's charge boundaries (from 0.0) and each step's commit time.
+
+    A step without a recorded time (an unknown age) is never re-issued: its
+    fair-use once-key may already have expired.
+    """
     steps = ledger.get('usage_steps')
-    if isinstance(steps, list) and steps and steps[0] == 0.0:
-        return list(steps)
-    committed = ledger.get('usage_committed_seconds', 0.0)
-    return [0.0, committed] if committed else [0.0]
+    if not (isinstance(steps, list) and steps and steps[0] == 0.0):
+        committed = ledger.get('usage_committed_seconds', 0.0)
+        steps = [0.0, committed] if committed else [0.0]
+    times = ledger.get('usage_step_times')
+    if not (isinstance(times, list) and len(times) == len(steps) - 1):
+        times = [None] * (len(steps) - 1)
+    return list(steps), list(times)
+
+
+def extend_chain(steps, times, seconds: float, now: float) -> tuple[list[float], list[float | None]]:
+    if seconds > steps[-1]:
+        return [*steps, seconds], [*times, now]
+    return list(steps), list(times)
 
 
 # A reviewed operator intent that is not settled can still change its unit.

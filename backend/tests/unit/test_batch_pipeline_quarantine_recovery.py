@@ -1253,7 +1253,7 @@ def test_terminally_held_upload_completes_partial_once_without_touching_held_uni
     ledger = ledger_row(client, binding)
     assert ledger['status'] == 'partial' and ledger['result'] == result
     assert ledger['usage_committed_seconds'] == 3 and ledger['job_id'] == binding.job_id
-    assert step == [0.0, 3] and ledger['usage_steps'] == [0.0, 3]
+    assert step == ([0.0, 3], [101]) and ledger['usage_steps'] == [0.0, 3] and ledger['usage_step_times'] == [101]
     # Paid-once and ordered-head: no provider call, no job/intent/merge write,
     # the parked sibling keeps its receipt, and the held audio is not touched.
     assert {key: value for key, value in client.rows.items() if key[0].endswith('_jobs')} == jobs_before
@@ -1363,6 +1363,7 @@ def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(s
     assert ledger['status'] == 'completed' and ledger['result'] == upgraded
     assert upgraded['failed_segments'] == 0 and upgraded['total_segments'] == 2
     assert ledger['usage_committed_seconds'] == 5.0 and ledger['usage_steps'] == [0.0, 3, 5.0]
+    assert ledger['usage_step_times'] == [101, 104]
     # A held span already settled as partial is never re-partialed after completion.
     assert projection.complete_partial(binding, 105, PARTIAL_ACCOUNTING) is None
     assert stt.call_count == 1
@@ -1456,18 +1457,41 @@ def test_fair_use_charge_after_partial_uses_a_distinct_once_key(monkeypatch):
     calls = []
     monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append((args, kwargs)))
     binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
-    record_speech(binding, {'seconds': 3, 'source': 'sync_fresh', 'completed': False})
+    record_speech(binding, {'seconds': 3, 'source': 'sync_fresh', 'completed': False}, 100)
     calls.clear()
     # After a partial at 3 s (stored steps [0, 3]) the upgrade re-issues the base
     # step under its own key, then the remainder: a base lost to a Redis failure
     # after the partial commit still lands, and one that landed is a SET NX no-op.
-    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'steps': [0.0, 3]})
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
     assert [(args[1], kwargs['idempotency_key']) for args, kwargs in calls] == [
         (3000, 'content'),
         (2000, 'content:3000'),
     ]
     calls.clear()
-    record_speech(binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': True, 'steps': [0.0, 3]})
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': True, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
+    assert calls == []
+
+
+def test_expired_or_unknown_age_step_is_never_readmitted(monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import record_speech_steps, reissue_window_seconds
+
+    calls = []
+    monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append(kwargs['idempotency_key']))
+    binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
+    now = 10 * 86400.0
+    window = reissue_window_seconds()
+    assert 0 < window < fair_use.FAIR_USE_REDIS_RETENTION_SECONDS
+    # A unit held past the once-key TTL: its old step stays out, the fresh one lands.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3, 5], [now - window - 1, now], now)
+    assert calls == ['content:3000']
+    calls.clear()
+    # A legacy partial without commit times: never re-issued.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3], [None], now)
     assert calls == []
 
 
