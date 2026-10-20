@@ -19,10 +19,11 @@ test is imported), when the name matches ``budget|deadline|timeout``
 - attribute patching: ``monkeypatch.setattr(module, 'X_TIMEOUT', 0.02)``,
   ``setattr(...)``, ``patch.object(module, 'X_TIMEOUT', 0.02)``, and the
   dotted-string forms ``monkeypatch.setattr('pkg.mod.X_TIMEOUT', 0.02)`` /
-  ``patch('pkg.mod.X_TIMEOUT', 0.02)`` / ``patch(..., new=0.02)``
+  ``patch('pkg.mod.X_TIMEOUT', 0.02)`` / ``patch(..., new=0.02)`` (also
+  ``patch.object(..., new=0.02)``)
 - env-backed budgets: ``monkeypatch.setenv('X_TIMEOUT_SECONDS', '0.05')``,
   ``os.environ['X_TIMEOUT_SECONDS'] = '0.05'``, and
-  ``patch.dict(os.environ, {'X_TIMEOUT_SECONDS': '0.05'})``
+  ``patch.dict(os.environ | 'os.environ', {...} | values={...} | X_TIMEOUT='0.05')``
 - keyword arguments to code under test: ``drain_tasks(..., timeout=0.1)``,
   ``Budget(deadline_seconds=0.01)``
 
@@ -30,9 +31,13 @@ Not flagged: harness waits whose timeout only bounds the test itself
 (``asyncio.wait_for``, ``Event.wait``, ``Queue.get``, ``Thread.join``,
 ``Future.result``, ``Lock.acquire``), mock call assertions
 (``assert_called_with(timeout=...)``), Redis client construction, ``sleep``,
-plain local variables, and any value inside a function that visibly controls
-the clock (a fake/injected ``clock``, ``freeze_time``/``freezegun``/
-``time_machine``, or a patched ``monotonic``/``perf_counter``).
+plain local variables, and any value inside a function (decorators included)
+that visibly controls the clock: a fake/injected ``clock=`` (not ``None`` or
+``time.*``), ``freeze_time``/``freezegun``/``time_machine``, or
+``monotonic``/``perf_counter`` replaced by something other than the real
+``time.*`` function (``{'monotonic': time.monotonic}`` is a real clock).
+Known gap: numbers nested inside a dict/list argument
+(``methods_timeout={'GET': 0.001}``) are not inspected.
 
 How to fix a new offender (in order of preference):
 
@@ -87,11 +92,19 @@ _KEYWORDS = (b'budget', b'deadline', b'timeout')
 # a name containing a keyword, an optional closing quote/bracket, one of ``=`` ``,`` ``:``, an optional
 # ``float =`` / ``new=``, an optional opening quote, then a literal that can be below 1 (``0.05``, ``.05``, ``5e-2``).
 _PREFILTER = re.compile(
-    rb'(?:budget|deadline|timeout)\w*[\'"]?\]?\s*[=,:]\s*(?:\w+\s*=\s*)?[\'"]?(?:0*\.\d|\d+(?:\.\d*)?e-\d)'
+    # Possessive quantifiers (Python 3.11+) keep adjacent whitespace runs from backtracking polynomially.
+    rb'(?:budget|deadline|timeout)\w*+[\'"]?\]?\s*+[=,:]\s*+(?:\w++\s*+=\s*+)?(?:\(\s*+)*+[\'"]?\s*+\+?'
+    rb'(?:0*+\.\d|[\d_]++(?:\.[\d_]*+)?e-\d)'
 )
+# Clock control: a fake/injected clock, a time-freezing library, or monotonic/perf_counter replaced by something
+# other than the real ``time.*`` function. ``'monotonic': time.monotonic`` and ``clock=None`` are real clocks.
+# Preceded by ``\s*``; rejecting ``\s`` here stops backtracking from testing the lookahead on a space.
+_REAL_CLOCK_VALUE = r'(?!\s|time\.|None\b)'
 _FAKE_CLOCK = re.compile(
-    r'fake_?clock|freeze_?time|freezegun|time_machine|\bclock\s*=|'
-    r'[\'"](?:monotonic|perf_counter)[\'"]|\.(?:monotonic|perf_counter)\s*=',
+    r'fake_?clock|freeze_?time|freezegun|time_machine|'
+    rf'\bclock\s*=(?!=)\s*{_REAL_CLOCK_VALUE}|'
+    rf'[\'"](?:monotonic|perf_counter)[\'"]\s*[,:]\s*(?:new\s*=\s*)?{_REAL_CLOCK_VALUE}|'
+    rf'\.(?:monotonic|perf_counter)\s*=(?!=)\s*{_REAL_CLOCK_VALUE}',
     re.IGNORECASE,
 )
 # Callees whose timeout bounds the test harness, not the code under test.
@@ -154,7 +167,10 @@ def _format(value: float) -> str:
 
 
 def _is_environ(node: ast.AST) -> bool:
-    return _dotted(node).rsplit('.', 1)[-1] == 'environ'
+    target = _string(node)
+    if target is None:
+        target = _dotted(node)
+    return target.rsplit('.', 1)[-1] == 'environ'
 
 
 class _Scanner(ast.NodeVisitor):
@@ -171,7 +187,9 @@ class _Scanner(ast.NodeVisitor):
         is_outer_def = self.outer_def is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         if is_outer_def:
             self.outer_def = node
-            source = '\n'.join(self.lines[node.lineno - 1 : node.end_lineno])  # type: ignore[attr-defined]
+            # Include decorators so ``@freeze_time(...)`` above the ``def`` counts as clock control.
+            start = min([node.lineno] + [d.lineno for d in node.decorator_list])  # type: ignore[attr-defined]
+            source = '\n'.join(self.lines[start - 1 : node.end_lineno])  # type: ignore[attr-defined]
             self.clock_controlled = bool(_FAKE_CLOCK.search(source))
         self.generic_visit(node)
         if is_outer_def:
@@ -214,9 +232,11 @@ class _Scanner(ast.NodeVisitor):
         args = node.args
         keywords = {kw.arg: kw.value for kw in node.keywords if kw.arg}
 
-        if last in ('setattr', 'object') and len(args) >= 3 and _string(args[1]) is not None:
-            # setattr(obj, 'NAME', v) / monkeypatch.setattr(obj, 'NAME', v) / patch.object(obj, 'NAME', v)
-            self._flag(_string(args[1]), _number(args[2], allow_str=False))  # type: ignore[arg-type]
+        if last in ('setattr', 'object') and len(args) >= 2 and _string(args[1]) is not None:
+            # setattr(obj, 'NAME', v) / monkeypatch.setattr(obj, 'NAME', v) / patch.object(obj, 'NAME', v | new=v)
+            value = args[2] if len(args) >= 3 else keywords.get('new')
+            if value is not None:
+                self._flag(_string(args[1]), _number(value, allow_str=False))  # type: ignore[arg-type]
         elif last in ('setattr', 'patch') and args and _string(args[0]) is not None:
             # monkeypatch.setattr('pkg.mod.NAME', v) / patch('pkg.mod.NAME', v) / patch('pkg.mod.NAME', new=v)
             value = args[1] if len(args) >= 2 else keywords.get('new')
@@ -225,11 +245,14 @@ class _Scanner(ast.NodeVisitor):
         elif last == 'setenv' and len(args) >= 2 and _string(args[0]) is not None:
             self._flag(_string(args[0]), _number(args[1], allow_str=True))  # type: ignore[arg-type]
         elif last == 'dict' and args and _is_environ(args[0]):
-            mapping = args[1] if len(args) >= 2 else None
+            # patch.dict(os.environ | 'os.environ', {'NAME': '0.05'} | values={...}, NAME='0.05')
+            mapping = args[1] if len(args) >= 2 else keywords.get('values')
             if isinstance(mapping, ast.Dict):
                 for key, value in zip(mapping.keys, mapping.values):
                     if key is not None and _string(key) is not None:
                         self._flag(_string(key), _number(value, allow_str=True))  # type: ignore[arg-type]
+            for name, value in keywords.items():
+                self._flag(name, _number(value, allow_str=True))
 
         if last not in _HARNESS_CALLEES and not last.startswith('assert_'):
             for name, value in keywords.items():
@@ -355,6 +378,27 @@ def test_fake_clock_is_exempt(monkeypatch):
 
 def test_injected_clock_is_exempt():
     fetch(timeout_seconds=0.1, clock=fake)
+
+@freeze_time('2026-10-20')
+def test_frozen_by_decorator_is_exempt():
+    module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+
+def test_real_clock_mapping_is_not_a_fake(monkeypatch):
+    deps = {'monotonic': time.monotonic}
+    module.AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS = 0.05
+
+def test_clock_none_is_not_a_fake():
+    fetch(timeout_seconds=0.2, clock=None)
+
+def test_more_spellings(monkeypatch):
+    with patch.object(module, 'KW_TIMEOUT_SECONDS', new=0.02):
+        pass
+    module.PAREN_TIMEOUT_SECONDS = (0.05)
+    with patch.dict('os.environ', {'STR_ENV_TIMEOUT': '0.02'}):
+        pass
+    with patch.dict(os.environ, KW_ENV_DEADLINE=' +0.03'):
+        pass
+    module.UNDERSCORE_BUDGET = 1_0e-2
 '''
 
 
@@ -373,7 +417,30 @@ def test_scanner_flags_the_flaky_shapes_and_skips_harness_waits() -> None:
         prefix + 'test_flagged::POST_TIMEOUT_SECONDS=0.05',
         prefix + 'test_flagged::timeout=0.1',
         prefix + 'TestShape.test_method::deadline_seconds=0.01',
+        prefix + 'test_real_clock_mapping_is_not_a_fake::AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS=0.05',
+        prefix + 'test_clock_none_is_not_a_fake::timeout_seconds=0.2',
+        prefix + 'test_more_spellings::KW_TIMEOUT_SECONDS=0.02',
+        prefix + 'test_more_spellings::PAREN_TIMEOUT_SECONDS=0.05',
+        prefix + 'test_more_spellings::STR_ENV_TIMEOUT=0.02',
+        prefix + 'test_more_spellings::KW_ENV_DEADLINE=0.03',
+        prefix + 'test_more_spellings::UNDERSCORE_BUDGET=0.1',
     }
+
+
+@pytest.mark.parametrize(
+    'snippet',
+    [
+        b'module.REQUEST_TIMEOUT_SECONDS = (0.05)',
+        b'drain_tasks(tasks, timeout=(0.05))',
+        b"patch('pkg.mod.LIST_BUDGET', new=(0.05))",
+        b"monkeypatch.setenv('X_TIMEOUT', ' +0.05')",
+        b'module.X_BUDGET = 1_0e-2',
+        b"patch.object(module, 'X_TIMEOUT', new=0.02)",
+    ],
+)
+def test_prefilter_admits_every_spelling_the_visitor_flags(snippet: bytes) -> None:
+    assert _might_match(snippet)
+    assert scan_bytes('x.py', snippet), snippet
 
 
 def test_prefilter_matches_name_then_small_value_shapes_only() -> None:
