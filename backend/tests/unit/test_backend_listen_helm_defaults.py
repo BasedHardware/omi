@@ -254,8 +254,12 @@ def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
     # HPA ignores ratios within 10% of target; on 2026-10-19 mean listen CPU
     # peaked at 0.56-0.65 while hot pods saturated, so a target at or above 60%
     # could not have scaled out of that incident.
-    assert len(cpu) == 1 and cpu[0]['type'] == 'Utilization'
-    assert 0 < cpu[0]['averageUtilization'] < 60
-    # Dropping a socket guard lets a CPU dip strand live sockets on too few pods.
-    assert set(external) == {'backend_listen_requests_per_pod', 'backend_listen_active_ws_connections_per_pod'}
-    assert hpa['spec']['minReplicas'] >= 1
+    assert cpu == [{'type': 'Utilization', 'averageUtilization': 55}]
+    # Dropping a socket guard, or raising it until it never binds, lets a CPU
+    # dip strand live sockets on too few pods. Changing these is a reviewed retune.
+    assert external == {
+        'backend_listen_requests_per_pod': 16,
+        'backend_listen_active_ws_connections_per_pod': 35,
+    }
+    # The floor is lowered separately from this retune, with its own evidence.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (40, 60)
