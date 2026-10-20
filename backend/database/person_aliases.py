@@ -245,6 +245,8 @@ def list_people(
     result = []
     for person in people_ref.stream():
         data = person.to_dict()
+        if not isinstance(data, dict):
+            continue
         if not include_dismissed and data.get('is_dismissed') is True:
             continue
         data.setdefault('id', person.id)
@@ -279,9 +281,11 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
     """
 
     people_ref = db_client.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name))
+    query = people_ref.where(filter=FieldFilter('name', '==', clean_name))
     for person in query.stream():
         data = person.to_dict()
+        if not isinstance(data, dict):
+            continue
         if data.get('is_dismissed') is True:
             continue
         data.setdefault('id', person.id)
