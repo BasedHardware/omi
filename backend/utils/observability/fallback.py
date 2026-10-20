@@ -171,6 +171,8 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'config_incomplete',
         'circuit_open',
         'last_resort',
+        'session_excluded',
+        'recovery_budget',
         'connection_lost',
         'modulate_serve_error',
         'capability_mismatch',
