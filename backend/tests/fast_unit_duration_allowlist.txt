@@ -477,3 +477,7 @@ tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_kee
 # First test to import utils.sync.files / utils.sync.pipeline in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
 tests/unit/test_sync_input_limits.py::test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix
 tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects
+# Builds the whole chat router's OpenAPI document in the call phase; measures 0.30-0.34s CPU locally, at the guard.
+tests/unit/test_chat_openapi_operation_ids.py::test_v1_chat_operation_ids_remain_compatible_after_handler_renames
+# Real FFmpeg: 48 per-target seeks plus loading the frames (~0.6s CPU); exercises the all-intra fallback.
+tests/unit/test_chat_video.py::test_all_intra_long_clip_falls_back_to_per_target_seeks

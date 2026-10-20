@@ -163,7 +163,9 @@ class ProjectionBinding:
     Stored as ``jobs[segment_id].projection_binding``. Every sibling names the
     same bounded complete ``segment_ids`` set. Result-log entries additionally
     carry ``previous_segment_id`` (null at the start of an owner log), so
-    projection can preserve the committed capture order under concurrent pumps.
+    projection preserves the committed log order under concurrent pumps. Log
+    order is capture order except where the bounded merge head wait or a late
+    capture appends an earlier capture at the tail (``late_capture``).
     """
 
     owner_id: str

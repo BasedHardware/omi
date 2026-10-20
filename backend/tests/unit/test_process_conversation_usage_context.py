@@ -599,7 +599,7 @@ def _explicit_selection_flow_conversation():
     return completed
 
 
-def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
+def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls, **process_kwargs):
     """Drive process_conversation for an explicit app selection; appends each write to update_calls."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
@@ -614,6 +614,7 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
     monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
     monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
     monkeypatch.setattr(
         process_conversation.conversations_db,
         "update_conversation",
@@ -625,8 +626,7 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
         "en",
         input_conversation,
         trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
-        app_id="selected-app",
-        explicit_app=SimpleNamespace(id="selected-app"),
+        **{"app_id": "selected-app", "explicit_app": SimpleNamespace(id="selected-app"), **process_kwargs},
     )
 
 
@@ -1333,12 +1333,124 @@ def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypa
     with pytest.raises(HTTPException) as exc_info:
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
 
-    assert seen_kwargs[0]['replace_selected_result'] is enabled
+    # Keep-until-replaced is the default for every user reprocess; the flag
+    # selects only the error code.
+    assert seen_kwargs[0]['replace_selected_result'] is True
     if enabled:
         assert exc_info.value.status_code == 502
         assert exc_info.value.detail['code'] == 'app_result_failed'
     else:
         assert exc_info.value.status_code == 500
+
+
+def test_first_party_only_never_runs_or_reads_the_preferred_app():
+    """summary-v2 F3: "Summarize with Omi" must not run the Redis preferred template."""
+    import sys
+
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-omi', conv, is_reprocess=True, replace_selected_result=True, first_party_only=True
+        )
+
+    app_result_mock.assert_not_called()
+    suggestion_mock.assert_not_called()
+    sys.modules["database.redis_db"].get_user_preferred_app.assert_not_called()
+    # Omi becomes the canonical summary for released clients (first non-empty app result wins).
+    assert conv.apps_results == []
+
+
+def test_first_party_only_rejects_an_explicit_app():
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(ValueError):
+            process_conversation.trigger_conversation_apps(
+                'user-omi', conv, app_id=selected.id, explicit_app=selected, first_party_only=True
+            )
+
+
+def test_user_reprocess_forwards_first_party_only(monkeypatch):
+    seen_kwargs: list = []
+
+    def _trigger(uid, conversation, **kwargs):
+        seen_kwargs.append(kwargs)
+
+    _run_explicit_selection_flow(monkeypatch, _trigger, [], app_id=None, explicit_app=None, first_party_only=True)
+
+    assert seen_kwargs[0]['first_party_only'] is True
+    assert seen_kwargs[0]['replace_selected_result'] is True
+
+
+def _goal_submissions():
+    return [
+        call
+        for call in process_conversation.submit_with_context.call_args_list
+        if process_conversation.update_goal_progress in call.args
+    ]
+
+
+def _successful_selected_app(uid, conversation, **kwargs):
+    conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+
+def _unchanged_digest():
+    # The flow's completed conversation is a MagicMock whose transcript iterates empty.
+    return process_conversation.derived_effects_transcript_digest([])
+
+
+def test_template_only_reprocess_keeps_memories_tasks_and_goals(monkeypatch):
+    """summary-v2 F4: another template on an unchanged transcript re-derives nothing."""
+    update_calls: list = []
+    _run_explicit_selection_flow(
+        monkeypatch,
+        _successful_selected_app,
+        update_calls,
+        derived_effects_transcript_sha256=_unchanged_digest(),
+    )
+
+    process_conversation._extract_memories.assert_not_called()
+    process_conversation._save_action_items.assert_not_called()
+    assert _goal_submissions() == []
+    assert not any(process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD in call for call in update_calls)
+
+
+def test_changed_transcript_reprocess_rederives_and_records_the_transcript(monkeypatch):
+    update_calls: list = []
+    _run_explicit_selection_flow(
+        monkeypatch,
+        _successful_selected_app,
+        update_calls,
+        derived_effects_transcript_sha256='digest-of-an-older-transcript',
+    )
+
+    process_conversation._extract_memories.assert_called_once()
+    process_conversation._save_action_items.assert_called_once()
+    assert len(_goal_submissions()) == 1
+    assert {process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD: _unchanged_digest()} in update_calls
+
+
+def test_failed_selected_app_never_rewrites_tasks_or_goal_progress(monkeypatch):
+    """summary-v2 F4: the task delete/replace must not follow a failed template."""
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    update_calls: list = []
+    with pytest.raises(HTTPException):
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
+
+    process_conversation._save_action_items.assert_not_called()
+    assert _goal_submissions() == []
+    assert not any(process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD in call for call in update_calls)
 
 
 def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):

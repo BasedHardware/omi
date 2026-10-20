@@ -25,6 +25,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]  # firestore transactional decorator is untyped
 
+from utils.memory.index_window_cursor import BookmarkDict, decode_cursor, query_scope
+from utils.observability.fallback import record_fallback
+
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from config import firestore_read_levers
 from database import memory_ledger
@@ -408,7 +411,32 @@ def _stream_memory_list_index_window(
     *,
     budget: Optional[ListReadBudget] = None,
     cursor_snapshot: Any = None,
+    uid: Optional[str] = None,
+    cursor: Optional[str] = None,
+    full_documents: bool = False,
 ) -> List[Any]:
+    if uid is not None and cursor is not None and firestore_read_levers.lever_enabled("memory_list_index_window", uid):
+        try:
+            position = decode_cursor(cursor, query_scope({"uid": uid, "order": order_field})) if cursor else None
+        except ValueError:
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        else:
+            query = memories_ref if full_documents else memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS))
+            query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by("__name__")
+            if position is not None:
+                stamp, memory_id = position
+                query = query.start_after(
+                    BookmarkDict({order_field: stamp, "__name__": memories_ref.document(memory_id)})
+                )
+            # The route clamps its requested page to 1..500. No offset or hidden-row slack.
+            return budgeted_stream_list(query.limit(max(1, min(int(candidate_limit), 500))), budget)
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
@@ -528,6 +556,34 @@ def list_memory_updated_or_created_index(
         candidate_docs.extend(window_docs)
     memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
+
+
+def scan_memory_list_index_window(
+    uid: str,
+    *,
+    order_field: str,
+    limit: int,
+    cursor: Optional[str] = None,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[list[dict[str, Any]], list[tuple[datetime, str]], bool]:
+    """Public storage seam for one raw cursor window, preserving exact timestamps."""
+    bounded_limit = max(1, min(int(limit), 500))
+    database = _get_db(firestore_client)
+    collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    docs = _stream_memory_list_index_window(
+        collection, order_field, bounded_limit, uid=uid, cursor=cursor, full_documents=True, budget=budget
+    )
+    payloads = []
+    positions = []
+    for doc in docs:
+        raw = _typed_doc(doc)
+        raw['id'] = doc.id
+        payloads.append(raw)
+        order_raw = raw.get(order_field)
+        order_time = order_raw if isinstance(order_raw, datetime) else datetime.fromtimestamp(0, tz=timezone.utc)
+        positions.append((order_time, doc.id))
+    return payloads, positions, len(docs) < bounded_limit
 
 
 def _fetch_memory_docs_by_ids(

@@ -21,6 +21,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/services/voice_playback/chat_reply_read_aloud.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -324,6 +325,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       String ext = p.extension(file.path).toLowerCase().replaceAll('.', '');
       if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'tiff', 'tif'].contains(ext)) {
         typesToAdd.add('image');
+      } else if (isChatVideo(file.path)) {
+        typesToAdd.add('video');
       } else {
         typesToAdd.add('file');
       }
@@ -397,14 +400,15 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     try {
       List<File> files = [];
 
+      // Photos and videos: a video is sampled on device and read as stills plus its audio.
       List res = [];
       if (4 - selectedFiles.length == 1) {
-        var image = await ImagePicker().pickImage(source: ImageSource.gallery);
-        if (image != null) {
-          res = [image];
+        var media = await ImagePicker().pickMedia();
+        if (media != null) {
+          res = [media];
         }
       } else {
-        res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+        res = await ImagePicker().pickMultipleMedia(limit: 4 - selectedFiles.length);
       }
 
       for (var r in res) {
@@ -413,7 +417,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
       if (files.isNotEmpty) {
         selectedFiles.addAll(files);
-        selectedFileTypes.addAll(files.map((e) => 'image'));
+        selectedFileTypes.addAll(files.map((e) => isChatVideo(e.path) ? 'video' : 'image'));
         await uploadFiles(files, appProvider?.selectedChatAppId);
       }
       notifyListeners();
@@ -445,7 +449,21 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       var res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowMultiple: true,
-        allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
+        allowedExtensions: [
+          'jpeg',
+          'md',
+          'pdf',
+          'gif',
+          'doc',
+          'png',
+          'pptx',
+          'txt',
+          'xlsx',
+          'webp',
+          'mp4',
+          'mov',
+          'm4v'
+        ],
         dialogTitle: l10n?.chooseFile ?? 'Select files',
         withData: false,
         withReadStream: false,
@@ -461,7 +479,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
         if (files.isNotEmpty) {
           selectedFiles.addAll(files);
-          selectedFileTypes.addAll(files.map((e) => 'file'));
+          selectedFileTypes.addAll(files.map((e) => isChatVideo(e.path) ? 'video' : 'file'));
           await uploadFiles(files, appProvider?.selectedChatAppId);
         }
         notifyListeners();

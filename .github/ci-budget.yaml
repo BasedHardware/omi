@@ -491,13 +491,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -509,13 +509,13 @@
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -527,13 +527,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -975,11 +975,33 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend.yml/build-image": {
+      "budget_p50_minutes": 5,
+      "display_name": "build-image",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "always() && !cancelled() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'build-only' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
       "matrix": {},
       "matrix_size": 1,
@@ -989,7 +1011,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1001,13 +1023,13 @@
       "budget_p50_minutes": 5,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy'",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main' && (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1019,13 +1041,13 @@
       "budget_p50_minutes": 5,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "${{ needs.firestore_readiness.outputs.break_glass == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1037,13 +1059,13 @@
       "budget_p50_minutes": 5,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'repair-traffic-only'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1055,13 +1077,13 @@
       "budget_p50_minutes": 5,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.event.inputs.mode == 'deploy'",
+      "expected_runs_per_day": 1,
+      "if": "github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2849,7 +2871,7 @@
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
+      "rationale": "Also triggers on web/packages/note-shared/** and contracts/note_citation_contract.json: the Windows renderer bundles @omi/note-shared from source, so its typecheck and tests must run when the package or its contract changes. Earlier: the workflow already triggered for desktop_windows_release.yml.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -2857,6 +2879,8 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]
@@ -2867,6 +2891,8 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]
@@ -3440,7 +3466,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3485,6 +3511,7 @@
               "description": "Workflow mode",
               "options": [
                 "deploy",
+                "build-only",
                 "repair-traffic-only"
               ],
               "required": "true",
@@ -3492,7 +3519,7 @@
             },
             "release_sha": {
               "default": "",
-              "description": "Exact main SHA with a successful Release Eligibility proof (deploy mode only)",
+              "description": "Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)",
               "required": "false"
             },
             "release_version": {

@@ -77,7 +77,7 @@ void main() {
     final calls = <String>[];
     final detail = _detail(
       _conversation(),
-      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
         calls.add(id);
         return gate.future;
       }),

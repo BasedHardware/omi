@@ -76,11 +76,9 @@ class ResultLog:
         }
 
     # --- FirestoreStore facade --------------------------------------------
-    def projection_page(self, limit=100, *, after=None):
+    def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready')):
         rows = sorted(
-            (row['committed_at'], sid)
-            for sid, row in self.results.items()
-            if row['projection_state'] in {'pending', 'persisted', 'ready'}
+            (row['committed_at'], sid) for sid, row in self.results.items() if row['projection_state'] in states
         )
         if after is not None:
             rows = [row for row in rows if row > after]
@@ -158,6 +156,8 @@ def advisory_claim(monkeypatch):
     monkeypatch.setattr(projection_followup, 'projection_claim', claim)
     monkeypatch.delenv('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', raising=False)
 
 
 def projector_for(log):
@@ -432,17 +432,21 @@ def backlog_log():
     return log, backlog + ['r']
 
 
-async def passes_until_recovered_followup(monkeypatch, *, owner_chain):
+async def passes_until_recovered_followup(monkeypatch, *, owner_chain, sweep_chain=False):
     """Count serving passes until R is persisted and its follow-up has started.
 
     Each pass is one ``reconcile_async``; the first is the recover-quarantine
     handler's own pass. Follow-ups take longer than a pass to finish, and a
-    pass releases the previous pass's follow-ups first.
+    pass releases the previous pass's follow-ups first. ``sweep_chain`` drives
+    the sweep's own owner-chain continuation and pending-only assignment page.
     """
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED', str(owner_chain).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', str(sweep_chain).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', str(sweep_chain).lower())
     log, burst = backlog_log()
     projector = projector_for(log)
-    projector.discovery.after = (log.results['x-0']['committed_at'], 'x-0')
+    cursor = (log.results['x-0']['committed_at'], 'x-0')
+    projector.discovery.after = projector.assignment_discovery.after = cursor
     service = Serving(MemoryStore(), projector=projector)
     started, gates, stopping = [], [], []
 
@@ -488,3 +492,30 @@ async def test_recovered_tail_unit_projects_in_the_recovery_pass(monkeypatch):
     # of other owners' receipts, four slots at a time, ahead of R.
     assert without_chain >= 30  # 36 for this deterministic shape
     assert blocked_without > 0
+
+
+@pytest.mark.parametrize('sweep_chain', [True, False])
+def test_sweep_chain_persists_backlog_in_the_pass_that_reaches_its_head(monkeypatch, sweep_chain):
+    """Without the recovery wake, the sweep itself walks the owner's chain.
+
+    The assignment cursor sits past the head, so the first pass sees only
+    blocked successors and wraps; the next pass reaches the head and, with the
+    continuation, persists the whole chain in that same pass.
+    """
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', str(sweep_chain).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', str(sweep_chain).lower())
+    # The sweep's own walk; test_batch_pipeline_owner_drain.py covers the drain.
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    log, burst = backlog_log()
+    projector = projector_for(log)
+    cursor = (log.results['x-0']['committed_at'], 'x-0')
+    projector.discovery.after = projector.assignment_discovery.after = cursor
+    passes = 0
+    while not log.persisted(BURST):
+        passes += 1
+        assert passes < 200
+        projector.sweep()
+    assert log.persist_order == burst
+    # The first pass is all blocked successors either way; the continuation
+    # saves the two further passes the replay-filled mixed page needs.
+    assert (passes, log.blocked_checks) == ((2, 21) if sweep_chain else (4, 21))

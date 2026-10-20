@@ -299,6 +299,11 @@ def baseline_module(monkeypatch):
         capture_output=True,
         text=True,
     ).stdout
+    # The retired rollout reader is gone; compare the historical ON path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('owner_retry_funnel_baseline')
     monkeypatch.setitem(sys.modules, module.__name__, module)
     exec(compile(source, 'baseline_speaker_resolution.py', 'exec'), module.__dict__)

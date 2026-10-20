@@ -770,6 +770,7 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required String fileFieldName,
   required String method,
   Future<void>? abortTrigger,
+  Map<String, File> namedFiles = const {},
 }) async {
   // Abortable when a trigger is supplied: an abandoned POST (setup deadline
   // expired) must not keep running server-side, or a user retry submits the
@@ -786,6 +787,11 @@ Future<http.MultipartRequest> _buildMultipartRequest({
     var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
+  for (var entry in namedFiles.entries) {
+    var length = await entry.value.length();
+    var stream = http.ByteStream(entry.value.openRead());
+    request.files.add(http.MultipartFile(entry.key, stream, length, filename: basename(entry.value.path)));
+  }
 
   return request;
 }
@@ -800,6 +806,7 @@ Future<http.Response> makeMultipartApiCall({
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
+  Map<String, File> namedFiles = const {},
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -817,6 +824,7 @@ Future<http.Response> makeMultipartApiCall({
       fields: fields,
       fileFieldName: fileFieldName,
       method: method,
+      namedFiles: namedFiles,
     );
 
     var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
@@ -836,6 +844,7 @@ Future<http.Response> makeMultipartApiCall({
             fields: fields,
             fileFieldName: fileFieldName,
             method: method,
+            namedFiles: namedFiles,
           );
           streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
           return http.Response.fromStream(streamedResponse);

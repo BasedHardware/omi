@@ -1,10 +1,8 @@
-import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from routers.listen.receiver import ListenReceiver, STTService
-from utils.stt import soniox as soniox_module
 from utils.stt.brand_terms import normalize_brand_segments, normalize_brand_terms
 from utils.stt.pre_recorded import _segments_as_objects
 from utils.stt.recovery_state import LiveRecoveryController
@@ -95,32 +93,8 @@ def test_prerecorded_segments_normalize_after_capitalize():
     assert result[0].text == 'We use Omi daily'
 
 
-@pytest.mark.parametrize(('flag', 'expected'), [(None, None), ('false', None), ('true', ['Omi', 'omi.me'])])
-async def test_soniox_context_terms_are_gated_and_sanitized(monkeypatch, flag, expected):
-    ws = AsyncMock()
-    connect = AsyncMock(return_value=ws)
-    socket_ctor = MagicMock()
-    monkeypatch.setattr(soniox_module.websockets, 'connect', connect)
-    monkeypatch.setattr(soniox_module, 'SafeSonioxSocket', socket_ctor)
-    monkeypatch.setenv('SONIOX_API_KEY', 'test-key')
-    if flag is None:
-        monkeypatch.delenv('SONIOX_CONTEXT_TERMS', raising=False)
-    else:
-        monkeypatch.setenv('SONIOX_CONTEXT_TERMS', flag)
-
-    await soniox_module.process_audio_soniox(
-        lambda _segments: None,
-        16000,
-        'en',
-        keywords=[' Omi ', 'Omi', '', 'omi.me', 'x' * 51],
-    )
-
-    config = json.loads(ws.send.await_args.args[0])
-    assert config.get('context', {}).get('terms') == expected
-
-
 @pytest.mark.parametrize('same_provider', [False, True])
-async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_provider):
+async def test_legacy_receiver_keeps_vocabulary_off_soniox(monkeypatch, same_provider):
     receiver = object.__new__(ListenReceiver)
     receiver.soniox_idle_budget = SonioxIdleBudget()
     receiver.host = MagicMock()
@@ -144,5 +118,5 @@ async def test_legacy_receiver_passes_vocabulary_to_soniox(monkeypatch, same_pro
 
     await receiver._create_stt_socket(lambda _segments: None, 16000, same_provider=same_provider)
 
-    assert process_audio.await_args.kwargs['keywords'] == ['Omi', 'omi.me']
+    assert 'keywords' not in process_audio.await_args.kwargs
     assert process_audio.await_args.kwargs['idle_budget'] is receiver.soniox_idle_budget

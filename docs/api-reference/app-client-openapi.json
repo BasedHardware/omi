@@ -5272,6 +5272,57 @@
         "title": "Body_upload_profile_v3_upload_audio_post",
         "type": "object"
       },
+      "Body_upload_video_frames_chat_v2_files_video_post": {
+        "properties": {
+          "audio": {
+            "anyOf": [
+              {
+                "format": "binary",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The clip's audio track (m4a/aac/ogg), for its transcript.",
+            "title": "Audio"
+          },
+          "duration_seconds": {
+            "maximum": 36000.0,
+            "minimum": 0.0,
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "frame_times": {
+            "description": "JSON array of each frame's time in seconds.",
+            "maxLength": 4096,
+            "title": "Frame Times",
+            "type": "string"
+          },
+          "frames": {
+            "description": "JPEG or PNG stills sampled from the clip, in time order (at most 48).",
+            "items": {
+              "format": "binary",
+              "type": "string"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "name": {
+            "default": "video.mov",
+            "maxLength": 255,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "frames",
+          "frame_times",
+          "duration_seconds"
+        ],
+        "title": "Body_upload_video_frames_chat_v2_files_video_post",
+        "type": "object"
+      },
       "BudgetChoiceRecord": {
         "additionalProperties": false,
         "properties": {
@@ -7759,6 +7810,59 @@
           "state"
         ],
         "title": "ChatEvidenceReference",
+        "type": "object"
+      },
+      "ChatFileVideo": {
+        "description": "A video attachment stored as stills (utils.media.video_frames); the clip itself is not kept.\n\nThe FileChat's own file is the overview contact sheet. The filmstrip holds every sampled\nframe for closer looks at a time window. ``transcript`` is encrypted at rest like chat text.",
+        "properties": {
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "frame_times": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Frame Times",
+            "type": "array"
+          },
+          "strip_cell_height": {
+            "default": 0,
+            "title": "Strip Cell Height",
+            "type": "integer"
+          },
+          "strip_cell_width": {
+            "default": 0,
+            "title": "Strip Cell Width",
+            "type": "integer"
+          },
+          "strip_columns": {
+            "default": 0,
+            "title": "Strip Columns",
+            "type": "integer"
+          },
+          "strip_file_id": {
+            "default": "",
+            "title": "Strip File Id",
+            "type": "string"
+          },
+          "strip_times": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Strip Times",
+            "type": "array"
+          },
+          "transcript": {
+            "default": "",
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "duration_seconds"
+        ],
+        "title": "ChatFileVideo",
         "type": "object"
       },
       "ChatFirstSubject": {
@@ -16081,6 +16185,16 @@
             ],
             "default": "",
             "title": "Thumbnail"
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFileVideo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -49493,7 +49607,7 @@
     },
     "/v1/conversations/{conversation_id}/reprocess": {
       "post": {
-        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:return: The updated conversation after reprocessing.",
+        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested\n    app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).\n:return: The updated conversation after reprocessing.",
         "operationId": "reprocess_conversation_v1_conversations__conversation_id__reprocess_post",
         "parameters": [
           {
@@ -49535,6 +49649,23 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "omi",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -49586,7 +49717,7 @@
             "description": "Successful Response"
           },
           "400": {
-            "description": "The selected app cannot summarize conversations"
+            "description": "The selected app cannot summarize conversations, or app_id was combined with source=omi"
           },
           "401": {
             "$ref": "#/components/responses/Error401"
@@ -74998,6 +75129,82 @@
       }
     },
     "/v1/users/preferences/app": {
+      "delete": {
+        "description": "Clears the user's preferred app: future processing uses Omi's own summary. Idempotent.",
+        "operationId": "clear_preferred_app_for_user_v1_users_preferences_app_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Clear Preferred App For User",
+        "tags": [
+          "v1"
+        ]
+      },
       "put": {
         "description": "Sets the user's preferred app for future processing.",
         "operationId": "set_preferred_app_for_user_v1_users_preferences_app_put",
@@ -79199,6 +79406,98 @@
           }
         ],
         "summary": "Upload File Chat",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/v2/files/video": {
+      "post": {
+        "description": "A video the client sampled on device: stills (and audio) instead of the whole clip.\n\nSame result as uploading the clip to /v2/files: one chat file whose image is a numbered\ncontact sheet of the clip's most distinct frames.",
+        "operationId": "upload_video_frames_chat_v2_files_video_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_video_frames_chat_v2_files_video_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FileChat"
+                  },
+                  "title": "Response Upload Video Frames Chat V2 Files Video Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Video Frames Chat",
         "tags": [
           "chat"
         ]

@@ -203,6 +203,7 @@ def test_canary_recovery_success_keeps_real_words(setup, monkeypatch, legacy_dep
         == 'recovered'
     )
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
 
 
@@ -517,5 +518,29 @@ def test_skipped_oversized_padded_retry_still_recovers_when_multilingual_succeed
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert row(client)['state'] == 'result_ready'
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
     legacy.assert_not_called()
+
+
+@pytest.mark.parametrize('empty', [True, False])
+def test_paid_epoch_meters_cap_audio_only_for_recognized_speech(setup, monkeypatch, legacy_dependencies, empty):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import speech_redrive
+
+    client, store, binding, artifacts, _, alternate, old = terminal_setup(setup, monkeypatch, legacy_dependencies)
+    if not empty:
+        alternate.return_value = ([{'text': 'Synthetic.', 'timestamp': [1, 2], 'speaker': 'SPEAKER_00'}], 'vi')
+    monkeypatch.setattr(speech_redrive, 'sync_allowed', lambda *args, **kwargs: True)
+    monkeypatch.setattr(speech_redrive, 'cap_enabled', lambda uid, lane: True)
+    monkeypatch.setattr(speech_redrive, 'funded_allowance', lambda *args, **kwargs: SimpleNamespace(reason='managed'))
+    meter = Mock()
+    monkeypatch.setattr(speech_redrive, 'record_audio', meter)
+    assert (
+        speech_redrive.redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100)
+        == 'recovered'
+    )
+    assert row(client)['result']['outcome'] == ('no_recoverable_speech' if empty else 'success')
+    # A terminal-empty span meters zero speech, matching the automatic recovery path.
+    assert meter.call_count == int(not empty)
+    alternate.assert_called_once()

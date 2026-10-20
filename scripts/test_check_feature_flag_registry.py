@@ -44,6 +44,17 @@ def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]
     return entry
 
 
+def ramp_plan(**overrides: object) -> dict[str, object]:
+    ramp: dict[str, object] = {
+        "cohorts": ["release-probe", "1%", "5% 3h", "25%", "100%"],
+        "clean_metric": "checkout_error_rate",
+        "expander": "release-owner session",
+        "done_by": "2026-11-20",
+    }
+    ramp.update(overrides)
+    return ramp
+
+
 class RegistryFixture(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="omi-flag-registry-")
@@ -85,6 +96,15 @@ class RegistryFixture(unittest.TestCase):
 
     def errors(self) -> list[str]:
         return check(self.root, check_render=False)[0]
+
+    def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
+        self.write("backend/docs/experiment.md", "Pre-registered readout")
+        row = flag(lifecycle="experiment", decision="kill_after_readout", terminal="undecided",
+                   review_by="2026-10-30", prereg="backend/docs/experiment.md")
+        self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
+        for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
+            errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
+            self.assertTrue(any("kill_after_readout requires" in error for error in errors))
 
     def test_finds_literal_and_module_constant_env_reads_with_locations(self) -> None:
         self.write(
@@ -229,6 +249,66 @@ class RegistryFixture(unittest.TestCase):
         errors = "\n".join(validate_registry({"flags": [wrong_switch], "ignore": [], "retired": []}, root=self.root))
         self.assertIn("ops_kill terminal must be keep", errors)
 
+    def test_post_cutoff_pending_rollout_accepts_complete_ramp_and_render_shows_it(self) -> None:
+        entry = flag(
+            created="2026-10-21",
+            review_by="2026-11-30",
+            terminal="undecided",
+            ramp=ramp_plan(),
+        )
+        self.write("config/feature-flags.yaml", self.yaml([entry]))
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 21))
+        self.assertEqual(errors, [])
+        output = render(self.root, {"flags": [entry], "ignore": [], "retired": []}, date(2026, 10, 21))
+        self.assertIn(
+            "| `EXAMPLE_ENABLED` | release-probe → 1% → 5% 3h → 25% → 100% | "
+            "checkout_error_rate | release-owner session | 2026-11-20 |",
+            output,
+        )
+
+    def test_post_cutoff_pending_rollout_requires_ramp(self) -> None:
+        entry = flag(created="2026-10-21", terminal="undecided")
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("ramp is required", errors)
+
+    def test_ramp_requires_all_fields(self) -> None:
+        entry = flag(
+            created="2026-10-21",
+            review_by="2026-11-30",
+            terminal="undecided",
+            ramp=ramp_plan(expander=""),
+        )
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("ramp.expander is required", errors)
+
+    def test_ramp_done_by_cannot_exceed_review_by(self) -> None:
+        entry = flag(
+            created="2026-10-21",
+            review_by="2026-11-19",
+            terminal="undecided",
+            ramp=ramp_plan(done_by="2026-11-20"),
+        )
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("ramp.done_by must be on or before review_by", errors)
+
+    def test_single_user_ramp_terminal_step_is_rejected(self) -> None:
+        for final_step in ("David-only", "single user"):
+            with self.subTest(final_step=final_step):
+                entry = flag(
+                    created="2026-10-21",
+                    review_by="2026-11-30",
+                    terminal="undecided",
+                    ramp=ramp_plan(cohorts=["release-probe", final_step]),
+                )
+                errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+                self.assertIn("terminal step must not be single-user", errors)
+
+    def test_pre_cutoff_pending_rollout_is_grandfathered_with_warning_count(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag()]))
+        errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 20))
+        self.assertEqual(errors, [])
+        self.assertTrue(any("WARNING: 1 grandfathered pending/undecided rollout rows lack ramp" in w for w in warnings))
+
     def test_rollout_and_experiment_owners_cannot_be_unowned(self) -> None:
         entry = flag(owner="unowned")
         errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
@@ -259,7 +339,7 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(review_by="2026-10-13")]))
         errors, warnings = check(self.root, check_render=False, as_of=date(2026, 10, 20))
         self.assertEqual(errors, [])
-        self.assertIn("within the 7-day grace: EXAMPLE_ENABLED (review_by 2026-10-13)", warnings[0])
+        self.assertTrue(any("within the 7-day grace: EXAMPLE_ENABLED (review_by 2026-10-13)" in w for w in warnings))
         errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 21))
         self.assertIn("review overdue beyond the 7-day grace: EXAMPLE_ENABLED", "\n".join(errors))
 

@@ -9,6 +9,11 @@ from fastapi.testclient import TestClient
 
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.other import endpoints as real_auth
+from database import budget_choice as real_choices
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+_get_choice = real_choices.get_choice
+_set_choice = real_choices.set_choice
 
 
 @pytest.fixture(scope='module')
@@ -209,3 +214,85 @@ def test_budget_choice_rate_ceiling_is_boost_exempt(monkeypatch):
     monkeypatch.setattr(rate_limit_config, 'RATE_LIMIT_BOOST', 100.0)
     assert 'users:budget_choice' in rate_limit_config.BOOST_EXEMPT_POLICIES
     assert rate_limit_config.get_effective_limit('users:budget_choice') == (6, 60)
+
+
+@pytest.fixture
+def stored_api(api, monkeypatch):
+    """Exercise HTTP serialization and the production choice transaction together."""
+    client, route = api
+    db = StrictFirestore()
+    clock = SimpleNamespace(period='2026-10')
+    monkeypatch.setenv('HELD_CONTENT_ENABLED', 'true')
+    monkeypatch.setattr(route, 'budget_period', lambda: clock.period)
+    monkeypatch.setattr(real_choices, 'budget_period', lambda: clock.period)
+    monkeypatch.setattr(
+        route.choices_db, 'get_choice', lambda uid, period: _get_choice(uid, period, firestore_client=db)
+    )
+    monkeypatch.setattr(
+        route.choices_db,
+        'set_choice',
+        lambda uid, period, choice, dont_ask: _set_choice(uid, period, choice, dont_ask, firestore_client=db),
+    )
+    return client, route, db, clock
+
+
+@pytest.mark.parametrize('choice', ['on_device', 'upgrade'])
+def test_choice_round_trip_replay_and_funded_resume_with_real_store(stored_api, monkeypatch, choice):
+    client, route, db, clock = stored_api
+    headers = {'X-Omi-Held-Content': '1'}
+    body = {'period': clock.period, 'choice': choice, 'dont_ask_again': True}
+    for _ in range(2):
+        written = client.put('/v1/users/budget-choice', headers=headers, json=body)
+        assert written.status_code == 200 and written.json()['choice'] == body
+    response = client.get('/v1/users/budget-choice', headers=headers).json()
+    assert response == {
+        'period': clock.period,
+        'state': 'on_device' if choice == 'on_device' else 'held_pending_choice',
+        'choice': body,
+        'ask': False,
+    }
+    # Choice persistence cannot create processing consent, audio, or quota rows.
+    assert set(db.rows) == {('users', 'synthetic-test-user', 'budget_choice', 'current')}
+    assert [len(tx.sets) for tx in db.transactions] == [1, 0]
+    monkeypatch.setattr(
+        route,
+        'resolve_transcription_allowance',
+        lambda *args: SimpleNamespace(managed=True, reason='plan_within_allowance'),
+    )
+    response = client.get('/v1/users/budget-choice', headers=headers).json()
+    assert response['state'] == 'managed' and response['ask'] is False
+    assert response['choice'] == body
+
+
+def test_new_month_expires_dont_ask_and_rejects_stale_replay(stored_api):
+    client, route, db, clock = stored_api
+    headers = {'X-Omi-Held-Content': '1'}
+    body = {'period': clock.period, 'choice': 'on_device', 'dont_ask_again': True}
+    assert client.put('/v1/users/budget-choice', headers=headers, json=body).status_code == 200
+    clock.period = '2026-11'
+    response = client.get('/v1/users/budget-choice', headers=headers).json()
+    assert response == {'period': '2026-11', 'state': 'held_pending_choice', 'choice': None, 'ask': True}
+    stale = client.put('/v1/users/budget-choice', headers=headers, json=body)
+    assert stale.status_code == 409 and stale.json()['detail'] == 'budget_period_changed'
+    body.update(period=clock.period, choice='upgrade', dont_ask_again=False)
+    assert client.put('/v1/users/budget-choice', headers=headers, json=body).status_code == 200
+    assert _get_choice('synthetic-test-user', clock.period, firestore_client=db) == body
+
+
+@pytest.mark.parametrize('existing', [False, True])
+def test_rollover_during_allowance_read_rejects_choice_without_mutation(stored_api, monkeypatch, existing):
+    client, route, db, clock = stored_api
+    headers = {'X-Omi-Held-Content': '1'}
+    body = {'period': clock.period, 'choice': 'on_device'}
+    if existing:
+        assert client.put('/v1/users/budget-choice', headers=headers, json=body).status_code == 200
+    before = dict(db.rows)
+
+    def delayed_allowance(*args):
+        clock.period = '2026-11'
+        return SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+
+    monkeypatch.setattr(route, 'resolve_transcription_allowance', delayed_allowance)
+    response = client.put('/v1/users/budget-choice', headers=headers, json=body)
+    assert response.status_code == 409 and response.json()['detail'] == 'budget_period_changed'
+    assert db.rows == before

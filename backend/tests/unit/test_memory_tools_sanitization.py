@@ -124,6 +124,9 @@ def test_unexpected_exception_in_search_memories_tool_is_sanitized(mt, caplog):
     error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(error_records) == 1
     assert error_records[0].exc_info[0] is RuntimeError
+    # The exception text can carry provider keys and user content; the log line
+    # keeps the type only.
+    assert _SENSITIVE not in error_records[0].getMessage()
 
 
 def test_traceback_print_exc_not_called_in_search_memories_tool(mt):

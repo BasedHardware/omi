@@ -12,7 +12,6 @@ import uuid
 from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
-from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
@@ -158,6 +157,7 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_close import note_ws_close
 from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
     emit_listen_vad_gate_metrics,
@@ -1009,7 +1009,6 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
                     idle_budget=self.soniox_idle_budget,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
@@ -1035,7 +1034,6 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
-                    keywords=keywords,
                     idle_budget=self.soniox_idle_budget,
                 ),
                 connect_modulate=(
@@ -1905,6 +1903,10 @@ class ListenReceiver(ReplayFilterMixin):
         if admission is not None and not admission.packet_allowed(
             buffer, self.host.stt_service, self.host.request.sample_rate
         ):
+            held_seconds = len(buffer) / (2 * self.host.request.sample_rate)
+            # Stamp the receipt span before awaiting custody, so a concurrent usage
+            # flush already sees this audio as held rather than billing it.
+            admission.note_held(self.host.state.last_audio_received_time or time.time(), held_seconds)
             hold = getattr(self, 'live_hold', None)
             if hold is not None and buffer:
                 start = self._stt_buffer_start_sample
@@ -1920,13 +1922,7 @@ class ListenReceiver(ReplayFilterMixin):
                     await hold.append_async(
                         bytes(buffer), self.host.request.sample_rate, timestamp, self.host.state.current_conversation_id
                     )
-            record_cap_audio(
-                'live',
-                'suppressed',
-                self.host.stt_service,
-                len(buffer) / (2 * self.host.request.sample_rate),
-                admission.reason == 'plan_allowance_exhausted',
-            )
+            admission.record_suppressed(self.host.stt_service, held_seconds)
             buffer.clear()
             self._stt_buffer_start_sample = None
             await self._emit_stt_cap_live_held()
@@ -2171,14 +2167,11 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm, self.host.stt_service, TARGET_SAMPLE_RATE
             )
             suppressed = denied or should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
-            if denied:
-                record_cap_audio(
-                    'live',
-                    'suppressed',
-                    self.host.stt_service,
-                    len(pcm) / (2 * TARGET_SAMPLE_RATE),
-                    admission is not None and admission.reason == 'plan_allowance_exhausted',
-                )
+            if denied and admission is not None:
+                admission.record_suppressed(self.host.stt_service, len(pcm) / (2 * TARGET_SAMPLE_RATE))
+            if suppressed and admission is not None:
+                # Both denials happen at receipt, so this frame's wall span is held.
+                admission.note_held(now, len(pcm) / (2 * TARGET_SAMPLE_RATE))
             if suppressed:
                 hold = getattr(self, 'live_hold', None)
                 if hold is not None:
@@ -2286,14 +2279,14 @@ class ListenReceiver(ReplayFilterMixin):
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()
-            if config.shadow_enabled or config.gate_enabled:
-                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+            if config.gate_enabled:
+                if self.translation_demand.observe(payload):
                     if self._translation_expiry_task is not None:
                         self._translation_expiry_task.cancel()
-                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    snapshot = self.translation_demand.snapshot()
                     get_translation_metrics().demand(
                         snapshot.policy.value,
-                        'enforced' if config.gate_enabled else 'shadow',
+                        'enforced',
                         self._telemetry_platform(),
                     )
                     if snapshot.expires_at is not None:
@@ -2327,10 +2320,9 @@ class ListenReceiver(ReplayFilterMixin):
     async def _expire_translation_demand(self, expires_at: float) -> None:
         interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
         if not interrupted and self.host.transcripts is not None:
-            config = resolve_ondemand_config()
             get_translation_metrics().demand(
-                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
-                'enforced' if config.gate_enabled else 'shadow',
+                self.translation_demand.snapshot().policy.value,
+                'enforced',
                 self._telemetry_platform(),
             )
             coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
@@ -2408,6 +2400,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self.host.state.last_activity_time = time.time()
                 if message.get('type') == 'websocket.disconnect':
                     self.host.state.close_code = message.get('code', 1000)
+                    note_ws_close(self.host.state, 'client', self.host.state.close_code)
                     if self.recovery is not None:
                         self.client_closing = True
                         if self.shutdown_deadline is None:
@@ -2521,8 +2514,8 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.audio_bytes_send(decoded, now)
                 elif message.get('text') is not None:
                     await self._handle_text(message['text'])
-        except WebSocketDisconnect:
-            pass
+        except WebSocketDisconnect as error:
+            note_ws_close(self.host.state, 'client', error.code)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
