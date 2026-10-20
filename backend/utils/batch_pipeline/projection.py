@@ -694,13 +694,14 @@ class Projector:
         chain = sweep_owner_chain_enabled()
         discovery = self.assignment_discovery if pending_page else self.discovery
         # At most one walk per owner per sweep. Page rows a walk already
-        # persisted are skipped unread; every other row is attempted as before.
+        # persisted are skipped unread and left out of ``counts``: the
+        # sweep_chain summary owns them. Every other row is attempted as before.
         walked: set[str] = set()
         chained: set[str] = set()
-        chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
+        # The shared budget starts with the first walk, not the page.
+        chain_deadline: float | None = None
         for segment_id in discovery.next(limit=size):
             if segment_id in chained:
-                counts['waiting'] += 1
                 continue
             try:
                 job, entry, binding = self.store.read(segment_id)
@@ -727,16 +728,22 @@ class Projector:
                 # the owner's chain now instead of waiting for the cursor to
                 # wrap. Each row still takes the owner claim and predecessor
                 # fence one at a time; nothing runs concurrently per owner.
+                if chain_deadline is None:
+                    chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
                 remaining = chain_deadline - time.monotonic()
                 if remaining > 0:
                     walked.add(binding.owner_id)
                     try:
-                        _, advanced = self._walk_owner(
+                        followups, advanced = self._walk_owner(
                             binding.owner_id,
                             recovered=None,
                             limit=OWNER_CHAIN_LIMIT,
                             budget_seconds=min(OWNER_CHAIN_SECONDS, remaining),
                         )
+                        # Walked async rows are owed follow-ups even when no
+                        # other async row is on either page this pass.
+                        if followups:
+                            self.has_async_followups = True
                         chained.update(advanced)
                     except Exception as error:
                         logger.error(
@@ -775,10 +782,10 @@ class Projector:
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                contention = contention or policy.projection_contention
                 if policy.async_projection:
                     self.has_async_followups = True
                     continue
-                contention = contention or policy.projection_contention
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
             except (ProjectionBlocked, BatchPrivacyBlocked):

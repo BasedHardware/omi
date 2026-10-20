@@ -133,7 +133,7 @@ class SyncAssignmentClock:
             int(commit_ms),
             int(retry_ms),
             int(self.ms['index']),
-            min(self.donors, 1000),
+            self.donors,
             int((time.monotonic() - self.started) * 1000),
             f' exception_type={exception_type}' if exception_type else '',
         )

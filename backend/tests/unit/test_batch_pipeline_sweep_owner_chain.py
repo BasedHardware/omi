@@ -96,8 +96,8 @@ def test_owner_backlog_drains_in_one_sweep_pass_up_to_the_chain_limit(monkeypatc
     # The page reached the head; the continuation walked 64 more rows in order.
     assert log.persist_order == ids[: 1 + projection.OWNER_CHAIN_LIMIT]
     assert log.blocked_checks == 0
-    # Page rows the walk persisted are not re-read or re-attempted.
-    assert counts == {'completed': 0, 'waiting': 5, 'blocked': 0, 'error': 0}
+    # Page rows the walk persisted are not re-read, re-attempted or counted.
+    assert counts == {'completed': 0, 'waiting': 1, 'blocked': 0, 'error': 0}
     assert claims.max_depth == 1
 
 
@@ -160,7 +160,53 @@ def test_walk_stopped_by_its_row_limit_leaves_later_page_rows_to_the_page(monkey
     # Head by the page, two by the walk, the rest in page order; one walk only.
     assert log.persist_order == ids
     assert walk.call_count == 1
-    assert counts['waiting'] == 6 and log.blocked_checks == 0
+    assert counts['waiting'] == 4 and log.blocked_checks == 0
+
+
+def test_walk_budget_starts_at_the_first_walk_not_the_page(monkeypatch):
+    log = ResultLog(async_projection=False)
+    ids = chain(log, BURST, 'a', 4)
+    now = [0.0]
+    monkeypatch.setattr(projection.time, 'monotonic', lambda: now[0])
+    projector = projector_for(log)
+    finished = []
+
+    def slow_finish(segment_id, *_):
+        finished.append(segment_id)
+        if len(finished) == 1:
+            now[0] += projection.OWNER_CHAIN_SECONDS + 10  # the head itself is slow
+
+    projector._finish = Mock(side_effect=slow_finish)
+    projector.sweep()
+    assert log.persist_order == ids
+    # Assignment pass in chain order; the finish page then retries the
+    # still-persisted synchronous receipts (this mock never marks them ready).
+    assert finished == ids + ids
+
+
+def test_walked_async_tail_behind_a_sync_head_keeps_followups_scheduled(monkeypatch):
+    log = ResultLog(async_projection=False)
+    log.commit(BURST, 'h', 'head', ['head'])
+    async_policy = projection.ProjectionPolicy(async_projection=True).to_dict()
+    tails = chain(log, BURST, 'a', 3)
+    for sid in tails:
+        log.jobs[sid]['policy_parts'] = {'projection': async_policy}
+    projector = projector_for(log)
+    projector._finish = Mock(return_value=None)
+    # The finish cursor already sits past the tails the walk will persist.
+    projector.finish_discovery.after = (log.clock + 1, 'zz')
+    projector.sweep(limit=1)
+    assert log.persist_order == ['head', *tails]
+    assert projector.has_async_followups
+
+
+def test_finish_page_contention_on_async_receipts_still_logs_the_summary(monkeypatch, caplog):
+    log = ResultLog()
+    log.policy = projection.ProjectionPolicy(async_projection=True, projection_contention=True).to_dict()
+    log.commit('other', 'o', 'o-0', ['o-0'], state='persisted')
+    with caplog.at_level('INFO', logger=projection.logger.name):
+        projector_for(log).sweep()
+    assert any('action=sweep outcome=summary' in record.getMessage() for record in caplog.records)
 
 
 def test_busy_owner_claim_blocks_the_row_and_starts_no_walk(monkeypatch, claims):

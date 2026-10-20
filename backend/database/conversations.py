@@ -4205,9 +4205,6 @@ def assign_sync_conversation(
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
-    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        with clock.timed('live_overlap'):
-            live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
 
     score_snapshots: dict = {}
 
@@ -4270,6 +4267,9 @@ def assign_sync_conversation(
         return planned
 
     with clock.call():
+        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+            with clock.timed('live_overlap'):
+                live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
         with clock.timed('transaction'):
             result = run_with_size_limit_backstop(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),

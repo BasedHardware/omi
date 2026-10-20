@@ -206,3 +206,46 @@ def test_timing_reports_bounded_error_and_off_is_silent(sdk_assignment, caplog):
     with caplog.at_level('INFO', logger=conversations_db.logger.name):
         persist(store)
     assert timing_lines(caplog) == []
+
+
+def test_timing_plan_excludes_nested_encode_and_counts_donors(sdk_assignment, monkeypatch, caplog):
+    import time as real_time
+
+    store, _ = sdk_assignment()
+
+    def body(transaction, user_ref, incoming, **kwargs):
+        real_time.sleep(0.01)
+        kwargs['encode']({'id': 'canonical'})
+        merged = {**incoming, 'sync_merged_from': ['d1', 'd2']}
+        transaction.set(store.doc_ref, merged)
+        return merged, True, merged['transcript_segments']
+
+    monkeypatch.setattr(assignment, 'assign_in_transaction', body)
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: None)
+    monkeypatch.setattr(conversations_db, 'encode_sync_assignment_plan', lambda *args: real_time.sleep(0.05) or {})
+    with caplog.at_level('INFO', logger=conversations_db.logger.name):
+        conversations_db.assign_sync_conversation(
+            'synthetic-unit', chunk('canonical', 1000), firestore_client=store, timing=True
+        )
+    [line] = timing_lines(caplog)
+    fields = dict(token.split('=', 1) for token in line.split())
+    assert int(fields['encode_ms']) >= 50
+    assert int(fields['plan_ms']) < int(fields['encode_ms'])
+    assert fields['donors'] == '2'
+
+
+def test_timing_logs_live_overlap_lookup_failure(sdk_assignment, monkeypatch, caplog):
+    store, _ = sdk_assignment()
+    monkeypatch.setattr(conversations_db, 'live_overlap_enabled', lambda: True)
+
+    def broken(*args):
+        raise RuntimeError('synthetic overlap index unavailable')
+
+    monkeypatch.setattr(conversations_db, 'find_sync_live_overlap_candidates', broken)
+    incoming = {**chunk('canonical', 1000), 'client_device_id': 'synthetic-device'}
+    with caplog.at_level('INFO', logger=conversations_db.logger.name):
+        with pytest.raises(RuntimeError):
+            conversations_db.assign_sync_conversation('synthetic-unit', incoming, firestore_client=store, timing=True)
+    [line] = timing_lines(caplog)
+    assert ' outcome=error ' in line and line.endswith(' exception_type=RuntimeError')
+    assert ' attempts=0 ' in line and 'synthetic' not in line

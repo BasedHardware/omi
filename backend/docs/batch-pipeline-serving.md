@@ -585,14 +585,15 @@ used to advance only while a sweep page held that owner's head. During the
 between pages (3.2 rows/min). When the sweep now persists a row that was
 `pending` when read, it calls the same walk the recovery wake uses, from that
 owner's `projection_watermark`. Bounds: one walk per owner per sweep, 64 rows
-and 30 seconds per walk, and 30 seconds of walking per sweep across all owners.
-Page rows the walk persisted are skipped without a read. Every other page row,
+and 30 seconds per walk, and 30 seconds of walking per sweep across all owners, starting with the
+first walk. Page rows the walk persisted are skipped without a read and are
+left out of the sweep's counts; the chain summary reports them. Every other page row,
 including rows past a walk that stopped at its bound, is attempted in page
 order as before. Each walked row still takes the Redis owner claim and the
 transactional predecessor, privacy and receipt fences one at a time, so no
 owner gains concurrency. Walked rows reach follow-ups through ordinary
 discovery, not the wake's priority queue, so they cannot starve other owners'
-follow-ups. The log line is `event=batch_projection action=sweep_chain
+follow-ups; a walk that persisted any async row keeps follow-ups scheduled. The log line is `event=batch_projection action=sweep_chain
 outcome=summary owners=N advanced=N`.
 
 `BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` defaults to `true` (kill
