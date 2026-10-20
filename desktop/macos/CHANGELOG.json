@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.510",
+      "date": "2026-10-20",
+      "changes": [
+        "The Claude sign-in upgrade sheet no longer shows a price"
+      ]
+    },
+    {
       "version": "0.12.509",
       "date": "2026-10-20",
       "changes": [
