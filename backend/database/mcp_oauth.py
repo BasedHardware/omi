@@ -145,6 +145,39 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _coerce_utc_datetime(value: object) -> Optional[datetime]:
+    """Normalize a stored Firestore timestamp into an aware UTC datetime.
+
+    Records written by different code paths (and by older clients) can hold a
+    naive datetime, an aware datetime in another offset, or an ISO-8601 string
+    -- including the ``Z`` suffix Firestore sometimes serializes. Every caller
+    compares these values against ``datetime.now(timezone.utc)``, so a naive or
+    string value would either raise ``TypeError: can't compare offset-naive and
+    offset-aware datetimes`` or be silently misread. Values that cannot be
+    interpreted are reported as absent so callers stay fail-closed.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            # Firestore timestamps are stored as UTC; a naive value means the
+            # writer dropped tzinfo, not that the instant is local time.
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text[-1] in ("Z", "z"):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
 def _csv_env(name: str) -> List[str]:
     return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
 
@@ -642,7 +675,13 @@ def _grant_is_revoked(grant: Dict[str, Any]) -> bool:
 
 
 def _grant_recency_key(grant: Dict[str, Any]) -> Any:
-    return grant.get("updated_at") or grant.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+    # Sort keys must be mutually comparable: a naive datetime next to an aware
+    # one raises TypeError, and an ISO-8601 string is orderable against neither.
+    for field in ("updated_at", "created_at"):
+        coerced = _coerce_utc_datetime(grant.get(field))
+        if coerced is not None:
+            return coerced
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
@@ -767,8 +806,8 @@ def consume_authorization_code(
         if not doc.exists:
             return None
         data: Dict[str, Any] = _typed_doc(doc)
-        expires_at = data.get("expires_at")
-        if data.get("consumed_at") or (expires_at and expires_at <= _now()):
+        expires_at = _coerce_utc_datetime(data.get("expires_at"))
+        if data.get("consumed_at") or (expires_at is not None and expires_at <= _now()):
             return None
         if (
             data.get("client_id") != client_id
@@ -806,8 +845,8 @@ def exchange_authorization_code_for_tokens(
         if not code_doc.exists:
             return None
         code_data: Dict[str, Any] = _typed_doc(code_doc)
-        expires_at = code_data.get("expires_at")
-        if code_data.get("consumed_at") or (expires_at and expires_at <= _now()):
+        expires_at = _coerce_utc_datetime(code_data.get("expires_at"))
+        if code_data.get("consumed_at") or (expires_at is not None and expires_at <= _now()):
             return None
         if (
             code_data.get("client_id") != client_id
@@ -948,12 +987,10 @@ def _nonempty_string(data: Dict[str, Any], field: str) -> Optional[str]:
 
 
 def _is_unexpired(value: object, now: datetime) -> bool:
-    if not isinstance(value, datetime):
+    expires_at = _coerce_utc_datetime(value)
+    if expires_at is None:
         return False
-    try:
-        return value > now
-    except (TypeError, ValueError):
-        return False
+    return expires_at > now
 
 
 def _validated_access_token_identity(
@@ -1061,8 +1098,8 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     _ensure_oauth_memory_grant(grant)
     if cache_ok:
         try:
-            expires_at = data.get("expires_at")
-            if isinstance(expires_at, datetime):
+            expires_at = _coerce_utc_datetime(data.get("expires_at"))
+            if expires_at is not None:
                 mcp_token_cache.fill_access_token(
                     access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
                 )
@@ -1101,7 +1138,7 @@ def rotate_refresh_token(
             return None
         data: Dict[str, Any] = _typed_doc(doc)
         now = _now()
-        expires_at = data.get("expires_at")
+        expires_at = _coerce_utc_datetime(data.get("expires_at"))
         grant_ref = db.collection("mcp_oauth_grants").document(data.get("grant_id"))
         grant_doc = grant_ref.get(transaction=transaction)
         grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
@@ -1112,7 +1149,7 @@ def rotate_refresh_token(
             # canonical or legacy ``/sse`` form.
             or (resource is not None and not mcp_resource_urls_match(data.get("resource"), resource))
             or data.get("revoked_at")
-            or (expires_at and expires_at <= now)
+            or (expires_at is not None and expires_at <= now)
             or not grant
             or grant.get("revoked_at")
             or grant.get("status") == "revoked"
@@ -1121,9 +1158,9 @@ def rotate_refresh_token(
         grant.setdefault("id", data.get("grant_id"))
         replay_grace = False
         if data.get("used_at") or data.get("replaced_by"):
-            used_at = data.get("used_at")
+            used_at = _coerce_utc_datetime(data.get("used_at"))
             replay_grace = (
-                isinstance(used_at, datetime) and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
+                used_at is not None and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
             )
             if replay_grace and int(data.get("replay_reissue_count") or 0) >= MCP_OAUTH_REPLAY_REISSUE_LIMIT:
                 # The window bounds duration; this bound caps how many durable
