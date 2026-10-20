@@ -101,6 +101,10 @@ DRAINING_PRECONDITIONS = {
         'batch-admitted cap-hold units debit the ladder v1 usage budget (Subscription session ruling 10-19; '
         'lane 6 slice, tracked in swarm/status/lane06.md)'
     ),
+    'minimal_redrive_finished': (
+        "operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path; draining stops "
+        'new sequencer registration and legacy-retire C11 deletes the mode (lead ruling 10-20 05:17Z)'
+    ),
 }
 
 
