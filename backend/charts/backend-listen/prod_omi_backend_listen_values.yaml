@@ -90,6 +90,12 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
+# NAME: "string" env values the prod listen workflow renders from the
+# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
+# rollout. Never commit values here. A key replaces the env entry of the same
+# name below (e.g. the STT_CAP_DISPATCH_* defaults).
+privateEnv: {}
+
 env:
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
