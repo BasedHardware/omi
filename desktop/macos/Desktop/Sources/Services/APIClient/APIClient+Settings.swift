@@ -54,7 +54,24 @@ extension APIClient {
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
-    return try await getTranscriptionPreferences()
+    do {
+      return try await getTranscriptionPreferences()
+    } catch {
+      // The PATCH already stored the change. A failed read-back must not look like a
+      // failed save: callers, including the vocabulary pane, roll a thrown error back.
+      logError("Settings: transcription preferences saved, but reading them back failed", error: error)
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "settings",
+        from: "transcription_preferences_readback",
+        to: "sent_values",
+        reason: "readback_failed",
+        outcome: .recovered
+      )
+      return TranscriptionPreferences(
+        singleLanguageMode: singleLanguageMode ?? false,
+        vocabulary: vocabulary ?? []
+      )
+    }
   }
 
   /// Fetches user language preference
@@ -331,6 +348,11 @@ struct DailySummarySettings: Decodable {
 struct TranscriptionPreferences: Codable {
   let singleLanguageMode: Bool
   let vocabulary: [String]
+
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
+  }
 
   enum CodingKeys: String, CodingKey {
     case singleLanguageMode = "single_language_mode"

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a saved Custom Vocabulary change looking failed when Settings could not read it back"
+}

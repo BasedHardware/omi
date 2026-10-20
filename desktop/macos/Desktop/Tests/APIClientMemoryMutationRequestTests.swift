@@ -7,6 +7,7 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var _request: URLRequest?
   private nonisolated(unsafe) static var _body: Data?
   private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
+  private nonisolated(unsafe) static var _failTranscriptionPreferencesGet = false
 
   static var request: URLRequest? {
     lock.lock()
@@ -26,11 +27,25 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     return _requests
   }
 
+  static var failTranscriptionPreferencesGet: Bool {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return _failTranscriptionPreferencesGet
+    }
+    set {
+      lock.lock()
+      _failTranscriptionPreferencesGet = newValue
+      lock.unlock()
+    }
+  }
+
   static func reset() {
     lock.lock()
     _request = nil
     _body = nil
     _requests = []
+    _failTranscriptionPreferencesGet = false
     lock.unlock()
   }
 
@@ -54,6 +69,10 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     let payload: Data
     if request.httpMethod == "GET", request.url?.path == "/v1/users/transcription-preferences" {
+      if Self.failTranscriptionPreferencesGet {
+        client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+        return
+      }
       payload = Data(
         "{\"single_language_mode\":false,\"vocabulary\":[\"Omi\",\"Codex\"],\"language\":\"en\"}".utf8)
     } else if request.httpMethod == "POST", request.url?.path == "/v3/memories" {
@@ -189,6 +208,22 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     XCTAssertEqual(request.url?.path, "/v3/memories/memory-1/visibility")
     XCTAssertNil(request.url?.query)
     XCTAssertEqual(try requestJSON()["value"] as? String, "private")
+  }
+
+  func testUpdateTranscriptionPreferencesKeepsTheSaveWhenReadbackFails() async throws {
+    MemoryMutationURLCapture.failTranscriptionPreferencesGet = true
+    let client = await makeClient()
+
+    let saved = try await client.updateTranscriptionPreferences(vocabulary: ["Omi", "Codex"])
+
+    XCTAssertEqual(saved.vocabulary, ["Omi", "Codex"])
+    XCTAssertEqual(
+      MemoryMutationURLCapture.requests.map { "\($0.method) \($0.path)" },
+      [
+        "PATCH /v1/users/transcription-preferences",
+        "GET /v1/users/transcription-preferences",
+      ]
+    )
   }
 
   func testUpdateTranscriptionPreferencesReadsCanonicalStateAfterStatusResponse() async throws {
