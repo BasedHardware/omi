@@ -294,6 +294,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         api_url: str,
         sample_rate: int,
         release: Callable[[], None],
+        *,
+        last_emitted_end: float = 0.0,
     ) -> None:
         pace = read_pace_seconds()
         super().__init__(callback, api_url, sample_rate, window_seconds=pace)
@@ -356,7 +358,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._silence_bytes = int(SILENCE_FLUSH_SECONDS * sample_rate) * 2
         self._anchor_bytes = 0
         self._now_bytes = 0
-        self._last_emitted_end = 0.0
+        self._last_emitted_end = float(last_emitted_end)
         self._capacity_subtype: str | None = None
         self._replay_cut_requested = False
         self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
@@ -1321,6 +1323,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 # duplicate but the tail is new audio, so trim instead of
                 # re-emitting the whole overlap (or dropping the phrase).
                 abs_start = self._last_emitted_end
+            if abs_end <= abs_start:
+                WINDOW_EMISSION_DROPS.labels(reason='already_emitted').inc()
+                continue
             # Buffer is original-level capture. Embeddings slice that PCM, not
             # the posted uniform-gain copy the decoder hears.
             speaker = await self._assign_speaker(self._slice_pcm(pcm, abs_start - start, rel_end))
@@ -1344,7 +1349,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return emitted
 
 
-def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
+def connect_window(
+    callback: Callable[[list[dict[str, Any]]], None],
+    sample_rate: int,
+    *,
+    last_emitted_end: float = 0.0,
+) -> WindowedParakeetSocket:
     try:
         min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
     except ValueError:
@@ -1357,7 +1367,13 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
         raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
-        socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
+        socket = WindowedParakeetSocket(
+            callback,
+            os.environ['HOSTED_PARAKEET_API_URL'],
+            sample_rate,
+            release,
+            last_emitted_end=last_emitted_end,
+        )
         socket.start()
         # Count only a socket whose pump started successfully. Keeping this at the
         # connection boundary makes the accepted outcome describe an actual
