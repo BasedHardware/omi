@@ -3312,6 +3312,7 @@ _add(
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
+_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))
 
 
 # WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as

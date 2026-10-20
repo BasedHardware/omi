@@ -4226,5 +4226,281 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-stt-chain-exhausted-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 600 && $B > 0.08",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "20m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "15",
+      "summary": "More than 8% of accepted /v4/listen sessions exhausted every live STT provider over the last hour",
+      "threshold": "omi_stt_chain_exhausted_total / omi_listen_accepted_total over 60m > 0.08 with >= 600 accepted sockets in 60m, for 20m",
+      "user_impact": "Those sessions lose live transcription entirely until the client reconnects; audio falls back to offline sync.",
+      "scope": "backend-listen omi_stt_chain_exhausted_total (all demand cohorts) over omi_listen_accepted_total. This is the session-level exhaustion counter, not the stt_selection fallback count that omi-stt-chain-exhausted-warn (> 0.35) uses. The series is incremented only on the configured chain (STT_CONNECT_ORDER_FROM_CONFIG, utils/stt/live_chain.py), which prod runs: 120 live series across 3 demand cohorts on 2026-10-20; it is empty on any deployment without the configured chain.",
+      "verification": "Backtest (prod Prometheus via the Grafana proxy). 20m window, 2026-10-10..10-20, 5m steps: daily p50 0.035-0.131 (10-20 is 0.035, the post-fix baseline), so a 5%/20m rule would fire 62x in 10d. 60m window, 2026-10-17..10-20, 10m steps: > 0.08 sustained 20m fires 6x in 3d (10-17 19:17Z, 10-18 00:07Z, 10-19 10:17Z, 10-19 15:17Z, 10-20 00:27Z, 10-20 15:07Z), including the 10-20 Soniox-bench incident (0.085-0.097 from 15:07Z). A dynamic threshold (2x the median of the same hour 1d/2d/7d ago, floor 0.08) was evaluated and rejected: the 3-offset query takes ~17s per instant evaluation (the 7-offset p50 8-29s, near the 30s evaluation timeout), and it would NOT have fired on 10-20 because the prior days were degraded at that hour (baseline 0.07-0.11).",
+      "evaluated_bad": "0.097 (2026-10-20 16:07Z 60m)",
+      "evaluated_good": "0.020 (2026-10-20 12:07Z 60m)",
+      "safe_next_action": "Check omi_stt_cost_routing_stage by target first: if no target is at 100 the router is in its availability escape (see omi-stt-no-full-stage-target). Then split omi_fallback_total{outcome=exhausted} by from_mode/to_mode/reason before touching provider config or rolling listen.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-chain-exhausted-ratio",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-no-full-stage-target",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - no provider at stage 100 (router availability escape)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(count((min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) == 100) or (max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) != max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}))) or vector(0)) and on () (count(omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) > 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A == 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
+      "summary": "No live STT target has been at cost-routing stage 100 for 10m, so the router serves every session from its availability escape",
+      "threshold": "count of targets whose fleet-min omi_stt_cost_routing_stage is 100 (or NaN, a pristine GateState) == 0, while the stage gauge is present, for 10m",
+      "user_impact": "With every target in trial or benched, each session gets all available targets ordered by stage, so trial and benched providers (e.g. Modulate at stage 0) serve real sessions and chain exhaustion rises.",
+      "scope": "backend-listen omi_stt_cost_routing_stage by target (live_router.py availability escape: all(stage < 100) for available targets). NaN means a pristine GateState (stage 100) and counts as full.",
+      "verification": "Backtest 2026-10-10..10-20 (2m steps): 11 episodes over 10m in 10d (10-13 08:11Z 238m, 10-13 18:15Z 38m, 10-14 17:05Z 70m, 10-14 19:29Z 300m, 10-15 20:31Z 96m, 10-16 01:03Z 94m, 10-16 05:57Z 134m, 10-16 19:05Z 226m, 10-18 00:45Z 62m, 10-19 23:29Z 138m, 10-20 13:45Z 70m). The 10-20 13:45Z episode is the Soniox bench after the 13:37Z listen roll, which ended when the Soniox GateState keys were reset at 14:53Z.",
+      "evaluated_bad": "0 targets at stage 100 (2026-10-20 13:45Z-14:55Z)",
+      "evaluated_good": "1 target at stage 100 (soniox, 2026-10-20 15:00Z)",
+      "safe_next_action": "Read omi_stt_cost_routing_stage by target and the live_stt_gate bench/stage log lines. If a target was benched by a restart burst rather than its own failure rate, the documented lever is saving and resetting that target's GateState keys (data/run-2026-10-13-two-lane-nemotron/stt-degradation-2026-10-20.md); never roll listen at peak to clear it.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-no-full-stage-target",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

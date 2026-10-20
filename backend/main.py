@@ -422,6 +422,9 @@ async def startup_event():
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    from utils.held_content_cohort import refresh_held_content_cohort_forever
+
+    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
     validate_account_deletion_dispatch_configuration()

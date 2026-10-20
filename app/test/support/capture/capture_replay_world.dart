@@ -273,6 +273,7 @@ class CaptureReplayWorld {
   late NativeMicRecorderService mic;
   late WalService wal;
   late StreamController<bool> connectivityStream;
+  late StreamController<void> networkChangeStream;
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
@@ -398,6 +399,7 @@ class CaptureReplayWorld {
     wal.start();
     await wal.syncs.phone.walReady;
     connectivityStream = StreamController<bool>.broadcast();
+    networkChangeStream = StreamController<void>.broadcast();
     _controller = _ReplayCaptureController(
       world: this,
       calendarGapMonitor: calendarGapMonitor,
@@ -408,6 +410,7 @@ class CaptureReplayWorld {
       connectivity: CaptureConnectivityBoundary(
         initiallyConnected: connected,
         changes: connectivityStream.stream,
+        networkChanges: networkChangeStream.stream,
         isConnected: () => connected,
       ),
       authBoundary: CaptureAuthBoundary(
@@ -456,6 +459,7 @@ class CaptureReplayWorld {
       },
       autoUploadEnabled: () => true,
       connectivityChanges: connectivityStream.stream,
+      networkChanges: networkChangeStream.stream,
       initiallyConnected: connected,
       clock: clock.now,
       scheduleCooldown: (delay, callback) => scheduler.once(delay, callback),
@@ -515,6 +519,12 @@ class CaptureReplayWorld {
     connectivityStream.add(value);
   }
 
+  /// The active interface changed (wifi -> cellular) without ever going offline.
+  void emitNetworkChange() {
+    timeline.add('network=changed');
+    networkChangeStream.add(null);
+  }
+
   /// Drain work started by timer callbacks and injections: WAL file writes
   /// returned as Futures from async periodic callbacks, coordinator recovery
   /// passes (including unawaited cooldown wakes), and event-queue microtasks.
@@ -548,6 +558,7 @@ class CaptureReplayWorld {
     _controller = null;
     socket = null;
     connectivityStream.close();
+    networkChangeStream.close();
   }
 
   /// Rebuilds the entire production graph from the same temp directory: a new
@@ -576,6 +587,7 @@ class CaptureReplayWorld {
     if (!_controllerDisposed) _controller?.dispose();
     coordinator.dispose();
     await connectivityStream.close();
+    await networkChangeStream.close();
     await wal.stop();
     SttModeResolver.debugResetInstance();
     SyncRateLimiter.instance.clear();

@@ -7,7 +7,11 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import owner_chain_projection_enabled, recovery_dispatch_interval_seconds
+from config.batch_pipeline import (
+    owner_chain_projection_enabled,
+    recovered_merge_release_enabled,
+    recovery_dispatch_interval_seconds,
+)
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
@@ -62,9 +66,15 @@ class Serving:
                 self.drain_owner(job['owner_id'])
         return accepted
 
-    def drain_owner(self, owner_id: str):
+    def drain_owner(self, owner_id: str, *, recovered: str | None = None):
+        """Commit the owner's ready rows. ``recovered`` (a recovery wake) also
+        releases that unit and its content's ready siblings past the head wait
+        (the unit itself also past the catch-up depth hold)."""
+        release = (
+            self.merge.release_set(recovered) if recovered is not None and recovered_merge_release_enabled() else None
+        )
         for _ in range(100):
-            if self.merge.commit_next(owner_id, time.time()) is None:
+            if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
 
     async def reconcile_async(self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None):
@@ -103,7 +113,7 @@ class Serving:
             # owner's chain now instead of waiting for the global cursor. The
             # wake is only a hint: on failure the generic sweep still runs.
             try:
-                self.drain_owner(owner_id)
+                self.drain_owner(owner_id, recovered=recovered)
                 priority = self.projector.project_owner(owner_id, recovered=recovered)
             except Exception as error:
                 logging.getLogger(__name__).error(

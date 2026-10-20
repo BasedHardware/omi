@@ -179,4 +179,28 @@ void main() {
     expect(changes, isEmpty);
     await expectLater(service.init(), throwsStateError);
   });
+
+  test('a wifi to cellular handover that never went offline is a network change', () async {
+    var networkChanges = 0;
+    service.onNetworkChange.listen((_) => networkChanges++);
+    await boot();
+    expect(networkChanges, 0, reason: 'the startup snapshot is not a change');
+
+    interfaces.add([ConnectivityResult.mobile]);
+    await settle();
+    probes.last.complete(true);
+    await settle();
+    expect(networkChanges, 1);
+    expect(changes, isEmpty, reason: 'online throughout, so onConnectionChange stays silent');
+
+    interfaces.add([ConnectivityResult.mobile]);
+    await settle();
+    probes.last.complete(true);
+    await settle();
+    expect(networkChanges, 1, reason: 'the same interface set again is not a change');
+
+    interfaces.add([ConnectivityResult.none]);
+    await settle();
+    expect(networkChanges, 1, reason: 'going offline is reported by onConnectionChange instead');
+  });
 }

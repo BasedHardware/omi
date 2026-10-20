@@ -9,6 +9,7 @@ from database import cap_hold_redrive as store
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured
+from utils.observability.held_content import publish_fleet
 from utils.sync import live_cap_staging
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,15 @@ def owner(snap: Any, collection: str) -> str | None:
 async def sweep() -> dict:
     if not enabled():
         return {'disabled': True}
+    try:
+        snapshot = await run_blocking(db_executor, store.fleet_snapshot)
+    except Exception as error:
+        logger.warning('event=cap_hold_redrive outcome=fleet_snapshot_deferred exception_type=%s', type(error).__name__)
+    else:
+        publish_fleet(snapshot)
     counts = {'sealed': 0, 'visited': 0}
-    for snap in await run_blocking(db_executor, store.discover, 'staging'):
+    staging = await run_blocking(db_executor, store.discover, 'staging')
+    for snap in staging:
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -41,7 +49,8 @@ async def sweep() -> dict:
                 counts['sealed'] += 1
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=seal_deferred exception_type=%s', type(error).__name__)
-    for snap in await run_blocking(db_executor, store.discover, 'cleanup'):
+    cleanup = await run_blocking(db_executor, store.discover, 'cleanup')
+    for snap in cleanup:
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -64,6 +73,7 @@ async def sweep() -> dict:
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=worker_deferred exception_type=%s', type(error).__name__)
 
-    await asyncio.gather(*(visit(snap) for snap in await run_blocking(db_executor, store.discover, 'choices')))
+    choices = await run_blocking(db_executor, store.discover, 'choices')
+    await asyncio.gather(*(visit(snap) for snap in choices))
     logger.info('event=cap_hold_redrive outcome=complete visited=%s sealed=%s', counts['visited'], counts['sealed'])
     return counts

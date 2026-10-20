@@ -4363,6 +4363,30 @@
         "mobile-instrumentation-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "captureRecoveryObserved",
+      "wire_name": "Capture Recovery Observed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": ["capture_start_skipped", "capture_start_redriven", "pendant_audio_orphaned", "transfer_pass_timed_out"]
+        },
+        "trigger": {
+          "type": "enum",
+          "wire_name": "trigger",
+          "values": ["sync_pass", "pass_ended", "app_resumed", "orphan_audio", "periodic", "other"]
+        }
+      },
+      "consumers": [
+        "capture-recovery"
+      ],
+      "correlation": null
     }
 ],
 "transport_dispositions": {

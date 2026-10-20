@@ -62,13 +62,26 @@ function protectCode(input, protect) {
   return out + input.slice(last);
 }
 
+// Protected-unit keys: a prefix the input does not contain, the unit's index in
+// base 254 over U+E002..U+E0FF, then U+E001. Private-use characters match no
+// repair pattern, and the keys stay short however many units a note holds.
+const KEY_BASE = 254;
+function keyDigits(index) {
+  let digits = "";
+  do {
+    digits = String.fromCharCode(0xe002 + (index % KEY_BASE)) + digits;
+    index = Math.floor(index / KEY_BASE);
+  } while (index > 0);
+  return digits;
+}
+
 function repairPass(input, knownIDs) {
   const valid = new Set(knownIDs);
   const protectedUnits = new Map();
   let prefix = "\uE000";
   while (input.includes(prefix)) prefix += "\uE000";
   const protect = (value) => {
-    const key = `${prefix}${"\uE002".repeat(protectedUnits.size)}\uE001`;
+    const key = `${prefix}${keyDigits(protectedUnits.size)}\uE001`;
     protectedUnits.set(key, value);
     return key;
   };
@@ -183,8 +196,13 @@ function repairPass(input, knownIDs) {
       .trim();
   }
   if (text.includes("\x01")) text = text.replaceAll("\x01", "").trim();
-  for (const [key, value] of [...protectedUnits].reverse())
-    text = text.replaceAll(key, value);
+  // One pass, restoring nested units (a link label that held a code span) recursively.
+  const keyPattern = new RegExp(`${prefix}[\\uE002-\\uE0FF]+\\uE001`, "g");
+  const restore = (value) =>
+    value.replace(keyPattern, (key) =>
+      protectedUnits.has(key) ? restore(protectedUnits.get(key)) : key
+    );
+  text = restore(text);
   return { text, sourceIDs: [...new Set(recovered)] };
 }
 

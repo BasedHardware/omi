@@ -484,8 +484,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case .failed:
       return .failed
     case .completed:
-      if !structured.title.isEmpty {
-        return .titled(structured.title)
+      // Display-only citation repair (`[s01234]`, `Speaker_00` in legacy titles); rename
+      // edits `structured.title`. A title that is only debris reads as untitled.
+      let title = ConversationSummarySelection.presentableTitle(
+        structured.title, segments: transcriptSegments
+      ).trimmingCharacters(in: .whitespacesAndNewlines)
+      if !title.isEmpty {
+        return .titled(title)
       }
       // Heuristic: a "real" conversation has at least one transcript segment
       // long enough to plausibly have content (≥ 5 words). Below that, it's
