@@ -651,6 +651,11 @@ class WorkflowContractTests(unittest.TestCase):
                 "build-only must check out exactly one root source tree",
             ),
             (
+                "          path: .deploy-control\n",
+                "          path: ./\n",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
                 "          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
                 "          docker push \"$IMAGE\"\n          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
                 "build-only must smoke the built image before pushing its exact tag",

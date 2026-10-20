@@ -417,6 +417,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          # Full history so the short tag disambiguates exactly as
+          # gcp_backend_listen_helm.yml resolves it.
+          fetch-depth: 0
 
       - name: Checkout immutable image-contract controls
         uses: actions/checkout@v7
@@ -478,7 +481,10 @@ jobs:
           if [[ "$exists" == "true" ]]; then
             # build-only labels its images with the admitted revision; deploy-mode
             # images carry no label, so provenance then rests on the SHA tag.
-            revision="$(docker buildx imagetools inspect "$image" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)"
+            if ! revision="$(docker buildx imagetools inspect "$image" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"; then
+              echo "ERROR: could not read the revision label of existing ${image}." >&2
+              exit 1
+            fi
             if [[ -n "$revision" && "$revision" != "<no value>" && "$revision" != "$ADMITTED_SHA" ]]; then
               echo "ERROR: ${image} is labelled revision ${revision}, not the admitted SHA ${ADMITTED_SHA}." >&2
               exit 1

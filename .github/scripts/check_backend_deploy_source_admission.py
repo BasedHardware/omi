@@ -678,7 +678,8 @@ def validate_manual_build_only_job(text: str) -> list[str]:
     root_checkouts = [
         step
         for step in re.split(r"(?m)^      - ", build_job)
-        if "uses: actions/checkout@" in step and not re.search(r"(?m)^          path: ", step)
+        if "uses: actions/checkout@" in step
+        and not re.search(r"(?m)^          path: (?!['\"]?\.?/?['\"]?\s*$)\S", step)
     ]
     if len(root_checkouts) != 1:
         errors.append("build-only must check out exactly one root source tree")
