@@ -75,6 +75,7 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
+from utils.media import video_upload
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
@@ -1462,6 +1463,8 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
+    # A video is stored (sheet, filmstrip, row) as it is read and answers after the other files.
+    stored_videos: List[FileChat] = []
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1469,6 +1472,14 @@ def upload_file_chat(
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+
+            if _is_video_upload(safe_suffix, file.content_type):
+                try:
+                    row = video_upload.video_from_file(uid, temp_file, safe_suffix)
+                except video_upload.VideoFramesError:
+                    raise HTTPException(status_code=400, detail=video_upload.VIDEO_UNREADABLE)
+                stored_videos.append(FileChat(**row))
+                continue
 
             try:
                 result = FileChatTool.upload(temp_file, file_name=safe_suffix)
@@ -1512,9 +1523,69 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    response = [fc.client_dump() for fc in files_chat + stored_videos]
 
     return response
+
+
+_VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.3gp'}
+MAX_VIDEO_FRAME_BYTES = 2 * 1024 * 1024
+
+
+def _is_video_upload(name: str, content_type: Optional[str]) -> bool:
+    return Path(name).suffix.lower() in _VIDEO_SUFFIXES or (content_type or '').lower().startswith('video/')
+
+
+@router.post('/v2/files/video', response_model=List[FileChat], tags=['chat'])
+@max_part_size(CHAT_FILE_MAX_PART_SIZE)
+def upload_video_frames_chat(
+    frames: List[UploadFile] = File(
+        ..., description='JPEG or PNG stills sampled from the clip, in time order (at most 48).'
+    ),
+    frame_times: str = Form(..., description="JSON array of each frame's time in seconds."),
+    duration_seconds: float = Form(..., ge=0, le=36000),
+    name: str = Form('video.mov', max_length=255),
+    audio: Optional[UploadFile] = File(None, description="The clip's audio track (m4a/aac/ogg), for its transcript."),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
+):
+    """A video the client sampled on device: stills (and audio) instead of the whole clip.
+
+    Same result as uploading the clip to /v2/files: one chat file whose image is a numbered
+    contact sheet of the clip's most distinct frames.
+    """
+    try:
+        times = json.loads(frame_times)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='frame_times must be a JSON array of seconds')
+    if (
+        not isinstance(times, list)
+        or len(times) != len(frames)
+        or not all(isinstance(t, (int, float)) and not isinstance(t, bool) for t in times)
+    ):
+        raise HTTPException(status_code=400, detail='frame_times must list one time per frame')
+    if len(frames) > video_upload.MAX_CANDIDATES:
+        raise HTTPException(status_code=400, detail=f'Send at most {video_upload.MAX_CANDIDATES} frames')
+    blobs = []
+    for frame in frames:
+        blob = frame.file.read(MAX_VIDEO_FRAME_BYTES + 1)
+        if len(blob) > MAX_VIDEO_FRAME_BYTES:
+            raise HTTPException(status_code=400, detail='Each frame must be 2 MB or smaller')
+        blobs.append(blob)
+    safe_name = Path(name).name or 'video.mov'
+    audio_path = None
+    try:
+        if audio is not None:
+            audio_path = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_audio"
+            with audio_path.open("wb") as buffer:
+                shutil.copyfileobj(audio.file, buffer)
+        try:
+            row = video_upload.video_from_frames(uid, safe_name, blobs, times, duration_seconds, audio_path)
+        except video_upload.VideoFramesError:
+            raise HTTPException(status_code=400, detail=video_upload.VIDEO_UNREADABLE)
+    finally:
+        if audio_path is not None:
+            audio_path.unlink(missing_ok=True)
+    return [FileChat(**row).client_dump()]
 
 
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
