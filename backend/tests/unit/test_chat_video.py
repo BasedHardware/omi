@@ -395,9 +395,10 @@ def test_all_intra_long_clip_falls_back_to_per_target_seeks(tmp_path, monkeypatc
     monkeypatch.setattr(video_frames, 'KEYFRAME_PASS_SECONDS', 0.001)
     data = _clip(tmp_path, 'testsrc2=size=160x90:rate=2', 130, '-g', '1')
     digest = digest_video(data, executable=_ffmpeg())
-    step = (130 - video_frames.END_MARGIN_SECONDS) / (MAX_CANDIDATES - 1)
-    assert len(digest.strip.times) == MAX_CANDIDATES
-    assert digest.strip.times[1] == pytest.approx(step, abs=0.01) and digest.strip.times[-1] > 128.5
+    times = digest.strip.times
+    assert len(times) >= MAX_CANDIDATES - 2 and times[-1] > 128.5 and list(times) == sorted(set(times))
+    # Labels are the decoded frames' own times: a 2 fps clip only has frames every 0.5 s.
+    assert all(abs(t * 2 - round(t * 2)) < 0.01 for t in times)
 
 
 def test_ffmpeg_stderr_is_drained_with_a_retained_line_cap():

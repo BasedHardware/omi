@@ -162,7 +162,7 @@ extension APIClient {
       file("frames", "frame-\(index).jpg", "image/jpeg", frame)
     }
     if let audio = video.audio {
-      file("audio", "audio.m4a", "audio/mp4", audio)
+      file("audio", audio.fileName, audio.mimeType, audio.data)
     }
     body.append(Data("--\(boundary)--\(lineBreak)".utf8))
     request.httpBody = body

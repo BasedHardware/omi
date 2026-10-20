@@ -41,4 +41,19 @@ final class ChatVideoSamplerTests: XCTestCase {
     XCTAssertEqual(ChatAttachment.from(url: URL(fileURLWithPath: "/tmp/clip.mp4"))?.isVideo, true)
     XCTAssertEqual(ChatAttachment.from(url: URL(fileURLWithPath: "/tmp/photo.png"))?.isVideo, false)
   }
+
+  /// macOS 14 sends 16 kHz mono PCM as WAV; the backend decoder reads it like any voice note.
+  func testWavHeaderDescribesSixteenKilohertzMonoPCM() {
+    let header = ChatVideoSampler.wavHeader(pcmBytes: 32_000)
+    XCTAssertEqual(header.count, 44)
+    XCTAssertEqual(String(decoding: header.prefix(4), as: UTF8.self), "RIFF")
+    XCTAssertEqual(String(decoding: header[8..<16], as: UTF8.self), "WAVEfmt ")
+    func u32(_ offset: Int) -> UInt32 {
+      header[offset..<offset + 4].enumerated().reduce(0) { $0 | UInt32($1.element) << (8 * UInt32($1.offset)) }
+    }
+    XCTAssertEqual(u32(4), 36 + 32_000)
+    XCTAssertEqual(u32(24), 16_000)
+    XCTAssertEqual(u32(28), 32_000)
+    XCTAssertEqual(u32(40), 32_000)
+  }
 }

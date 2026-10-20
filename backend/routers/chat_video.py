@@ -5,13 +5,13 @@ A video is read as stills plus speech (utils/media/video_frames.py); the clip is
 
 import json
 import math
+import shutil
 import tempfile
 import uuid
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from multipart.multipart import shutil
 
 from models.chat import FileChat
 from utils.media import video_upload

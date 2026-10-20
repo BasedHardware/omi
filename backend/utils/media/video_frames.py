@@ -258,23 +258,31 @@ def _seek_candidates(
     for index in range(MAX_CANDIDATES):
         at = index * step
         output = directory / f's{index:03d}.jpg'
-        if _seek_one(executable, source, at, output, deadline):
-            paths.append(output)
-            times.append(at)
-        elif index == MAX_CANDIDATES - 1 and times and at - 1.0 > times[-1]:
+        decoded = _seek_one(executable, source, at, output, deadline)
+        if decoded is None and index == MAX_CANDIDATES - 1 and times and at - 1.0 > times[-1]:
             # A low-frame-rate clip can end before the last target: take its final second.
-            if _seek_one(executable, source, at - 1.0, output, deadline):
-                paths.append(output)
-                times.append(at - 1.0)
+            decoded = _seek_one(executable, source, at - 1.0, output, deadline)
+        if decoded is not None and (not times or decoded > times[-1]):
+            paths.append(output)
+            times.append(decoded)
     return _load(paths), times
 
 
-def _seek_one(executable: str, source: Path, at: float, output: Path, deadline: float) -> bool:
-    """Write the frame at ``at`` seconds to ``output``; False when nothing decoded there in time."""
+def _seek_one(executable: str, source: Path, at: float, output: Path, deadline: float) -> Optional[float]:
+    """Write the first frame at or after ``at`` seconds to ``output`` and return its real time.
+
+    ``-copyts`` keeps the source timestamps through the seek, so showinfo reports the decoded
+    frame's own time (a 2 fps clip asked for 2.76 s answers with its 3.0 s frame).
+    None when nothing decoded there in time.
+    """
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return False
-    command = _base_command(executable) + [
+        return None
+    command = _base_command(executable)
+    command[command.index('-v') + 1] = 'info'  # showinfo reports at info level
+    command += [
+        '-hide_banner',
+        '-copyts',
         '-ss',
         f'{at:.3f}',
         '-i',
@@ -284,7 +292,7 @@ def _seek_one(executable: str, source: Path, at: float, output: Path, deadline: 
         '-an',
         '-sn',
         '-vf',
-        _SCALE,
+        f'{_SCALE},showinfo',
         '-frames:v',
         '1',
         '-q:v',
@@ -293,12 +301,13 @@ def _seek_one(executable: str, source: Path, at: float, output: Path, deadline: 
         str(output),
     ]
     try:
-        subprocess.run(
-            command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=min(remaining, 5)
-        )
+        lines = _run_keeping(command, _PTS_TIME, timeout=min(remaining, 5))
     except subprocess.SubprocessError:
-        return False  # one undecodable spot; the rest still describe the clip
-    return output.exists()
+        return None  # one undecodable spot; the rest still describe the clip
+    match = _PTS_TIME.search(lines[0]) if lines else None
+    if not match or not output.exists():
+        return None
+    return max(0.0, float(match.group(1)))
 
 
 def candidate_count(duration: float) -> int:

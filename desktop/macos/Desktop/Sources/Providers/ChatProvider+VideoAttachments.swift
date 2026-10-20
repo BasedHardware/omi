@@ -6,16 +6,7 @@ extension ChatProvider {
   func uploadVideoAttachment(id: String, url: URL, fileName: String, appId: String?) async {
     do {
       let video = try await ChatVideoSampler.sample(url: url)
-      let resp: [ChatFileResponse]
-      if video.audioNeedsServer {
-        // Speech this Mac couldn't export: send the clip; the server samples and transcribes it.
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        let mime = url.pathExtension.lowercased() == "mov" ? "video/quicktime" : "video/mp4"
-        resp = try await APIClient.shared.uploadChatFiles(
-          [(data: data, fileName: fileName, mimeType: mime)], appId: appId)
-      } else {
-        resp = try await APIClient.shared.uploadChatVideo(video, fileName: fileName, appId: appId)
-      }
+      let resp = try await APIClient.shared.uploadChatVideo(video, fileName: fileName, appId: appId)
       guard let server = resp.first else { throw APIError.invalidResponse }
       guard let idx = pendingAttachments.firstIndex(where: { $0.id == id }) else { return }
       pendingAttachments[idx].serverId = server.id

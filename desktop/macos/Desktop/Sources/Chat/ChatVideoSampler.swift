@@ -7,16 +7,19 @@ import Foundation
 /// Uploading a whole clip costs the user bandwidth and the backend a decode; the chat model only
 /// ever sees stills (`backend/utils/media/video_frames.py`). This samples the same candidate set
 /// the server would (at most 48 frames, at most 4 per second, longest edge 384 px) and exports
-/// the audio as AAC, for `POST /v2/files/video`.
+/// the audio (AAC on macOS 15+, 16 kHz mono WAV on macOS 14), for `POST /v2/files/video`.
 struct SampledChatVideo {
   let frames: [Data]
   let times: [Double]
   let duration: Double
-  /// AAC (.m4a) audio track, or nil when the clip is silent.
-  let audio: Data?
-  /// The clip has speech this Mac can't export (macOS 14): upload the clip whole instead,
-  /// so the server transcribes it.
-  var audioNeedsServer = false
+  /// The audio track, or nil when the clip is silent.
+  let audio: SampledChatAudio?
+}
+
+struct SampledChatAudio {
+  let data: Data
+  let fileName: String
+  let mimeType: String
 }
 
 enum ChatVideoSamplerError: Error, LocalizedError {
@@ -78,15 +81,12 @@ enum ChatVideoSampler {
     // The async sequence answers in request order; keep times ascending regardless.
     let order = kept.indices.sorted { kept[$0] < kept[$1] }
     let audio = try? await exportAudio(asset: asset, duration: duration)
-    let hasAudio = (try? await !asset.loadTracks(withMediaType: .audio).isEmpty) ?? false
-    var sampled = SampledChatVideo(
+    return SampledChatVideo(
       frames: order.map { frames[$0] },
       times: order.map { (kept[$0] * 100).rounded() / 100 },
       duration: duration.isFinite ? duration : (kept.max() ?? 0),
       audio: audio
     )
-    sampled.audioNeedsServer = hasAudio && audio == nil
-    return sampled
   }
 
   private static func jpegData(_ image: CGImage) -> Data? {
@@ -94,11 +94,16 @@ enum ChatVideoSampler {
       using: .jpeg, properties: [.compressionFactor: 0.75])
   }
 
-  /// AAC export uses the macOS 15 async API; on macOS 14 a clip with audio uploads whole.
-  private static func exportAudio(asset: AVURLAsset, duration: Double) async throws -> Data? {
-    guard #available(macOS 15, *) else { return nil }
-    guard try await !asset.loadTracks(withMediaType: .audio).isEmpty,
-      let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
+  /// AAC through the macOS 15 async export API; macOS 14 reads 16 kHz mono PCM into a WAV.
+  private static func exportAudio(asset: AVURLAsset, duration: Double) async throws -> SampledChatAudio? {
+    let tracks = try await asset.loadTracks(withMediaType: .audio)
+    guard let track = tracks.first else { return nil }
+    guard #available(macOS 15, *) else {
+      return try wavAudio(asset: asset, track: track, duration: duration).map {
+        SampledChatAudio(data: $0, fileName: "audio.wav", mimeType: "audio/wav")
+      }
+    }
+    guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
     else { return nil }
     let output = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-chat-video-\(UUID().uuidString).m4a")
@@ -107,6 +112,60 @@ enum ChatVideoSampler {
       start: .zero,
       duration: CMTime(seconds: min(duration, maxAudioSeconds), preferredTimescale: 600))
     try await session.export(to: output, as: .m4a)
-    return try Data(contentsOf: output)
+    return SampledChatAudio(data: try Data(contentsOf: output), fileName: "audio.m4a", mimeType: "audio/mp4")
+  }
+
+  /// 16 kHz mono 16-bit PCM in a WAV container (about 19 MB for the 10-minute cap).
+  static func wavAudio(asset: AVURLAsset, track: AVAssetTrack, duration: Double) throws -> Data? {
+    let reader = try AVAssetReader(asset: asset)
+    reader.timeRange = CMTimeRange(
+      start: .zero, duration: CMTime(seconds: min(duration, maxAudioSeconds), preferredTimescale: 600))
+    let output = AVAssetReaderTrackOutput(
+      track: track,
+      outputSettings: [
+        AVFormatIDKey: kAudioFormatLinearPCM,
+        AVSampleRateKey: 16_000,
+        AVNumberOfChannelsKey: 1,
+        AVLinearPCMBitDepthKey: 16,
+        AVLinearPCMIsFloatKey: false,
+        AVLinearPCMIsBigEndianKey: false,
+        AVLinearPCMIsNonInterleaved: false,
+      ])
+    guard reader.canAdd(output) else { return nil }
+    reader.add(output)
+    guard reader.startReading() else { return nil }
+    var pcm = Data()
+    while let buffer = output.copyNextSampleBuffer() {
+      if let block = CMSampleBufferGetDataBuffer(buffer) {
+        let length = CMBlockBufferGetDataLength(block)
+        var chunk = Data(count: length)
+        _ = chunk.withUnsafeMutableBytes { bytes in
+          bytes.baseAddress.map { CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: $0) }
+        }
+        pcm.append(chunk)
+      }
+    }
+    guard reader.status == .completed, !pcm.isEmpty else { return nil }
+    return wavHeader(pcmBytes: pcm.count) + pcm
+  }
+
+  static func wavHeader(pcmBytes: Int, sampleRate: UInt32 = 16_000) -> Data {
+    var header = Data()
+    func append<T: FixedWidthInteger>(_ value: T) {
+      withUnsafeBytes(of: value.littleEndian) { header.append(contentsOf: $0) }
+    }
+    header.append(contentsOf: Array("RIFF".utf8))
+    append(UInt32(36 + pcmBytes))
+    header.append(contentsOf: Array("WAVEfmt ".utf8))
+    append(UInt32(16))
+    append(UInt16(1))  // PCM
+    append(UInt16(1))  // mono
+    append(sampleRate)
+    append(sampleRate * 2)  // byte rate
+    append(UInt16(2))  // block align
+    append(UInt16(16))  // bits per sample
+    header.append(contentsOf: Array("data".utf8))
+    append(UInt32(pcmBytes))
+    return header
   }
 }
