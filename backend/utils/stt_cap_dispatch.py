@@ -1,4 +1,4 @@
-"""Funded-provider admission; legacy root usage counters deliberately stay unchanged."""
+"""Funded-provider admission; legacy root counters exclude only suppressed (held) live audio."""
 
 import logging
 import os
@@ -112,6 +112,10 @@ class LiveAdmission:
         self.usage_cache = None
         self.capture_observer: Callable[[bytes, int, int, bool], None] | None = None
         self.active_capture: tuple[bytes, int, list[tuple[int, int]]] | None = None
+        # Suppressed PCM seconds summed across channels. The usage flush excludes
+        # them from elapsed transcription seconds: held audio is metered once,
+        # by recovery, when it is actually transcribed.
+        self.held_audio_seconds = 0.0
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 
@@ -189,11 +193,20 @@ class LiveAdmission:
                 return False
         return True
 
+    def record_suppressed(self, provider, seconds):
+        record_audio('live', 'suppressed', provider, seconds, self.reason == 'plan_allowance_exhausted')
+        self.held_audio_seconds += seconds
+
+    def consume_held_seconds(self, channels=1):
+        """Whole wall-clock held seconds since the last call; the fraction carries."""
+        channels = max(1, channels)
+        whole = int(self.held_audio_seconds / channels)
+        self.held_audio_seconds = max(0.0, self.held_audio_seconds - whole * channels)
+        return whole
+
     def send(self, raw, data, provider, rate, *args, **kwargs):
         if not self.packet_allowed(data, provider, rate):
-            record_audio(
-                'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
-            )
+            self.record_suppressed(provider, len(data) / (2 * rate))
             self.observe_capture(False)
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
@@ -309,26 +322,14 @@ class CapSocket(STTSocket):
         if start_sample is not None:
             self.admission.active_capture = (data, self.rate, ((start_sample, len(data) // 2),))
         if self.raw is None or not self.admission.packet_allowed(data, self.provider, self.rate):
-            record_audio(
-                'live',
-                'suppressed',
-                self.provider,
-                len(data) / (2 * self.rate),
-                self.admission.reason == 'plan_allowance_exhausted',
-            )
+            self.admission.record_suppressed(self.provider, len(data) / (2 * self.rate))
             self.admission.observe_capture(False)
             return True
         return False
 
     def send(self, data, *args, **kwargs):
         if self.raw is None:
-            record_audio(
-                'live',
-                'suppressed',
-                self.provider,
-                len(data) / (2 * self.rate),
-                self.admission.reason == 'plan_allowance_exhausted',
-            )
+            self.admission.record_suppressed(self.provider, len(data) / (2 * self.rate))
             self.admission.observe_capture(False)
             return True
         return self.admission.send(self.raw, data, self.provider, self.rate, *args, **kwargs)

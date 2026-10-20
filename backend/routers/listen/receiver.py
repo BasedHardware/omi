@@ -12,7 +12,6 @@ import uuid
 from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
-from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
@@ -1920,13 +1919,7 @@ class ListenReceiver(ReplayFilterMixin):
                     await hold.append_async(
                         bytes(buffer), self.host.request.sample_rate, timestamp, self.host.state.current_conversation_id
                     )
-            record_cap_audio(
-                'live',
-                'suppressed',
-                self.host.stt_service,
-                len(buffer) / (2 * self.host.request.sample_rate),
-                admission.reason == 'plan_allowance_exhausted',
-            )
+            admission.record_suppressed(self.host.stt_service, len(buffer) / (2 * self.host.request.sample_rate))
             buffer.clear()
             self._stt_buffer_start_sample = None
             await self._emit_stt_cap_live_held()
@@ -2171,14 +2164,8 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm, self.host.stt_service, TARGET_SAMPLE_RATE
             )
             suppressed = denied or should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
-            if denied:
-                record_cap_audio(
-                    'live',
-                    'suppressed',
-                    self.host.stt_service,
-                    len(pcm) / (2 * TARGET_SAMPLE_RATE),
-                    admission is not None and admission.reason == 'plan_allowance_exhausted',
-                )
+            if denied and admission is not None:
+                admission.record_suppressed(self.host.stt_service, len(pcm) / (2 * TARGET_SAMPLE_RATE))
             if suppressed:
                 hold = getattr(self, 'live_hold', None)
                 if hold is not None:
