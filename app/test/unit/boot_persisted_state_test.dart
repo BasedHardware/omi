@@ -30,7 +30,11 @@ void main() {
     // before removing its directory rather than racing a temporary-file rename.
     await BootJournal.instance.read();
     PathProviderPlatform.instance = previousProvider;
-    await directory.delete(recursive: true);
+    if (await directory.exists()) {
+      try {
+        await directory.delete(recursive: true);
+      } catch (_) {}
+    }
   });
 
   test('old and corrupt boot preferences quarantine originals and load defaults', () async {
