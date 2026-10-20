@@ -34,7 +34,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// without one it is the dialog card.
 Future<bool> confirmConversationDelete(BuildContext context, {Rect? anchor}) async {
   final l10n = context.l10n;
-  if (!context.read<ConnectivityProvider>().isConnected) {
+  final isConnected = context.read<ConnectivityProvider>().isConnected;
+  if (!isConnected) {
     await showOmiAlert(
       context,
       title: l10n.unableToDeleteConversation,
@@ -44,6 +45,7 @@ Future<bool> confirmConversationDelete(BuildContext context, {Rect? anchor}) asy
   }
   final prefs = SharedPreferencesUtil();
   if (!prefs.showConversationDeleteConfirmation) return true;
+  if (!context.mounted) return false;
   final result = anchor != null
       ? await showOmiConfirmMenu(
           context,
@@ -100,7 +102,8 @@ Future<void> confirmAndDeleteSelectedConversations(BuildContext context) async {
   final selected = provider.selectedConversations;
   if (selected.isEmpty) return;
   final l10n = context.l10n;
-  if (!context.read<ConnectivityProvider>().isConnected) {
+  final isConnected = context.read<ConnectivityProvider>().isConnected;
+  if (!isConnected) {
     await showOmiAlert(
       context,
       title: l10n.unableToDeleteConversation,
