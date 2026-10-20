@@ -23,6 +23,13 @@ describe('EditableTitle', () => {
     expect(updateConversationTitle).not.toHaveBeenCalled();
   });
 
+  it('a title that repairs to nothing reads as untitled, not as the raw debris', () => {
+    render(<EditableTitle conversationId="c1" title="[s01234]" displayTitle="" />);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(
+      'Untitled Conversation',
+    );
+  });
+
   it('falls back to the stored title without a display title', () => {
     render(<EditableTitle conversationId="c1" title="Plain title" />);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Plain title');

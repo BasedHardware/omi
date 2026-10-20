@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   presentableNoteSection,
   presentableNoteStructured,
+  presentableNoteTitle,
   resolvableNoteSources,
 } from '@omi/note-shared/note-sources.mjs';
 
@@ -61,4 +62,23 @@ test('derived share surfaces read repaired title, overview and sections', () => 
   assert.deepEqual(structured.sections[0].source_segment_ids, ['s1']);
   assert.equal(structured.meeting_type, 'standup');
   assert.equal(presentableNoteStructured(undefined, ['s1']), undefined);
+});
+
+test('titles keep ordinary bracketed words and lose only citation-shaped units', () => {
+  const cases = [
+    ['Project [Q3]', [], 'Project [Q3]'],
+    ['Q3 Review [2024]', [], 'Q3 Review [2024]'],
+    ['Notes [v2] [s01234]', [], 'Notes [v2]'],
+    ['Kickoff [s01234]', ['s01234'], 'Kickoff'],
+    ['Recap [abc]', ['abc'], 'Recap'],
+    ['Recap [Speaker 1]', [], 'Recap'],
+    ['Speaker_00 recap', [], 'recap'],
+    ['Sync [443191dc-8b75-4451-9d72-27c449b9ea45]', [], 'Sync'],
+    ['Plan [s01234, Q3]', [], 'Plan [s01234, Q3]'],
+    ['Mixed [Q3] text s01234', ['s01234'], 'Mixed [Q3] text'],
+    ['[s01234]', [], ''],
+  ];
+  for (const [input, ids, expected] of cases) {
+    assert.equal(presentableNoteTitle(input, ids), expected, input);
+  }
 });

@@ -149,6 +149,11 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(conv.title, "Kickoff [s01234]")
   }
 
+  func test_ordinaryBracketedTitleWordsAreKept() {
+    XCTAssertEqual(makeConversation(title: "Project [Q3]").displayState, .titled("Project [Q3]"))
+    XCTAssertEqual(makeConversation(title: "Notes [v2] [s01234]").displayState, .titled("Notes [v2]"))
+  }
+
   func test_titleOfOnlyDebrisReadsAsUntitled() {
     let conv = makeConversation(title: "Speaker_00 [s01234]", status: .completed)
     XCTAssertEqual(conv.displayState, .untitledEmpty)

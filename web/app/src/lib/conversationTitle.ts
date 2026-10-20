@@ -1,6 +1,6 @@
 import {
   noteTranscriptIDs,
-  presentableNoteText,
+  presentableNoteTitle,
 } from '@omi/note-shared/note-sources.mjs';
 
 interface TitledConversation {
@@ -10,11 +10,11 @@ interface TitledConversation {
 
 /**
  * The title as displayed: citation debris (`[s01234]`, `Speaker_00`) repaired against the
- * conversation's transcript, as for note sections. Display only — edit and save paths keep
+ * conversation's transcript. Ordinary bracketed words (`Project [Q3]`) are kept. Display only — edit and save paths keep
  * `structured.title`. Empty when the stored title is empty or only debris.
  */
 export function conversationDisplayTitle(conversation: TitledConversation): string {
-  return presentableNoteText(
+  return presentableNoteTitle(
     conversation.structured?.title,
     noteTranscriptIDs(conversation.transcript_segments),
   );

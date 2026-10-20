@@ -17,6 +17,15 @@ describe('conversationDisplayTitle', () => {
     ).toBe('recap');
   });
 
+  it('keeps ordinary bracketed words in titles', () => {
+    expect(conversationDisplayTitle({ structured: { title: 'Project [Q3]' } })).toBe(
+      'Project [Q3]',
+    );
+    expect(
+      conversationDisplayTitle({ structured: { title: 'Call [Kickoff] [s01234]' } }),
+    ).toBe('Call [Kickoff]');
+  });
+
   it('keeps ordinary titles and returns empty for a missing title', () => {
     expect(
       conversationDisplayTitle({ structured: { title: 'Q3 planning (draft)' } }),

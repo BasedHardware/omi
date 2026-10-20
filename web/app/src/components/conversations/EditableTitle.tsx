@@ -115,7 +115,7 @@ export function EditableTitle({
         className,
       )}
     >
-      {displayTitle || title || 'Untitled Conversation'}
+      {(displayTitle ?? title) || 'Untitled Conversation'}
     </h1>
   );
 }

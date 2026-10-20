@@ -771,7 +771,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             _Row(
               key: ValueKey('search_conversation_${conversation.id}'),
               leading: _Emoji(conversation.structured.emoji),
-              title: presentableConversationTitle(conversation),
+              title: presentableConversationTitleOrFallback(conversation, l10n),
               subtitle: [
                 dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                 if (conversation.matchSnippets.isNotEmpty) conversation.matchSnippets.first.text,
@@ -837,7 +837,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 for (final conversation in _scopeConversations)
                   _Row(
                     leading: _Emoji(conversation.structured.emoji),
-                    title: presentableConversationTitle(conversation),
+                    title: presentableConversationTitleOrFallback(conversation, context.l10n),
                     subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                     onTap: () => _openConversation(conversation),
                   ),

@@ -120,6 +120,18 @@ enum ConversationSummarySelection {
     return NoteCitationContract.repair(text, valid: valid).text
   }
 
+  /// A conversation title for display: like `presentableText`, but ordinary bracketed words
+  /// ("Project [Q3]") are kept; see `NoteCitationContract.repairTitle`.
+  static func presentableTitle(_ title: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    let lowered = title.lowercased()
+    let mayCarryDebris =
+      title.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { title.contains($0) })
+    guard mayCarryDebris else { return title }
+    return NoteCitationContract.repairTitle(title, valid: valid)
+  }
+
   /// Suggested "Try with Apps" rows: memories-capable apps that have not
   /// produced a result for this conversation yet.
   ///

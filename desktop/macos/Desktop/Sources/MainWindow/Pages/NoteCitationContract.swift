@@ -15,6 +15,36 @@ enum NoteCitationContract {
     }
   }
 
+  /// Read-time repair of a conversation title (web `presentableNoteTitle`). Titles keep ordinary
+  /// bracketed words ("Project [Q3]"): only bracket units made of known IDs, citation-shaped IDs (a
+  /// segment UUID, `s01234`, a `^1` footnote) or a speaker label are debris. Everything else the
+  /// note repair does applies as for any note text.
+  static func repairTitle(_ input: String, valid: Set<String>) -> String {
+    let mask = "\u{E012}"
+    if input.contains(mask) { return repair(input, valid: valid).text }
+    var kept: [String] = []
+    let masked = replace(input, pattern: #"[\[［【][^\[\]［］【】\n]*[\]］】]"#) { unit in
+      let bare = String(unit.dropFirst().dropLast())
+        .replacingOccurrences(of: "[\u{200B}\u{200C}\u{200D}\u{2060}\u{FEFF}]", with: "", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let tokens = bare.split(whereSeparator: { $0.isWhitespace || $0 == "," || $0 == ";" }).map(String.init)
+      let citation =
+        matches(bare, #"(?i)^(?:spk|speaker)[ _]\p{Nd}+:?$"#)
+        || tokens.allSatisfy { token in
+          valid.contains(token)
+            || matches(
+              token,
+              #"(?i)^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s[0-9]{4,}|\^[0-9]+)$"#)
+        }
+      if citation || kept.count >= 0x0F00 { return unit }
+      kept.append(unit)
+      return mask + String(Unicode.Scalar(UInt32(0xE100 + kept.count - 1))!)
+    }
+    return replace(repair(masked, valid: valid).text, pattern: "\u{E012}[\u{E100}-\u{EFFF}]") { slot in
+      kept[Int(slot.unicodeScalars.last!.value) - 0xE100]
+    }
+  }
+
   /// Protected-unit keys: a prefix the input does not contain, the unit's index in base 254 over
   /// U+E002..U+E0FF, then U+E001. Private-use characters match no repair pattern, and the keys
   /// stay short however many units a note holds.

@@ -14,6 +14,25 @@ final class NoteCitationContractTests: XCTestCase {
     XCTAssertEqual(nested.sourceIDs, ["s01234"])
   }
 
+  func testTitlesKeepOrdinaryBracketedWordsAndLoseOnlyCitationShapedUnits() {
+    let cases: [(String, Set<String>, String)] = [
+      ("Project [Q3]", [], "Project [Q3]"),
+      ("Q3 Review [2024]", [], "Q3 Review [2024]"),
+      ("Notes [v2] [s01234]", [], "Notes [v2]"),
+      ("Kickoff [s01234]", ["s01234"], "Kickoff"),
+      ("Recap [abc]", ["abc"], "Recap"),
+      ("Recap [Speaker 1]", [], "Recap"),
+      ("Speaker_00 recap", [], "recap"),
+      ("Sync [443191dc-8b75-4451-9d72-27c449b9ea45]", [], "Sync"),
+      ("Plan [s01234, Q3]", [], "Plan [s01234, Q3]"),
+      ("Mixed [Q3] text s01234", ["s01234"], "Mixed [Q3] text"),
+      ("[s01234]", [], ""),
+    ]
+    for (input, valid, expected) in cases {
+      XCTAssertEqual(NoteCitationContract.repairTitle(input, valid: valid), expected, input)
+    }
+  }
+
   func testHandAuthoredCrossClientContract() throws {
     // Read the single tracked contract directly, never a generated fixture copy.
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

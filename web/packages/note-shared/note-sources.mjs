@@ -48,7 +48,7 @@ export function presentableNoteStructured(structured, transcriptIDs = []) {
   if (!structured || typeof structured !== "object") return structured;
   return {
     ...structured,
-    title: presentableNoteText(structured.title, transcriptIDs),
+    title: presentableNoteTitle(structured.title, transcriptIDs),
     overview: presentableNoteText(structured.overview, transcriptIDs),
     sections: Array.isArray(structured.sections)
       ? structured.sections.map((section) =>
@@ -58,4 +58,40 @@ export function presentableNoteStructured(structured, transcriptIDs = []) {
         )
       : structured.sections,
   };
+}
+
+// Citation-shaped bracket tokens in a title: a transcript segment UUID, the
+// compact `s01234` form, or a `^1` footnote marker.
+const TITLE_CITATION_TOKEN =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s\d{4,}|\^\d+)$/i;
+const TITLE_SPEAKER = /^(?:spk|speaker)[ _]\p{Nd}+:?$/iu;
+const TITLE_BRACKET = /[[［【]([^[\]［］【】\n]*)[\]］】]/g;
+const TITLE_MASK = "";
+
+/**
+ * Read-time repair of a conversation title. Titles keep ordinary bracketed
+ * words ("Project [Q3]", "Call [Kickoff]"): only bracket units made of known
+ * IDs, citation-shaped IDs or a speaker label are debris. Everything else the
+ * note repair does (bare known IDs, speaker labels, citation parentheses and
+ * links) applies as for any note text.
+ */
+export function presentableNoteTitle(text, transcriptIDs = []) {
+  const input = text ?? "";
+  const known = new Set(transcriptIDs.filter(Boolean));
+  if (input.includes(TITLE_MASK)) return presentableNoteText(input, [...known]);
+  const kept = [];
+  const masked = input.replace(TITLE_BRACKET, (unit, content) => {
+    const bare = content.replace(/[​‌‍⁠﻿]/g, "").trim();
+    const tokens = bare.split(/[\s,;]+/).filter(Boolean);
+    const citation =
+      TITLE_SPEAKER.test(bare) ||
+      tokens.every((token) => known.has(token) || TITLE_CITATION_TOKEN.test(token));
+    if (citation || kept.length >= 0x0f00) return unit;
+    kept.push(unit);
+    return TITLE_MASK + String.fromCharCode(0xe100 + kept.length - 1);
+  });
+  return presentableNoteText(masked, [...known]).replace(
+    /([-])/g,
+    (_, slot) => kept[slot.charCodeAt(0) - 0xe100]
+  );
 }

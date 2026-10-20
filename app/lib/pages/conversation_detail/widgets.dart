@@ -117,7 +117,8 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
 
   String _atRestText(String stored) {
     final shown = widget.displayText?.call(stored) ?? stored;
-    return shown.isNotEmpty ? shown : stored;
+    // A stored title that was only citation debris reads as untitled, never as the raw debris.
+    return shown.isNotEmpty ? shown : (widget.hintText ?? context.l10n.untitledConversation);
   }
 
   @override

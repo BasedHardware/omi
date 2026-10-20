@@ -64,7 +64,16 @@ String conversationDisplayTitle(
 /// transcript, trimmed. Display only: never save it as the user's title.
 String presentableConversationTitle(ServerConversation conversation, {String? title}) {
   final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
-  return repairNoteCitations(title ?? conversation.structured.title, knownIDs).text.trim();
+  return presentableNoteTitle(title ?? conversation.structured.title, knownIDs).trim();
+}
+
+/// The repaired title for secondary surfaces (rows, search, share subject), with no untitled
+/// telemetry. A stored title that repairs to nothing (it was only debris) falls back like an untitled
+/// one; an empty stored title stays empty, as these surfaces always rendered it.
+String presentableConversationTitleOrFallback(ServerConversation conversation, AppLocalizations l10n) {
+  final repaired = presentableConversationTitle(conversation);
+  if (repaired.isNotEmpty || conversation.structured.title.trim().isEmpty) return repaired;
+  return transcriptFallbackTitle(conversation) ?? recordingFallbackTitle(conversation, l10n);
 }
 
 /// A presentation-only label; never save this placeholder as a user title.

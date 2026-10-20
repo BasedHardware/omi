@@ -221,6 +221,15 @@ void main() {
       expect(presentableConversationTitle(_conversation(title: 'Q3 planning (draft)')), 'Q3 planning (draft)');
     });
 
+    test('secondary surfaces fall back when the stored title was only debris', () {
+      expect(presentableConversationTitleOrFallback(_conversation(title: 'Project [Q3]'), l10n), 'Project [Q3]');
+      expect(
+          presentableConversationTitleOrFallback(
+              _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]), l10n),
+          'Ship the beta on Friday.');
+      expect(presentableConversationTitleOrFallback(_conversation(), l10n), isEmpty);
+    });
+
     test('a title that is only debris falls back like an untitled one', () {
       final conversation = _conversation(title: '[s01234]', segments: [_segment('Ship the beta on Friday.')]);
       expect(conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.values.first),

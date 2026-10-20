@@ -374,7 +374,7 @@ class _ConversationRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      presentableConversationTitle(conversation),
+                      presentableConversationTitleOrFallback(conversation, context.l10n),
                       style: OmiType.body,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

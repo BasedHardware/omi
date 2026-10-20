@@ -803,7 +803,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       children: [
                         Expanded(
                           child: Text(
-                            '${tryDecodeText(data.$2.structured.emoji)} ${repairNoteCitations(data.$2.structured.title, const []).text}',
+                            '${tryDecodeText(data.$2.structured.emoji)} ${presentableNoteTitle(data.$2.structured.title, const [])}',
                             style: Theme.of(context).textTheme.bodyMedium,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

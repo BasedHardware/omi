@@ -150,4 +150,25 @@ void main() {
     expect(detail.savedTitles, isEmpty, reason: 'an untouched title is never saved, repaired or not');
     expect(conversation.structured.title, 'Kickoff [s01234]');
   });
+
+  testWidgets('a title that was only debris reads as untitled at rest, never as the debris', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildOmiTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ConversationTitleField(
+            style: const TextStyle(fontSize: 20),
+            controller: TextEditingController(text: '[s01234]'),
+            focusNode: FocusNode(),
+            hintText: 'Recording at noon',
+            displayText: (stored) => '',
+          ),
+        ),
+      ),
+    );
+    final atRest = tester.widget<Text>(find.byKey(const Key('conversation_title_at_rest')));
+    expect(atRest.data, 'Recording at noon');
+  });
 }

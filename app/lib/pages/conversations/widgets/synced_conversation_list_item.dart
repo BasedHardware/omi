@@ -89,8 +89,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                               maxLines: 1,
                             )
                           : Text(
-                              presentableConversationTitle(conversation,
-                                  title: conversation.structured.title.decodeString),
+                              presentableConversationTitleOrFallback(conversation, context.l10n),
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),

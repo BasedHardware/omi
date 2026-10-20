@@ -150,3 +150,33 @@ String _keyDigits(int index) {
     text = result.text;
   }
 }
+
+// Citation-shaped bracket tokens in a title: a transcript segment UUID, the compact `s01234` form,
+// or a `^1` footnote marker.
+final _titleCitationToken =
+    RegExp(r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s\d{4,}|\^\d+)$', caseSensitive: false);
+final _titleSpeaker = RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true);
+final _titleBracket = RegExp(r'[\[［【]([^\[\]［］【】\n]*)[\]］】]');
+const _titleMask = '';
+
+/// Read-time repair of a conversation title (web `presentableNoteTitle`). Titles keep ordinary
+/// bracketed words ("Project [Q3]"): only bracket units made of known IDs, citation-shaped IDs or a
+/// speaker label are debris. Everything else the note repair does applies as for any note text.
+String presentableNoteTitle(String text, Iterable<String> knownIDs) {
+  final known = knownIDs.where((id) => id.isNotEmpty).toSet();
+  if (text.contains(_titleMask)) return repairNoteCitations(text, known).text;
+  final kept = <String>[];
+  final masked = text.replaceAllMapped(_titleBracket, (match) {
+    final unit = match[0]!;
+    final bare = match[1]!.replaceAll(RegExp('[​‌‍⁠﻿]'), '').trim();
+    final tokens = bare.split(RegExp(r'[\s,;]+')).where((token) => token.isNotEmpty);
+    final citation = _titleSpeaker.hasMatch(bare) ||
+        tokens.every((token) => known.contains(token) || _titleCitationToken.hasMatch(token));
+    if (citation || kept.length >= 0x0f00) return unit;
+    kept.add(unit);
+    return '$_titleMask${String.fromCharCode(0xE100 + kept.length - 1)}';
+  });
+  return repairNoteCitations(masked, known)
+      .text
+      .replaceAllMapped(RegExp('([-])'), (match) => kept[match[1]!.codeUnitAt(0) - 0xE100]);
+}

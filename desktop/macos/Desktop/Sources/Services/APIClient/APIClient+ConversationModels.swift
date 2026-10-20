@@ -486,7 +486,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case .completed:
       // Display-only citation repair (`[s01234]`, `Speaker_00` in legacy titles); rename
       // edits `structured.title`. A title that is only debris reads as untitled.
-      let title = ConversationSummarySelection.presentableText(
+      let title = ConversationSummarySelection.presentableTitle(
         structured.title, segments: transcriptSegments
       ).trimmingCharacters(in: .whitespacesAndNewlines)
       if !title.isEmpty {
