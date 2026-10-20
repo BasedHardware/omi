@@ -404,20 +404,10 @@ env:
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
     value: "21600"
-  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
-    value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "true"
-  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "true"
-  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
     value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
     value: "true"
-  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -483,14 +473,8 @@ env:
     value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
-  - name: SONIOX_MONTHLY_CEILING_USD
-    value: "0"
-  - name: SONIOX_ESTIMATED_USD_PER_HOUR
-    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
-  - name: SONIOX_CONTEXT_TERMS
-    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT

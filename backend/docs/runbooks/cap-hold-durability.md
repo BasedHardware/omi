@@ -6,6 +6,10 @@ rollout. The enforcement cohort deadline remains **2026-10-19 18:00 UTC**; neith
 `STT_CAP_DISPATCH_ENFORCEMENT` nor `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` is enabled
 by this change.
 
+Held-choice API acceptance and its separate DEC-BTR-005 graduation schedule are
+tracked by the [hermetic acceptance and ramp protocol](held-content-acceptance.md).
+The dated dispatch-enforcement ramp below does not authorize that API rollout.
+
 ## Admission scope and original custody lane
 
 The [cohort/lane contract and dazheng-owned ramp](../stt-cap-dispatch.md#cohort-and-lane-rollout-david-2026-10-18)
