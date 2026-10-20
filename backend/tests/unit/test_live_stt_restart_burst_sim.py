@@ -405,6 +405,43 @@ async def test_no_same_target_retry_while_the_pod_drains(monkeypatch, draining):
     )
 
 
+@pytest.mark.asyncio
+async def test_a_failed_mid_session_retry_redial_does_not_vote_again(monkeypatch):
+    """The serving leg's pre-text death voted; the granted redial is the same blip."""
+    from utils.stt.recovery_state import LiveRecoveryController, current_recovery
+
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
+    votes = []
+    monkeypatch.setattr(live_chain.health, 'record_session', lambda *args, **_kwargs: votes.append(args[2:]) or True)
+    controller = LiveRecoveryController(SimpleNamespace(state=SimpleNamespace(active=True)))
+    controller.begin(family='soniox')
+    controller.attempted_targets.add('soniox')
+    assert controller.grant_transient_retry('soniox') and controller.is_retry_dial('soniox')
+    dials = []
+
+    async def blip():
+        dials.append(1)
+        return SimpleNamespace(is_connection_dead=True, finish=lambda: None, death_reason=None, typed_death_reason=None)
+
+    token = current_recovery.set(controller)
+    try:
+        with pytest.raises((live_chain.LiveChainExhausted, RuntimeError)):
+            await live_chain.connect_configured_chain(
+                primary_service=st.STTService.soniox,
+                connect_primary=blip,
+                callbacks={},
+                failed=set(),
+                models=['soniox'],
+                routing_uid=_uid(8),
+                routing_language='ja',
+            )
+    finally:
+        current_recovery.reset(token)
+    assert len(dials) == 1  # the slot is spent; no in-chain second retry
+    assert not [vote for vote in votes if provider_observation(vote[0], vote[3]) is True]
+
+
 def test_retry_slot_is_separate_from_the_soniox_rescue_reentry():
     from utils.stt.recovery_state import LiveRecoveryController
 

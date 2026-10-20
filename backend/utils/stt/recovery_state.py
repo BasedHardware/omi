@@ -308,6 +308,14 @@ class LiveRecoveryController:
     def _retry_available(self, identity: str) -> bool:
         return identity in self._retry_grants and identity not in self._retry_used
 
+    def is_retry_dial(self, identity: str) -> bool:
+        """Whether the next reservation of ``identity`` spends its retry slot."""
+        return (
+            identity in self.attempted_targets
+            and not self._cheap_reentry_available(identity)
+            and self._retry_available(identity)
+        )
+
     def note_retry_jitter(self, identity: str, seconds: float) -> None:
         """Delay the next dial of a same-target retry (one pending per identity)."""
         if len(self._retry_jitter) < MAX_RECOVERY_TARGETS:

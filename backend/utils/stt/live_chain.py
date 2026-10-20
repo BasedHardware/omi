@@ -764,6 +764,10 @@ async def connect_configured_chain(
         if active and backup(service, target):
             target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
             COST_DECISION.labels(target=target_id, reason='failover').inc()
+        # A dial spending a same-target retry slot: its failure is the same blip
+        # the dead leg already voted for, so it must not vote again.
+        is_retry_dial = getattr(recovery, 'is_retry_dial', None)
+        retry_dial = bool(is_retry_dial(attempt_identity(service, target))) if callable(is_retry_dial) else False
         try:
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
@@ -917,6 +921,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if retry_dial:
+                rejected_outcome.evidence = False
             if socket is not None and rejected_outcome.connection_cause is None:
                 rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
@@ -1033,6 +1039,8 @@ async def connect_configured_chain(
             if remaining is not None:
                 delay = min(delay, max(0.0, remaining / 4))
         await asyncio.sleep(delay)
+        if is_draining():
+            return None  # SIGTERM arrived during the jitter
         if not circuit.allow_request(max_probes=probes):
             SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
             return None
