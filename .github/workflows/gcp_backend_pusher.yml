@@ -138,6 +138,8 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
+          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
+          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"
