@@ -1,11 +1,102 @@
 """Stable person rename and bounded exact-alias retention."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
+import os
+import pickle
+import threading
+
+from config.firestore_read_levers import lever_enabled
 from database import chat_edits
 from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
+
+
+class _PeopleScanMemo:
+    def __init__(self, parent):
+        self.parent = parent
+        self.entries = {}
+        self.bytes_used = 0
+        self.generation = 0
+        self.writers = 0
+        self.active = True
+        self.client = None
+        self.lock = threading.RLock()
+        self.max_entries = _memo_bound('FIRESTORE_PEOPLE_SCAN_MEMO_MAX_ENTRIES', 256)
+        self.max_bytes = _memo_bound('FIRESTORE_PEOPLE_SCAN_MEMO_MAX_BYTES', 2 * 1024 * 1024)
+
+    def clear(self):
+        self.entries.clear()
+        self.bytes_used = 0
+        self.generation += 1
+
+
+def _memo_bound(name: str, default: int) -> int:
+    try:
+        # Zero disables admission; invalid config retains the documented default.
+        return max(0, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
+_people_scan_memo: ContextVar[_PeopleScanMemo | None] = ContextVar('people_scan_attempt', default=None)
+
+
+@contextmanager
+def people_scan_attempt():
+    """Explicitly bound raw People reuse to ONE sync task attempt.
+
+    The integrator must enter/exit this at the attempt boundary, including retries,
+    errors and cancellation. There is no implicit request, thread, TTL or UID cache.
+    Inherited executor contexts become inactive when this scope exits. A new attempt
+    MUST enter a new scope, even when its Python context was copied from another.
+    Nested attempts are isolated; invalidate parent snapshots when returning.
+    """
+    memo = _PeopleScanMemo(_people_scan_memo.get())
+    token = _people_scan_memo.set(memo)
+    try:
+        yield
+    finally:
+        with memo.lock:
+            memo.active = False
+            memo.clear()
+            memo.client = None
+        _people_scan_memo.reset(token)
+        _invalidate_people_scans()
+
+
+def _invalidate_people_scans():
+    # Clearing every UID is deliberately conservative. Also invalidate ancestors
+    # when a nested attempt writes; never restore a parent's pre-write snapshot.
+    memo = _people_scan_memo.get()
+    while memo is not None:
+        with memo.lock:
+            memo.clear()
+        memo = memo.parent
+
+
+@contextmanager
+def _people_write():
+    # Fence both sides of commit (including an uncertain/failed commit), and do
+    # not admit/hit snapshots while another context-propagated worker is writing.
+    memos = []
+    memo = _people_scan_memo.get()
+    while memo is not None:
+        with memo.lock:
+            memo.clear()
+            memo.writers += 1
+        memos.append(memo)
+        memo = memo.parent
+    try:
+        yield
+    finally:
+        for memo in memos:
+            with memo.lock:
+                memo.clear()
+                memo.writers -= 1
 
 
 def normalized_person_alias(value: Any) -> str | None:
@@ -55,6 +146,7 @@ def update_person_name_transaction(
         'updated_at': datetime.now(timezone.utc),
         'is_user_created': True,
     }
+    _invalidate_people_scans()
     transaction.update(person_ref, patch)
     if expected_chat_state is not None:
         expected_chat_state['after'] = chat_edits.encode(patch)
@@ -67,12 +159,13 @@ def rename_person_retaining_aliases(
     """Rename an owner-scoped person and map concurrent deletion to missing."""
 
     person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
-    try:
-        if expected_chat_state is not None:
-            return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
-        return update_person_name_transaction(db_client.transaction(), person_ref, name)
-    except NotFound:
-        return False
+    with _people_write():
+        try:
+            if expected_chat_state is not None:
+                return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
+            return update_person_name_transaction(db_client.transaction(), person_ref, name)
+        except NotFound:
+            return False
 
 
 @transactional
@@ -87,6 +180,7 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
     if data.get('is_dismissed') is True:
         return True
     now = datetime.now(timezone.utc)
+    _invalidate_people_scans()
     transaction.update(
         person_ref,
         {
@@ -102,16 +196,48 @@ def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
     """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
 
     person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
-    try:
-        return dismiss_person_transaction(db_client.transaction(), person_ref)
-    except NotFound:
-        return False
+    with _people_write():
+        try:
+            return dismiss_person_transaction(db_client.transaction(), person_ref)
+        except NotFound:
+            return False
 
 
 def list_people(
-    db_client: Any, uid: str, *, include_dismissed: bool = False, limit: Optional[int] = None
+    db_client: Any,
+    uid: str,
+    *,
+    include_dismissed: bool = False,
+    limit: Optional[int] = None,
+    memoize: bool = False,
 ) -> list[dict[str, Any]]:
-    """List owner-scoped people, hiding soft-dismissed records by default."""
+    """List people; only audited, read-only context callers may opt into reuse.
+
+    Learning/entitlement authority, privacy, destructive and mutation-adjacent
+    callers MUST keep memoize=False (the default). Complete/dismissed exports
+    always read live. Stored bytes contain only this raw result, never a learning
+    projection. Each hit decodes its own copy, preserving Firestore value types.
+    """
+    memo = _people_scan_memo.get()
+    key = (uid, include_dismissed, limit)
+    generation = None
+    if memo is not None:
+        if memoize and not include_dismissed and lever_enabled('people_scan_dedupe', uid):
+            with memo.lock:
+                if memo.active and not memo.writers and (memo.client is None or memo.client is db_client):
+                    memo.client = db_client
+                    generation = memo.generation
+                    payload = memo.entries.get(key)
+                    if payload is not None:
+                        try:
+                            # Only deserialize bytes produced here, never external data.
+                            return pickle.loads(payload)
+                        except Exception:
+                            memo.clear()
+                            generation = memo.generation
+        else:
+            # A live authority read must not leave an older hint snapshot usable.
+            _invalidate_people_scans()
 
     people_ref = db_client.collection('users').document(uid).collection('people')
     if limit is not None:
@@ -123,11 +249,34 @@ def list_people(
             continue
         data.setdefault('id', person.id)
         result.append(data)
+    if memo is not None and generation is not None:
+        try:
+            payload = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+            # Payload+key bytes bounded separately from <= max_entries metadata.
+            size = len(payload) + len(uid.encode('utf-8')) + 64
+            with memo.lock:
+                if (
+                    memo.active
+                    and not memo.writers
+                    and memo.generation == generation
+                    and key not in memo.entries
+                    and len(memo.entries) < memo.max_entries
+                    and memo.bytes_used + size <= memo.max_bytes
+                ):
+                    memo.entries[key] = payload
+                    memo.bytes_used += size
+        except Exception:
+            # Unsupported raw values disable reuse, never change read semantics.
+            pass
     return result
 
 
 def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
-    """Find the first active owner-scoped person with an exact display name."""
+    """Find the first active owner-scoped person with this display name, ignoring case.
+
+    An exact match costs one indexed query. Firestore has no case-insensitive equality,
+    so only a miss scans the owner's people, comparing names the way renames dedupe aliases.
+    """
 
     people_ref = db_client.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name))
@@ -137,4 +286,12 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
             continue
         data.setdefault('id', person.id)
         return data
+    wanted = normalized_person_alias(name)
+    if wanted is None:
+        return None
+    folded = wanted.casefold()
+    for data in list_people(db_client, uid):
+        stored = normalized_person_alias(data.get('name'))
+        if stored is not None and stored.casefold() == folded:
+            return data
     return None

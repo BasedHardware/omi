@@ -159,6 +159,57 @@ final conversationDetailScenarios = <AuditScenario>[
     },
   ),
   AuditScenario(
+    id: 'conversation-detail-partial-audio',
+    title: 'Transcript player when only a few seconds of a long call were saved',
+    page: 'lib/widgets/conversation_bottom_bar.dart (ConversationBottomBar)',
+    state: 'A 5:49 phone call with a complete transcript and one 3 s stored recording (#19243)',
+    run: (a) async {
+      final startedAt = DateTime(2026, 10, 2, 14);
+      TranscriptSegment line(String id, double start, double end, String text, {bool mine = false}) =>
+          TranscriptSegment(
+            id: id,
+            text: text,
+            speaker: mine ? 'SPEAKER_0' : 'SPEAKER_1',
+            isUser: mine,
+            personId: null,
+            start: start,
+            end: end,
+            translations: [],
+          );
+      final conversation = ServerConversation(
+        id: 'audit-partial-audio',
+        createdAt: startedAt,
+        startedAt: startedAt,
+        finishedAt: startedAt.add(const Duration(minutes: 5, seconds: 49)),
+        status: ConversationStatus.completed,
+        structured: Structured('Call about the venue deposit', 'Confirmed the deposit and the Friday walkthrough.',
+            emoji: '\u{1F4DE}', category: 'personal'),
+        transcriptSegments: [
+          line('0', 0, 12, 'Hi, calling about the deposit for the twelfth.'),
+          line('1', 12, 40, 'Yes, it is confirmed. Do you still want the walkthrough on Friday?', mine: true),
+          line('2', 40, 95, 'Friday works. Can we do it before noon?'),
+          line('3', 95, 180, 'Eleven is fine. I will send the parking details tonight.', mine: true),
+          line('4', 180, 300, 'Perfect. One more thing about the catering list.'),
+          line('5', 300, 349, 'Send it over and I will look tomorrow.', mine: true),
+        ],
+        audioFiles: [
+          AudioFile(
+            id: 'audio-partial',
+            uid: 'audit',
+            conversationId: 'audit-partial-audio',
+            chunkTimestamps: [],
+            duration: 3,
+            startedAt: startedAt,
+          ),
+        ],
+      );
+      await _pumpDetail(a, conversation, tab: _transcriptTab);
+      expect(find.byKey(const ValueKey('detail_audio_player')), findsOneWidget);
+      await a.shot('Open the transcript: the player explains the short recording instead of showing -0:03',
+          step: 'transcript');
+    },
+  ),
+  AuditScenario(
     id: 'conversation-detail-summary',
     title: 'Conversation summary, top bar and overflow menu',
     page: _page,

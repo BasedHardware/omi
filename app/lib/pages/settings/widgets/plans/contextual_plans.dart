@@ -24,7 +24,7 @@ Future<bool> openContextualPlans(
   final provider = context.read<UsageProvider>();
   if (!provider.showSubscriptionUI || !await PlanStorefrontGate.sheetEnabled()) return false;
   if (!context.mounted || !provider.showSubscriptionUI) return false;
-  if (await PaywallRouter.openVariant(context, source: source)) return true;
+  if (trigger.isEmpty && await PaywallRouter.openVariant(context, source: source)) return true;
   if (!context.mounted) return false;
   PlatformManager.instance.analytics
       .paywallOpened(source, currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown');
@@ -128,7 +128,7 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;
     final result =
-        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'budget_80', locale: context.l10n.localeName);
+        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'usage_budget', locale: context.l10n.localeName);
     if (mounted && generation == _generation && result is ApiSuccess<PlanStorefront>) {
       setState(() => _data = result.data);
     }
@@ -151,22 +151,72 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
             data: data,
             onDismiss: () => BudgetNudgeDismissal.dismiss(period),
             onOpen: () async {
-              await openContextualPlans(context, source: 'budget_80', trigger: 'budget_80', storefront: data);
+              await openContextualPlans(context, source: 'budget_80', trigger: 'usage_budget', storefront: data);
             }),
     ]);
   }
 }
 
+/// Keeps a CJK segment together so the meter wraps at the `·` separators.
+String meterLineForLayout(String line) {
+  const separator = ' · ';
+  return line.split(separator).map((part) {
+    if (!_containsCjk(part)) return part;
+    final buffer = StringBuffer();
+    var first = true;
+    for (final rune in part.runes) {
+      if (!first) buffer.write('\u2060');
+      buffer.writeCharCode(rune);
+      first = false;
+    }
+    return buffer.toString();
+  }).join(separator);
+}
+
+bool _containsCjk(String text) => text.runes.any(_isCjk);
+
+bool _isCjk(int rune) =>
+    (rune >= 0x1100 && rune <= 0x11FF) ||
+    (rune >= 0x3040 && rune <= 0x30FF) ||
+    (rune >= 0x3130 && rune <= 0x318F) ||
+    (rune >= 0x3400 && rune <= 0x9FFF) ||
+    (rune >= 0xA960 && rune <= 0xA97F) ||
+    (rune >= 0xAC00 && rune <= 0xD7AF) ||
+    (rune >= 0xD7B0 && rune <= 0xD7FF) ||
+    (rune >= 0xF900 && rune <= 0xFAFF) ||
+    (rune >= 0xFF00 && rune <= 0xFFEF);
+
 /// Usage-screen meter. The line is the backend string; there is no separate title.
 class StorefrontUsageMeter extends StatelessWidget {
-  const StorefrontUsageMeter({super.key, required this.usage});
+  const StorefrontUsageMeter({super.key, required this.usage, this.embedded = false});
   final StorefrontUsage usage;
+
+  /// Draws the meter as padding inside a settings card instead of its own card.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final line = usage.meterLine;
     if (line == null || line.isEmpty) return const SizedBox.shrink();
     final percent = usage.percent;
+    final body = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(meterLineForLayout(line), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      if (percent != null) ...[
+        const SizedBox(height: OmiSpacing.xs),
+        LinearProgressIndicator(
+          key: const Key('storefront_usage_meter_bar'),
+          value: (percent / 100).clamp(0.0, 1.0),
+          minHeight: 4,
+          color: OmiColors.accent,
+          backgroundColor: OmiColors.surface3,
+          borderRadius: OmiRadius.pillAll,
+        ),
+      ],
+    ]);
+    if (embedded) {
+      return Padding(
+          key: const Key('storefront_usage_meter'), padding: const EdgeInsets.all(OmiSpacing.md), child: body);
+    }
     return Container(
       key: const Key('storefront_usage_meter'),
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
@@ -176,20 +226,7 @@ class StorefrontUsageMeter extends StatelessWidget {
         borderRadius: OmiRadius.lgAll,
         border: Border.all(color: OmiColors.border),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        if (percent != null) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          LinearProgressIndicator(
-            key: const Key('storefront_usage_meter_bar'),
-            value: (percent / 100).clamp(0.0, 1.0),
-            minHeight: 4,
-            color: OmiColors.accent,
-            backgroundColor: OmiColors.surface3,
-            borderRadius: OmiRadius.pillAll,
-          ),
-        ],
-      ]),
+      child: body,
     );
   }
 }
@@ -248,5 +285,51 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
         ]),
       ]),
     );
+  }
+}
+
+/// Only the backend's observed daily cap opens this entry, never the key count or tier name.
+class McpCapUpsellEntry extends StatefulWidget {
+  const McpCapUpsellEntry({super.key});
+  @override
+  State<McpCapUpsellEntry> createState() => _McpCapUpsellEntryState();
+}
+
+class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
+  PlanStorefront? _data;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (!mounted ||
+        !context.read<UsageProvider>().showSubscriptionUI ||
+        !await PlanStorefrontGate.contextualEnabled()) {
+      return;
+    }
+    if (!mounted) return;
+    final result = await PlanStorefrontApi()
+        .load(source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', locale: context.l10n.localeName);
+    if (mounted && result is ApiSuccess<PlanStorefront>) setState(() => _data = result.data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _data;
+    if (!context.watch<UsageProvider>().showSubscriptionUI ||
+        data == null ||
+        !data.showSubscriptionUi ||
+        data.usage?.mcpCapReached != true) {
+      return const SizedBox.shrink();
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(data.header, style: OmiType.subhead),
+      OmiButton.secondary(
+          label: context.l10n.paywallComparePlans,
+          onPressed: () =>
+              openContextualPlans(context, source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', storefront: data)),
+    ]);
   }
 }

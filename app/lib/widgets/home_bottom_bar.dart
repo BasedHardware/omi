@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// The two-bubbles glyph (FontAwesome `comments`, regular weight) that marks Ask Omi everywhere it
 /// appears, so every entry point reads as one family.
@@ -70,6 +71,46 @@ class HomeChatBarBackdrop extends StatelessWidget {
               stops: [0.0, kHomeBottomFadeHeight / height, 1.0],
               colors: [_fadeStart, OmiColors.surface0, OmiColors.surface0],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Centred "Ask anything" button in Home's bottom bar (#19854).
+class HomeAskAnythingButton extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const HomeAskAnythingButton({super.key, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.l10n.askAnything;
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      child: GestureDetector(
+        key: const ValueKey('home_ask_omi_bar'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: kHomeChatBarHeight,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: OmiColors.border, width: 1),
+          ),
+          child: Text(
+            label,
+            style: OmiType.subhead.copyWith(
+              color: OmiColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),

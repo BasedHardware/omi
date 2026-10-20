@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: batch-policy-boundary
+    command: ["python3", "backend/config/policy/guard.py"]
+    triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-18 policy-window incident: obligations admitted at first-summary percent zero were graded under another revision's policy; fail reads of snapshot-owned batch keys outside the immutable resolver; keep live switches behind their helper and warn on unowned E1b worker/process keys"
   - id: monitoring-alert-backtest-lint
     command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
     triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
@@ -90,6 +95,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: launch-library-app-tests
+    command: ["python3", "plugins/omi-launch-library-app/test_main.py"]
+    triggers: ["plugins/omi-launch-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Launch Library 2 app must validate chat-tool input, ignore Omi uid, cap provider payloads, handle the 15-request hourly limit safely, and format public launch data with source attribution"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
@@ -160,6 +170,11 @@ checks:
     triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14181: arXiv paper search and detail endpoints require typed request validation, defensive Atom XML parsing, and hermetic CI coverage"
+  - id: arxiv-error-handling-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_error_handling.py"]
+    triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "arXiv plugin must prevent internal exception details and network traces from leaking into chat tool responses"
   - id: public-holidays-app-tests
     command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
@@ -537,14 +552,19 @@ checks:
     reason: "manual public promotion requires exact already-processed build, matching release notes and roll-forward checks"
   - id: mobile-daily-train-contract
     command: ["python3", "app/scripts/mobile_daily_train_test.py"]
-    triggers: ["app/scripts/mobile_daily_train.py", "app/scripts/mobile_daily_train_test.py", "app/scripts/mobile_store_promote.py", "codemagic.yaml", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
+    triggers: ["app/scripts/mobile_daily_train.py", "app/scripts/mobile_daily_train_test.py", "app/scripts/mobile_store_promote.py", "codemagic.yaml", ".github/workflows/mobile_daily_train.yml", ".github/workflows/mobile_rollout_watch.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the daily store train is self-driving but store-gated: hold while a submission is in flight, replace only an unreleased approval, iOS releases on approval with a pausable phased rollout, Android stages a haltable production rollout and advances it one ladder hop per gate-green day (halted rollouts wait for a human)"
+    reason: "the daily store train is self-driving but store-gated: hold while a submission is in flight, release an approved-but-unreleased version via appStoreVersionReleaseRequests with the phased rollout attached, iOS releases on approval with a pausable phased rollout that jumps to 100% after its 12h observation window, Android stages a haltable production rollout at 1% and advances it one ladder hop per 4-hour observation window (halted rollouts wait for a human)"
   - id: mobile-daily-train-dispatch
     command: ["python3", ".github/scripts/test_dispatch_mobile_daily_train.py"]
     triggers: [".github/scripts/dispatch_mobile_daily_train.py", ".github/scripts/test_dispatch_mobile_daily_train.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/workflows/mobile_daily_train.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Codemagic drops a variables object holding an empty string, so the daily dispatch must always send a non-empty TRAIN_DRY_RUN and target the train workflow on main"
+  - id: mobile-rollout-advance-dispatch
+    command: ["python3", ".github/scripts/test_dispatch_mobile_rollout_watch.py"]
+    triggers: [".github/scripts/dispatch_mobile_rollout_watch.py", ".github/scripts/test_dispatch_mobile_rollout_watch.py", ".github/workflows/mobile_rollout_watch.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the intraday rollout advance never submits or stages a candidate: its dispatch must target the advance workflow on main with TRAIN_ADVANCE_ROLLOUTS=true and a non-empty TRAIN_DRY_RUN"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
@@ -873,7 +893,7 @@ checks:
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: web-app-checks
     command: ["bash", "web/app/test.sh"]
-    triggers: ["web/app/src/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/vitest.setup.ts", "web/app/scripts/moonshine-smoke.test.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
+    triggers: ["web/app/src/**", "web/packages/note-shared/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/vitest.setup.ts", "web/app/scripts/moonshine-smoke.test.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "web/app shipped with no typecheck or test lane at all, so desktop-parity work there had no runnable Definition-of-Done gate"
   - id: admin-deploy-scope
@@ -883,14 +903,14 @@ checks:
     reason: "admin Cloud Run deploys must decide scope before taking the shared prod environment slot"
   - id: admin-deploy-scope-fixtures
     command: ["python3", ".github/scripts/test_check_admin_deploy_scope.py"]
-    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", "web/admin/grafana/apply_omi_tv_dashboard.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "generated-client-only diffs must skip admin deploy; real admin runtime diffs and workflow_dispatch must still deploy"
   - id: grafana-dashboard-build
-    command: ["python3", "web/admin/grafana/test_build_dashboards.py"]
+    command: ["python3", "web/admin/grafana/test_build_wall_dashboard.py"]
     triggers: ["web/admin/grafana/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "platform boards must stay honest per-platform and every day-grain column must render on its NYC calendar day (bare UTC dates hid the latest day)"
+    reason: "the Business Omi TV board artifact must stay aligned with its source builder and embed contract"
   - id: web-llm-gateway-only
     command: ["python3", ".github/scripts/check_web_llm_gateway_only.py"]
     triggers: ["web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.ts", "web/**/*.tsx", "web/**/package.json", ".github/scripts/check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -898,12 +918,12 @@ checks:
     reason: "SCA-118: production web LLM traffic must not regain direct provider SDKs, URLs, or credentials"
   - id: web-frontend-tests
     command: ["bash", "scripts/run-web-frontend-tests.sh"]
-    triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
+    triggers: ["web/frontend/**", "web/packages/note-shared/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
   - id: web-share-http-tests
     command: ["bash", "scripts/run-web-share-http-tests.sh"]
-    triggers: ["web/frontend/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
+    triggers: ["web/frontend/**", "web/packages/note-shared/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-599: public share URLs returned HTML for Markdown and JSON requests and omitted public speaker/time/task facts; synthetic HTTP requests exercise the shared rendering primitives through actual Next routing"
   - id: web-admin-tests
@@ -1008,12 +1028,12 @@ checks:
     reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
   - id: pusher-runtime-capability-admission-dev
     command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "dev"]
-    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/config/free_tier_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 Pusher outage: every explicit conversation-finalization host must satisfy its semantic memory-mutation capability before deployment"
   - id: pusher-runtime-capability-admission-prod
     command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "prod"]
-    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/config/free_tier_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 Pusher outage: production admission must reject an omitted host or missing, disabled, or invalid memory fence"
   - id: backend-workflow-contracts
@@ -1370,7 +1390,7 @@ checks:
     reason: "#11979 keeps automatic development admission on merged-into-main ancestry, not main-tip equality"
   - id: superseded-auto-deploy-workflow-contracts
     command: ["python3", ".github/scripts/test_superseded_auto_deploys.py"]
-    triggers: [".github/workflows/gcp_daily_memory_sweep_job.yml", ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml", ".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Superseded deployment runs must report a neutral notice, and every later step must stay gated so stale images and deployments cannot run"
   - id: gcp-backend-production-boundary
@@ -1578,6 +1598,11 @@ checks:
     triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
+  - id: plugin-oauth-state-signing-tests
+    command: ["python3", "plugins/oauth/test_oauth_state_signing.py"]
+    triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "oauth notion-crm callback used the raw uid as OAuth state, letting an attacker bind their own Notion grant under a victim uid (login CSRF); state must be HMAC-signed at issuance and verified before the token exchange, mirroring the merged composio fix in #14689"
   - id: hive-update-task-status-tests
     command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
@@ -1653,6 +1678,11 @@ checks:
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
+  - id: open-library-robustness-tests
+    command: ["python3", "plugins/omi-open-library-app/test_robustness_and_null_guards.py"]
+    triggers: ["plugins/omi-open-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "guard null author and publisher collections against TypeError, handle string list metadata, disallow boolean limits, and reject non-dict payloads"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
@@ -1758,6 +1788,11 @@ checks:
     triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
+  - id: pubmed-error-handling-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_error_handling.py"]
+    triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PubMed chat tools must sanitize network errors and unhandled exceptions to prevent internal host/token leakage into tool responses"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

@@ -1,6 +1,7 @@
 """Unit tests for rate limiting config and logic."""
 
 import asyncio
+import ast
 import importlib
 import os
 import sys
@@ -123,10 +124,18 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
-        expensive = ['knowledge_graph:rebuild', 'wrapped:generate', 'conversations:reprocess']
+        expensive = ['knowledge_graph:rebuild', 'wrapped:generate']
         for name in expensive:
             max_req, _ = RATE_POLICIES[name]
             self.assertLessEqual(max_req, 5, f"{name} should have low base limit")
+
+    def test_reprocess_allows_template_exploration_below_create_ceiling(self):
+        """Reprocess must allow trying several templates but never exceed full-create spend."""
+        max_req, window = RATE_POLICIES['conversations:reprocess']
+        create_max, create_window = RATE_POLICIES['conversations:create']
+        self.assertEqual(window, 3600)
+        self.assertGreaterEqual(max_req, 10)
+        self.assertLessEqual(max_req / window, create_max / create_window)
 
     def test_bursty_endpoints_have_high_limits(self):
         """Agent/MCP endpoints should allow bursts."""
@@ -864,7 +873,21 @@ class TestRouterWiring(unittest.TestCase):
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
         mcp_source = open("routers/mcp.py", encoding='utf-8').read()
-        self.assertIn("limit = max(1, min(limit, 200))", developer_source)
+        # Pin the route's shared-clamp cap independently of formatting.
+        # test_external_list_cache exercises its negative/oversized inputs.
+        tree = ast.parse(developer_source)
+        handler = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'get_conversations'
+        )
+        clamps = [
+            node
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'clamp_list_page'
+        ]
+        self.assertEqual(len(clamps), 1)
+        self.assertEqual(ast.literal_eval(clamps[0].args[2]), 200)
         self.assertIn("min(limit, 200)", mcp_source)
 
     def test_integration_router_has_rate_limits(self):

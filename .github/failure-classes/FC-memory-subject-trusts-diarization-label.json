@@ -5,14 +5,12 @@
   "canonical_prevention": "Derive typed owner evidence from the shared speaker-count primitive and admit owner attribution through one policy. Quote promotion additionally requires the unique owner cluster. Render ambiguous memory transcripts without owner names and gate daily-summary primary-user candidates on cited source evidence.",
   "canonical_prevention_artifact": [
     "backend/utils/conversations/owner_attribution.py",
-    "backend/tests/unit/test_owner_attribution.py",
-    "backend/tests/unit/test_daily_memory_sweep.py"
+    "backend/tests/unit/test_owner_attribution.py"
   ],
   "evidence_prs": [],
   "scope_hints": [
     "backend/utils/conversations/subjects.py",
-    "backend/utils/conversations/process_conversation.py",
-    "backend/utils/memory/daily_memory_sweep.py"
+    "backend/utils/conversations/process_conversation.py"
   ],
   "status": "open"
 }

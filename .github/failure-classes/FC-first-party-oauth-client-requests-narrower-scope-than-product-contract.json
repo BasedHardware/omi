@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "FC-first-party-oauth-client-requests-narrower-scope-than-product-contract",
+  "violated_contract": "A first-party OAuth client's stored grant must carry every scope the first-party product surfaces assume, but the server granted exactly the literal scope parameter. The ChatGPT directory flow requests only memories.read while the Connect-an-Agent screens and the hosted tool registry require the standard read set (conversations.read, action_items.read, goals.read), so every ChatGPT grant sat below the product's own floor: the registry hid existing tools (get_conversations, get_goals, get_action_items, get_daily_summaries), the app showed a permanent \"Needs more access. Reconnect to fix.\" banner, and Reconnect could never clear it because the reconnect flow re-requested the same narrow scope.",
+  "canonical_prevention": "Never derive a first-party client's effective grant from the raw scope parameter alone. Normalize scopes through a first-party floor (requested scopes unioned with the scopes the product contract requires) so the consent screen shows and the grant stores the effective set, and cover the floor with tests proving writes and opt-in scopes are never implied, third-party clients keep literal grants, and re-consent upgrades legacy narrow grants.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/mcp_oauth.py"
+  ],
+  "status": "open"
+}

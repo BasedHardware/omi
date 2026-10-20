@@ -51,7 +51,7 @@ def dependencies():
 @pytest.fixture(autouse=True)
 def default_flag(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 def at(seconds):
@@ -347,13 +347,12 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
     result, _, _ = intake(store, chunk, target_id=gen_id(L))
     # The live host continues to emit offsets against the pinned origin.
     # Moving it on sync intake shifts every later live line by one second.
-    assert result['started_at'] == at(origin if flag == '' else origin - 1)
+    assert result['started_at'] == at(origin)
     live = next(s for s in result['transcript_segments'] if s['text'] == live_text(L, 0))
     assert result['started_at'].timestamp() + live['start'] == origin + 1
     incoming = next(s for s in result['transcript_segments'] if s['text'] == chunk['transcript_segments'][0]['text'])
     assert result['started_at'].timestamp() + incoming['start'] == origin - 1
-    if flag == '':
-        assert incoming['audio_alignment'] == 'unplaced'
+    assert incoming['audio_alignment'] == 'unplaced'
     from database import conversations as db
 
     written = db.update_conversation_segments(
@@ -374,7 +373,7 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
         ],
     )
     fresh = next(s for s in written.segments if s.get('id') == 'LIVE-FRESH')
-    assert result['started_at'].timestamp() + fresh['start'] == origin + (20 if flag == '' else 19)
+    assert result['started_at'].timestamp() + fresh['start'] == origin + 20
 
 
 @pytest.mark.asyncio

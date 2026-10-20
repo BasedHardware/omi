@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from enum import Enum
+import os
 from typing import Any, Final
 
 
@@ -18,6 +19,8 @@ class PlanType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: object):
+        if value == 'pro' and os.getenv('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', 'false') == 'true':
+            return None
         return WIRE_PLAN_ALIASES.get(value) if isinstance(value, str) else None
 
 
@@ -25,8 +28,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '4782b15081e10eaa8ef165e8c8e22fd7989b17c2f72f4a1eeb994bb9f9686199'
-CATALOG_REVISION: Final = 7
+CATALOG_SHA256: Final = '92a8140d796926c205e6546624439b4c67609d69f471f5eeb89e63c4619f9419'
+CATALOG_REVISION: Final = 10
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -41,7 +44,13 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
                              'unlimited_v2': 2999,
                              'unlimited': 2000,
                              'plus': 2000}}
-ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None,
+            'capabilities': {'basic': {'cloud_screen_vectors': False},
+                             'plus': {'cloud_screen_vectors': True},
+                             'unlimited': {'cloud_screen_vectors': True},
+                             'unlimited_v2': {'cloud_screen_vectors': True},
+                             'operator': {'cloud_screen_vectors': True},
+                             'architect': {'cloud_screen_vectors': True}}},
  'ladder_v1': {'rate_card_version': 'v1',
                'unit_usd_micros': 1000,
                'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
@@ -50,7 +59,23 @@ ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
                                              'chat_tier': 'standard'},
                                    'plus': {'kind': 'units', 'value': 16360},
                                    'operator': {'kind': 'units', 'value': 44090},
-                                   'architect': {'kind': 'units', 'value': 189463}}}}
+                                   'architect': {'kind': 'units', 'value': 189463}},
+               'mcp_daily_caps': {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000},
+               'api_max_reads_per_request': {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000},
+               'capabilities': {'basic': {'cloud_screen_vectors': False},
+                                'plus': {'cloud_screen_vectors': False},
+                                'operator': {'cloud_screen_vectors': True},
+                                'architect': {'cloud_screen_vectors': True}}}}
+LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {'ladder_v1_plus_month': {'plan_id': 'plus', 'interval': 'month', 'env_var': 'LADDER_V1_PLUS_MONTH_PRICE_ID'},
+ 'ladder_v1_plus_year': {'plan_id': 'plus', 'interval': 'year', 'env_var': 'LADDER_V1_PLUS_YEAR_PRICE_ID'},
+ 'ladder_v1_pro_month': {'plan_id': 'operator', 'interval': 'month', 'env_var': 'LADDER_V1_PRO_MONTH_PRICE_ID'},
+ 'ladder_v1_pro_year': {'plan_id': 'operator', 'interval': 'year', 'env_var': 'LADDER_V1_PRO_YEAR_PRICE_ID'},
+ 'ladder_v1_architect_month': {'plan_id': 'architect',
+                               'interval': 'month',
+                               'env_var': 'LADDER_V1_ARCHITECT_MONTH_PRICE_ID'},
+ 'ladder_v1_architect_year': {'plan_id': 'architect',
+                              'interval': 'year',
+                              'env_var': 'LADDER_V1_ARCHITECT_YEAR_PRICE_ID'}}
 LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
 RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
  'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
@@ -419,6 +444,7 @@ PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'free': {'month
 __all__ = [
     'ENTITLEMENT_VERSIONS',
     'LADDER_V1_STRIPE_PRICES',
+    'LADDER_V1_PRICE_BINDINGS',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',

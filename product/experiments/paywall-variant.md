@@ -8,6 +8,9 @@ free mobile readers who see a paywall ever upgrade; Pocket and Plaud report arou
 - `outline` — native port of the soft paywall from PR #21412 (Graphite direction), plus one
   placement at the end of first-run onboarding (`onboarding_paywall: true`).
 - `web` — a webview paywall whose page is the variant (payload `url`), same onboarding placement.
+- `trial` — native free-trial paywall (feature carousel, dated timeline, month/year, "Start for
+  $0.00"); its placement is once right after sign-up and consent (`onboarding_paywall: true`), and
+  checkout passes `trial_days: 7`, which the backend honors only for a first-time subscriber.
 New designs join as new arms; the split is set in PostHog, never in code.
 
 **Unit.** A free reader who is shown a paywall. Exposure = `$feature_flag_called` with

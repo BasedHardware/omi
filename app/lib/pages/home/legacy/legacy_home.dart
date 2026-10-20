@@ -5,7 +5,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -23,13 +22,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
-
-/// Today's chat bar height (the redesign's bottom controls are 56).
-const double _legacyChatBarHeight = 62;
+import 'package:omi/widgets/home_bottom_bar.dart' show HomeAskAnythingButton;
 
 const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
-/// Today's Ask Omi bar: the full-width chat field with a mic at its end.
+/// Today's Ask bar: main's centred "Ask anything" button (#19854). [onVoice] stays for the caller;
+/// the button opens text chat, as on main.
 class LegacyHomeChatBar extends StatelessWidget {
   const LegacyHomeChatBar({super.key, required this.onTap, required this.onVoice});
 
@@ -37,65 +35,7 @@ class LegacyHomeChatBar extends StatelessWidget {
   final VoidCallback onVoice;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: onTap,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          height: _legacyChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onVoice(),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: _legacyChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => HomeAskAnythingButton(onTap: onTap);
 }
 
 /// Circular phone-mic record button shown to the right of the home chat bar.

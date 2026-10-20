@@ -50,8 +50,9 @@ it.each([403, 503])(
   }
 );
 
-it("keeps an explicitly available legacy board while the flag is off", () => {
-  state.current.data = { enabled: false, legacy: true };
+it("shows the unavailable notice when the Business embed is disabled", () => {
+  state.current.data = { enabled: false };
   render(<GrafanaKiosk token="test-link" />);
-  expect(screen.getByTitle("Omi TV")).toBeTruthy();
+  expect(screen.queryByTitle("Omi TV")).toBeNull();
+  expect(screen.getByText("TV dashboard unavailable")).toBeTruthy();
 });

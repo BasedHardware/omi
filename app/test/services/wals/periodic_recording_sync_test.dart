@@ -141,12 +141,16 @@ void main() {
     var scheduled = 0;
     var drained = 0;
     var cancelled = 0;
+    final drainStarted = Completer<void>();
+    final finishDrain = Completer<void>();
     final coordinator = RecordingTransferCoordinator(
       reconcile: () async {},
       discover: () async {},
       refreshPending: () async {},
       drain: () async {
         drained++;
+        drainStarted.complete();
+        await finishDrain.future;
         return const RecordingTransferDrainResult.skipped();
       },
       autoUploadEnabled: () => true,
@@ -158,24 +162,106 @@ void main() {
       scheduled++;
       return null;
     });
-    Future<Object?> nativeCall(String method) async {
-      final completed = Completer<Object?>();
-      messenger.handlePlatformMessage(
-          PeriodicRecordingSync.channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
-          (reply) {
-        completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
-      });
-      return completed.future;
-    }
 
     await bridge.start();
     expect(scheduled, 1);
-    expect(await nativeCall('wake'), true);
-    expect(drained, 1);
-    await nativeCall('expire');
+    final wake = _nativeCall('wake');
+    await drainStarted.future;
+    // iOS expires the window while the drain it started is still running.
+    await _nativeCall('expire');
     expect(cancelled, 1);
+    finishDrain.complete();
+    expect(await wake, true);
+    expect(drained, 1);
     bridge.dispose();
     coordinator.dispose();
     messenger.setMockMethodCallHandler(PeriodicRecordingSync.channel, null);
   });
+
+  test('expiration does not cancel a Transfer to Phone the window did not start', () async {
+    var drains = 0;
+    var cancelled = 0;
+    final discovering = Completer<void>();
+    final finishDiscovery = Completer<void>();
+    final coordinator = RecordingTransferCoordinator(
+      reconcile: () async {},
+      refreshPending: () async {},
+      // Discovery is slow while the user's transfer holds the device link.
+      discover: () async {
+        discovering.complete();
+        await finishDiscovery.future;
+      },
+      // That transfer owns the WAL stack, so this window's drain could only contend.
+      drain: () async {
+        drains++;
+        return const RecordingTransferDrainResult.contended();
+      },
+      autoUploadEnabled: () => true,
+    )..setForeground(false);
+    final bridge = PeriodicRecordingSync(coordinator: coordinator, cancel: () => cancelled++, isIOS: true);
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(PeriodicRecordingSync.channel, (call) async => null);
+
+    await bridge.start();
+    final wake = _nativeCall('wake');
+    await discovering.future;
+    await _nativeCall('expire');
+    // In the app `cancel` is WalSyncs.cancelSync(), which would stop the user's transfer.
+    expect(cancelled, 0);
+    finishDiscovery.complete();
+    expect(await wake, true);
+    expect(drains, 0);
+    bridge.dispose();
+    coordinator.dispose();
+    messenger.setMockMethodCallHandler(PeriodicRecordingSync.channel, null);
+  });
+
+  test('expiration does not cancel a sync that was already draining when the window opened', () async {
+    var drains = 0;
+    var cancelled = 0;
+    final drainStarted = Completer<void>();
+    final finishDrain = Completer<void>();
+    final coordinator = RecordingTransferCoordinator(
+      reconcile: () async {},
+      discover: () async {},
+      refreshPending: () async {},
+      drain: () async {
+        drains++;
+        drainStarted.complete();
+        await finishDrain.future;
+        return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
+      },
+      autoUploadEnabled: () => true,
+    );
+    final bridge = PeriodicRecordingSync(coordinator: coordinator, cancel: () => cancelled++, isIOS: true);
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(PeriodicRecordingSync.channel, (call) async => null);
+
+    await bridge.start();
+    // The user taps Sync, then leaves the app while the device drain runs.
+    final userSync = coordinator.wake(WakeTrigger.userRetry);
+    await drainStarted.future;
+    coordinator.setForeground(false);
+    // iOS opens a refresh window that joins that drain, then expires it first.
+    final wake = _nativeCall('wake');
+    await _nativeCall('expire');
+    expect(cancelled, 0);
+    finishDrain.complete();
+    await userSync;
+    expect(await wake, true);
+    expect(drains, 1);
+    bridge.dispose();
+    coordinator.dispose();
+    messenger.setMockMethodCallHandler(PeriodicRecordingSync.channel, null);
+  });
+}
+
+/// Delivers [method] to the bridge as the iOS side does and returns Dart's reply.
+Future<Object?> _nativeCall(String method) async {
+  final completed = Completer<Object?>();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+      PeriodicRecordingSync.channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall(method)), (reply) {
+    completed.complete(const StandardMethodCodec().decodeEnvelope(reply!));
+  });
+  return completed.future;
 }

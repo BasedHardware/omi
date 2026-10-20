@@ -277,3 +277,30 @@ async def test_store_initialization_leaves_event_loop_and_fails_closed(monkeypat
     )
     assert initialization_threads and initialization_threads[0] != request_thread
     assert response is not None and response.status_code == 503
+
+
+def test_admitted_duration_emits_only_after_new_committed_ownership(cohort, monkeypatch):
+    from database import batch_pipeline_intake as module
+    from unittest.mock import Mock
+
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    store = MemoryStore()
+    works, binding = proposal()
+    submit(store, works, binding)
+    submit(store, works, binding)
+    metric.assert_called_once_with('admitted', seconds=works[0].duration_seconds)
+
+
+@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running', 'failed_held', 'cancelled', None])
+def test_quarantine_poll_distinguishes_recoverable_and_terminal(cohort, recovery_state):
+    store = MemoryStore()
+    submit(store, *proposal())
+    job = store.rows['jobs', 'segment']
+    job.update(state='quarantined', recovery_state=recovery_state, merge_pending=False)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    recoverable = recovery_state in {'held', 'prepared', 'running'}
+    assert status['status'] == ('processing' if recoverable else 'failed')
+    assert status['failed_segments'] == (0 if recoverable else 1)
+    assert status['poll_after_ms'] == (3000 if recoverable else 0)
+    assert status['errors'] == ([] if recoverable else ['batch_worker_quarantined'])

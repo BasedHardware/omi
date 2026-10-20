@@ -15,7 +15,9 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/pages/settings/widgets/upgrade_paywall.dart';
 import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -115,6 +117,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,
         conversation.isLocked,
+        conversation.processingDeferred,
       );
 
   @override
@@ -127,7 +130,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final reprocess = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
       final updated = await reprocess(widget.conversation.id);
       if (!mounted) return;
       final provider = context.read<ConversationProvider>();
@@ -475,7 +478,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded;
-    final discardedSnippet = discarded ? conversationSnippet(widget.conversation) : '';
+    final discardedSnippet =
+        discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
     return Stack(
       children: [
         Column(
@@ -518,6 +522,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
+                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
+                      OnDeviceProvenanceChip(conversationId: widget.conversation.id),
                       if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),

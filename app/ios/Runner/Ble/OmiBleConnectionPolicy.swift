@@ -3,6 +3,14 @@ import Foundation
 
 /// Pure decisions for connection recovery and GATT authentication failures.
 enum OmiBleConnectionPolicy {
+    static func savedRetryAllowed(saved: Bool, everConnected: Bool, manual: Bool, pairingLost: Bool) -> Bool {
+        (saved || everConnected) && !manual && !pairingLost
+    }
+
+    static func savedRetryDelay(attempt: Int) -> TimeInterval {
+        min(60, pow(2, Double(min(max(attempt - 1, 0), 6))))
+    }
+
     enum ReadyRecoveryAction: Equatable {
         case connect
         case replayReady
@@ -69,5 +77,15 @@ enum OmiBleConnectionPolicy {
             || nsError.code == CBATTError.insufficientAuthorization.rawValue
             || nsError.code == CBATTError.insufficientEncryptionKeySize.rawValue
             || nsError.code == CBATTError.insufficientEncryption.rawValue
+    }
+}
+
+/// At most seven distinct intermediate states plus the connected outcome per outage.
+struct OmiSavedReconnectTelemetry {
+    private var reported: Set<String> = []
+    mutating func admit(_ result: String) -> Bool {
+        guard !reported.contains(result), reported.count < 7 || result == "connected" else { return false }
+        reported.insert(result)
+        return true
     }
 }

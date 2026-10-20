@@ -98,7 +98,11 @@ def private_cloud_session(monkeypatch):
     monkeypatch.setattr(pusher, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
 
     def run(conversation_exists: bool):
-        def update_conversation(uid, conversation_id, update_data):
+        def update_conversation(uid, conversation_id, update_data, *, record_owner_out=None):
+            # This fixture models an unowned conversation; accept the result-out
+            # seam without fabricating a lane owner for the pusher drain.
+            if record_owner_out is not None:
+                assert record_owner_out == {}
             first_flush_handled.set()
             return conversation_exists
 

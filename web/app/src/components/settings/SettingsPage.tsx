@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
+import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
+import { BudgetUpsellBanner, StorefrontPanel } from './storefront/StorefrontHost';
 import {
   Shield,
   LogOut,
@@ -867,6 +869,15 @@ export function UsageSectionContent({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
+  const [storefrontEnabled, setStorefrontEnabled] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void PlanStorefrontGate.sheetEnabled().then((on) => live && setStorefrontEnabled(on));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Set initial selected price when plans load, and keep it in sync when the
   // subscription's current price changes (e.g. after a plan change or
@@ -1078,11 +1089,34 @@ export function UsageSectionContent({
         </button>
       </div>
 
+      <p className="text-sm leading-relaxed text-text-tertiary">
+        <strong className="font-medium text-text-secondary">
+          Using your own keys on desktop?
+        </strong>{' '}
+        Those keys stay on that device and are not synced to the web app. This web app
+        uses your Omi plan. Omi-hosted usage draws from the same account allowance across
+        devices. Desktop BYOK applies only when that service uses your own key.
+      </p>
+
       {/* Tab Content */}
       {activeTab === 'plan' ? (
         /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
         <div className="space-y-6">
-          {isUnknownPlan ? (
+          {storefrontEnabled ? (
+            /* Ladder-v1 plans payload; the backend owns every plan string. */
+            <>
+              <BudgetUpsellBanner
+                showMeter={false}
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+              <StorefrontPanel
+                source="web_plans"
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+            </>
+          ) : isUnknownPlan ? (
             <UnknownPlanCard />
           ) : !isPaid ? (
             /* BASIC PLAN VIEW */

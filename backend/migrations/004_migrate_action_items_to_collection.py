@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from database.action_item_write_fence import install_write_fences
+
+# This standalone writer must fence Developer task pages too.
+install_write_fences()
+
 # Initialize Firebase Admin SDK
 try:
     cred = credentials.ApplicationDefault()

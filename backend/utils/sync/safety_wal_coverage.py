@@ -22,7 +22,7 @@ import numpy as np
 
 from database import conversations
 from utils.other import storage
-from utils.sync.assignment import compatible_capture
+from utils.sync.live_overlap import compatible_capture
 from utils.request_validation import parse_sync_filename_timestamp
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.observability.fallback import record_fallback

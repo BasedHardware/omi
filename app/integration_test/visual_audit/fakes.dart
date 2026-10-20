@@ -116,6 +116,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
+  @override
   int get batteryLevel => battery;
   @override
   bool get isCharging => charging;
@@ -154,6 +156,8 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   List<Wal> get pendingLocalTranscriptionWals => const [];
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => const [];
+  @override
+  bool canPlayOrShareWal(Wal wal) => false;
   @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override

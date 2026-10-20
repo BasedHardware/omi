@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
 
+from utils.external_list_reads import ExternalListCacheRoute, cached_external_list, lever_enabled
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
 from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
@@ -67,7 +68,7 @@ logger = logging.getLogger(__name__)
 _REST_RETRY_AFTER = "60"
 
 
-class _McpRoute(APIRoute):
+class _McpRoute(ExternalListCacheRoute):
     """Ensure every 429 leaving this router carries a Retry-After hint.
 
     The Redis-backed limiter sets its own windowed value; the in-process
@@ -399,6 +400,7 @@ def search_memories(
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
     response: Response,
+    request: Request = None,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
@@ -450,6 +452,15 @@ def get_memories(
             detail=app_key_grant.observability,
         )
 
+    budget = (
+        list_read_budget_for_request(request, route='mcp-memories', owner_uid=uid, context=auth_context)
+        if sort in {'created_desc', 'updated_desc', 'manual_first'}
+        and lever_enabled('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED')
+        else None
+    )
+    cached = cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
     try:
         result = mcp_memory_handlers.memories_page_core(
             uid,
@@ -468,9 +479,12 @@ def get_memories(
             # smaller MCP tool cap.
             max_scan=5000,
             cursor_kind="rest_get_memories",
+            **({'budget': budget} if budget is not None else {}),
         )
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
+    if budget is not None:
+        finish_list_budget(response, budget)
     _next_cursor_header(response, result.get("next_cursor"))
     if result.get("scan_truncated"):
         response.headers["X-Scan-Truncated"] = "true"

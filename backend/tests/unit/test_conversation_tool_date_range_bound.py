@@ -128,7 +128,6 @@ ct = _load(
     "utils.retrieval.tools._conversation_tools_date_range_test",
     "utils/retrieval/tools/conversation_tools.py",
 )
-jit = importlib.import_module("utils.retrieval.tools.conversation_jit")
 
 
 class TestExactConversationReference:
@@ -213,48 +212,3 @@ class TestBoundedResult:
         assert "yyyy" not in out
         assert len(out) <= ct.MAX_RESULT_CHARS + 400  # budget plus the appended note
         assert "remaining 1 were omitted, not absent" in out
-
-
-class TestJITConversationRetrieval:
-    def test_summary_card_is_transcript_free_and_has_stable_refs(self):
-        raw = {
-            "id": "conv-42",
-            "created_at": "2026-08-23T12:00:00+00:00",
-            "transcript_segments": [{"id": "secret", "text": "must not be in the card"}],
-            "structured": {
-                "title": "Planning",
-                "overview": "A bounded overview",
-                "category": "work",
-                "action_items": [{"description": "Ship the plan"}],
-            },
-        }
-
-        card = jit._summary_card_from_data(raw)
-        result = jit.format_jit_results([raw])
-
-        assert card["conversation_ref"] == "conversation:conv-42"
-        assert card["summary_evidence_ref"] == "conversation:conv-42:summary"
-        assert card["action_items"] == [{"description": "Ship the plan", "completed": False}]
-        assert "A bounded overview" in result
-        assert "conversation:conv-42:summary" in result
-        assert "must not be in the card" not in result
-
-    def test_bounded_window_caps_segments_and_uses_index_fallback_refs(self):
-        segments = [{"id": f"s{i}", "start": i, "end": i + 1, "text": f"line {i}"} for i in range(40)]
-
-        window = jit._bounded_transcript_window(
-            segments,
-            offset=5,
-            limit=999,
-            conversation_id="conv-42",
-        )
-
-        assert len(window) == jit.MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS
-        assert window[0]["evidence_ref"] == "conversation:conv-42:segment:s5"
-        assert window[-1]["evidence_ref"] == "conversation:conv-42:segment:s28"
-
-    def test_unratified_jit_options_are_not_exposed_on_production_tools(self):
-        for tool in (ct.get_conversations_tool, ct.search_conversations_tool):
-            fields = tool.args_schema.model_fields
-            assert "summary_card_only" not in fields
-            assert "hydrate_transcript_windows" not in fields

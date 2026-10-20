@@ -4,11 +4,9 @@ import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { grafanaRenewalDelay } from "@/lib/grafana-renewal";
-import { grafanaBoardSrc } from "@/lib/grafana-board";
 
 type TvEmbed = {
   enabled: boolean;
-  legacy?: boolean;
   url?: string;
   expiresAt?: number;
 };
@@ -132,7 +130,7 @@ function TvEmbedFrame({ token }: { token: string }) {
   // Renewal failure shows the honest notice immediately — a stale embed must
   // not keep framing a dead JWT — and the bounded retry effect above
   // re-arms renewal so an unattended TV self-heals.
-  if (error || (!isLoading && embed && !embed.enabled && !embed.legacy)) {
+  if (error || (!isLoading && embed && !embed.enabled)) {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-200">
         <div>
@@ -145,23 +143,8 @@ function TvEmbedFrame({ token }: { token: string }) {
       </main>
     );
   }
-  // Flag-off while legacy anonymous board still exists: keep it working.
-  if (embed && !embed.enabled && embed.legacy) {
-    return (
-      <Suspense fallback={<div className="h-screen w-screen bg-black" />}>
-        <LegacyKioskFrame />
-      </Suspense>
-    );
-  }
   if (embed?.enabled && embed.url) return <KioskFrame src={embed.url} />;
   return <div className="h-screen w-screen bg-black" />;
-}
-
-function LegacyKioskFrame() {
-  const params = useSearchParams();
-  return (
-    <KioskFrame src={grafanaBoardSrc(params?.get("platform") ?? null, true)} />
-  );
 }
 
 export function GrafanaKiosk({ token }: { token: string }) {

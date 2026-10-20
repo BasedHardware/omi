@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "catalog_revision": 10,
+  "show_subscription_ui": true,
+  "header": "Ihr Plus-Plan endet am 1. Nov.",
+  "current": {
+    "plan_id": "plus",
+    "name": "Plus",
+    "price_id": "price_plus_month",
+    "interval": "month",
+    "legacy": false,
+    "cancel_at_period_end": true,
+    "line": "Sie nutzen Plus · $19.99/Mon.",
+    "legacy_note": null
+  },
+  "usage": {
+    "kind": "unavailable",
+    "percent": null,
+    "period_id": null,
+    "reset_label": null,
+    "meter_line": null,
+    "nudge_line": null,
+    "pro_gates": [
+      "proactive_agent",
+      "screen_context"
+    ]
+  },
+  "tiers": [
+    {
+      "tier_id": "plus:ladder_v1",
+      "plan_id": "plus",
+      "name": "Plus",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "Etwa 100 Stunden Aufnahme im Monat, rund 3 Stunden am Tag",
+      "bullets": [],
+      "action": "checkout",
+      "cta_label": "Erneut abonnieren",
+      "blocked_line": null,
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_plus_month",
+          "interval": "month",
+          "amount_minor": 1999,
+          "currency": "usd",
+          "headline": "$19.99/Monat",
+          "subline": null,
+          "renewal_line": "Verlängert sich monatlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen."
+        }
+      ]
+    },
+    {
+      "tier_id": "basic:ladder_v1",
+      "plan_id": "basic",
+      "name": "Free",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "Etwa 15 Stunden Aufnahme im Monat",
+      "bullets": [],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "Abonnieren Sie zuerst erneut, um den Plan zu ändern",
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
+    },
+    {
+      "tier_id": "operator:ladder_v1",
+      "plan_id": "operator",
+      "name": "Pro",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "Etwa 280 Stunden Aufnahme im Monat, genug, um es den ganzen Tag zu tragen",
+      "bullets": [
+        "Omi erinnert Sie an Dinge, die Sie erledigen wollten",
+        "Auf Ihrem Mac kann Omi sehen, woran Sie arbeiten, und dabei helfen",
+        "5.000 MCP-Anfragen am Tag"
+      ],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "Abonnieren Sie zuerst erneut, um den Plan zu ändern",
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_operator_month",
+          "interval": "month",
+          "amount_minor": 4999,
+          "currency": "usd",
+          "headline": "$49.99/Monat",
+          "subline": null,
+          "renewal_line": "Verlängert sich monatlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen."
+        },
+        {
+          "price_id": "price_operator_year",
+          "interval": "year",
+          "amount_minor": 49990,
+          "currency": "usd",
+          "headline": "$41.66/Monat",
+          "subline": "$499.90 jährlich abgerechnet · 2 Monate gratis",
+          "renewal_line": "Verlängert sich jährlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen.",
+          "months_free": 2
+        }
+      ]
+    },
+    {
+      "tier_id": "architect:ladder_v1",
+      "plan_id": "architect",
+      "name": "Architect",
+      "recommended": false,
+      "is_current": false,
+      "hours_line": "Etwa 1,200 Stunden Aufnahme im Monat, für ganztägige Nutzung auf mehreren Geräten",
+      "bullets": [
+        "Alles aus Pro, mit über viermal so viel Nutzung",
+        "Mindestens 5.000 MCP-Anfragen am Tag"
+      ],
+      "action": "none",
+      "cta_label": null,
+      "blocked_line": "Abonnieren Sie zuerst erneut, um den Plan zu ändern",
+      "compact": false,
+      "prices": [
+        {
+          "price_id": "price_architect_month",
+          "interval": "month",
+          "amount_minor": 19900,
+          "currency": "usd",
+          "headline": "$199/Monat",
+          "subline": null,
+          "renewal_line": "Verlängert sich monatlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen."
+        },
+        {
+          "price_id": "price_architect_year",
+          "interval": "year",
+          "amount_minor": 199000,
+          "currency": "usd",
+          "headline": "$165.83/Monat",
+          "subline": "$1,990 jährlich abgerechnet · 2 Monate gratis",
+          "renewal_line": "Verlängert sich jährlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen.",
+          "months_free": 2
+        }
+      ]
+    }
+  ],
+  "yearly_toggle_label": null
+}

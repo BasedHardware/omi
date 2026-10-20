@@ -2,6 +2,8 @@
 
 import logging
 
+from utils.other.list_budget import ListReadBudget
+
 from typing import Any, Dict, List, Optional, cast
 
 from fastapi import HTTPException
@@ -68,6 +70,7 @@ def conversation_cards_page_core(
     categories: Optional[List[str]] = None,
     cursor_kind: str,
     extra_field_paths: Optional[List[str]] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """Shared card page for the MCP ``get_conversations`` tool and REST list.
 
@@ -99,6 +102,7 @@ def conversation_cards_page_core(
                 end_date=end_dt,
                 categories=valid_categories,
                 extra_field_paths=extra_field_paths,
+                **({'budget': budget} if budget is not None else {}),
             )
         except FailedPrecondition as e:
             raise_conversation_index_error(e)
