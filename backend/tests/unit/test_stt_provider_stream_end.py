@@ -510,7 +510,9 @@ def test_abort_replay_socket_records_once_after_the_transport_close():
     assert nothing.value == 0
 
 
-def test_a_cancelled_soniox_drain_still_counts():
+def test_a_cancelled_soniox_drain_nobody_aborts_still_counts(monkeypatch):
+    monkeypatch.setattr(pse, "CANCELLED_DRAIN_RECORD_DELAY_SECONDS", 0.01)
+
     async def run():
         ws = _ScriptedWebSocket([])
         socket = soniox.SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
@@ -521,6 +523,7 @@ def test_a_cancelled_soniox_drain_still_counts():
         await asyncio.sleep(0.05)
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
+        await asyncio.sleep(0.05)  # The backstop record after a cancel nobody aborts.
         return socket
 
     before = sum(_end_count('soniox', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
@@ -528,6 +531,33 @@ def test_a_cancelled_soniox_drain_still_counts():
     after = sum(_end_count('soniox', closer, code) for closer in CLOSERS for code in CODE_CLASSES)
     assert socket.stream_end.recorded
     assert after - before == 1
+
+
+def test_a_cancelled_drain_then_abort_records_once_with_the_abort_close_code():
+    from utils.stt.replay_delivery import abort_replay_socket
+
+    async def run():
+        ws = _ScriptedWebSocket([])
+        socket = soniox.SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
+
+        async def stuck_send_task():
+            await asyncio.Event().wait()
+
+        socket._send_task.cancel()
+        socket._send_task = asyncio.ensure_future(stuck_send_task())  # A paced send that never finishes.
+        note_stream_close_intent(socket, US_DRAIN)
+        drain = asyncio.ensure_future(socket.drain_and_close())
+        await asyncio.sleep(0.01)
+        drain.cancel()
+        await asyncio.gather(drain, return_exceptions=True)
+        assert not socket.stream_end.recorded  # Left to the abort, which closes the transport.
+        await abort_replay_socket(socket, timeout=0.2)
+        return socket
+
+    delta = _Delta('soniox', US_DRAIN, '1000')
+    socket = asyncio.run(run())
+    assert socket.stream_end.recorded
+    assert delta.value == 1
 
 
 def test_finish_without_an_owner_records_but_never_after_an_owner_began_closing():
@@ -539,7 +569,9 @@ def test_finish_without_an_owner_records_but_never_after_an_owner_began_closing(
     assert free.record(unless_closing=True) is True
 
 
-def test_a_modulate_drain_cancelled_before_its_close_still_counts():
+def test_a_modulate_drain_cancelled_before_its_close_still_counts(monkeypatch):
+    monkeypatch.setattr(pse, "CANCELLED_DRAIN_RECORD_DELAY_SECONDS", 0.01)
+
     async def run():
         ws = _ScriptedWebSocket([])
         sock = streaming.SafeModulateSocket(ws, lambda _segments: None, asyncio.get_running_loop())
@@ -548,6 +580,7 @@ def test_a_modulate_drain_cancelled_before_its_close_still_counts():
         await asyncio.sleep(0)
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
+        await asyncio.sleep(0.05)  # The backstop record after a cancel nobody aborts.
         sock.finish()  # A later finish must not count the same stream again.
         sock._recv_task.cancel()
         await asyncio.gather(sock._recv_task, sock._send_task, return_exceptions=True)

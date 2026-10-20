@@ -422,11 +422,14 @@ class SafeSonioxSocket(STTSocket):
     async def drain_and_close(self) -> None:
         self.stream_end.begin_close()
         self._done_timed_out = False
+        cancelled = False
         try:
             await self._drain_and_close()
+        except asyncio.CancelledError:
+            cancelled = True  # The abort that follows closes the transport and records first.
+            raise
         finally:
-            # Cancelled or not, this owner records once, after its close when that ran.
-            self.stream_end.record(closer=US_TIMEOUT if self._done_timed_out else None)
+            self.stream_end.record_after_drain(cancelled=cancelled, closer=US_TIMEOUT if self._done_timed_out else None)
 
     async def _drain_and_close(self) -> None:
         try:

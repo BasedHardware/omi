@@ -20,6 +20,7 @@ diagnostics; never user ids, audio, transcript or raw vendor text.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import threading
@@ -48,6 +49,8 @@ PROVIDERS = ('modulate', 'soniox')
 
 # Uvicorn closes every open websocket with 1012 when the pod shuts down.
 POD_RESTART_CLOSE_CODE = 1012
+# Callers abort a cancelled drain within their cleanup budget (seconds); this backstop runs after it.
+CANCELLED_DRAIN_RECORD_DELAY_SECONDS = 5.0
 
 OMI_STT_PROVIDER_STREAM_END_TOTAL = Counter(
     'omi_stt_provider_stream_end_total',
@@ -275,6 +278,22 @@ class ProviderStreamEnd:
         with self._lock:
             self._closing = True
 
+    def record_after_drain(self, *, cancelled: bool, closer: Optional[str] = None) -> None:
+        """An owner's drain ended. A cancelled one usually left ``ws.close()`` to the abort that follows.
+
+        That abort records after its own close; this only backstops a cancel
+        nobody aborts, after ``CANCELLED_DRAIN_RECORD_DELAY_SECONDS``.
+        """
+        if not cancelled:
+            self.record(closer=closer)
+            return
+        try:
+            asyncio.get_running_loop().call_later(
+                CANCELLED_DRAIN_RECORD_DELAY_SECONDS, lambda: self.record(closer=closer)
+            )
+        except RuntimeError:
+            self.record(closer=closer)
+
     def note_intent(self, closer: str) -> None:
         """The session's reason for closing this stream. The first intent wins."""
         if closer in CLOSERS and closer != VENDOR and self._intent is None:
@@ -405,6 +424,9 @@ class _DetachedStreamEnd(ProviderStreamEnd):
         return False
 
     def begin_close(self) -> None:
+        pass
+
+    def record_after_drain(self, *, cancelled: bool, closer: Optional[str] = None) -> None:
         pass
 
     def note_intent(self, closer: str) -> None:
