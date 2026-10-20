@@ -4,6 +4,8 @@ from copy import deepcopy
 
 import pytest
 
+from models.mcp_client import McpCredentialError
+
 from database import mcp_client_credentials as credentials
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -59,7 +61,7 @@ def test_long_stale_cache_refreshes_the_latest_expired_credentials(store):
 def test_expired_owner_cannot_commit_or_release_a_successor_lease(store):
     claim(store)
     assert claim(store, owner='successor', now=161).state == 'claimed'
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         complete(store, now=162)
     credentials.release_refresh('app', TOKENS, 'worker', firestore_client=store)
     assert store.rows[('plugins_data', 'app')]['mcp_oauth_refresh']['owner'] == 'successor'
@@ -81,7 +83,7 @@ def test_refresh_cannot_overwrite_a_reconnected_integration(store, field, value)
     row = store.rows[('plugins_data', 'app')]
     row['external_integration']['mcp_oauth_tokens'][field] = value
     before = deepcopy(row)
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         complete(store)
     assert row == before
 
@@ -89,7 +91,7 @@ def test_refresh_cannot_overwrite_a_reconnected_integration(store, field, value)
 def test_refresh_cannot_recreate_a_deleted_integration(store):
     claim(store)
     store.rows.pop(('plugins_data', 'app'))
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         complete(store)
     credentials.release_refresh('app', TOKENS, 'worker', firestore_client=store)
     assert not store.rows
@@ -98,11 +100,11 @@ def test_refresh_cannot_recreate_a_deleted_integration(store):
 def test_server_reconfiguration_and_missing_authorization_are_rejected(store):
     row = store.rows[('plugins_data', 'app')]
     row['external_integration']['mcp_server_url'] = 'https://other.example/mcp'
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         claim(store)
     row['external_integration']['mcp_server_url'] = URL
     row['external_integration']['mcp_oauth_tokens'] = None
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         claim(store)
 
 

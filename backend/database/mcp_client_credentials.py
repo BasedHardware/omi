@@ -1,28 +1,18 @@
 """Authoritative, fenced refresh claims for OAuth-backed external MCP apps."""
 
-from dataclasses import dataclass
 import hashlib
 import json
 import time
-from typing import Any, Literal
+from typing import Any
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from models.mcp_client import McpCredentialError, RefreshClaim
 
 REFRESH_LEASE_SECONDS = 60
 _BINDING_FIELDS = ('token_endpoint', 'client_id', 'client_secret', 'redirect_uri', 'code_verifier')
-
-
-class McpCredentialError(RuntimeError):
-    """Safe-to-display credential lifecycle failure; never includes provider data."""
-
-
-@dataclass(frozen=True)
-class RefreshClaim:
-    state: Literal['current', 'busy', 'claimed']
-    tokens: dict[str, Any]
 
 
 def _run(client: Any, operation: Any) -> Any:

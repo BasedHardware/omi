@@ -18,6 +18,8 @@ import uuid
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
+
+from models.mcp_client import McpCredentialError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -219,7 +221,7 @@ def test_real_transaction_fences_late_refresh_writes(live_connection, mutation):
             == 'claimed'
         )
     before = deepcopy(ref.get().to_dict())
-    with pytest.raises(credentials.McpCredentialError):
+    with pytest.raises(McpCredentialError):
         credentials.complete_refresh(
             ref.id, url, tokens, 'old', {**tokens, 'access_token': 'late'}, now=162, firestore_client=client
         )

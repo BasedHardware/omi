@@ -20,6 +20,7 @@ import httpx
 
 from database import redis_db
 from models.app import ChatTool
+from models.mcp_client import McpCredentialError
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -643,6 +644,8 @@ async def _call_mcp_tool_http(
                 return "Error: MCP server requires re-authorization."
             try:
                 access_token = await refresh_access_token(access_token)
+            except McpCredentialError as error:
+                return f"Error: {error}"
             except Exception:
                 return "Error: MCP authorization could not be refreshed. Reconnect the integration."
             refreshed = True
@@ -684,6 +687,8 @@ async def _call_mcp_tool_sse(
                 return "Error: MCP server requires re-authorization."
             try:
                 access_token = await refresh_access_token(access_token)
+            except McpCredentialError as error:
+                return f"Error: {error}"
             except Exception:
                 return "Error: MCP authorization could not be refreshed. Reconnect the integration."
             resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)

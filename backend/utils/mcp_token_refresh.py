@@ -8,7 +8,8 @@ import time
 from typing import Any
 
 from database import redis_db
-from database.mcp_client_credentials import McpCredentialError, claim_refresh, complete_refresh, release_refresh
+from database.mcp_client_credentials import claim_refresh, complete_refresh, release_refresh
+from models.mcp_client import McpCredentialError
 from utils import mcp_client
 from utils.executors import db_executor, run_blocking
 

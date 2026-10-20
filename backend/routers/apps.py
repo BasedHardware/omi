@@ -43,7 +43,7 @@ from utils.mcp_client import (
     generate_pkce_pair,
 )
 
-from database.mcp_client_credentials import McpCredentialError
+from models.mcp_client import McpCredentialError
 from utils.mcp_token_refresh import refresh_mcp_access_token
 
 from database.apps import (
