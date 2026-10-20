@@ -3611,5 +3611,53 @@ void main() {
       expectSubsecondSplit(local.testWals);
       expectSubsecondBounds(local.testWals, bounds);
     });
+
+    test('onAudioCodecChanged does not wipe frames captured while flush disk I/O is in flight', () async {
+      const t = 1735689600;
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final persistEntered = Completer<void>();
+      final releasePersist = Completer<void>();
+      var blockPersist = false;
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        now: () => DateTime.fromMillisecondsSinceEpoch(t * 1000),
+        persistWals: (wals) async {
+          if (blockPersist) {
+            if (!persistEntered.isCompleted) persistEntered.complete();
+            await releasePersist.future;
+          }
+        },
+        loadWals: () async => <Wal>[],
+      );
+      local.start();
+      await local.walReady;
+      local.setDeviceInfo('pendant-1', 'Omi');
+
+      for (var i = 0; i < 10; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i], syncKey: FrameSyncKey([i, 0, 0])),
+          captureRoot: rootA,
+        );
+      }
+
+      blockPersist = true;
+      final codecChange = local.onAudioCodecChanged(BleAudioCodec.opus);
+      await persistEntered.future;
+
+      // Simulate 10 orphan pendant packets arriving while _flush() awaits disk I/O.
+      for (var i = 0; i < 10; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [100 + i], syncKey: FrameSyncKey([100 + i, 0, 0])),
+          captureRoot: rootB,
+        );
+      }
+
+      releasePersist.complete();
+      await codecChange;
+
+      expect(local.testFrames, hasLength(10));
+      expect(local.testFrames.first.sourceClockEpoch, 1);
+      expect(local.testFrames.first.sourceFramePosition, 0);
+    });
   });
 }
