@@ -130,6 +130,9 @@ def test_blocked_wait_backs_off_and_still_wakes_at_the_ceiling_escape(runtime):
     escape = 1000 + config.CEILING_HEADROOM_SECONDS
     assert not demand.admit('low', now=escape - 10)
     assert wake.call_args.kwargs['schedule_at'] == escape
+    # Under 5 s from the escape the minimum delay wins, still inside the headroom.
+    assert not demand.admit('low', now=escape - 3)
+    assert wake.call_args.kwargs['schedule_at'] == escape + 2 < 1000 + config.CEILING_SECONDS
     assert demand.admit('low', now=escape)
 
 

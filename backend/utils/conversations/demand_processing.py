@@ -270,7 +270,7 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
             binding = row['binding']
             wake_at = max(now + 5, row['due_at'])
             if blocked:
-                # Each wait is a new named task: back off, but wake by the escape.
+                # Each wait is a new named task: back off, clamped to the escape.
                 escape = row['started_at'] + CEILING_HEADROOM_SECONDS
                 wake_at = max(wake_at, min(now + BLOCKED_WAIT_SECONDS, escape))
             enqueue_named_task(

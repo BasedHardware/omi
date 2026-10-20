@@ -34,7 +34,8 @@ Future lazy enrichment does not block ready visible work. Ready work drains tier
 not a demonstrated completion SLO. Priority
 waits create scheduled wakeups without consuming processing attempts. A wait
 behind ready higher-tier work re-checks every `BLOCKED_WAIT_SECONDS` (30), one
-named Cloud Task per wait, and wakes no later than its ceiling escape. Already
+named Cloud Task per wait, clamped to its ceiling escape (at most 5 seconds past
+it, inside the one-minute headroom). Already
 running work is not preempted. Queue-age gauges use scrape-time Redis reads and
 return NaN when the dependency is unavailable. Redis loss uses eager recovery
 for finalization/effects and retains sync's ordinary settle deadline;
