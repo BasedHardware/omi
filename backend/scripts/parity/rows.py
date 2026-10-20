@@ -227,6 +227,7 @@ def row_2(corpus, replay, surface: Surface, t: Thresholds = THRESHOLDS) -> RowRe
 ROW3_KEYS = (
     'first_summary_dispatch_measured_count',
     'first_summary_dispatch_breaches_over_121s',
+    'first_summary_dispatch_max_seconds',
     'first_summary_completion_p95_seconds',
     'accept_to_summary_p95_seconds',
     'legacy_accept_to_summary_p95_seconds',
@@ -253,6 +254,9 @@ def row_3(agg: Mapping[str, Any] | None, surface: Surface, t: Thresholds = THRES
     }
     sample = {'dispatches': dispatches, 'min_dispatches': t.first_summary_min_dispatches}
     if dispatches is None or breaches is None:
+        return _result('3', Status.PENDING, R.INPUT_INVALID, surface, measured, sample)
+    if dispatches and _num(agg.get('first_summary_dispatch_max_seconds')) is None:
+        # Without the measured max the strict 121s limit cannot be checked; a zero count is not proof.
         return _result('3', Status.PENDING, R.INPUT_INVALID, surface, measured, sample)
     if breaches:
         return _result('3', Status.FAIL, R.FIRST_SUMMARY_DISPATCH_BREACH, surface, measured, sample)
@@ -424,6 +428,9 @@ def row_6(cost: Mapping[str, Any] | None, surface: Surface, t: Thresholds = THRE
         }
         if rate is None:
             return _result('6', Status.PENDING, R.INPUT_MISSING, surface, measured, sample)
+        if rate <= 0 or supported is None:
+            # A zero or negative rate carries no ramp percent: never a PASS without a numeric cap.
+            return _result('6', Status.PENDING, R.INPUT_INVALID, surface, measured, sample)
         # Contract (j): below the floor the row still PASSes, capped at the percent the measured
         # throughput carries (the report's ``max_supported_percent``, printed before the terminal
         # line); legacy dark then waits for David's fifth-node decision. ``capped`` records it.

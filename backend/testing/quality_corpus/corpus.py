@@ -212,7 +212,7 @@ def score(
     result['corpus_minutes'] = round(wer_seconds / 60.0, 2)
     for name, directory in pipelines.items():
         wer_pairs, speaker_words, speaker_correct, silence_words, missing = [], 0, 0, 0, 0
-        scored_seconds = 0.0
+        scored_seconds, silence_tokens = 0.0, 0
         for unit_id, meta in sorted(index.items()):
             ref = json.loads((units_dir / 'refs' / f'{unit_id}.json').read_text())
             path = directory / f'{unit_id}.json'
@@ -225,9 +225,9 @@ def score(
                 scored_seconds += meta['seconds']
             if 'silence' in meta['use']:
                 silence_words += len(words)
-                # Empty reference: every word emitted on a silence bed is an insertion error in the
-                # pooled WER, so row 1's batch-vs-legacy delta charges hallucinated words.
-                wer_pairs.append(('', words_text(words)))
+                # Every token emitted on a silence bed is an insertion error in the pooled WER, fillers
+                # included (normalization would drop them), so row 1's delta charges hallucinations.
+                silence_tokens += len(words_text(words).split())
             if 'speaker' in meta['use']:
                 turns = (
                     [Turn(**t) for t in ref['turns']] if 'turns' in ref else turns_from_words(ref.get('words') or [])
@@ -239,8 +239,11 @@ def score(
                 scored = speaker_accuracy(truth, [w.get('speaker') for w in words])
                 speaker_words += scored['words']
                 speaker_correct += scored['correct_1to1']
+        wer = pooled_wer(wer_pairs)
+        wer['errors'] += silence_tokens
+        wer['wer'] = wer['errors'] / wer['reference_words'] if wer['reference_words'] else None
         result['pipelines'][name] = {
-            'wer': pooled_wer(wer_pairs),
+            'wer': wer,
             'speaker': {
                 'words': speaker_words,
                 'correct_1to1': speaker_correct,

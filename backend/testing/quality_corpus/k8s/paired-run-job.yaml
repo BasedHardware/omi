@@ -83,6 +83,10 @@ spec:
                   python testing/quality_corpus/corpus.py score --units /corpus/built --batch /receipts/baseline-batch \
                     --output /receipts/corpus-baseline.json
                   ;;
+                *)
+                  echo "unknown RUN=${RUN}" >&2
+                  exit 64
+                  ;;
               esac
               cat /receipts/*.json 2>/dev/null | head -c 200000
               echo "gate_exit=$gate"

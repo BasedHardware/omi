@@ -235,7 +235,8 @@ def check_first_summary(sample: Mapping[str, Any] | None):
         'dispatch_max_seconds': max_seconds,
         'status': sample.get('first_summary_status'),
     }
-    if breaches is None or measured_count is None:
+    if breaches is None or measured_count is None or (measured_count and max_seconds is None):
+        # Without the measured max the strict 121s limit cannot be checked.
         return _check('first_summary', PENDING, 'input_invalid', measured)
     # The gate's breach counter allows 120s + 5s; the contract's limit is strict 121s (parity row 3).
     strict = fleet_sample.row3_aggregates(sample, None)['first_summary_dispatch_breaches_over_121s']

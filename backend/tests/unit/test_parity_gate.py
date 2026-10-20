@@ -246,6 +246,9 @@ def test_row3_completion_and_accept_to_summary():
     assert rows.row_3(fleet_sample.row3_aggregates(gate_sample(), None), P).reason is R.INPUT_MISSING
     few = fleet_sample.row3_aggregates(gate_sample(first_summary_dispatch_measured_count=19), LEGACY)
     assert rows.row_3(few, P).reason is R.SAMPLE_BELOW_MINIMUM
+    no_max = gate_sample()
+    del no_max['first_summary_dispatch_max_seconds']  # breaches=0 alone cannot prove the 121s limit
+    assert rows.row_3(fleet_sample.row3_aggregates(no_max, LEGACY), P).reason is R.INPUT_INVALID
 
 
 def test_row4_completeness_tokens_and_drift():
@@ -286,6 +289,13 @@ def test_row6_throughput_on_staging_and_cost_on_prod_shadow():
     assert slow.measured['max_supported_percent'] == pytest.approx(100 * 4 * 30 / 174)
     assert rows.row_6(COST, S).measured['capped'] is False
     assert rows.row_6({**COST, 'leases_per_min_per_node': None}, S).reason is R.INPUT_MISSING
+    for bad_rate in (0.0, -3.0, 'nan'):
+        # A rate that carries no ramp percent is never an uncapped PASS.
+        result = rows.row_6({**COST, 'leases_per_min_per_node': bad_rate}, S)
+        assert (result.status, result.reason) == (
+            Status.PENDING,
+            R.INPUT_INVALID if bad_rate != 'nan' else R.INPUT_MISSING,
+        )
     assert rows.row_6(COST, P).status is Status.PASS
     pricey = {**COST, 'batch': {**COST['batch'], 'vendor_stt_usd': 100}}
     assert rows.row_6(pricey, P).reason is R.COST_ABOVE_LEGACY

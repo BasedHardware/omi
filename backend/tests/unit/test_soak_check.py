@@ -19,6 +19,7 @@ def gate(status='PASS', reason=None, percent=100.0, breaches=0):
             'percent': percent,
             'first_summary_dispatch_breaches': breaches,
             'first_summary_dispatch_measured_count': 30,
+            'first_summary_dispatch_max_seconds': 90.0,
             'first_summary_status': 'PASS',
         },
     }
@@ -144,6 +145,10 @@ def test_first_summary_uses_the_strict_121s_limit_and_a_dispatch_floor():
     unmeasured = gate()
     del unmeasured['sample']['first_summary_dispatch_measured_count']
     assert by_check(run(evidence(), unmeasured))['first_summary']['status'] == 'PENDING'
+    no_max = gate()
+    del no_max['sample']['first_summary_dispatch_max_seconds']  # a dropped field is not a zero breach
+    check = by_check(run(evidence(), no_max))['first_summary']
+    assert (check['status'], check['reason']) == ('PENDING', 'input_invalid')
 
 
 def test_upload_2xx_drop_over_one_point_for_a_judged_build():
