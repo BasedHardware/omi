@@ -310,6 +310,20 @@ class BatteryHistorySessionStoreTest {
         assertEquals("90000", disk["audio_outage_device"])
         assertEquals("7", disk["audio_outage_epoch_device"])
         assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
+
+        disk["disconnect_history_device"] = JSONArray()
+            .put(JSONObject().put("eventType", "disconnect").put("timestamp", 90000.5))
+            .toString()
+        val fractionalMarker = parsedDisconnectHistory(disk["disconnect_history_device"])!!
+        assertFalse(disconnectEvidenceSupportsMarker(fractionalMarker, 90000L))
+        assertEquals(
+            AudioOutageMarkerVerdict.AMBIGUOUS,
+            judgeAudioOutageMarker(disk["disconnect_history_device"], session, 7L, 90000L, true),
+        )
+        assertNull(store.openSince("device"))
+        assertEquals("90000", disk["audio_outage_device"])
+        assertEquals("7", disk["audio_outage_epoch_device"])
+        assertFalse(planAudioOutageCleanup(disk["disconnect_history_device"], session, 7L, 90000L, true).dropMarker)
     }
 
     @Test fun `ambiguous marker within echo tolerance of the overwritten start is cleared`() {

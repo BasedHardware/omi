@@ -50,7 +50,10 @@ internal fun isSessionStartEcho(started: Long, marker: Long): Boolean {
 internal fun JSONObject.validTimestamp(): Long {
     if (isNull("timestamp")) return 0L
     val value = get("timestamp")
-    if (value !is Number) return 0L
+    // Only integer JSON numbers count. A fractional value (e.g. 90000.5) must
+    // contribute nothing rather than truncate toward the marker: writers emit
+    // integer millis, so any other shape is malformed data.
+    if (value !is Int && value !is Long) return 0L
     val timestamp = value.toLong()
     return if (timestamp > 0L) timestamp else 0L
 }
