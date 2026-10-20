@@ -10,6 +10,7 @@
 #     --warm  min-instances=1 on the named services for the window (default: overlay's 0).
 #     --services none   deploy only the batch worker (with --with-worker), e.g. for an A/B arm.
 #     --worker-set KEY=VALUE  worker-only rehearsal override (not committed; plain redeploy restores).
+#     --no-gmp  skip the Managed Prometheus 'collector' sidecar (default: attached like prod).
 #     --worker-probe FILE     run the worker through a staging-only measurement wrapper (ConfigMap
 #                             staging-asrctx-probe from FILE); observation only.
 #   Committed worker config: backend/deploy/staging/worker_env.yaml (plain values or secretKeyRef).
@@ -83,6 +84,7 @@ OVERRIDES=()
 WARM=()
 WORKER_SETS=()
 WORKER_PROBE=""
+GMP=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --services)
@@ -110,6 +112,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --skip-build) SKIP_BUILD=1 ;;
+    --no-gmp) GMP=0 ;;
     --allow-non-integration) ALLOW_NON_INTEGRATION=1 ;;
     --break-lock) BREAK_LOCK=1 ;;
     --teardown) TEARDOWN=1 ;;
@@ -315,12 +318,39 @@ PYEOF
   # shellcheck disable=SC2207  # shape flags are fixed tokens without spaces
   shape=($(shape_flags "$svc"))
   log "deploy: $name @ $SHORT"
+  suffix="${SHORT}-$(date -u +%H%M%S)"
+  serving="${name}-${suffix}"
+  no_traffic=()
+  current="$(gcloud run services describe "$name" --region="$REGION" --project="$PROJECT" \
+    --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
+  if [[ -n "$current" ]]; then
+    # Prod's order: a zero-traffic candidate, the collector attached as the final revision, then traffic.
+    gcloud run services update-traffic "$name" --to-revisions="${current}=100" \
+      --region="$REGION" --project="$PROJECT" --quiet >/dev/null
+    no_traffic=(--no-traffic)
+  fi
   gcloud run deploy "$name" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
     --env-vars-file="$env_file" "${render_flags[@]}" "${shape[@]}" \
     --no-cpu-throttling --cpu-boost --execution-environment=gen2 \
-    --labels="env=staging,release-sha=${SHORT}" --revision-suffix="${SHORT}-$(date -u +%H%M%S)" \
+    --labels="env=staging,release-sha=${SHORT}" --revision-suffix="$suffix" "${no_traffic[@]}" \
     --quiet >/dev/null
-  gcloud run services update-traffic "$name" --to-latest --region="$REGION" --project="$PROJECT" --quiet >/dev/null
+  if [[ "$GMP" == 1 && -n "$current" ]]; then
+    gmp_config=cloud_run_gmp_sync.yaml ingress=backend-1
+    [[ "$svc" == backend ]] && gmp_config=cloud_run_gmp_sidecar.yaml
+    [[ "$svc" == backend-integration ]] && ingress=backend-integration
+    # The attach re-checks the ingress env against what was rendered (names and values stay in $WORK).
+    "$PY" -c 'import json, sys, yaml
+env = yaml.safe_load(open(sys.argv[1]))
+json.dump({"services": {sys.argv[2]: {"env": [{"name": k, "value": str(v)} for k, v in env.items()]}}}, open(sys.argv[3], "w"))' \
+      "$env_file" "$name" "$WORK/${svc}.env-state.json"
+    "$PY" "$WORK/src/backend/scripts/attach_cloud_run_gmp_sidecar.py" --project="$PROJECT" --region="$REGION" \
+      --service="$name" --base-revision="$serving" --final-revision="${serving}-gmp" --ingress-container="$ingress" \
+      --config="$WORK/src/backend/deploy/$gmp_config" --config-env --expected-env-state="$WORK/${svc}.env-state.json" \
+      >/dev/null || die "GMP sidecar attach failed for $name"
+    serving="${serving}-gmp"
+  fi
+  gcloud run services update-traffic "$name" --to-revisions="${serving}=100" \
+    --region="$REGION" --project="$PROJECT" --quiet >/dev/null
   verdict="$(verify_service "$svc" "$name" "$env_file")" || die "verify failed for $name: $verdict"
   log "verify: $name $verdict"
 done
