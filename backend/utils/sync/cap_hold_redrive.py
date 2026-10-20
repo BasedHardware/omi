@@ -9,6 +9,7 @@ from database import cap_hold_redrive as store
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured
+from utils.observability.held_content import publish_backlog, publish_held_sample
 from utils.sync import live_cap_staging
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 def enabled() -> bool:
     return os.getenv('CAP_HOLD_DURABLE_REDRIVE_ENABLED', 'true').lower() == 'true'
+
+
+def _loaded(snap: Any) -> dict:
+    reader = getattr(snap, 'to_dict', None)
+    if not callable(reader):
+        return {}
+    data = reader()
+    return data if isinstance(data, dict) else {}
 
 
 def owner(snap: Any, collection: str) -> str | None:
@@ -32,7 +41,8 @@ async def sweep() -> dict:
     if not enabled():
         return {'disabled': True}
     counts = {'sealed': 0, 'visited': 0}
-    for snap in await run_blocking(db_executor, store.discover, 'staging'):
+    staging = await run_blocking(db_executor, store.discover, 'staging')
+    for snap in staging:
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -41,7 +51,8 @@ async def sweep() -> dict:
                 counts['sealed'] += 1
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=seal_deferred exception_type=%s', type(error).__name__)
-    for snap in await run_blocking(db_executor, store.discover, 'cleanup'):
+    cleanup = await run_blocking(db_executor, store.discover, 'cleanup')
+    for snap in cleanup:
         uid = owner(snap, 'stt_cap_holds')
         if uid is None:
             continue
@@ -49,6 +60,7 @@ async def sweep() -> dict:
             await run_blocking(storage_executor, live_cap_staging.cleanup, uid, snap.reference)
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
+    publish_held_sample([_loaded(snap) for snap in (*staging, *cleanup)])
     if not execution_admission_configured():
         return counts
 
@@ -64,6 +76,8 @@ async def sweep() -> dict:
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=worker_deferred exception_type=%s', type(error).__name__)
 
-    await asyncio.gather(*(visit(snap) for snap in await run_blocking(db_executor, store.discover, 'choices')))
+    choices = await run_blocking(db_executor, store.discover, 'choices')
+    publish_backlog([_loaded(snap) for snap in choices])
+    await asyncio.gather(*(visit(snap) for snap in choices))
     logger.info('event=cap_hold_redrive outcome=complete visited=%s sealed=%s', counts['visited'], counts['sealed'])
     return counts

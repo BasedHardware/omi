@@ -7,6 +7,7 @@ from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFail
 from google.cloud import firestore
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.legal_holds import external_write_fence
+from utils.observability.held_content import record_erasure
 from utils.sync import cap_hold
 from utils.sync.live_cap_publication import Publication
 
@@ -30,7 +31,11 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         # A destructive writer either precedes this read (we refuse) or waits /
         # conflicts with it. Nested GCS gates reuse this exact transaction scope.
         with external_write_fence(uid, firestore_client=client, transaction=tx):
-            if attempted and ref.get(transaction=tx).exists:
+            existing = ref.get(transaction=tx)
+            prior = existing.to_dict() if existing.exists else None
+            if prior and prior.get('state') == 'purged':
+                return  # Tombstone wins. A commit over it is post_delete_publication.
+            if attempted and existing.exists:
                 return  # Includes purged receipts; never recreate recovered audio.
             attempted = True
             source.put_started = True
@@ -39,6 +44,8 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             source.fields = dict(fields)
             body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
             tx.create(ref, {**body, 'live_custody_version': 4})  # Already sealed; no mutable stream lease.
+            if prior and prior.get('state') == 'purged':
+                record_erasure('post_delete_publication')
             tx.set(total, {'seconds': firestore.Increment(seconds), 'count': firestore.Increment(1)}, merge=True)
 
     try:

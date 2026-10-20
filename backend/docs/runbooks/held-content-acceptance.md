@@ -59,17 +59,14 @@ head `ef29c43c3eaa5537f126bdbbcd80485a35e94632`. It proposes a process-wide
 malformed documents deny, and read failures retain the last snapshot.
 It is not held-choice wiring and must not be assumed merged or deployed.
 
-Recommended prerequisite: reuse that cache/validation pattern and the pure
-`config.rollout_cohorts.cohort_admits` stable bucket, with a **separate**
-`rollout_cohorts/held-content` control document and independent env fallback.
-Do not point held-content at the STT document: changing API exposure must not
-expand execution lanes or funded dispatch. Generalize the cache safely or add a
-small independently tested adapter; inject the authenticated UID into held-choice
-admission without doing usage/choice reads for excluded requests. Keep exact
-capability, entitlement, per-month consent, rate limit and stale-period checks.
-Test absent/malformed/wrong-environment documents, refresh failure, cold-start
-denial, monotonic percentages, and immediate env-kill precedence before rollout.
-This PR does not implement or activate that prerequisite.
+The choice API uses that pattern on a **separate** `rollout_cohorts/held-content`
+document. `HELD_CONTENT_ENABLED` is the kill switch and is read before the cache.
+A process that has not completed a refresh denies (cold start). A confirmed-absent
+document falls back to `HELD_CONTENT_COHORT` (empty denies). Malformed or
+wrong-environment documents deny. A refresh failure keeps the last snapshot and
+never replaces it with a wider env value. Serving checks do not wait on Firestore.
+Excluded accounts are rejected before usage and choice reads. This does not point
+held-content at the STT document and does not turn the kill switch on.
 
 For a stable account cohort: use private probe tokens, then probe union `pct:5`,
 `pct:25`, `all`, identical across API replicas. Percent is a stable **UID bucket**
@@ -105,20 +102,21 @@ The operator must have the following dashboard/alerts before starting the watch:
 
 | Signal | Promotion gate at **every** step, over a complete 24 h watch |
 | --- | --- |
-| Lost capture | Zero acknowledged/published synthetic source gaps or byte/frame mismatches; no acknowledged capture without durable authority. Any loss stops immediately. Track volatile PCM separately: the last unpublished <=15 seconds is not an acknowledged custody guarantee. |
-| Choice API and capability | Zero unexpected 5xx for probe scenarios, zero 200 without exact capability, zero stale-period writes, zero intent-only managed grants. Capable API 5xx no more than baseline +0.1 percentage point; p95 latency no more than 1.2x baseline. Expected 404/409/429 are separate outcomes. |
-| Recovery completion and held age | All probe consented/funded sources settle across a worker restart with no client traffic. Report pending count/seconds, oldest age and p95 age **within eligible consent**, completion/attempt ratio and backlog trend. Require >=99% within the predeclared visit/lease/discovery budget and no unexplained oldest-age growth; no progress for two discovery rotations after lease expiry pages the owner. Hold the step if denominator is too small to assess; synthetic completion is mandatory. |
+| Lost capture | `omi_held_content_capture_total{kind="lost"}`, `{kind="byte_mismatch"}`, `{kind="frame_mismatch"}`, and `{kind="ack_without_authority"}` stay at zero new events. Any loss stops immediately. Track volatile PCM separately: the last unpublished <=15 seconds is not an acknowledged custody guarantee. |
+| Choice API and capability | `omi_held_content_choice_5xx_total` no more than baseline +0.1 percentage point. p95 of `omi_held_content_choice_latency_seconds` no more than 1.2x baseline (`histogram_quantile(0.95, sum by (le, method) (rate(omi_held_content_choice_latency_seconds_bucket[5m])))`). `omi_held_content_choice_total{outcome="no_capability"}` is the dark/excluded 404 path, not a 200. `{outcome="stale_period_409"}` may be non-zero at the UTC boundary and must not accompany a write. `{outcome="intent_only"}` counts upgrade writes; `{outcome="ok"}` is the other success. A managed grant from an upgrade choice increments `{outcome="intent_only"}` on the read and stops the step. Expected other 409/429 outcomes are not this series. |
+| Recovery completion and held age | `omi_held_content_recovery_total{result="completed"}` / `{result="attempt"}` >= 99% within the predeclared visit/lease/discovery budget. `omi_held_content_oldest_age_seconds`, `omi_held_content_pending_count`, and `omi_held_content_pending_seconds` are the latest bounded redrive or recovery sample (aggregate with max(), not sum()). `omi_held_content_backlog_items` is the latest choice page (max()). No unexplained oldest-age growth; no progress for two discovery rotations after lease expiry pages the owner. Hold the step if the denominator is too small; synthetic completion is mandatory. |
 | Spend and reconciliation | Zero unexplained duplicate usage keys or repeat provider dispatch, no increase in `omi_stt_cap_recovery_reconciliation_total{outcome="redispatched"}` / `failed`; any lost or doubly funded probe audio stops immediately. Preserve receipts/audio for investigation. Compare vendor usage with internal accepted seconds; internal counters alone are not invoice proof. |
-| Custody maintenance and deletion | Zero probe erasure failures after retry budget, zero post-delete publication; `event=cap_hold_redrive` progresses with no repeated `worker_deferred`, `seal_deferred` or `cleanup_deferred`. No launch-config errors; stable live STT and sync/client 5xx. |
+| Custody maintenance and deletion | `omi_held_content_erasure_total{outcome="failure"}` stays at zero new events after the retry budget. `{outcome="post_delete_publication"}` stays at zero: a manifest commit whose prior receipt was `purged` is the only increment, and the tombstone returns before that commit. `event=cap_hold_redrive` progresses with no repeated `worker_deferred`, `seal_deferred` or `cleanup_deferred`. No launch-config errors; stable live STT and sync/client 5xx. |
 
 Existing signals include `omi_stt_cap_provider_audio_seconds_total`,
 `omi_stt_cap_recovery_reconciliation_total`,
 `omi_stt_cap_launch_config_errors_total`, and structured `event=cap_hold_redrive`
-logs. The code does **not** currently provide a complete dedicated held-age,
-choice-exposure, lost-capture or completion dashboard. Instrument bounded outcome
-counters/timings and an authorized aggregate or probe-only age view before the
-first watch; do not scan real users' held manifests to manufacture this report.
-Never label Prometheus metrics with UID, hold ID, content or session ID.
+logs. Held-content series above are armed without UID, hold ID, content, or
+session labels. Age and backlog gauges come from rows the redrive or recovery
+path already loaded; do not scan held manifests to manufacture a fuller report.
+Cohort source is `omi_held_content_cohort_source` (`doc`, `env`, or `none`) and
+`omi_held_content_cohort_percent`. Refresh failures are
+`omi_held_content_cohort_refresh_failures_total{reason="read|schedule"}`.
 The deadline is not permission to promote with missing telemetry or no samples.
 
 ## Proposed calendar (all UTC)

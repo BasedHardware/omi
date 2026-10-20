@@ -20,6 +20,7 @@ from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
 from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
+from utils.observability.held_content import publish_held_sample, record_erasure, record_recovery
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -41,6 +42,14 @@ def register_backlog_runner(runner: Callable[[str], Awaitable[None]]) -> None:
 
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
+    try:
+        _erase_objects(uid, snapshot, row)
+    except Exception:
+        record_erasure('failure')
+        raise
+
+
+def _erase_objects(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     # Account deletion already purges this existing owner-scoped chunk prefix.
     objects = [
         row,
@@ -150,6 +159,8 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         receipts.update(updated)
         return True
 
+    publish_held_sample([row])
+    record_recovery('attempt')
     try:
         try:
             plan, local_paths, contexts = await cap_recovery_plan.ensure_plan(
@@ -342,7 +353,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             return False
         failed = any(r.get('state') == 'failed_reconciliation' for r in receipts.values())
         retained = failed or any(r.get('reconciled_ingested') for r in receipts.values())
-        return await _save(
+        saved = await _save(
             uid,
             snapshot,
             row,
@@ -353,6 +364,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 'retain_audio': retained,
             },
         )
+        if saved:
+            record_recovery('completed')
+        return saved
     finally:
         await run_blocking(storage_executor, directory.cleanup)
 
