@@ -36,13 +36,8 @@ ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
     "MEMORY_ENABLED",
-    "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
-    "CONVERSATION_OCR_CONTEXT_ENABLED",
-    "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
-    "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
-    "FREE_TIER_LOCAL_PROCESSING",
-    "FREE_TIER_EMERGENCY_STOP",
+    "CLIENT_SUMMARIES_AT_CAP_ENABLED",
     # Both process_conversation hosts must read the same managed-spend ledger
     # switch; a listen-only value would leave pusher-hosted direct-provider
     # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
@@ -56,13 +51,8 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
     {
         # Visibility belongs to authenticated listen sockets and opt-in detail
         # reads; pusher hosts neither transport and must not admit this spend.
-        'TRANSLATION_DEMAND_SHADOW_ENABLED',
         'TRANSLATION_DEMAND_GATE_ENABLED',
-        'TRANSLATION_DEMAND_LEASE_V1_ENABLED',
-        'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
         'TRANSLATION_ONOPEN_ENABLED',
-        'TRANSLATION_ONDEMAND_COHORT_PERCENT',
-        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
         'TRANSLATION_ONDEMAND_MAX_CHARS',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
@@ -138,9 +128,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
@@ -248,10 +235,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
-            "SONIOX_IDLE_CLOSE_SECONDS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",

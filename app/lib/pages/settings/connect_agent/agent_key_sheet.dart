@@ -70,7 +70,13 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
       await widget.service.retireOlderKeys(widget.agent, prepared.keyId);
       if (mounted) setState(() => _working = false);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        // Closed while the link was being made and the link then failed: preparePrompt already
+        // deleted the key it made, but the list behind the sheet reloaded while that key existed
+        // and would keep showing it as waiting for the agent.
+        widget.onDiscarded?.call();
+        return;
+      }
       setState(() => _working = false);
       OmiFeedback.error(context, l10n.connectAgentPrepareFailed, actionLabel: l10n.tryAgain, onAction: _copy);
     }
@@ -217,7 +223,7 @@ class _ActiveAgentSheetState extends State<ActiveAgentSheet> {
     if (!confirmed || !mounted) return;
     setState(() => _revoking = true);
     try {
-      await widget.service.revokeKey(widget.keyId);
+      await widget.service.revokeAgent(widget.agent, shownKeyId: widget.keyId);
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;

@@ -74,6 +74,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
+    // The search lives on the app-wide provider, so it outlives this page: it is still applied when
+    // you come back, and Global Search sets it before opening the page. Show it in the field, or the
+    // list stays filtered under an empty search box with no clear button.
+    _searchController.text = context.read<MemoriesProvider>().searchQuery;
     (() async {
       final provider = context.read<MemoriesProvider>();
       try {
@@ -210,8 +214,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             SliverToBoxAdapter(
                               child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
                             ),
-                          if (provider.memoryBeliefEnabled &&
-                              provider.showHistory &&
+                          if (provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
                             SliverToBoxAdapter(
                               child: Padding(

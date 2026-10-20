@@ -5,7 +5,7 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 ## Boundaries
 
 - `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
-- `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
+- `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. `input_limits.py` bounds historical batches before custody transfer and each worker attempt, including codec expansion and retryable tmpfs pressure. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
 - `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. `uid_sequencer.py` dispatches accepted backfill jobs through the Firestore owner/pending registry in `database/sync_backfill_sequencer.py`; it owns no STT or conversation writes. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
 - `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
@@ -102,6 +102,10 @@ Known limitation: WALs carrying different existing live target IDs can remain se
 
 The shared arithmetic does not unify the observed clocks: live finished_at is currently callback wall time, while sync uses VAD/word ends. Another boundary-policy input difference is timeout configuration: realtime can configure its timeout per session; shipped WALs do not carry that setting, so sync uses the default 120 seconds. Tests replay the in-order realtime speech rule as the reference and require identical sync membership, absolute transcript ranges and extents across arrival permutations for temporal intake, including 119-second joins and >=120-second splits with hint-only live stubs and missing target IDs present. Sync enrichment remains per finishing job and revision-fenced, not quiescence-debounced. Historical aliases already returned to clients may require a history refresh. Tests model serial commit permutations and replay failures hermetically; Firestore retry contention and live UI acceptance require separate evidence.
 
+### Operator minimal redrive
+
+An operator-built Cloud Tasks payload with `redrive_mode: 'minimal'` (`utils/sync/minimal_redrive.py`; clients never set it) keeps the ledger, dedupe and receipts but pins Parakeet through `selected_service`, skips paid empty-segment recovery (a double empty is silence), and fails retryably with `sync_minimal_provider_unavailable` when Parakeet cannot serve the language. Before temporal assignment it passes the closest same-partition, non-deleted completed row within 10 minutes as the explicit `target_id`; normal traffic keeps the ±2 minute hint and 120-second continuity. Post-processing is replaced: appended rows get no enrichment, and each new row gets one `sync_redrive_title` (gpt-5-nano) title and overview through `persist_processed_conversation`, keeping the deterministic minimum if that call fails. `SYNC_MINIMAL_REDRIVE_ENABLED=false` refuses such tasks with a retryable 409 before any work.
+
 ## Assignment outcomes
 
 Labeled non-target donors are excluded before extending the capture interval. A labeled
@@ -118,6 +122,14 @@ raise `SyncAssignmentConflict` and remain loud retryable upstream errors under t
 existing job error taxonomy. Copy/checkpoint failures also retain retry behavior.
 Donor retraction that collides with the account destructive-operation gate is
 deferred and converges on a later append; it does not fail the accepted chunk.
+
+Batch projection uses the same terminal assignment outcome: a metadata-only ready
+receipt records `disposition=superseded`, contributes zero content speech usage,
+and advances the ordered cursor only after the final part. Successful parts and
+siblings retain their own receipts and usage. The content ledger completes with
+zero errors and `superseded_segments`, without returning IDs for rejected parts.
+Settlement rechecks the existing privacy, deletion, binding and ledger fences;
+privacy revocation remains owned by erasure, not by this acknowledgment.
 
 ## Speaker identity
 

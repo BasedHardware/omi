@@ -261,7 +261,7 @@ def _build(page, monkeypatch):
     memory_service = MagicMock()
     memory_service._read_window.return_value = [_ServiceMemory(raw) for raw in page]
 
-    def read(uid, *, category_filter=None, **kwargs):
+    def read(uid, *, category_filter=None, reuse_compatibility_reads=False, **kwargs):
         if category_filter is None:
             return memory_service._read_window(uid, **kwargs)
         return read_category_window(
@@ -323,6 +323,8 @@ def test_pagination_is_clamped_before_firestore(monkeypatch):
     second_kwargs = dict(memory_service.read.call_args_list[1].kwargs)
     assert isinstance(first_kwargs.pop('budget'), ListReadBudget)
     assert isinstance(second_kwargs.pop('budget'), ListReadBudget)
+    assert first_kwargs.pop('reuse_compatibility_reads') is True
+    assert second_kwargs.pop('reuse_compatibility_reads') is True
     assert first_kwargs == {
         'limit': 1001,
         'offset': 0,
@@ -487,3 +489,22 @@ def test_grant_denial_is_unchanged(monkeypatch):
 
     assert resp.status_code == 403
     assert 'x-omi-list-truncated' not in resp.headers
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_tail_read_exhaustion_keeps_existing_page_continuation(monkeypatch, enabled):
+    monkeypatch.setenv('OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED', 'true' if enabled else 'false')
+    client, memory_service = _build([], monkeypatch)
+
+    def read(uid, **kwargs):
+        assert kwargs.get('reuse_compatibility_reads', False) is enabled
+        kwargs['budget'].mark_exhausted('documents')
+        return [_ServiceMemory(_valid_memory('legacy-visible'))]
+
+    memory_service.read.side_effect = read
+    resp = client.get('/v1/dev/user/memories?limit=10&offset=2')
+    assert resp.status_code == 200
+    assert [row['id'] for row in resp.json()] == ['legacy-visible']
+    assert resp.headers['x-omi-list-truncated'] == 'true'
+    assert resp.headers['x-omi-has-more'] == 'true'
+    assert resp.headers['x-omi-next-offset'] == '3'

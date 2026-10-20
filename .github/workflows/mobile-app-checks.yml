@@ -621,11 +621,34 @@ jobs:
       - name: Select and assert pinned Xcode
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
+      # Manifest flow coverage bootstraps the pinned Swift formatter. Share the
+      # desktop binary cache so a cold source build cannot consume the iOS
+      # compiler's job budget (16 minutes on PR #21488).
+      - name: Restore Swift formatter and linter tools
+        id: ios-swift-tools-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode266-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-swift-tools-v3-xcode266-
+
       - name: Run macOS-scoped iOS manifest checks
         run: |
           python3 .github/scripts/run_checks.py --lane ci --platform macos \
             --exclusive-platform --base "${{ needs.changes.outputs.diff_base }}" \
             --skip-pr-body-checks
+
+      - name: Save Swift tools before iOS compilation
+        if: steps.ios-swift-tools-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ steps.ios-swift-tools-cache.outputs.cache-primary-key }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

@@ -5,6 +5,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -297,15 +299,17 @@ def test_initial_enablement_drains_backlog_midmonth(env):
     assert env.state_data['completed_period'] == '2026-11'
 
 
-def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monkeypatch):
+@pytest.mark.parametrize('dispatch', [False, True])
+def test_monthly_reset_never_kicks_cap_audio_recovery(env, monkeypatch, dispatch):
     from unittest.mock import Mock
 
     fake = ModuleType('utils.sync.cap_hold_recovery')
     fake.kick = Mock()
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     monkeypatch.setenv('LOCKED_CONTENT_RESET_RECOVERY_ENABLED', 'false')
     env.module.register_cap_audio_recovery(fake.kick)
     env.module.recover_locked_content('test-user', now=NOW)
     env.module.recover_locked_content('test-user', now=NOW)
-    assert fake.kick.call_count == 2
+    fake.kick.assert_not_called()
     env.state.get.assert_not_called()

@@ -1,7 +1,7 @@
 """Additive dispatch provenance, independent of root usage and unit projection."""
 
-from prometheus_client import Counter
-from config.stt_cap_dispatch import enabled
+from prometheus_client import Counter, Gauge
+from config.stt_cap_dispatch import execution_admission_configured as enabled
 import logging
 
 AUDIO_SECONDS = Counter(
@@ -11,6 +11,9 @@ AUDIO_SECONDS = Counter(
 )
 CONFIG_ERRORS = Counter('omi_stt_cap_launch_config_errors', 'Invalid subscription launch configuration', ['reason'])
 RECONCILIATION = Counter('omi_stt_cap_recovery_reconciliation', 'Held piece reconciliation transitions', ['outcome'])
+COHORT_SOURCE = Gauge('omi_stt_cap_cohort_source', 'Active cohort source (one hot)', ['source'])
+COHORT_PERCENT = Gauge('omi_stt_cap_cohort_percent', 'Active percentage; explicit UID members are not represented')
+COHORT_REFRESH_FAILURES = Counter('omi_stt_cap_cohort_refresh_failures', 'Cohort refresh failures', ['reason'])
 logger = logging.getLogger(__name__)
 
 

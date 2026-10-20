@@ -127,7 +127,11 @@ def test_concurrent_reprocess_calls_share_the_active_summary_writer(monkeypatch,
             try:
                 assert started.wait(5), 'processor did not start'
                 concurrent = pool.submit(conv_router.reprocess_conversation, 'c1', uid='u1', app_id=app_ids[1])
-                assert concurrent.result(timeout=5) is model
+                # The second caller never echoes the stale row as success (summary-v2 F1).
+                with pytest.raises(HTTPException) as busy:
+                    concurrent.result(timeout=5)
+                assert busy.value.status_code == 409
+                assert busy.value.detail['code'] == 'conversation_processing_in_progress'
                 process.assert_called_once()
                 assert process.call_args.kwargs['app_id'] == app_ids[0]
             finally:

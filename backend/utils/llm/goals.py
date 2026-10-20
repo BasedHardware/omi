@@ -3,6 +3,8 @@ LLM utilities for goal tracking.
 Handles AI-powered goal suggestions, advice generation, and progress extraction.
 """
 
+from utils.generated_compute import generated_compute_allowed
+
 import json
 import math
 import re
@@ -330,6 +332,8 @@ def extract_and_update_goal_progress(
     Extract goal progress from text and update if found.
     Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
     """
+    if not generated_compute_allowed(uid, 'goals'):
+        return None
     try:
         goals = goals_db.get_user_goals(uid, limit=100)
         if not goals or not text or len(text) < 5:
@@ -433,7 +437,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                             "goal_title": goal_title,
                             "old_value": old_value,
                             "new_value": new_value,
-                            "reasoning": result_dict.get('reasoning'),
+                            "reasoning": str(result_dict.get('reasoning') or ''),
                         }
                     )
             except (ValueError, TypeError, KeyError):

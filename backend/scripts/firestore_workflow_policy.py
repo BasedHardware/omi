@@ -203,10 +203,8 @@ NON_FIRESTORE_IMAGE_EXCLUSIONS = {
     'parakeet': 'self-hosted STT service with its own source root; queries no Firestore collections',
     'nllb-translation': 'self-hosted translation service with its own source root; queries no Firestore collections',
     'plugins': 'built from the plugins tree, not backend source',
-    'typesense-jit-qa': 'JIT QA repins the upstream Typesense image; it carries no backend query code',
 }
 NON_BACKEND_DOCKERFILE_EXCLUSIONS = {
-    'backend/Dockerfile.jit_qa_typesense': 'JIT QA repins the upstream Typesense image',
     'backend/modal/Dockerfile.finops_unit_cost_job': (
         'batch unit-cost job reads Firestore as a pull input and does not serve a Firestore-backed API'
     ),

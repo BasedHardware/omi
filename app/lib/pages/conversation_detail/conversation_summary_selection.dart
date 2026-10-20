@@ -81,20 +81,27 @@ class ConversationSummarySelection {
 
   /// Omi's own summary: the compatibility overview or the section projection, else empty.
   static ConversationSummarySelection firstParty(ServerConversation conversation) {
-    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
+    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
     String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);
     final validIDs = knownIDs.toSet();
-    final sections = conversation.structured.sections
-        .where((section) => section.bodyMarkdown.trim().isNotEmpty)
-        .map((section) => Section(
-              heading: presentable(section.heading),
-              bodyMarkdown: presentable(section.bodyMarkdown),
-              kind: section.kind,
-              sourceSegmentIds: (section.sourceSegmentIds ?? []).where(validIDs.contains).toSet().toList(),
-            ))
-        .toList(growable: false);
+    final sections =
+        conversation.structured.sections.where((section) => section.bodyMarkdown.trim().isNotEmpty).map((section) {
+      final heading = repairNoteCitations(section.heading, knownIDs);
+      final body = repairNoteCitations(section.bodyMarkdown, knownIDs);
+      // Inline citations the repair removes join the typed provenance (macOS presentableSection),
+      // so a legacy note whose only evidence was `[s01234]` keeps its transcript pointer.
+      return Section(
+        heading: heading.text,
+        bodyMarkdown: body.text,
+        kind: section.kind,
+        sourceSegmentIds: [...?section.sourceSegmentIds, ...heading.sourceIDs, ...body.sourceIDs]
+            .where(validIDs.contains)
+            .toSet()
+            .toList(),
+      );
+    }).toList(growable: false);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
       return ConversationSummarySelection(
           content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);

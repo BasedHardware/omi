@@ -8,6 +8,8 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
+
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
@@ -50,6 +52,15 @@ PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sy
 @pytest.fixture(autouse=True)
 def _prod_sync_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
+@pytest.fixture(autouse=True)
+def _collect_previous_case_mocks():
+    # Endpoint and coordinator cases both create cyclic MagicMock graphs.
+    # Collect prior-case mocks in setup so a later call does not pay their cleanup.
+    import gc
+
+    gc.collect()
 
 
 def _read_pipeline_source():
@@ -1439,6 +1450,10 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # routers/sync.py resolves its handler budget at import time against the
+        # dispatch deadline; a MagicMock attr cannot be compared inside min().
+        sys.modules['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
+
         # Dispatch tests supply their own cache and do not acquire voiceprints.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -1661,6 +1676,7 @@ class TestAsyncCoordinatorBehavioral:
 
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -1686,6 +1702,7 @@ class TestAsyncCoordinatorBehavioral:
     def _cleanup(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         sys.modules.pop('sync_behavioral', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -3470,6 +3487,10 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # routers/sync.py resolves its handler budget at import time against the
+        # dispatch deadline; a MagicMock attr cannot be compared inside min().
+        sys.modules['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
+
         # Dispatch tests supply their own cache and do not acquire voiceprints.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -3617,6 +3638,11 @@ class TestV2EndpointExecution:
         sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
         sys.modules['database.sync_jobs'] = mock_sync_jobs
+        # Same import-time budget resolution as the first harness: the TTL and
+        # stale threshold must be comparable numbers, not MagicMock attrs.
+        mock_sync_jobs.RUN_LOCK_TTL_SECONDS = 1800
+        mock_sync_jobs.STALE_THRESHOLD_SECONDS = 600
+        mock_sync_jobs.QUEUED_DISPATCH_STALE_SECONDS = 1800
         mock_sync_jobs.is_sync_job_stale = MagicMock(return_value=False)
         mock_sync_jobs.try_acquire_sync_job_run_lock = MagicMock()
         mock_sync_jobs.get_sync_job_run_lock_epoch = MagicMock(return_value=1)
@@ -3659,6 +3685,7 @@ class TestV2EndpointExecution:
     def _cleanup_modules(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)

@@ -1,6 +1,8 @@
 """Exhaustion completes siblings without claiming silence or repeating paid STT."""
 
 from copy import deepcopy
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import importlib.util
 from pathlib import Path
 import sys
@@ -201,6 +203,7 @@ def test_canary_recovery_success_keeps_real_words(setup, monkeypatch, legacy_dep
         == 'recovered'
     )
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
 
 
@@ -337,7 +340,7 @@ def test_operator_storage_loss_reconciles_and_counts_terminal_once(setup, monkey
     alternate.assert_not_called()
 
 
-def test_nonpaid_artifact_requires_current_disposition_token_and_flag(setup, monkeypatch, legacy_dependencies):
+def test_nonpaid_artifact_requires_current_token_and_recorded_disposition(setup, monkeypatch, legacy_dependencies):
     from utils.batch_pipeline.retention import register_batch_artifact
 
     client, store, binding, _, _, _, old = terminal_setup(setup, monkeypatch, legacy_dependencies)
@@ -355,8 +358,11 @@ def test_nonpaid_artifact_requires_current_disposition_token_and_flag(setup, mon
             store, binding.owner_id, 'bad', f"gs://synthetic/results/bad/{old['token']}.enc", 'results', 0
         )
     monkeypatch.delenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED')
+    register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
     with pytest.raises(BatchPrivacyBlocked):
-        register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
+        register_batch_artifact(
+            store, binding.owner_id, 'bad', f"gs://synthetic/results/bad/{old['token']}.enc", 'results', 0
+        )
 
 
 def test_worker_proof_survives_the_real_lease_cas_and_unknown_failures_do_not_gain_it():
@@ -512,5 +518,29 @@ def test_skipped_oversized_padded_retry_still_recovers_when_multilingual_succeed
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert row(client)['state'] == 'result_ready'
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
     legacy.assert_not_called()
+
+
+@pytest.mark.parametrize('empty', [True, False])
+def test_paid_epoch_meters_cap_audio_only_for_recognized_speech(setup, monkeypatch, legacy_dependencies, empty):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import speech_redrive
+
+    client, store, binding, artifacts, _, alternate, old = terminal_setup(setup, monkeypatch, legacy_dependencies)
+    if not empty:
+        alternate.return_value = ([{'text': 'Synthetic.', 'timestamp': [1, 2], 'speaker': 'SPEAKER_00'}], 'vi')
+    monkeypatch.setattr(speech_redrive, 'sync_allowed', lambda *args, **kwargs: True)
+    monkeypatch.setattr(speech_redrive, 'cap_enabled', lambda uid, lane: True)
+    monkeypatch.setattr(speech_redrive, 'funded_allowance', lambda *args, **kwargs: SimpleNamespace(reason='managed'))
+    meter = Mock()
+    monkeypatch.setattr(speech_redrive, 'record_audio', meter)
+    assert (
+        speech_redrive.redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100)
+        == 'recovered'
+    )
+    assert row(client)['result']['outcome'] == ('no_recoverable_speech' if empty else 'success')
+    # A terminal-empty span meters zero speech, matching the automatic recovery path.
+    assert meter.call_count == int(not empty)
+    alternate.assert_called_once()

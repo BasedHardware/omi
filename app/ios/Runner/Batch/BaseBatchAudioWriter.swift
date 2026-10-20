@@ -440,7 +440,7 @@ class BaseBatchAudioWriter {
         ) else { return }
         for url in items {
             let name = url.lastPathComponent
-            guard name.hasPrefix(recoveryPrefix), name.hasSuffix(".bin.\(partSuffix)") else { continue }
+            guard (name.hasPrefix(recoveryPrefix) || (recoveryPrefix == "audio_omibatch_" && name.hasPrefix("audio_omibatchoverflow_"))), name.hasSuffix(".bin.\(partSuffix)") else { continue }
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > 0 {
                 let finalURL = url.deletingPathExtension()

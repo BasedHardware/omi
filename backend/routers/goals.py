@@ -3,6 +3,8 @@ Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
 
+from utils.generated_compute import require_generated_compute
+
 import uuid
 from typing import Annotated, Optional, List
 
@@ -224,16 +226,13 @@ def list_goal_progress_events(
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
-
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
-
     try:
         updated_goal = goals_db.update_goal(uid, goal_id, update_data)
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
-
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
@@ -277,6 +276,7 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
 @router.get('/v1/goals/suggest', tags=['goals'], response_model=GoalSuggestionResponse)
 def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
+    require_generated_compute(uid, 'goals')
     return suggest_goal_llm(uid)
 
 
@@ -285,6 +285,7 @@ def get_goal_advice(
     goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
     """Get AI-generated actionable advice for achieving a goal."""
+    require_generated_compute(uid, 'goals_advice')
     try:
         advice = get_goal_advice_llm(uid, goal_id)
         return {'advice': advice}
@@ -334,6 +335,7 @@ def extract_and_update_progress(
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
+    require_generated_compute(uid, 'goals')
     # User-initiated LLM extraction — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     result = extract_and_update_goal_progress(uid, request.text)
@@ -350,7 +352,7 @@ def extract_and_update_progress(
                     'goal_title': u.get('goal_title'),
                     'previous_value': u.get('old_value'),
                     'new_value': u.get('new_value'),
-                    'reasoning': u.get('reasoning', ''),
+                    'reasoning': str(u.get('reasoning') or ''),
                 }
                 for u in updates
             ],

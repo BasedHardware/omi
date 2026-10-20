@@ -1,0 +1,748 @@
+{
+ "config": "provider_failure_quarantine",
+ "schema": "pipeline_sim.trace/v1",
+ "seed": 7,
+ "segments": {
+  "seg-1": {
+   "content_kind": "speech",
+   "duration_seconds": 117.77,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-1",
+    "duration_seconds": 117.77,
+    "failure": "worker_failed",
+    "fresh_capture": false,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-1",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-1",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 117.77,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 117.77,
+    "language": "en",
+    "speech_seconds": 117.77,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-2": {
+   "content_kind": "speech",
+   "duration_seconds": 217.61,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-2",
+    "duration_seconds": 217.61,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-2",
+    "late_capture": false,
+    "log_sequence": 2,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-1",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 217.61,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 217.61,
+    "language": "en",
+    "speech_seconds": 217.61,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-3": {
+   "content_kind": "speech",
+   "duration_seconds": 329.81,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-3",
+    "duration_seconds": 329.81,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-2",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-3",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-2",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 329.81,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-2",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 329.81,
+    "language": "en",
+    "speech_seconds": 329.81,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-4": {
+   "content_kind": "speech",
+   "duration_seconds": 559.77,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-4",
+    "duration_seconds": 559.77,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-2",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-4",
+    "late_capture": false,
+    "log_sequence": 2,
+    "owner_id": "owner-2",
+    "previous_segment_id": "seg-3",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 559.77,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-2",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 559.77,
+    "language": "en",
+    "speech_seconds": 559.77,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-5": {
+   "content_kind": "speech",
+   "duration_seconds": 552.98,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-5",
+    "duration_seconds": 552.98,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-5",
+    "late_capture": true,
+    "log_sequence": 3,
+    "owner_id": "owner-3",
+    "previous_segment_id": "seg-7",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 552.98,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 552.98,
+    "language": "en",
+    "speech_seconds": 552.98,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-6": {
+   "content_kind": "speech",
+   "duration_seconds": 447.66,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-6",
+    "duration_seconds": 447.66,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-6",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-3",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 447.66,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 447.66,
+    "language": "en",
+    "speech_seconds": 447.66,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-7": {
+   "content_kind": "speech",
+   "duration_seconds": 525.29,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-7",
+    "duration_seconds": 525.29,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-7",
+    "late_capture": false,
+    "log_sequence": 2,
+    "owner_id": "owner-3",
+    "previous_segment_id": "seg-6",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 525.29,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 525.29,
+    "language": "en",
+    "speech_seconds": 525.29,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  }
+ },
+ "totals": {
+  "counters": {
+   "asr_error": 35,
+   "recovery_recovered": 7,
+   "recovery_tasks_enqueued": 7
+  },
+  "job_states": {
+   "committed": 7
+  },
+  "paid_calls": 7,
+  "paid_outcomes": {
+   "recovered": 7
+  },
+  "recovery_states": {
+   "recovered": 7
+  },
+  "revision_drain": {
+   "fire_and_forget:completed": 3,
+   "fire_and_forget:stopped_at_horizon": 1,
+   "request_scoped:completed": 7
+  }
+ },
+ "uploads": [
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 335.38,
+    "summary_dispatches": 1,
+    "words": 2,
+    "words_digest": 258338192607763
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-1",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-1",
+    "seg-2"
+   ],
+   "target": null,
+   "upload": "upload-1"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 889.58,
+    "summary_dispatches": 1,
+    "words": 2,
+    "words_digest": 258338192607763
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-2",
+   "lane": "fresh",
+   "owner": "owner-2",
+   "segments": [
+    "seg-3",
+    "seg-4"
+   ],
+   "target": null,
+   "upload": "upload-2"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 1525.93,
+    "summary_dispatches": 1,
+    "words": 3,
+    "words_digest": 182568435522919
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-3",
+   "lane": "fresh",
+   "owner": "owner-3",
+   "segments": [
+    "seg-5",
+    "seg-6",
+    "seg-7"
+   ],
+   "target": null,
+   "upload": "upload-3"
+  }
+ ]
+}

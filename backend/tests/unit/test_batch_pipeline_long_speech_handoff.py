@@ -1,0 +1,195 @@
+"""Long-speech empty units in a language Parakeet lacks skip the padded Parakeet retry.
+
+Staging (2026-10-20): 104/109 quarantined empties with >=5 s worker-VAD speech were
+Vietnamese; repadding cannot make Parakeet TDT v3 transcribe a language it lacks.
+"""
+
+import logging
+import time
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import numpy as np
+import pytest
+
+from diarizer.batch_pipeline import PipelineWorker
+from diarizer.batch_pipeline_models import ParakeetWords, StagedAudio, stt_language
+from utils.batch_pipeline.audio import audio_unit, with_context
+from utils.batch_pipeline.contracts import Priority, RecoveryWork, ValidationFailureWork, WorkItem
+from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.recovery_disposition import padded_empty, padded_skipped
+from utils.batch_pipeline.scheduler import Scheduler
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.fixture(autouse=True)
+def _recovery_route(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
+    monkeypatch.delenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', raising=False)
+
+
+def item(key='a', duration=10):
+    return WorkItem(key, 'owner-' + key, 100, 'encrypted://' + key, duration, Priority.FRESH)
+
+
+def worker(language, *, speech_seconds=None, recover=None):
+    """A worker whose Parakeet returns nothing; intake recorded ``language``."""
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    failures, saved = [], {}
+    built = PipelineWorker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        vad=lambda s: [(0, speech_seconds if speech_seconds is not None else len(s) / 16000)],
+        words_providers={'parakeet': provider},
+        diarizers={'pyannote': lambda samples: {'turns': []}},
+        persist=lambda work, payload: saved.__setitem__(work.segment_id, payload) or 'r://' + work.segment_id,
+        on_failure=lambda i, e: failures.append((i.segment_id, e)),
+        recover_words=recover or provider.recover_empty,
+        language_of=lambda work: language,
+        io_concurrency=1,
+    )
+    return built, model, failures, saved
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('language', ['vi', 'ja', 'multi', ''])
+async def test_unsupported_or_unknown_language_skips_the_padded_retry(language, caplog):
+    built, model, failures, saved = worker(language)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a'), time.time())
+    with caplog.at_level(logging.INFO):
+        await Pump(queue, built).run_once()
+    assert model.transcribe.call_count == 1  # first pass only, no padded retry
+    assert not saved and failures == [('a', 'BatchValidationError')]
+    assert 'event=batch_asr_recovery segment_id=a reason=empty_asr' in caplog.text
+    assert 'outcome=skipped_long_speech' in caplog.text
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
+    assert job['worker_empty_evidence'] == {'padded_retry': 'skipped_long_speech', 'version': 1}
+    # Skipped, never attested empty: terminal-empty disposition still requires a real retry.
+    assert padded_skipped(job) and not padded_empty(job)
+    direct = worker(language)[0].process_batch([item('b')])
+    assert direct == [RecoveryWork('b', padded_retry='skipped_long_speech')]
+
+
+@pytest.mark.parametrize(
+    'language,speech_seconds,env',
+    [
+        ('en', None, {}),  # Parakeet language: the retry may recover it
+        ('de', None, {}),
+        (None, None, {}),  # intake recorded no language (older staged audio, record lane)
+        ('vi', 4.9, {}),  # too little speech to be confident it is speech
+        ('vi', None, {'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED': 'false'}),  # kill switch
+    ],
+)
+def test_retry_still_runs_otherwise(monkeypatch, language, speech_seconds, env):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    built, model, _, _ = worker(language, speech_seconds=speech_seconds)
+    results = built.process_batch([item('a')])
+    assert model.transcribe.call_count == 2  # first pass + padded retry
+    assert results == [RecoveryWork('a', padded_retry='empty')]
+
+
+def test_no_recovery_route_keeps_the_retry(monkeypatch):
+    # Without the RecoveryWork handoff the retry is the only remaining attempt.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false')
+    built, model, _, _ = worker('vi')
+    results = built.process_batch([item('a')])
+    assert model.transcribe.call_count == 2
+    assert results == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
+
+
+def test_partial_first_pass_words_keep_the_retry():
+    # no_owned_words: Parakeet produced words, so the unit may be in its language.
+    from diarizer.batch_pipeline import long_speech_handoff
+
+    state = {'stt_language': 'vi', 'speech_seconds': 30.0}
+    assert long_speech_handoff(state, 'empty_asr')
+    assert not long_speech_handoff(state, 'no_owned_words')
+
+
+def staged(context):
+    return with_context(audio_unit(100, b'\x00\x00' * 16000).wav, context)
+
+
+def test_staged_audio_reads_the_intake_language():
+    for context, expected in (
+        ({'source': 'omi', 'stt_language': 'vi'}, 'vi'),
+        ({'source': 'omi', 'stt_language': ''}, ''),
+        ({'source': 'omi'}, None),  # staged before intake recorded a language
+        ({'source': 'omi', 'stt_language': 7}, None),
+    ):
+        source = StagedAudio(lambda work, body=staged(context): body)
+        work = item('a', duration=1)
+        source.decode(work)
+        assert source.language(work) == expected
+        assert source.language(work) is None  # popped once
+    plain = StagedAudio(lambda work: audio_unit(100, b'\x00\x00' * 16000).wav)  # no context chunk
+    plain.decode(item('a', duration=1))
+    assert plain.language(item('a', duration=1)) is None
+    assert stt_language(None) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('user_language,expected', [('vi', 'vi'), ('pt-BR', 'pt'), (None, '')])
+async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_language, expected):
+    from utils.batch_pipeline import intake
+    from utils.batch_pipeline.artifacts import ProtectionContext
+    from utils.batch_pipeline.audio import read_context
+
+    store = MemoryStore()
+    frozen = []
+
+    class Captured(Exception):
+        pass
+
+    def authorize(store_, seed, snapshots):
+        snapshots['user'] = {'language': user_language} if user_language else {}
+        return ProtectionContext('standard', 0)
+
+    def stage_audio(work, body):
+        frozen.append(read_context(body))
+        raise Captured
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
+    )
+
+    def decode_units(paths, max_seconds):
+        yield audio_unit(100, b'\x00\x00' * 1600)
+
+    monkeypatch.setattr(intake, 'decode_units', decode_units)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=stage_audio))
+    policy = SimpleNamespace(live_record_enabled=False)
+    try:
+        await intake.accept_upload(
+            uid='synthetic-owner',
+            job_id='job',
+            content_id='content',
+            paths=['a.bin'],
+            lane='backfill',
+            recording_age_seconds=60,
+            source='omi',
+            should_lock=False,
+            conversation_id=None,
+            client_device_id='pendant-1',
+            client_platform='ios',
+            intake_context={'stt_language': 'en'},  # caller context cannot override it
+            policy=policy,
+        )
+    except Captured:
+        pass
+    assert len(frozen) == 1 and frozen[0]['stt_language'] == expected

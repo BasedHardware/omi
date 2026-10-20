@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo } from 'react';
+import { useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Check, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,8 @@ import { PostHogManager } from '@/lib/analytics/posthog';
 interface ConversationTileProps {
   conversation: Conversation;
   onClick?: () => void;
-  onStarToggle?: (id: string, starred: boolean) => void;
+  // Rejects when the server did not save the change, so the tile can take it back
+  onStarToggle?: (id: string, starred: boolean) => Promise<void> | void;
   isSelected?: boolean;
   // Selection mode props for merge feature
   isSelectionMode?: boolean;
@@ -36,6 +37,8 @@ export const ConversationTile = memo(function ConversationTile({
 }: ConversationTileProps) {
   const [isStarred, setIsStarred] = useState(conversation.starred);
   const [isHovered, setIsHovered] = useState(false);
+  // One star request at a time, so a failed one puts back the value it replaced
+  const starRequestPending = useRef(false);
 
   const startedAt = new Date(conversation.started_at || conversation.created_at);
   const finishedAt = conversation.finished_at ? new Date(conversation.finished_at) : null;
@@ -48,15 +51,24 @@ export const ConversationTile = memo(function ConversationTile({
   const { excerpt, category, actionItemCount, speakerCount } =
     conversationSignals(conversation);
 
-  const handleStarClick = (e: React.MouseEvent) => {
+  const handleStarClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (starRequestPending.current) return;
+    starRequestPending.current = true;
     const newStarred = !isStarred;
     setIsStarred(newStarred);
-    onStarToggle?.(conversation.id, newStarred);
     PostHogManager.track('Conversation Starred', {
       conversation_id: conversation.id,
       starred: newStarred,
     });
+    try {
+      await onStarToggle?.(conversation.id, newStarred);
+    } catch {
+      // The server kept the old value, so the tile must not keep showing the new one
+      setIsStarred(!newStarred);
+    } finally {
+      starRequestPending.current = false;
+    }
   };
 
   const handleClick = () => {

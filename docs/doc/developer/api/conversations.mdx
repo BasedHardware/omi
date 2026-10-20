@@ -29,6 +29,22 @@ description: "Create and retrieve conversations via the Developer API"
 
 ---
 
+## Saved transcripts awaiting processing
+
+When funded processing is paused at an account's allowance limit, conversation
+creation still preserves the submitted transcript or external text. An additive
+`processing_deferred: true` field identifies a saved conversation waiting for
+cloud summaries, memories, tasks, and app processing. Its completed capture status
+does not imply that those generated results exist. Reading or reopening the
+conversation preserves this waiting state.
+
+A monthly allowance reset admits new recordings while saved waiting recordings
+remain waiting. The user chooses whether to process that backlog in the app,
+after reviewing its estimated allowance use. If it cannot all fit, the newest
+recordings that fit are processed and the remainder stays waiting. An upgrade
+can start backlog processing automatically when the estimate fits the upgraded
+allowance. Transcript retrieval remains available throughout.
+
 ## Get Conversations
 
 <Card title="GET /v1/dev/user/conversations" icon="download" color="#22c55e" horizontal>
@@ -363,6 +379,8 @@ intent prevents backlog recreation. No automatic tombstone expiry is currently c
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |
     | `language` | string | No | Language code (default: 'en') |
     | `geolocation` | object | No | Geolocation data |
+    | `folder_id` | string | No | ID of one of your folders (from `GET /v1/dev/user/folders`). The conversation is filed there and AI folder assignment is skipped; an unknown ID returns 422 |
+    | `calendar_meeting_context` | object | No | Calendar meeting this conversation belongs to: `calendar_event_id`, `title`, `start_time`, `duration_minutes` (required) and optional `participants` (`name`/`email`), `platform`, `meeting_link`, `notes`. Used as context for the summary and to identify participants |
   </Accordion>
   <Accordion title="Transcript Segment Fields" icon="list">
     | Field | Type | Required | Description |

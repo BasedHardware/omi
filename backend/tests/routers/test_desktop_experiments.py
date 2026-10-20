@@ -21,7 +21,7 @@ from fastapi import HTTPException
 
 from routers import desktop_experiments as router
 from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
-from utils.jit_rollout import JITDecisionReason, JITErrorClass, JITFlagEvaluation, TriState
+from utils.posthog_flags import PairedFlagEvaluation, TriState
 
 
 def _request(
@@ -43,9 +43,9 @@ class _FakeFlagProvider:
     def __init__(self, enabled: bool):
         self.enabled = enabled
 
-    async def __call__(self, uid: str) -> JITFlagEvaluation:
+    async def __call__(self, uid: str) -> PairedFlagEvaluation:
         state = TriState.ENABLED if self.enabled else TriState.DISABLED
-        return JITFlagEvaluation(state, TriState.DISABLED, JITDecisionReason.EVALUATED, JITErrorClass.NONE)
+        return PairedFlagEvaluation(state, TriState.DISABLED)
 
 
 @pytest.fixture

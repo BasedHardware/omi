@@ -521,6 +521,36 @@ async def test_replay_tracking_survives_downstream_vad_fail_open(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('pending_output', [False, True])
+async def test_quiet_modulate_replacement_settles_instead_of_overflow_failover(monkeypatch, pending_output):
+    actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    clock = [0.0]
+    monkeypatch.setattr(live_session, '_replay_clock', lambda: clock[0])
+    try:
+        assert await actual._failover_stt_socket()
+        replacement = actual.stt_socket
+        modulate = legs['modulate'][0]
+        modulate.has_pending_provider_output = lambda: pending_output
+        # The replayed window capture is VAD speech this leg never answered.
+        assert replacement._tracks_window_replay and replacement.has_untranscribed_speech()
+        monkeypatch.setattr(replacement.gate, '_run_vad', lambda _pcm: False)
+        pcm = b'\x00\x00' * 16000
+        for second in range(120):
+            clock[0] = float(second + 1)
+            await _flush_capture(actual, pcm, 1920 + second * 16000)
+        if pending_output:
+            # Output the provider still owes keeps today's replay obligation.
+            assert modulate.is_connection_dead and replacement.death_reason == 'replay_ring_overflow'
+            return
+        assert actual.host.stt_service == st.STTService.modulate and legs['soniox'] == []
+        assert not modulate.is_connection_dead and not replacement.has_untranscribed_speech()
+        first, end = actual._window_ring().capture_bounds
+        assert end == 1920 + 120 * 16000 and end - first <= 90 * 16000
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('account_failure', [False, True])
 async def test_mid_session_modulate_endpoint_failure_preserves_healthy_sibling(monkeypatch, account_failure):
     monkeypatch.setattr(live_router, '_target_circuits', {})

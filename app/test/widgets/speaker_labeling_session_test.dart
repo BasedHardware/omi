@@ -112,7 +112,7 @@ void main() {
           saves.add((ids.join(','), personId));
           return true;
         },
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) async {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
           regenerations++;
           return conversation;
         }),

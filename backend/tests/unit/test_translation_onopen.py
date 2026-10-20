@@ -33,8 +33,6 @@ def conversation(count=2):
 
 def configure(monkeypatch):
     monkeypatch.setenv('TRANSLATION_ONOPEN_ENABLED', 'true')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_ALLOWLIST', 'u,another-user')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_GEMINI_ENABLED', 'true')
     monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', '100000')
     monkeypatch.setenv('TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', '1000000')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'a' * 32)
@@ -150,7 +148,6 @@ def test_clean_scan_cap_exhaustion_returns_partial_cursor_not_complete(monkeypat
 def test_default_detail_route_has_no_translation_side_effect(monkeypatch):
     detail = conversation(1)
     monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)
-    monkeypatch.setattr(conversation_routes, '_dispatch_first_open_work', lambda *args, **kwargs: None)
     called = []
     monkeypatch.setattr(conversation_routes, 'translate_open_page', lambda *args, **kwargs: called.append(True))
     response = Response()
@@ -179,7 +176,6 @@ def test_authenticated_detail_http_opt_in_returns_status_without_shape_change(mo
         'transcript_segments': [],
     }
     monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)
-    monkeypatch.setattr(conversation_routes, '_dispatch_first_open_work', lambda *args, **kwargs: None)
     monkeypatch.setattr(
         conversation_routes,
         'translate_open_page',
@@ -201,7 +197,6 @@ def test_authenticated_detail_http_opt_in_returns_status_without_shape_change(mo
 def test_detail_route_serves_raw_when_translation_service_fails(monkeypatch):
     detail = conversation(1)
     monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)
-    monkeypatch.setattr(conversation_routes, '_dispatch_first_open_work', lambda *args, **kwargs: None)
 
     def unavailable(*args):
         raise ConnectionError('translation unavailable')

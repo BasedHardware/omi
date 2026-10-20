@@ -1,9 +1,10 @@
+from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from datetime import datetime, timezone
 
 import database.conversation_scan as conversation_scan_db
@@ -29,6 +30,7 @@ from utils.other.storage import (
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -55,7 +57,7 @@ from models.conversation import (
 from utils.conversations.fragment_visibility import is_completed_rule_discard
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
+from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.onopen_translation import translate_open_page
@@ -81,7 +83,6 @@ from utils.conversations.process_conversation import (
     AppUsageAttribution,
     DerivedEffectsDisposition,
     process_conversation,
-    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -279,40 +280,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     return conversation
 
 
-def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
-    """Claim once and run in the background; failure remains retryable."""
-    conversation_id = conversation.get('id')
-    if not conversation_id or not conversation.get('jit_first_open'):
-        return
-    try:
-        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
-    except Exception as error:
-        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        return
-    if token is None:
-        return
-
-    def _run() -> None:
-        succeeded = False
-        try:
-            latest = conversations_db.get_conversation(uid, conversation_id)
-            if latest is None:
-                raise RuntimeError('conversation disappeared before first-open work')
-            run_first_open_derived_work(uid, latest, token)
-            succeeded = True
-        except Exception as error:
-            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        finally:
-            try:
-                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
-            except Exception as error:
-                logger.exception(
-                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
-                )
-
-    submit_with_context(postprocess_executor, _run)
-
-
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
@@ -375,10 +342,10 @@ def _accepted_client_projection(raw: Any, segments: Any) -> Optional[ClientProce
     """Bind a client projection to the persisted transcript, or drop it.
 
     Schema failures and hash mismatch are not request errors: the conversation
-    still finalizes on the deterministic minimum. Warnings are content-free
+    still finalizes under the funded processing policy. Warnings are content-free
     (reason plus provenance only — never transcript or body).
     """
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         projection = ClientProcessing.model_validate(raw)
@@ -754,7 +721,7 @@ def get_conversation_finalization_status(
     '/v1/conversations/{conversation_id}/reprocess',
     response_model=Conversation,
     responses={
-        400: {'description': 'The selected app cannot summarize conversations'},
+        400: {'description': 'The selected app cannot summarize conversations, or app_id was combined with source=omi'},
         403: {'description': 'The selected app is not available to this user'},
         404: {'description': 'The conversation or selected app does not exist'},
         409: {
@@ -769,6 +736,7 @@ def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
+    source: Optional[Literal['omi']] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
     response: Response = None,  # type: ignore[assignment]
     background_tasks: BackgroundTasks = None,
@@ -778,8 +746,13 @@ def reprocess_conversation(
     :param conversation_id: The ID of the conversation to reprocess
     :param language_code: Optional language code to use for processing
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
+    :param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested
+        app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).
     :return: The updated conversation after reprocessing.
     """
+    first_party_only = source == FIRST_PARTY_SUMMARY_SOURCE
+    if first_party_only and app_id:
+        raise HTTPException(status_code=400, detail='app_id and source=omi are mutually exclusive')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
@@ -793,6 +766,8 @@ def reprocess_conversation(
 
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
+    # A hidden conversation's derived effects are not trusted to be current.
+    effects_transcript = None if was_discarded else conversation.get(DERIVED_EFFECTS_TRANSCRIPT_FIELD)
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -808,11 +783,10 @@ def reprocess_conversation(
     except attention_db.ClaimRejected as error:
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     if not owned or not attention_db.owns_live_claim(uid, operation):
-        if reprocess_result_contract_enabled():
-            # Echoing the stale row as 200 made clients report "updated" with
-            # no new summary; another writer still owns this conversation.
-            raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
-        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+        # Echoing the stale row as 200 made clients report "updated" with no new
+        # summary; another writer still owns this conversation. Every released
+        # client treats a non-200 reprocess answer as failure.
+        raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
     try:
         result = execute_reprocess(
             uid,
@@ -824,6 +798,8 @@ def reprocess_conversation(
             was_discarded,
             background_tasks,
             response,
+            first_party_only=first_party_only,
+            derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
     except Exception:
         attention_db.finish(uid, operation, 'failed')
@@ -854,7 +830,18 @@ def _reprocess_succeeded(result: Any, app_id: Optional[str]) -> bool:
 
 
 def execute_reprocess(
-    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+    uid,
+    conversation_id,
+    conversation,
+    language_code,
+    app_id,
+    explicit_app,
+    was_discarded,
+    background_tasks,
+    response,
+    *,
+    first_party_only: bool = False,
+    derived_effects_transcript_sha256: Optional[str] = None,
 ):
     receipt_applied: list = []
 
@@ -869,6 +856,8 @@ def execute_reprocess(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
         speaker_receipt_observer=receipt_applied.append,
+        first_party_only=first_party_only,
+        derived_effects_transcript_sha256=derived_effects_transcript_sha256,
     )
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
@@ -1081,12 +1070,10 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred'):
+    if conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
-    else:
-        _dispatch_first_open_work(uid, conversation)
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
@@ -2317,10 +2304,12 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
+    require_generated_compute(uid, 'daily_summary')
     try:
-        summary = generate_summary_with_prompt(
-            full_transcript, request.prompt, language_code=conversation.language or 'en'
-        )
+        with generated_compute_scope(uid):
+            summary = generate_summary_with_prompt(
+                full_transcript, request.prompt, language_code=conversation.language or 'en'
+            )
     except SummaryProviderError as exc:
         # The provider failed on its own account, so this is an upstream failure and not a fault
         # of the request: report it as one instead of as a 500 the client cannot act on.

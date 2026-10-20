@@ -77,6 +77,10 @@ def rejection_code(error):
     return 'agent_stale_or_unavailable'
 
 
+class AgentRecordUnavailable(RuntimeError):
+    """An owner record is temporarily hidden; Review must leave it retryable."""
+
+
 class ToolError(ValueError):
     def __init__(self, code, *, field=None, ref=None, expected=None, retryable=True):
         super().__init__(code)

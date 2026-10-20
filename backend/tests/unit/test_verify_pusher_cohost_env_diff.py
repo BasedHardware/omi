@@ -176,22 +176,6 @@ def test_queue_age_publisher_rejects_unexpected_values(
     assert any(error in message for message in gate.validate_preflight(chart_fixture))
 
 
-def test_missing_required_flag_on_pusher_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        "",
-    )
-
-    errors = gate.validate_preflight(chart_fixture)
-
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED is missing on pusher" in error
-        for error in errors
-    )
-
-
 @pytest.mark.parametrize("env", ("dev", "prod"))
 def test_ledger_switch_missing_on_pusher_fails(gate: SimpleNamespace, chart_fixture: Path, env: str) -> None:
     """Free-tier program Move 1: both process_conversation hosts read the ledger switch.
@@ -227,21 +211,6 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
     errors = gate.validate_preflight(chart_fixture)
 
     assert any(f"[{env}] required identical flag LLM_GATEWAY_ACCOUNTING_ENABLED disagrees" in error for error in errors)
-
-
-def test_required_flag_value_disagreement_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "false"\n',
-    )
-
-    errors = gate.validate_preflight(chart_fixture)
-
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees" in error for error in errors
-    )
 
 
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:

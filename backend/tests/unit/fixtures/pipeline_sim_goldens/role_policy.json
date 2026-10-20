@@ -1,0 +1,639 @@
+{
+ "config": "role_policy",
+ "schema": "pipeline_sim.trace/v1",
+ "seed": 7,
+ "segments": {
+  "seg-1": {
+   "content_kind": "speech",
+   "duration_seconds": 552.98,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-1",
+    "duration_seconds": 552.98,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "policy": {
+     "batch_allowlisted": false,
+     "batch_enabled": true,
+     "batch_percent": 100.0,
+     "final_pass_authoritative": false,
+     "final_pass_enabled": false,
+     "live_admission_enabled": false,
+     "live_record_enabled": false,
+     "live_stt_retired": false,
+     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "retire_percent": 0.0,
+     "schema_version": 1,
+     "source_role": "sync"
+    },
+    "policy_parts": {
+     "first_summary": {
+      "first_summary_deadline_seconds": 120,
+      "first_summary_enabled": true,
+      "policy_id": "41e539cdea39c20da86573dcd2f616b761fd4187276d23bfbce7b46a9c3c0f94",
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "projection": {
+      "async_projection": false,
+      "authoritative_labels": true,
+      "policy_id": "a496cd8f45b0b1f8ea5fbab6e628773a05f4cd3e2921d1860a3d4aee7503759f",
+      "projection_contention": false,
+      "projection_timing": false,
+      "require_live_target": false,
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "recovery": {
+      "policy_id": "6ca14f699a3a539d8fd7c3be1333143a1cf748f18532a88c510b9ee688e9a0a7",
+      "recovery_all_admitted": true,
+      "recovery_allowlisted": false,
+      "recovery_enabled": true,
+      "recovery_mode": "on",
+      "schema_version": 1,
+      "source_role": "integration",
+      "speech_empty_multilingual": true,
+      "terminal_empty_disposition": true
+     },
+     "scheduler": {
+      "head_priority": false,
+      "max_attempts": 5,
+      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "schema_version": 1,
+      "shared_live": false,
+      "source_role": "scheduler"
+     }
+    },
+    "policy_source": "admission",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-1",
+    "late_capture": true,
+    "log_sequence": 3,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-2",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 552.98,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 552.98,
+    "language": "en",
+    "speech_seconds": 552.98,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-2": {
+   "content_kind": "speech",
+   "duration_seconds": 447.66,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-2",
+    "duration_seconds": 447.66,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "policy": {
+     "batch_allowlisted": false,
+     "batch_enabled": true,
+     "batch_percent": 100.0,
+     "final_pass_authoritative": false,
+     "final_pass_enabled": false,
+     "live_admission_enabled": false,
+     "live_record_enabled": false,
+     "live_stt_retired": false,
+     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "retire_percent": 0.0,
+     "schema_version": 1,
+     "source_role": "sync"
+    },
+    "policy_parts": {
+     "first_summary": {
+      "first_summary_deadline_seconds": 120,
+      "first_summary_enabled": true,
+      "policy_id": "41e539cdea39c20da86573dcd2f616b761fd4187276d23bfbce7b46a9c3c0f94",
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "recovery": {
+      "policy_id": "6ca14f699a3a539d8fd7c3be1333143a1cf748f18532a88c510b9ee688e9a0a7",
+      "recovery_all_admitted": true,
+      "recovery_allowlisted": false,
+      "recovery_enabled": true,
+      "recovery_mode": "on",
+      "schema_version": 1,
+      "source_role": "integration",
+      "speech_empty_multilingual": true,
+      "terminal_empty_disposition": true
+     },
+     "scheduler": {
+      "head_priority": false,
+      "max_attempts": 5,
+      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "schema_version": 1,
+      "shared_live": false,
+      "source_role": "scheduler"
+     }
+    },
+    "policy_source": "admission",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-2",
+    "late_capture": true,
+    "log_sequence": 2,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-3",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 447.66,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 447.66,
+    "language": "en",
+    "speech_seconds": 447.66,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-3": {
+   "content_kind": "speech",
+   "duration_seconds": 525.29,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-3",
+    "duration_seconds": 525.29,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "policy": {
+     "batch_allowlisted": false,
+     "batch_enabled": true,
+     "batch_percent": 100.0,
+     "final_pass_authoritative": false,
+     "final_pass_enabled": false,
+     "live_admission_enabled": false,
+     "live_record_enabled": false,
+     "live_stt_retired": false,
+     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "retire_percent": 0.0,
+     "schema_version": 1,
+     "source_role": "sync"
+    },
+    "policy_parts": {
+     "first_summary": {
+      "first_summary_deadline_seconds": 120,
+      "first_summary_enabled": true,
+      "policy_id": "41e539cdea39c20da86573dcd2f616b761fd4187276d23bfbce7b46a9c3c0f94",
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "recovery": {
+      "policy_id": "6ca14f699a3a539d8fd7c3be1333143a1cf748f18532a88c510b9ee688e9a0a7",
+      "recovery_all_admitted": true,
+      "recovery_allowlisted": false,
+      "recovery_enabled": true,
+      "recovery_mode": "on",
+      "schema_version": 1,
+      "source_role": "integration",
+      "speech_empty_multilingual": true,
+      "terminal_empty_disposition": true
+     },
+     "scheduler": {
+      "head_priority": false,
+      "max_attempts": 5,
+      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "schema_version": 1,
+      "shared_live": false,
+      "source_role": "scheduler"
+     }
+    },
+    "policy_source": "admission",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-3",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-1",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 525.29,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 525.29,
+    "language": "en",
+    "speech_seconds": 525.29,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  },
+  "seg-4": {
+   "content_kind": "speech",
+   "duration_seconds": 176.93,
+   "final_job": {
+    "attempt": 5,
+    "client_status": "completed",
+    "conversation_id": "conv-4",
+    "duration_seconds": 176.93,
+    "failure": "worker_failed",
+    "fresh_capture": true,
+    "late_capture": true,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "policy": {
+     "batch_allowlisted": false,
+     "batch_enabled": true,
+     "batch_percent": 100.0,
+     "final_pass_authoritative": false,
+     "final_pass_enabled": false,
+     "live_admission_enabled": false,
+     "live_record_enabled": false,
+     "live_stt_retired": false,
+     "policy_id": "c333f30e783eb1528047aa1522f6b1ea42977444c24e9f1625524f335904ba13",
+     "retire_percent": 0.0,
+     "schema_version": 1,
+     "source_role": "sync"
+    },
+    "policy_parts": {
+     "first_summary": {
+      "first_summary_deadline_seconds": 120,
+      "first_summary_enabled": true,
+      "policy_id": "41e539cdea39c20da86573dcd2f616b761fd4187276d23bfbce7b46a9c3c0f94",
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "projection": {
+      "async_projection": false,
+      "authoritative_labels": true,
+      "policy_id": "a496cd8f45b0b1f8ea5fbab6e628773a05f4cd3e2921d1860a3d4aee7503759f",
+      "projection_contention": false,
+      "projection_timing": false,
+      "require_live_target": false,
+      "schema_version": 1,
+      "source_role": "integration"
+     },
+     "recovery": {
+      "policy_id": "6ca14f699a3a539d8fd7c3be1333143a1cf748f18532a88c510b9ee688e9a0a7",
+      "recovery_all_admitted": true,
+      "recovery_allowlisted": false,
+      "recovery_enabled": true,
+      "recovery_mode": "on",
+      "schema_version": 1,
+      "source_role": "integration",
+      "speech_empty_multilingual": true,
+      "terminal_empty_disposition": true
+     },
+     "scheduler": {
+      "head_priority": false,
+      "max_attempts": 5,
+      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "schema_version": 1,
+      "shared_live": false,
+      "source_role": "scheduler"
+     }
+    },
+    "policy_source": "admission",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "quarantine_reason": "worker_failed",
+    "recovery": {
+     "epoch": 1,
+     "privacy_generation": 0,
+     "provider": "modulate"
+    },
+    "recovery_state": "recovered",
+    "recovery_wake": {
+     "queue": "pipeline-sim-sync-jobs",
+     "seq": 1
+    },
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-4",
+    "late_capture": true,
+    "log_sequence": 4,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-1",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 176.93,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "recovery_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<30s ready",
+    "<30s leased",
+    "<30s retry",
+    "<1m ready",
+    "<1m leased",
+    "<1m retry",
+    "<5m ready",
+    "<5m leased",
+    "<5m quarantined recovery:held",
+    "<5m quarantined recovery:prepared",
+    "<5m quarantined recovery:running",
+    "<5m result_ready recovery:recovered",
+    "<5m committed recovery:recovered",
+    "<5m committed recovery:recovered client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 1,
+   "recover_task_responses": [
+    "recovered"
+   ],
+   "result_artifact": {
+    "audio_seconds": 176.93,
+    "language": "en",
+    "speech_seconds": 176.93,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "legacy_sync"
+   },
+   "result_transitions": [
+    "<5m pending outcome:success",
+    "<5m completed outcome:success"
+   ]
+  }
+ },
+ "totals": {
+  "counters": {
+   "asr_error": 20,
+   "recovery_recovered": 4,
+   "recovery_tasks_enqueued": 4
+  },
+  "job_states": {
+   "committed": 4
+  },
+  "paid_calls": 4,
+  "paid_outcomes": {
+   "recovered": 4
+  },
+  "recovery_states": {
+   "recovered": 4
+  },
+  "revision_drain": {
+   "fire_and_forget:completed": 2,
+   "fire_and_forget:stopped_at_horizon": 1,
+   "request_scoped:completed": 4
+  }
+ },
+ "uploads": [
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 1525.93,
+    "summary_dispatches": 1,
+    "words": 3,
+    "words_digest": 182568435522919
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-1",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-1",
+    "seg-2",
+    "seg-3"
+   ],
+   "target": null,
+   "upload": "upload-1"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 176.93,
+    "summary_dispatches": 1,
+    "words": 1,
+    "words_digest": 11844727155393
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-2",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-4"
+   ],
+   "target": null,
+   "upload": "upload-2"
+  }
+ ]
+}

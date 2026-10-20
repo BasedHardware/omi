@@ -289,6 +289,12 @@ def conversations_db():
     fakes["utils.other.playback_identity"] = load_module_fresh(
         "utils.other.playback_identity", str(_BACKEND / "utils" / "other" / "playback_identity.py")
     )
+    # database.conversations imports the WQ4 cursor codec at module level; the
+    # codec is stdlib-only outside google.api_core's DatetimeWithNanoseconds, so
+    # load the real module for the isolated utils package.
+    fakes["utils.conversation_page_cursor"] = load_module_fresh(
+        "utils.conversation_page_cursor", str(_BACKEND / "utils" / "conversation_page_cursor.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(

@@ -1,0 +1,1183 @@
+{
+ "config": "deleted_merged_targets",
+ "schema": "pipeline_sim.trace/v1",
+ "seed": 7,
+ "segments": {
+  "seg-1": {
+   "content_kind": "speech",
+   "duration_seconds": 283.23,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-9",
+    "duration_seconds": 283.23,
+    "fresh_capture": false,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-9",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-1",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 283.23,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 283.23,
+    "speech_seconds": 283.23,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-10": {
+   "content_kind": "speech",
+   "duration_seconds": 525.29,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-17",
+    "duration_seconds": 525.29,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-17",
+    "late_capture": false,
+    "log_sequence": 3,
+    "owner_id": "owner-3",
+    "previous_segment_id": "seg-9",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 525.29,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 525.29,
+    "speech_seconds": 525.29,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-11": {
+   "content_kind": "speech",
+   "duration_seconds": 475.71,
+   "final_job": null,
+   "final_result": {
+    "conversation_id": "conv-3",
+    "erased": true,
+    "late_capture": true,
+    "log_sequence": 7,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-6",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s purged"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": null,
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
+  },
+  "seg-12": {
+   "content_kind": "speech",
+   "duration_seconds": 390.66,
+   "final_job": null,
+   "final_result": {
+    "conversation_id": "conv-3",
+    "erased": true,
+    "late_capture": false,
+    "log_sequence": 8,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-11",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s purged"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": null,
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
+  },
+  "seg-13": {
+   "content_kind": "speech",
+   "duration_seconds": 505.48,
+   "final_job": null,
+   "final_result": {
+    "conversation_id": "conv-3",
+    "erased": true,
+    "late_capture": false,
+    "log_sequence": 9,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-12",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s purged"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": null,
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
+  },
+  "seg-14": {
+   "content_kind": "speech",
+   "duration_seconds": 584.01,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-4",
+    "duration_seconds": 584.01,
+    "fresh_capture": true,
+    "late_capture": true,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "conversation"
+   },
+   "final_result": {
+    "conversation_id": "conv-4",
+    "late_capture": true,
+    "log_sequence": 10,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-13",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 584.01,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 584.01,
+    "speech_seconds": 584.01,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-15": {
+   "content_kind": "speech",
+   "duration_seconds": 203.62,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-4",
+    "duration_seconds": 203.62,
+    "fresh_capture": true,
+    "late_capture": true,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "conversation"
+   },
+   "final_result": {
+    "conversation_id": "conv-4",
+    "late_capture": true,
+    "log_sequence": 11,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-14",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 203.62,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 203.62,
+    "speech_seconds": 203.62,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-16": {
+   "content_kind": "speech",
+   "duration_seconds": 209.11,
+   "final_job": null,
+   "final_result": {
+    "conversation_id": "conv-6",
+    "erased": true,
+    "late_capture": true,
+    "log_sequence": 12,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-15",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s purged"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": null,
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
+  },
+  "seg-17": {
+   "content_kind": "speech",
+   "duration_seconds": 65.86,
+   "final_job": null,
+   "final_result": {
+    "conversation_id": "conv-6",
+    "erased": true,
+    "late_capture": true,
+    "log_sequence": 13,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-16",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s purged"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": null,
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
+  },
+  "seg-18": {
+   "content_kind": "speech",
+   "duration_seconds": 176.93,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-7",
+    "duration_seconds": 176.93,
+    "fresh_capture": true,
+    "late_capture": true,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "conversation"
+   },
+   "final_result": {
+    "conversation_id": "conv-7",
+    "late_capture": true,
+    "log_sequence": 4,
+    "owner_id": "owner-3",
+    "previous_segment_id": "seg-10",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 176.93,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed",
+    "<5s committed client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 176.93,
+    "speech_seconds": 176.93,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success",
+    "<5s completed outcome:success"
+   ]
+  },
+  "seg-2": {
+   "content_kind": "speech",
+   "duration_seconds": 417.19,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-10",
+    "duration_seconds": 417.19,
+    "fresh_capture": false,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-10",
+    "late_capture": false,
+    "log_sequence": 2,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-1",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 417.19,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 417.19,
+    "speech_seconds": 417.19,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-3": {
+   "content_kind": "speech",
+   "duration_seconds": 289.14,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-11",
+    "duration_seconds": 289.14,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-11",
+    "late_capture": false,
+    "log_sequence": 3,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-2",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 289.14,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 289.14,
+    "speech_seconds": 289.14,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-4": {
+   "content_kind": "speech",
+   "duration_seconds": 73.68,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-12",
+    "duration_seconds": 73.68,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 0,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-12",
+    "late_capture": false,
+    "log_sequence": 4,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-3",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 73.68,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 73.68,
+    "speech_seconds": 73.68,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-5": {
+   "content_kind": "speech",
+   "duration_seconds": 381.53,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-13",
+    "duration_seconds": 381.53,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 0,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-13",
+    "late_capture": false,
+    "log_sequence": 5,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-4",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 381.53,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 381.53,
+    "speech_seconds": 381.53,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-6": {
+   "content_kind": "speech",
+   "duration_seconds": 100.64,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-14",
+    "duration_seconds": 100.64,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 0,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-14",
+    "late_capture": false,
+    "log_sequence": 6,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-5",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 100.64,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 100.64,
+    "speech_seconds": 100.64,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-7": {
+   "content_kind": "speech",
+   "duration_seconds": 219.66,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-1",
+    "duration_seconds": 219.66,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-2",
+    "priority": 0,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "conversation"
+   },
+   "final_result": {
+    "conversation_id": "conv-1",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-2",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 219.66,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-2",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 219.66,
+    "speech_seconds": 219.66,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-8": {
+   "content_kind": "speech",
+   "duration_seconds": 552.98,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-15",
+    "duration_seconds": 552.98,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-15",
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-3",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 552.98,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 552.98,
+    "speech_seconds": 552.98,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  },
+  "seg-9": {
+   "content_kind": "speech",
+   "duration_seconds": 447.66,
+   "final_job": {
+    "attempt": 1,
+    "client_status": "completed",
+    "conversation_id": "conv-16",
+    "duration_seconds": 447.66,
+    "fresh_capture": true,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-3",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-16",
+    "late_capture": false,
+    "log_sequence": 2,
+    "owner_id": "owner-3",
+    "previous_segment_id": "seg-8",
+    "privacy_generation": 0,
+    "projection": {
+     "speech_seconds": 447.66,
+     "state": "completed"
+    },
+    "projection_state": "completed",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
+   ],
+   "owner": "owner-3",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 447.66,
+    "speech_seconds": 447.66,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
+   ]
+  }
+ },
+ "totals": {
+  "counters": {
+   "asr_words": 18,
+   "excluded_deleted_target": 2,
+   "purged_jobs": 5
+  },
+  "job_states": {
+   "committed": 13
+  },
+  "paid_calls": 0,
+  "paid_outcomes": {},
+  "recovery_states": {},
+  "revision_drain": {
+   "fire_and_forget:completed": 6,
+   "fire_and_forget:stopped_at_horizon": 1
+  }
+ },
+ "uploads": [
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 989.56,
+    "summary_dispatches": 1,
+    "words": 3,
+    "words_digest": 182568435522919
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-1",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-1",
+    "seg-2",
+    "seg-3"
+   ],
+   "target": null,
+   "upload": "upload-1"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 555.85,
+    "summary_dispatches": 1,
+    "words": 3,
+    "words_digest": 182568435522919
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-2",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-4",
+    "seg-5",
+    "seg-6"
+   ],
+   "target": null,
+   "upload": "upload-2"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 219.66,
+    "summary_dispatches": 1,
+    "words": 1,
+    "words_digest": 11844727155393
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-3",
+   "lane": "fresh",
+   "owner": "owner-2",
+   "segments": [
+    "seg-7"
+   ],
+   "target": "merged",
+   "upload": "upload-3"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 1525.93,
+    "summary_dispatches": 1,
+    "words": 3,
+    "words_digest": 182568435522919
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-4",
+   "lane": "fresh",
+   "owner": "owner-3",
+   "segments": [
+    "seg-8",
+    "seg-9",
+    "seg-10"
+   ],
+   "target": null,
+   "upload": "upload-4"
+  },
+  {
+   "content_status": "processing",
+   "conversation": {
+    "excluded": "deleted_target",
+    "first_summary": "none",
+    "projected": false,
+    "speech_seconds": 0.0,
+    "summary_dispatches": 0,
+    "words": 0,
+    "words_digest": 87221350796331
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-5",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-11",
+    "seg-12",
+    "seg-13"
+   ],
+   "target": "deleted",
+   "upload": "upload-5"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 787.63,
+    "summary_dispatches": 1,
+    "words": 2,
+    "words_digest": 258338192607763
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-6",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-14",
+    "seg-15"
+   ],
+   "target": "merged",
+   "upload": "upload-6"
+  },
+  {
+   "content_status": "processing",
+   "conversation": {
+    "excluded": "deleted_target",
+    "first_summary": "none",
+    "projected": false,
+    "speech_seconds": 0.0,
+    "summary_dispatches": 0,
+    "words": 0,
+    "words_digest": 87221350796331
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-7",
+   "lane": "fresh",
+   "owner": "owner-1",
+   "segments": [
+    "seg-16",
+    "seg-17"
+   ],
+   "target": "deleted",
+   "upload": "upload-7"
+  },
+  {
+   "content_status": "completed",
+   "conversation": {
+    "excluded": null,
+    "first_summary": "completed",
+    "projected": true,
+    "speech_seconds": 176.93,
+    "summary_dispatches": 1,
+    "words": 1,
+    "words_digest": 11844727155393
+   },
+   "duplicate_of": null,
+   "http_status": 202,
+   "intake": "admitted",
+   "job": "job-8",
+   "lane": "fresh",
+   "owner": "owner-3",
+   "segments": [
+    "seg-18"
+   ],
+   "target": "merged",
+   "upload": "upload-8"
+  }
+ ]
+}

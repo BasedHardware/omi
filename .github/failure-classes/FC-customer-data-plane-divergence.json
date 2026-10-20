@@ -5,7 +5,8 @@
   "canonical_prevention": "Bind every production-family artifact to canonical production API, agent, desktop API, and Firebase/Firestore identity in build configuration and runtime resolution; mutation-test the protected settings and verify signed artifacts before publishing. Require a separate non-production identity plus explicit migration review for any exception.",
   "canonical_prevention_artifact": [
     "desktop/macos/Desktop/Tests/APIClientRoutingTests.swift",
-    "backend/tests/unit/test_desktop_release_scripts.py"
+    "backend/tests/unit/test_desktop_release_scripts.py",
+    "backend/tests/unit/test_screen_frames_bucket_data_plane.py"
   ],
   "evidence_prs": [
     10090,

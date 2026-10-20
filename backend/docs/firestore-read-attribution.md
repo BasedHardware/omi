@@ -141,12 +141,10 @@ entrypoints do that before they read:
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
 | backend-integration | `backend/main.py` | imports the same database-backed router process and is included in the required ledger service set |
-| llm_gateway | `backend/llm_gateway/main.py` | Legacy JIT proactivity reservation reads retired; the gateway still records provider accounting through its retained accounting boundary |
+| llm_gateway | `backend/llm_gateway/main.py` | Gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
 | memory-maintenance-job | `backend/modal/memory_maintenance_job.py` | maintenance cron imports `database._client` |
-| daily-memory-sweep-job | `backend/modal/daily_memory_sweep_job.py` | imports `database._client` |
-| knowledge-ledger-drain-job | `backend/modal/knowledge_ledger_drain_job.py` | drain module imports `database._client` |
 | day3-reengagement-email-job | `backend/modal/day3_reengagement_email_job.py` | imports `database._client` |
 | frame-request-retention-job | `backend/modal/frame_request_retention_job.py` | retention service imports `database._client` |
 | notifications-job | `backend/modal/job.py` | `utils/other/jobs.py` imports `utils/x_connector.py`, which imports `database._client` |
@@ -324,8 +322,6 @@ and an overlapping context for the same entrypoint.
 | `modal/job.py:main` (notifications + daily summaries) | `@read_origin('job:notifications')` |
 | `modal/x_connector_sync_job.py:main` | `@read_origin('job:x_connector_sync')` |
 | `modal/memory_maintenance_job.py:main` | `@read_origin('job:memory_maintenance')` |
-| `modal/daily_memory_sweep_job.py:main` | `@read_origin('job:daily_memory_sweep')` |
-| `modal/knowledge_ledger_drain_job.py:main` | `@read_origin('job:knowledge_ledger_drain')` |
 | `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
 | `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
 | `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |
@@ -337,9 +333,9 @@ and an overlapping context for the same entrypoint.
 | `routers/feedback_admin.py:generate_feedback_report` (scheduled/manual dated backfill) | `@read_origin('job:feedback_report_generate')` |
 
 Cron HTTP routes already receive their route-template origins without these
-optional job decorators. `main.py` also launches live-STT refresh, Soniox runway,
+optional job decorators. `main.py` also launches live-STT refresh,
 executor health and proactive dispatch with constant names; those receive
-`task:live_stt_fleet_health`, `task:soniox_runway`, `task:executor_health` and
+`task:live_stt_fleet_health`, `task:executor_health` and
 `task:proactive_message_dispatcher` automatically. S2's new startup queue publisher
 receives `task:startup_durable_queue_age_publish` automatically.
 
