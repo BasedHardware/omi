@@ -4232,14 +4232,14 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - sessions exhausting the provider chain above 5%",
+    "title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
     "condition": "D",
     "data": [
       {
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 1200,
+          "from": 3600,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -4248,7 +4248,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[20m]))",
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -4259,7 +4259,7 @@
         "refId": "B",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 1200,
+          "from": 3600,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -4268,7 +4268,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[20m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[20m])), 1)",
+          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -4288,7 +4288,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 200 && $B > 0.05",
+          "expression": "$A >= 600 && $B > 0.08",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -4346,13 +4346,13 @@
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "15",
-      "summary": "More than 5% of accepted /v4/listen sessions exhausted every live STT provider in the last 20m",
-      "threshold": "omi_stt_chain_exhausted_total / omi_listen_accepted_total > 0.05 with >= 200 accepted sockets in 20m, for 20m",
+      "summary": "More than 8% of accepted /v4/listen sessions exhausted every live STT provider over the last hour",
+      "threshold": "omi_stt_chain_exhausted_total / omi_listen_accepted_total over 60m > 0.08 with >= 600 accepted sockets in 60m, for 20m",
       "user_impact": "Those sessions lose live transcription entirely until the client reconnects; audio falls back to offline sync.",
       "scope": "backend-listen omi_stt_chain_exhausted_total (all demand cohorts) over omi_listen_accepted_total. This is the session-level exhaustion counter, not the stt_selection fallback count that omi-stt-chain-exhausted-warn (> 0.35) uses. The series is incremented only on the configured chain (STT_CONNECT_ORDER_FROM_CONFIG, utils/stt/live_chain.py), which prod runs: 120 live series across 3 demand cohorts on 2026-10-20; it is empty on any deployment without the configured chain.",
-      "verification": "Backtest 2026-10-10..10-20 (5m steps, prod Prometheus via the Grafana proxy): daily p50 0.035-0.131 (10-20 is 0.035, the post-fix baseline; 10-14 peaked at p50 0.131 / max 0.586). At > 0.05 for 20m it fires 62 times in 10d and 17 times in the last 3d, mostly during the degraded 10-14..10-19 regime. On 2026-10-20 the ratio was 0.028-0.031 before the 13:37Z listen roll and 0.066-0.092 from 13:03Z to 15:33Z (Soniox benched, availability escape), so the rule catches that incident.",
-      "evaluated_bad": "0.092 (2026-10-20 15:03Z 20m)",
-      "evaluated_good": "0.028 (2026-10-20 12:03Z 20m)",
+      "verification": "Backtest (prod Prometheus via the Grafana proxy). 20m window, 2026-10-10..10-20, 5m steps: daily p50 0.035-0.131 (10-20 is 0.035, the post-fix baseline), so a 5%/20m rule would fire 62x in 10d. 60m window, 2026-10-17..10-20, 10m steps: > 0.08 sustained 20m fires 6x in 3d (10-17 19:17Z, 10-18 00:07Z, 10-19 10:17Z, 10-19 15:17Z, 10-20 00:27Z, 10-20 15:07Z), including the 10-20 Soniox-bench incident (0.085-0.097 from 15:07Z). A dynamic threshold (2x the median of the same hour 1d/2d/7d ago, floor 0.08) was evaluated and rejected: the 3-offset query takes ~17s per instant evaluation (the 7-offset p50 8-29s, near the 30s evaluation timeout), and it would NOT have fired on 10-20 because the prior days were degraded at that hour (baseline 0.07-0.11).",
+      "evaluated_bad": "0.097 (2026-10-20 16:07Z 60m)",
+      "evaluated_good": "0.020 (2026-10-20 12:07Z 60m)",
       "safe_next_action": "Check omi_stt_cost_routing_stage by target first: if no target is at 100 the router is in its availability escape (see omi-stt-no-full-stage-target). Then split omi_fallback_total{outcome=exhausted} by from_mode/to_mode/reason before touching provider config or rolling listen.",
       "runbook": "backend/docs/operational/windowed-live-stt.md"
     },

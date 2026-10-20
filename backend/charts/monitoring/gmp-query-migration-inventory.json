@@ -848,27 +848,27 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[20m]))",
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
       "file": "alerts/live-stt.json",
       "issues": [],
       "metrics": [
         "omi_listen_accepted_total"
       ],
-      "owner_title": "Live STT - sessions exhausting the provider chain above 5%",
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
       "owner_uid": "omi-stt-chain-exhausted-ratio",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[20m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[20m])), 1)",
+      "expression": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
       "file": "alerts/live-stt.json",
       "issues": [],
       "metrics": [
         "omi_listen_accepted_total",
         "omi_stt_chain_exhausted_total"
       ],
-      "owner_title": "Live STT - sessions exhausting the provider chain above 5%",
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
       "owner_uid": "omi-stt-chain-exhausted-ratio",
       "panel": null,
       "pointer": "/data/1/model/expr",

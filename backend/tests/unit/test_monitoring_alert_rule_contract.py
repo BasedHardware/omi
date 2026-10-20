@@ -1887,7 +1887,8 @@ def test_live_stt_session_exhaustion_and_availability_escape_alerts():
     for export_name, rules in _all_rule_exports().items():
         ratio = {node["refId"]: node["model"] for node in rules["omi-stt-chain-exhausted-ratio"]["data"]}
         assert "omi_stt_chain_exhausted_total" in ratio["B"]["expr"], export_name
-        assert ratio["C"]["expression"] == "$A >= 200 && $B > 0.05", export_name
+        assert ratio["C"]["expression"] == "$A >= 600 && $B > 0.08", export_name
+        assert "[60m]" in ratio["B"]["expr"], export_name
         assert rules["omi-stt-chain-exhausted-ratio"]["for"] == "20m", export_name
         escape = rules["omi-stt-no-full-stage-target"]
         expr = escape["data"][0]["model"]["expr"]
