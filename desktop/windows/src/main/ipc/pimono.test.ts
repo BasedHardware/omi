@@ -64,6 +64,8 @@ vi.mock('../codingAgent/piMono', () => ({
 vi.mock('../auth/firebaseIdToken', () => ({
   verifyFirebaseIdToken: vi.fn(() => Promise.resolve(null))
 }))
+vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
+vi.mock('../assistants/core/notify', () => ({ notifyProactive: vi.fn() }))
 
 import { registerPiMonoHandlers } from './pimono'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
@@ -77,10 +79,6 @@ import {
   __resetPiMonoSessionForTests,
   __setByokKeyStoreForTests
 } from '../codingAgent/piMonoSession'
-import {
-  rendererConversationBinding,
-  resetRendererConversationBindingForTests
-} from '../jit/rendererConversationBinding'
 import {
   getAssistantSettingsOwner,
   registerAssistantSettingsHandlers,
@@ -173,32 +171,11 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     expect(controlPlaneOwnerId()).toBe(DEFAULT_LOCAL_OWNER_ID)
   })
 
-<<<<<<< HEAD
-  it('adopts a renderer selection reported before auth only after verification', async () => {
-    const selection = handlers.get('jit:rendererSelectionChanged')
-    if (!selection) throw new Error('jit:rendererSelectionChanged was not registered')
-
-    expect(selection({}, 'chat-before-auth')).toBe(false)
-    expect(rendererConversationBinding()).toBeNull()
-
-    verify.mockResolvedValue('account-A')
-    await setSession({ token: 'genuine-A', desktopApiBase: base })
-
-    expect(rendererConversationBinding()?.deletionKey).toBe('chat-before-auth')
-  })
-
-  it('rejects a renderer selection after sign-out and clears the old binding', async () => {
-    verify.mockResolvedValue('account-A')
-    await setSession({ token: 'genuine-A', desktopApiBase: base })
-    const selection = handlers.get('jit:rendererSelectionChanged')
-    if (!selection) throw new Error('jit:rendererSelectionChanged was not registered')
-    expect(selection({}, 'chat-A')).toBe(true)
-    expect(rendererConversationBinding()?.deletionKey).toBe('chat-A')
-
-    await setSession(null)
-
-    expect(selection({}, 'chat-old')).toBe(false)
-    expect(rendererConversationBinding()).toBeNull()
+  it('does not bind assistant settings to claims from a rejected token', async () => {
+    const token = `h.${Buffer.from(JSON.stringify({ uid: 'victim' })).toString('base64url')}.s`
+    verify.mockResolvedValue(null)
+    await setSession({ token, desktopApiBase: base })
+    expect(getAssistantSettingsOwner()).toBeNull()
   })
 
   it('binds assistant settings owner on session relay and protects against mismatched writes', async () => {

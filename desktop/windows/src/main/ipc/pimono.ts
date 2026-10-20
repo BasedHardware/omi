@@ -9,18 +9,8 @@
 
 import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
-import {
-  ensurePiMonoAdapterRegistered,
-  setControlPlaneOwner,
-  controlPlaneOwnerId
-} from '../agentKernel/controlPlane'
+import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
-import {
-  clearRendererConversationBinding,
-  fenceRendererConversationOwner,
-  setRendererConversationSelection
-} from '../jit/rendererConversationBinding'
-import { decodeUidFromIdToken } from '../auth/omiAuth'
 import { setAssistantSettingsOwner } from './assistantSettings'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
@@ -43,33 +33,14 @@ export function registerPiMonoHandlers(): void {
     // kernel chat + control tools. Fail closed, never fall back to the decode path.
     // On sign-out (session === null) it resets to default.
     const current = getPiMonoSession()
-    const rawUid = current?.token ? decodeUidFromIdToken(current.token) : null
-    setAssistantSettingsOwner(rawUid || null)
+    setAssistantSettingsOwner(null)
     const uid = current ? await verifyFirebaseIdToken(current.token) : null
     setControlPlaneOwner(uid)
-    if (uid && !rawUid) {
-      setAssistantSettingsOwner(uid)
-    }
-    // Keep the renderer-selection projection fenced to the same verified host
-    // owner. A token refresh for the same account preserves the selected chat;
-    // sign-out or an account switch drops it before any JIT analysis can capture
-    // the prior account's deletion key.
-    if (uid) fenceRendererConversationOwner(controlPlaneOwnerId())
-    else clearRendererConversationBinding()
+    setAssistantSettingsOwner(uid)
     // Register the managed-cloud pi-mono adapter into the kernel now that a
     // session may be present. Idempotent, and a no-op when signed out (returns
     // false), so the registry stays empty until a real Firebase session exists.
     // DARK: registration only — nothing routes chat to pi-mono until PR-E.
     ensurePiMonoAdapterRegistered()
   })
-
-  // JIT conversation-binding IPCs. The renderer broadcasts which chat is
-  // currently on-screen, but main retains ultimate control: it records the
-  // selection only when an authenticated host owner is present, and rejects
-  // changes once signed out.
-  ipcMain.handle(
-    'jit:rendererSelectionChanged',
-    (_e, conversationId: unknown): boolean =>
-      setRendererConversationSelection(typeof conversationId === 'string' ? conversationId : null)
-  )
 }
