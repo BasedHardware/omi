@@ -174,7 +174,7 @@ def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collabo
     if not episodes_enabled_for(uid):
         return 'disabled'
     outcome = 'error'
-    for attempt in range(2):
+    for _ in range(2):
         try:
             outcome = _record_moment_once(uid, moment, c)
         except episodes_db.EpisodeConflict:
@@ -192,7 +192,7 @@ def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collabo
 def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     now = _now(c)
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
-    if policy.idle_close_due(episode, now):
+    if episode is not None and policy.idle_close_due(episode, now):
         _close(uid, episode, 'idle', c, now=now)
         episode = None
     elif (
@@ -263,11 +263,11 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     else:
         metrics.record_boundary('continue')
 
+    state_updated_at = policy.utc(episode.get('state_updated_at')) if episode else None
     if (
-        episode
-        and moment.trigger == 'pause'
-        and policy.utc(episode.get('state_updated_at'))
-        and (now - policy.utc(episode.get('state_updated_at'))).total_seconds() < MOMENT_MIN_INTERVAL_SECONDS
+        moment.trigger == 'pause'
+        and state_updated_at is not None
+        and (now - state_updated_at).total_seconds() < MOMENT_MIN_INTERVAL_SECONDS
     ):
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'

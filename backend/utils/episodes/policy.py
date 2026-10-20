@@ -72,14 +72,14 @@ def is_live(episode: Optional[Mapping[str, Any]]) -> bool:
 
 def idle_close_due(episode: Optional[Mapping[str, Any]], now: datetime) -> bool:
     """A live episode with no speech for the close gap is over; reads close it lazily."""
-    if not is_live(episode):
+    if episode is None or not is_live(episode):
         return False
     last = utc(episode.get('last_activity_at'))
     return last is not None and (now - last).total_seconds() >= CLOSE_GAP_SECONDS
 
 
 def boundary(episode: Optional[Mapping[str, Any]], moment: MomentFacts) -> Boundary:
-    if not is_live(episode):
+    if episode is None or not is_live(episode):
         return Boundary(NEW)
     started = utc(episode.get('started_at')) or moment.started_at
     last = utc(episode.get('last_activity_at')) or started

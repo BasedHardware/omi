@@ -88,7 +88,7 @@ class InvalidUpdate(ValueError):
 
 def parse_update(raw: str, *, known_item_ids: Sequence[str]) -> IncrementalUpdate:
     """Parse and bound the model's JSON. Unknown item ids are ignored, never invented."""
-    text = raw if isinstance(raw, str) else str(raw)
+    text = str(raw)
     try:
         start, end = text.index('{'), text.rindex('}') + 1
         data = json.loads(text[start:end])

@@ -91,7 +91,7 @@ class MomentTracker:
         if not conversation_id:
             return []
         wall = time.time() if now is None else now
-        fresh = [dict(s) for s in segments if isinstance(s, Mapping) and str(s.get('text') or '').strip()]
+        fresh = [dict(s) for s in segments if str(s.get('text') or '').strip()]
         ended: list[MomentInput] = []
         with self._lock:
             self._evict(wall)
