@@ -12,6 +12,8 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
+// Ring protocol epoch timestamp validation helper (#20358)
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -574,6 +576,10 @@ class StorageSyncImpl implements StorageSync {
           hasParseGap = true;
         }
         if (value.length > 4) {
+          final packetTs = (value[0] << 24) | (value[1] << 16) | (value[2] << 8) | value[3];
+          if (RingProtocol.isUsableEpochTimestamp(packetTs) && wal.timerStart <= 0) {
+            wal.timerStart = packetTs;
+          }
           var audioData = value.sublist(4);
           var audioLen = audioData.length;
 

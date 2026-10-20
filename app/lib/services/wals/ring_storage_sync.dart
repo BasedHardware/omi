@@ -530,10 +530,16 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final chunkSeqs = recordSeqs.sublist(0, recordsToTake);
         final chunk = bytesData.sublist(0, framesToTake);
-        final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
-            ? recordTimestamps.first
-            : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+        int? chunkTs;
+        for (final t in recordTimestamps) {
+          if (RingProtocol.isUsableEpochTimestamp(t) || (rtcValid && t > 0)) {
+            chunkTs = t;
+            break;
+          }
+        }
+        final chunkTimerStart = chunkTs ??
+            ((firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
+                bufferBaseElapsed ~/ (fps > 0 ? fps : 1));
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
           if (chunk.isEmpty) {
@@ -695,15 +701,10 @@ class RingStorageSyncImpl implements RingStorageSync {
         final frames = RingProtocol.parseAudioPayload(audio);
         elapsedTotal += frames.length;
 
-        // Anchor timerStart on the first usable timestamp.
-        if (firstRecordTs == null) {
-          if (rtcValid && ts > 0) {
-            firstRecordTs = ts;
-          } else {
-            // Fallback: now - estimated duration of the unread region.
-            final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
-          }
+        // Anchor timerStart on the first usable timestamp (#20358).
+        if (firstRecordTs == null && (RingProtocol.isUsableEpochTimestamp(ts) || (rtcValid && ts > 0))) {
+          final elapsedBeforeRecord = (elapsedTotal - frames.length) ~/ (fps == 0 ? 1 : fps);
+          firstRecordTs = ts - elapsedBeforeRecord;
         }
 
         if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
@@ -716,6 +717,11 @@ class RingStorageSyncImpl implements RingStorageSync {
         recordTimestamps.add(ts);
         recordFrameCounts.add(frames.length);
         bytesData.addAll(frames);
+      }
+
+      // If no valid hardware timestamp was found, fall back conservatively on unread duration.
+      if (doneOk || recordsConsumed >= wal.totalFrames) {
+        firstRecordTs ??= (DateTime.now().millisecondsSinceEpoch ~/ 1000 - wal.totalFrames ~/ (fps == 0 ? 1 : fps));
       }
 
       // Throttled progress update.
