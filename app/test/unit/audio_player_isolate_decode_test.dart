@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -55,9 +56,9 @@ void main() {
     final bytes = BytesBuilder();
     for (final rawFrame in frames) {
       final frame = Uint8List.fromList(rawFrame);
-      bytes
-        ..add((ByteData(4)..setUint32(0, frame.length, Endian.little)).buffer.asUint8List())
-        ..add(frame);
+      final lenBytes = (ByteData(4)..setUint32(0, frame.length, Endian.little)).buffer.asUint8List();
+      bytes.add(lenBytes);
+      bytes.add(frame);
     }
     await File('${dir.path}/$name').writeAsBytes(bytes.takeBytes());
     return Wal(
@@ -96,7 +97,8 @@ void main() {
     expect(pcmWavPath, isNotNull);
     expect(player.lastDecodeIsolateDebugName, 'decodeWalAudio');
 
-    final corruptPart = File('${dir.path}/corrupt.wav')..writeAsBytesSync([1, 2, 3, 4]);
+    final corruptPart = File('${dir.path}/corrupt.wav');
+    corruptPart.writeAsBytesSync([1, 2, 3, 4]);
     final combined = await WavCombiner.combineWavFiles(
       [File(opusWavPath!), corruptPart, File(pcmWavPath!)],
       '${dir.path}/combined.wav',

@@ -1,10 +1,9 @@
 {
   "annotate_overrides": 1,
-  "avoid_print": 19,
+  "avoid_print": 18,
   "avoid_renaming_method_parameters": 1,
   "constant_identifier_names": 8,
   "curly_braces_in_flow_control_structures": 6,
-  "dangling_library_doc_comments": 1,
   "depend_on_referenced_packages": 4,
   "deprecated_member_use": 10,
   "library_private_types_in_public_api": 3,
@@ -18,7 +17,7 @@
   "slash_for_doc_comments": 1,
   "unnecessary_brace_in_string_interps": 10,
   "unnecessary_getters_setters": 1,
-  "unnecessary_import": 12,
+  "unnecessary_import": 13,
   "unnecessary_to_list_in_spreads": 1,
   "use_super_parameters": 1
 }
