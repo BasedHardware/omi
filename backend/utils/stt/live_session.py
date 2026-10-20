@@ -263,25 +263,10 @@ class LiveChainSession:
                         if leg.retired_for_replay:
                             return
                         translated = epoch.translate(seg_list)
-                        if not translated:
-                            return
-                        retained = []
-                        for segment in translated:
-                            raw_start = max(0.0, float(segment.get('start', 0.0)))
-                            raw_end = max(raw_start, float(segment.get('end', 0.0)))
-                            if raw_end <= self.last_end:
-                                continue
-                            start = max(self.last_end, raw_start)
-                            end = max(start, raw_end)
-                            if end <= start:
-                                continue
-                            segment['start'], segment['end'] = start, end
-                            self.last_end = end
-                            retained.append(segment)
-                        if retained:
-                            leg.note_selection_transcript(retained)
+                        if translated:
+                            leg.note_selection_transcript(translated)
                             self.receiver._enqueue_epoch_segments(
-                                retained, provider=service.value, speaker_epoch=stream_epoch
+                                translated, provider=service.value, speaker_epoch=stream_epoch
                             )
 
                     self.receiver._run_on_listen_loop(translate_on_loop, segments)
@@ -352,7 +337,7 @@ class LiveChainSession:
 
                     def new_window():
                         window_raw = connect_window(callback, sample_rate)
-                        if hasattr(window_raw, '_last_emitted_end') and self.last_end > 0:
+                        if self.last_end > 0:
                             window_raw._last_emitted_end = float(self.last_end)
                         if self.no_text_rescue.enabled:
                             window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue

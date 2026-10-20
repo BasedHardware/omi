@@ -86,42 +86,62 @@ def test_successor_same_provider_preserves_speaker_scope_and_prevents_renumberin
     assert second_block[1]["speaker_id"] == 1
 
 
-def test_callback_deduplication_against_last_end():
-    """Demonstrates deduplication of replayed segments against session last_end."""
-    last_end = 293.04
+@pytest.mark.anyio
+async def test_production_callback_deduplication_against_last_end(monkeypatch):
+    """Drives the actual production callback in live_session to verify that replayed audio
+    segments are trimmed or dropped against session.last_end without generating degenerate segments.
+    """
+    from types import SimpleNamespace
+    from utils.stt import live_session, streaming as st
+    from tests.unit.test_live_speaker_carry import _managed_receiver
 
-    # Successor leg receives replayed audio:
-    # 1. Old duplicate ending before or at last_end (290.76 to 293.04) -> MUST DROP
-    # 2. Overlapping segment (291.68 to 296.08) -> MUST TRIM start to 293.04
-    # 3. Degenerate segment (292.50 to 293.04) -> MUST DROP (end <= start after trim)
-    # 4. Fresh segment (296.50 to 300.00) -> MUST KEEP as-is
+    callbacks = []
+    raw_socket = SimpleNamespace(is_connection_dead=False, finish=lambda: None, send=lambda data: True)
+
+    async def connect_soniox(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return raw_socket
+
+    async def pick_primary(**kwargs):
+        return await kwargs['connect_primary'](), kwargs['primary_service']
+
+    monkeypatch.setattr(st, 'process_audio_soniox', connect_soniox)
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: None)
+    monkeypatch.setattr(live_session.st, 'connect_stt_socket_with_fallback', pick_primary)
+    monkeypatch.setenv('SONIOX_API_KEY', 'test')
+
+    receiver, stamped = _managed_receiver()
+    session = live_session.LiveChainSession(receiver)
+    await session.connect(16000)
+    assert len(callbacks) == 1
+
+    # Simulate existing progress up to 293.04
+    session.last_end = 293.04
+
+    # Invoke the actual production callback with replayed/overlapping audio
     incoming = [
         {"speaker": "SPEAKER_0", "start": 290.76, "end": 293.04, "text": "old phrase"},
         {"speaker": "SPEAKER_0", "start": 291.68, "end": 296.08, "text": "overlapping phrase"},
         {"speaker": "SPEAKER_0", "start": 292.50, "end": 293.04, "text": "degenerate phrase"},
         {"speaker": "SPEAKER_1", "start": 296.50, "end": 300.00, "text": "new phrase"},
     ]
+    callbacks[0](incoming)
 
-    retained = []
-    for segment in incoming:
-        raw_start = max(0.0, float(segment["start"]))
-        raw_end = max(raw_start, float(segment["end"]))
-        if raw_end <= last_end:
-            continue
-        start = max(last_end, raw_start)
-        end = max(start, raw_end)
-        if end <= start:
-            continue
-        segment["start"], segment["end"] = start, end
-        last_end = end
-        retained.append(segment)
+    # Verify that the production receiver received deduplicated segments:
+    # 1. "old phrase" dropped (raw_end <= 293.04)
+    # 2. "degenerate phrase" dropped (end <= start after trim)
+    # 3. "overlapping phrase" trimmed to (293.04, 296.08)
+    # 4. "new phrase" kept as-is (296.50, 300.00)
+    assert len(stamped) == 1
+    emitted = stamped[0]
+    assert len(emitted) == 2
+    assert emitted[0]["text"] == "overlapping phrase"
+    assert emitted[0]["start"] == 293.04
+    assert emitted[0]["end"] == 296.08
 
-    assert len(retained) == 2
-    assert retained[0]["text"] == "overlapping phrase"
-    assert retained[0]["start"] == 293.04
-    assert retained[0]["end"] == 296.08
+    assert emitted[1]["text"] == "new phrase"
+    assert emitted[1]["start"] == 296.50
+    assert emitted[1]["end"] == 300.00
+    assert session.last_end == 300.00
 
-    assert retained[1]["text"] == "new phrase"
-    assert retained[1]["start"] == 296.50
-    assert retained[1]["end"] == 300.00
-    assert last_end == 300.00
