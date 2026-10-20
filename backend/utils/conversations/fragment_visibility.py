@@ -30,14 +30,44 @@ def is_user_curated(data: Mapping[str, Any]) -> bool:
     """
     return bool(
         data.get('sync_relevance_user_kept')
-        or data.get('sync_live_target')
         or data.get('has_photos')
         or data.get('photos')
         or data.get('user_title')
         or data.get('starred')
         or data.get('folder_user_set')
-        or _value(data.get('visibility', 'private')) not in (None, 'private')
     )
+
+
+_RULE_DISCARD_REASONS = frozenset({'no_content_words', 'filler_only', 'mic_check', 'empty_transcript'})
+
+
+def is_rule_discard_decision(decision: Any) -> bool:
+    """Whether ``relevance_decision`` records a deterministic-rule discard."""
+    return (
+        isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') == 'rule'
+        and isinstance(decision.get('reason'), str)
+        and decision.get('reason') in _RULE_DISCARD_REASONS
+    )
+
+
+def is_completed_rule_discard(data: Mapping[str, Any] | None) -> bool:
+    """Whether ``data`` is a finished, uncurated row the rules already discarded.
+
+    Rows written while live ownership or sharing counted as curation carry the
+    stored ``rule``/``discard`` decision but kept ``discarded=False``. Readers
+    treat that decision as the durable verdict: the conversation is hidden
+    until a user restores it, and ``prepare_conversation_for_read`` projects
+    the effective flag onto the read copy without rewriting storage.
+    """
+    if not data:
+        return False
+    if _value(data.get('status')) != 'completed':
+        return False
+    if is_user_curated(data):
+        return False
+    return is_rule_discard_decision(data.get('relevance_decision'))
 
 
 def is_low_signal_sync_fragment(data: Mapping[str, Any] | None) -> bool:

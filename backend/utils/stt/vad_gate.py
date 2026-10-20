@@ -12,6 +12,8 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
+from utils.stt_cap_dispatch import suppress_socket_audio, set_cap_capture
+
 import logging
 import os
 import threading
@@ -20,7 +22,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
 
@@ -30,8 +32,10 @@ from utils.metrics import (
     OMI_VAD_GATE_SESSIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_loop import listen_loop_metrics_enabled, record_vad_windows
+from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.socket import STTSocket
-from utils.stt.vad import (
+from utils.stt.local_vad import (
     VAD_WINDOW_SAMPLES,
     _get_ort_session,  # type: ignore[reportPrivateUsage]  # internal helper, same package
     make_fresh_state,
@@ -197,6 +201,7 @@ class VADStreamingGate:
         self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
+        self._count_vad_windows = listen_loop_metrics_enabled()
         start = VAD_GATE_SPEECH_THRESHOLD if speech_threshold is None else speech_threshold
         cont = start if continue_threshold is None else continue_threshold
         self._speech_threshold = start
@@ -334,6 +339,8 @@ class VADStreamingGate:
         Buffers samples across chunks to handle cases where chunk size < window size.
         """
         with self._vad_inference_lock:
+            started = time.perf_counter() if self._count_vad_windows else 0.0
+            windows = 0
             float_data = self._convert_for_vad(pcm_data)
 
             # Always append to buffer for cross-chunk accumulation
@@ -352,6 +359,7 @@ class VADStreamingGate:
                     prob, self._vad_state, self._vad_context = run_vad_window(
                         window, self._vad_state, self._vad_context
                     )
+                    windows += 1
                     if prob > threshold:
                         is_speech = True
                     else:
@@ -362,6 +370,8 @@ class VADStreamingGate:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
             self._last_vad_mixed = is_speech and saw_silence
+            if self._count_vad_windows:
+                record_vad_windows(windows, time.perf_counter() - started)
             return is_speech
 
     def process_audio(
@@ -732,6 +742,7 @@ class GatedSTTSocket(STTSocket):
         send_tracker: Any = None,
     ):
         self._conn = stt_connection
+        self.recovery_enabled = session_recovery_enabled(stt_connection)
         self._gate = gate
         self._passthrough_audio = passthrough_audio
         # Audio-timeline v2: the provider epoch's translator. Accepted sends
@@ -757,6 +768,20 @@ class GatedSTTSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._conn.death_reason
 
+    async def wait_send_capacity(self, limit: int | None = None, timeout: float | None = None) -> bool:
+        enabled = getattr(self, 'recovery_enabled', None)
+        if enabled is None:
+            enabled = session_recovery_enabled(self._conn)
+        if not enabled:
+            return not self.is_connection_dead
+        wait = getattr(self._conn, 'wait_send_capacity', None)
+        if not callable(wait):
+            return not self.is_connection_dead
+        try:
+            return await cast(Callable[..., Awaitable[bool]], wait)(limit=limit, timeout=timeout)
+        except TypeError:
+            return await cast(Callable[[], Awaitable[bool]], wait)()
+
     @property
     def typed_death_reason(self) -> Optional[str]:
         """Proxy the wrapped socket's typed rejection (None when untyped)."""
@@ -778,9 +803,12 @@ class GatedSTTSocket(STTSocket):
 
     def send(self, data: bytes, wall_time: Optional[float] = None, start_sample: Optional[int] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
+        if suppress_socket_audio(self._conn, data, start_sample=start_sample):
+            return True
         if self.is_connection_dead:
             return False
         if self._gate is None:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
@@ -801,19 +829,25 @@ class GatedSTTSocket(STTSocket):
             )
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(data)
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
+        observe = getattr(self._conn, 'observe_vad', None)
+        if getattr(self._conn, 'idle_close_enabled', False) is True and callable(observe):
+            observe(gate_out, self._gate.mode)
         if self._raw_file:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             sent_spans = ((start_sample, len(data) // 2),) if start_sample is not None else ()
         elif gate_out.audio_to_send:
+            set_cap_capture(self._conn, gate_out.audio_to_send, gate_out.send_spans)
             accepted = self._conn.send(self._counted(gate_out.audio_to_send))
             sent_spans = gate_out.send_spans
         else:
@@ -821,6 +855,7 @@ class GatedSTTSocket(STTSocket):
             # a provider enqueue failure and must not terminate the session.
             accepted = True
             sent_spans = ()
+        self._idle_send_spans = sent_spans
         if accepted is True and self._send_tracker is not None and sent_spans:
             self._send_tracker.send_path = 'vad_gate_passthrough' if self._passthrough_audio else 'vad_gate_active'
             self._send_tracker.note_accepted_spans(sent_spans)
@@ -836,6 +871,47 @@ class GatedSTTSocket(STTSocket):
                 # the client instead of continuing as if transcription worked.
                 return False
         return accepted
+
+    @property
+    def idle_close_enabled(self) -> bool:
+        return getattr(self._conn, 'idle_close_enabled', False) is True
+
+    async def complete_send(self) -> bool:
+        offset = getattr(self._conn, 'set_resume_provider_offset', None)
+        if self._send_tracker is not None and callable(offset):
+            offset(self._send_tracker.last_send_provider_start)
+        complete = getattr(self._conn, 'complete_send', None)
+        return (
+            await cast(Callable[[], Awaitable[bool]], complete)() if callable(complete) else not self.is_connection_dead
+        )
+
+    def commit_send(self) -> None:
+        commit = getattr(self._conn, 'commit_send', None)
+        if callable(commit):
+            commit()
+
+    def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        if suppress_socket_audio(self._conn, data):
+            return True
+        from utils.stt.soniox_idle import unaccepted_onset
+
+        data, spans = unaccepted_onset(data, spans, self._send_tracker)
+        if not data:
+            return True
+        self._idle_send_spans = spans
+        set_cap_capture(self._conn, data, spans)
+        accepted = self._conn.send(data)
+        if accepted and self._send_tracker is not None and spans:
+            self._send_tracker.note_accepted_spans(spans)
+        return accepted
+
+    def take_unsent_packet(self) -> Any:
+        data = self.take_unsent_audio()
+        return (data, getattr(self, '_idle_send_spans', ())) if data else None
+
+    def take_unsent_audio(self) -> bytes:
+        take = getattr(self._conn, 'take_unsent_audio', None)
+        return cast(Callable[[], bytes], take)() if callable(take) else b''
 
     def finalize(self) -> None:
         """Flush pending transcript."""

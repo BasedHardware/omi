@@ -3,8 +3,10 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from routers.listen.runtime import ListenSessionRuntime
-from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME, COST_CANARY_OUTCOME
 
 
 def _runtime(
@@ -68,10 +70,13 @@ def test_canary_outcome_uses_stable_allocation_arm(monkeypatch):
     runtime = _runtime(delivered=True)
     for percent, arm in [('100', 'window'), ('0', 'control')]:
         monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', percent)
-        before = WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed')._value.get()
+        before = WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed', demand_cohort='ineligible')._value.get()
         runtime._session_transcript_outcome_recorded = False
         _outcome(runtime)
-        assert WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed')._value.get() == before + 1
+        assert (
+            WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed', demand_cohort='ineligible')._value.get()
+            == before + 1
+        )
 
 
 def test_terminal_failure_is_never_excused_as_too_short():
@@ -161,6 +166,7 @@ def test_teardown_seam_calls_the_recorder_after_attempt_terminalization():
         ListenSessionRuntime._record_session_transcript_outcome(runtime)
     record.assert_called_once_with(
         outcome='transcribed',
+        demand_cohort='ineligible',
         uid='uid-1',
         source='omi',
         platform='ios',
@@ -174,7 +180,9 @@ def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
     emitted = []
     with transcription._zero_transcript_events_lock:
         transcription._zero_transcript_events.clear()
-    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(
+        outcome='no_transcript', demand_cohort='ineligible'
+    )._value.get()
     with patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)):
         transcription.record_live_session_transcript_outcome(
             outcome='no_transcript',
@@ -184,7 +192,9 @@ def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
             recording_id='recording-1',
         )
 
-    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(
+        outcome='no_transcript', demand_cohort='ineligible'
+    )._value.get()
     assert after == before + 1
     assert emitted == [
         {
@@ -207,7 +217,9 @@ def test_no_transcript_product_events_coalesce_per_uid_but_aggregate_counts_ever
     now = 1000.0
     with transcription._zero_transcript_events_lock:
         transcription._zero_transcript_events.clear()
-    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(
+        outcome='no_transcript', demand_cohort='ineligible'
+    )._value.get()
     with (
         patch.object(transcription, '_zero_transcript_clock', side_effect=lambda: now),
         patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)),
@@ -229,7 +241,9 @@ def test_no_transcript_product_events_coalesce_per_uid_but_aggregate_counts_ever
             recording_id='private-recording-c',
         )
 
-    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(
+        outcome='no_transcript', demand_cohort='ineligible'
+    )._value.get()
     assert after == before + 3, 'Prometheus remains the authoritative outage signal'
     assert len(emitted) == 2
     assert emitted[1]['properties']['coalesced_outcome_count'] == 2
@@ -261,5 +275,42 @@ def test_outcome_children_are_queryable_from_process_start_without_increments():
     from prometheus_client import REGISTRY
 
     for outcome in ('transcribed', 'no_transcript', 'too_short'):
-        sample = REGISTRY.get_sample_value('omi_live_session_transcript_outcome_total', {'outcome': outcome})
+        sample = REGISTRY.get_sample_value(
+            'omi_live_session_transcript_outcome_total', {'outcome': outcome, 'demand_cohort': 'ineligible'}
+        )
         assert sample is not None, f'outcome="{outcome}" child must be pre-created at import'
+
+
+def test_router_canary_counts_admission_arm_once_even_after_config_change(monkeypatch):
+    runtime = _runtime(terminal=True)
+    runtime._cost_routing_arm = 'on'
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    counter = COST_CANARY_OUTCOME.labels(arm='on', outcome='no_transcript', demand_cohort='ineligible')
+    before = counter._value.get()
+    assert _outcome(runtime) == 'no_transcript'
+    assert counter._value.get() == before + 1
+
+
+def test_ineligible_session_has_no_router_canary_vote():
+    runtime = _runtime(delivered=True)
+    runtime._cost_routing_arm = None
+    counters = [
+        COST_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed', demand_cohort='ineligible')
+        for arm in ('on', 'control')
+    ]
+    before = [counter._value.get() for counter in counters]
+    assert _outcome(runtime) == 'transcribed'
+    assert [counter._value.get() for counter in counters] == before
+
+
+@pytest.mark.parametrize('percent', ['broken', 'NaN', '101'])
+def test_invalid_router_percent_cannot_abort_session_telemetry(monkeypatch, percent):
+    from routers.listen import runtime as runtime_module
+
+    runtime = _runtime(delivered=True)
+    monkeypatch.setattr(runtime_module, 'managed_chain_enabled', lambda host: True)
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_ON_PERCENT', percent)
+    runtime._capture_cost_routing_arm()
+    assert runtime._cost_routing_arm == 'control'
+    assert _outcome(runtime) == 'transcribed'

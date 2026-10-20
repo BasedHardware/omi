@@ -10,7 +10,13 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL
+from config.jev_decisions import (
+    JEV_AUTO_LANE_ID,
+    JEV_GATEWAY_REQUEST_MS,
+    JEV_MODEL,
+    SCREEN_TASK_JEV_AUTO_LANE_ID,
+    SCREEN_TASK_JEV_MODEL,
+)
 from llm_gateway.gateway.accounting import ProviderResponseMetadata, ProviderUsage
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
@@ -81,6 +87,16 @@ def test_lane_is_pinned_to_one_jev_version_with_one_attempt_and_no_fallback():
     assert route.fallbacks == [] and route.retry.max_attempts == 1
     assert route.timeouts.request_ms == JEV_GATEWAY_REQUEST_MS
     assert lane.last_known_good == lane.active_route
+
+
+def test_screen_task_lane_is_pinned_to_jev_114_without_changing_the_shared_lane():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[SCREEN_TASK_JEV_AUTO_LANE_ID]
+    route = config.route_artifacts[lane.active_route]
+
+    assert (route.primary.provider, route.primary.model) == ('openrouter', SCREEN_TASK_JEV_MODEL)
+    assert route.fallbacks == [] and route.retry.max_attempts == 1
+    assert config.route_artifacts[config.lanes[JEV_AUTO_LANE_ID].active_route].primary.model == JEV_MODEL
 
 
 def test_requires_service_auth():
@@ -157,6 +173,40 @@ def test_provider_failure_maps_to_the_gateway_provider_failure_contract():
 
     assert response.status_code in {502, 504}
     assert len(provider.calls) == 1  # no gateway retry; the caller owns its one retry
+
+
+class _SlowSystemOneProvider:
+    """Trickles past the route deadline: per-phase transport timeouts never fire."""
+
+    calls: list[int] = []
+
+    async def create_systemone(self, request, *, provider_ref, credentials, timeout_ms):
+        import asyncio
+
+        type(self).calls.append(timeout_ms)
+        await asyncio.sleep((timeout_ms + 2_000) / 1000.0)
+        return ProviderResponse(
+            response=ANSWER_BODY,
+            accounting=ProviderResponseMetadata(usage=ProviderUsage(prompt_tokens=21, uncached_input_tokens=21)),
+        )
+
+
+@pytest.mark.asyncio
+async def test_slow_provider_hits_the_wall_clock_deadline():
+    from llm_gateway.gateway.errors import GatewayProviderFailureError
+    from llm_gateway.gateway.executor import execute_systemone
+    from llm_gateway.gateway.resolver import resolve_systemone_route
+
+    config = load_gateway_config(prod_mode=True)
+    request_body = {'model': JEV_AUTO_LANE_ID, 'state': 'synthetic', 'questions': QUESTIONS}
+    resolved = resolve_systemone_route(config, request_body)
+    credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
+
+    with pytest.raises(GatewayProviderFailureError) as excinfo:
+        await execute_systemone(resolved, credentials, ProviderRegistry({'openrouter': _SlowSystemOneProvider()}))
+
+    assert excinfo.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert _SlowSystemOneProvider.calls == [JEV_GATEWAY_REQUEST_MS]
 
 
 def _openrouter_provider(handler) -> OpenAICompatibleChatCompletionProvider:

@@ -1,6 +1,12 @@
 package com.friend.ios
 
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.Context
+import android.os.Build
+import android.os.BatteryManager
+import android.os.PowerManager
+import android.os.SystemClock
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
@@ -30,6 +36,17 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        com.friend.ios.ondevice.OnDeviceBackgroundWorker.attach(this, flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
+            if (call.method != "setPolicy") { result.notImplemented() } else {
+                com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,
+                    call.argument<Boolean>("enabled") == true, call.argument<Number>("epoch")!!.toLong(), call.argument<Boolean>("retire") == true)
+                result.success(null)
+            }
+        }
+
+
+        com.friend.ios.ondevice.PhoneBatteryChannel.register(this, flutterEngine)
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)

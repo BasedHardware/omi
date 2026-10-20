@@ -17,6 +17,8 @@ import Foundation
 /// `forKey:` string literals from being introduced elsewhere (the baseline
 /// may only shrink).
 enum DefaultsKey: String {
+  /// Retired unowned value, retained only for regression fixtures; never sync authority.
+  case screenActivitySyncLegacyCursor = "screenActivitySync_lastId"
   case authIsSignedIn = "auth_isSignedIn"
   case authUserEmail = "auth_userEmail"
   case authUserId = "auth_userId"
@@ -43,6 +45,8 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Retained goal/reminder preference; keep the historical persisted key after Advice retirement.
+  case goalReminderNotificationsEnabled = "adviceNotificationsEnabled"
   /// Opt-out (defaults to on): the post-meeting summary share notification —
   /// the persistent notch card offering "Copy link" / "Send to <participant>".
   case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
@@ -167,10 +171,9 @@ enum DefaultsKey: String {
   /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
   case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
-  /// Local embedding runtime: skip Apple NLCE / hybrid and keep Gemini screen search.
+  /// Hard kill local vectors. Entitled plans retain Gemini search; other plans retain FTS.
   case disableLocalEmbeddings = "disableLocalEmbeddings"
-  /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
-  /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
+  /// Local hybrid search defaults on in every channel; `OMI_LOCAL_EMBEDDINGS` overrides.
   case localEmbeddingsEnabled = "localEmbeddingsEnabled"
   /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
   case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
@@ -180,6 +183,10 @@ enum DefaultsKey: String {
 /// derived at runtime.
 struct ScopedDefaultsKey {
   fileprivate let rawValue: String
+
+  static func screenActivitySyncCursor(ownerID: String) -> Self {
+    Self(rawValue: "screenActivitySync_lastId_\(ownerID)")
+  }
 
   static func taskContextSubjectMatches(ownerHash: String) -> Self {
     Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
@@ -194,6 +201,12 @@ struct ScopedDefaultsKey {
   static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
     Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
   }
+
+  static func assistantVoiceID(ownerID: String) -> Self {
+    Self(rawValue: "assistantVoiceID.\(ownerID)")
+  }
+
+  static let legacyShortcutSelectedVoiceID = Self(rawValue: "shortcut_selectedVoiceID")
 
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")

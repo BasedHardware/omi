@@ -36,7 +36,7 @@ class CallUberEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("could not convert string to float", response.json()["detail"])
+        self.assertIn("Coordinates must be a number or a numeric string", response.json()["detail"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ initialization, and blocks non-local network while importing the app.
 from __future__ import annotations
 
 import argparse
+import copy
 import ipaddress
 import json
 import logging
@@ -52,6 +53,14 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/pending-work',
+    '/v1/attention-items',
+    '/v1/messaging/links',
+    '/v1/messaging/link-proofs',
+    '/v1/review',
+    '/v2/review',
+    '/v1/entities',
+    '/v1/proactivity',
     '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
@@ -68,23 +77,27 @@ APP_CLIENT_PREFIXES = (
     '/v1/conversations',
     '/v1/csat',
     '/v1/dev',
+    '/v1/dream/runs',
     '/v1/fair-use',
     '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
     '/v1/import',
     '/v1/integrations',
+    # Released JIT paths remain static 410 tombstones for client compatibility.
     '/v1/jit',
     '/v1/knowledge-graph',
     '/v1/mcp',
     '/v1/memories',
     '/v1/payment-methods',
     '/v1/payments',
+    '/v2/payments',
     '/v1/paypal',
     '/v1/persons',
     '/v1/phone',
     '/v1/mobile',
     '/v1/screen-activity',
+    '/v1/screen-task',
     '/v1/screen-frame-egress',
     '/v1/search',
     '/v1/speaker-tag-prompts',
@@ -92,6 +105,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/sync',
     '/v1/task-integrations',
     '/v1/task-intelligence',
+    '/v1/tts',
     '/v1/users',
     '/v1/wrapped',
     '/v1/work-intents',
@@ -144,6 +158,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; public docs expose the Developer API key conversation detail route.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; not part of the Developer API key contract.',
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/title',
@@ -225,6 +243,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'POST',
+        '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'DELETE',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -248,6 +270,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/{conversation_id}/analytics',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; included in the app-client contract, not the Developer API key contract.',
     (
         'GET',
         '/v1/conversations/{conversation_id}/finalization',
@@ -331,6 +357,13 @@ APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
     ): (
         'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
         'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
     ),
 }
 
@@ -935,6 +968,42 @@ def _normalize_component_names(schema: dict[str, Any]) -> None:
         _rewrite_refs(schema, ref_map)
 
 
+def _publish_negotiated_plan_identity(schema: dict[str, Any]) -> None:
+    """Keep the default released contract; publish the opt-in catalog response.
+
+    The runtime model accepts catalog IDs. The route's capability/floor gate
+    continues to send the legacy projection to callers without a safe decoder.
+    Keeping distinct schemas lets the unchanged compatibility checker validate
+    that default response, without widening any installed decoder's contract.
+    """
+    from config.plan_catalog import LEGACY_WIRE_PLAN_VALUES
+
+    operation = schema.get('paths', {}).get('/v1/users/me/subscription', {}).get('get')
+    components = schema.get('components', {}).get('schemas', {})
+    if operation is None or 'Subscription' not in components or 'UserSubscriptionResponse' not in components:
+        return
+    components['PlanIdentitySubscription'] = copy.deepcopy(components['Subscription'])
+    components['PlanIdentitySubscription']['title'] = 'PlanIdentitySubscription'
+    components['PlanIdentityUserSubscriptionResponse'] = copy.deepcopy(components['UserSubscriptionResponse'])
+    capable = components['PlanIdentityUserSubscriptionResponse']
+    capable['title'] = 'PlanIdentityUserSubscriptionResponse'
+    capable['properties']['subscription'] = {'$ref': '#/components/schemas/PlanIdentitySubscription'}
+    components['Subscription']['properties']['plan']['enum'] = list(LEGACY_WIRE_PLAN_VALUES)
+    operation.setdefault('parameters', []).append(
+        {
+            'name': 'X-Omi-Plan-Identity',
+            'in': 'header',
+            'required': False,
+            'schema': {'type': 'string'},
+            'description': 'Value 1 declares catalog plan IDs and lossless unknown-plan decoding on a recognized client platform. Otherwise the platform release floor determines capability; older or unidentified clients retain legacy labels.',
+        }
+    )
+    operation['x-omi-plan-identity-response'] = {
+        'schema': {'$ref': '#/components/schemas/PlanIdentityUserSubscriptionResponse'},
+        'description': 'application/json response when the server plan-identity capability predicate accepts the header or platform/version floor. The default 200 schema is the legacy projection.',
+    }
+
+
 def build_openapi(app, surface: str) -> dict[str, Any]:
     if surface == 'public':
         routes = public_contract_routes(app)
@@ -945,6 +1014,9 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     elif surface == 'integration-public':
         routes = integration_public_contract_routes(app)
         title = INTEGRATION_PUBLIC_OPENAPI_TITLE
+    elif surface == 'dream':
+        routes = [route for route in app.routes if isinstance(route, APIRoute) and route.path == '/v1/dream/runs']
+        title = 'Omi Dream API'
     else:
         raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
@@ -960,11 +1032,13 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     )
     if surface == 'public':
         _normalize_bearer_security(schema)
-    elif surface == 'app-client':
+    elif surface in {'app-client', 'dream'}:
         _normalize_app_client_security(schema)
     elif surface == 'integration-public':
         _normalize_integration_public_security(schema)
     _normalize_component_names(schema)
+    if surface == 'app-client':
+        _publish_negotiated_plan_identity(schema)
     validate_contract(app, schema, surface)
     return schema
 
@@ -1042,6 +1116,9 @@ def validate_contract(app, schema: dict[str, Any], surface: str = 'public') -> N
                     f'Developer-API-only route leaked into app-client OpenAPI: {method} {path} '
                     f'({APP_CLIENT_EXCLUDED_ROUTES[(method, path)]})'
                 )
+    elif surface == 'dream':
+        if set(documented_route_keys(schema)) != {('GET', '/v1/dream/runs'), ('POST', '/v1/dream/runs')}:
+            raise OpenAPIContractError('Dream surface must contain exactly the owner GET and POST routes')
     elif surface == 'integration-public':
         documented = set(documented_route_keys(schema))
         expected = set(
@@ -1104,7 +1181,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Export or verify an Omi OpenAPI contract.')
     parser.add_argument(
         '--surface',
-        choices=('public', 'app-client', 'integration-public'),
+        choices=('public', 'app-client', 'integration-public', 'dream'),
         default='public',
         help='contract surface to export; defaults to public Developer API',
     )
@@ -1129,6 +1206,8 @@ def default_spec_path(surface: str) -> Path:
         return DEFAULT_APP_CLIENT_SPEC_PATH
     if surface == 'integration-public':
         return DEFAULT_INTEGRATION_PUBLIC_SPEC_PATH
+    if surface == 'dream':
+        return BACKEND_DIR / 'docs' / 'api' / 'dream-openapi.json'
     raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
 

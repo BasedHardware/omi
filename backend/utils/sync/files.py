@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
+from utils.sync.input_limits import BackfillStoragePressure, raise_sync_storage_pressure, sync_pcm_format
 
 try:
     from opuslib import Decoder
@@ -87,6 +89,9 @@ def decode_opus_file_to_wav(
                         decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
                 except Exception as e:
+                    # A full volume is capacity pressure, never a corrupt frame:
+                    # keeping the decoded prefix would complete a truncated recording.
+                    raise_sync_storage_pressure(e)
                     logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
                     corrupt_stream = True
                     break
@@ -96,7 +101,7 @@ def decode_opus_file_to_wav(
                 logger.warning(
                     'Opus decode: keeping %d frames decoded before the stream became unreadable', frame_count
                 )
-            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
+            logger.debug(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
         logger.info("No PCM data was decoded.")
@@ -104,9 +109,19 @@ def decode_opus_file_to_wav(
             os.remove(wav_file_path)
         return False
     except Exception as e:
+        # Capacity pressure must leave as itself (never as a corrupt-stream
+        # False) so the worker defers instead of consuming the staged audio.
+        pressure = e if isinstance(e, BackfillStoragePressure) else None
+        if pressure is None:
+            try:
+                raise_sync_storage_pressure(e)
+            except BackfillStoragePressure as mapped:
+                pressure = mapped
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
+        if pressure is not None:
+            raise pressure
         return False
 
 
@@ -219,6 +234,7 @@ def decode_pcm_file_to_wav(
         pcm_data.clear()
         return True
     except Exception as e:
+        raise_sync_storage_pressure(e)
         logger.error('PCM decode failed exception_type=%s', type(e).__name__)
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -249,6 +265,7 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
+@sync_phase('decode_vad')
 def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
     """Decode each uploaded sync file, isolating unreadable files from their batch.
 
@@ -268,16 +285,14 @@ def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str
         if match:
             try:
                 frame_size = int(match.group(1))
-                logger.info(f"Found frame size {frame_size} in filename: {filename}")
+                logger.debug(f"Found frame size {frame_size} in filename: {filename}")
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
         if _is_pcm_codec(filename):
-            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
-            sample_rate = (
-                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
-            )
-            sample_width = 1 if '_pcm8_' in filename else 2
+            pcm_format = sync_pcm_format(filename)
+            assert pcm_format is not None
+            sample_rate, sample_width = pcm_format
             success = decode_pcm_file_to_wav(
                 path,
                 wav_path,

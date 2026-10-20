@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_configured
 import json
 import logging
 import os
@@ -23,7 +24,12 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import (
+    UnsafeWebhookURLError,
+    get_pinned_delivery_client,
+    get_webhook_semaphore,
+    safe_request_targets,
+)
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -33,8 +39,8 @@ from utils.mcp_client import (
     refresh_oauth_token,
     discover_mcp_tools,
     fetch_brandfetch_logo,
-    generate_state_token,
-    parse_state_token,
+    create_mcp_oauth_state,
+    consume_mcp_oauth_state,
     generate_pkce_pair,
 )
 
@@ -771,8 +777,14 @@ def search_apps(
                 [err['loc'][0] for err in e.errors() if err.get('loc')],
             )
 
-    # Always exclude persona type apps from results
-    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    # Persona apps are hidden from browse/search — they are private chat identities, not catalog
+    # listings. The one exception is the installed-apps read: the mobile chat picker loads the
+    # user's installed apps from this endpoint, and a persona the user already enabled must
+    # reappear there after restart/refresh or the picker silently loses it.
+    if installed_apps:
+        filtered_apps = apps
+    else:
+        filtered_apps = [app for app in apps if not app.is_a_persona()]
 
     # Apply rating filter
     if rating is not None:
@@ -914,6 +926,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
@@ -962,11 +976,26 @@ async def update_persona(
     uid=Depends(auth.get_current_user_uid),
 ):
     data = parse_form_json(dict, persona_data, 'persona_data')
+    # Released clients serialize an omitted field as null, not absent. For these two, null
+    # must mean "not sent": `'omi' in data.get('connected_accounts', [])` raised TypeError on
+    # null, and writing null over the stored handle both cleared it and made the response
+    # model (username: str) fail with a 500 after the write.
+    for field in ('username', 'connected_accounts'):
+        if data.get(field) is None:
+            data.pop(field, None)
+
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    needs_generation = (
+        'name' in data and data['name'] and data['name'] != persona.get('name') and 'description' not in data
+    ) or ('omi' in data.get('connected_accounts', []) and 'omi' not in persona.get('connected_accounts', []))
+    if needs_generation:
+        if generated_compute_configured():
+            await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
 
     # Image
     if file:
@@ -1044,11 +1073,15 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
-        # Return existing persona
-        return persona
+        safe_persona = _safe_app_from_dict(persona)
+        if safe_persona is not None:
+            return safe_persona
+        logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
     # Create a new persona for the user
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
@@ -1522,6 +1555,7 @@ def generate_description_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    require_generated_compute(uid, 'app_integration')
     enforce_chat_quota(uid, platform=x_app_platform)
     if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
@@ -1544,6 +1578,7 @@ def generate_description_and_emoji_endpoint(
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
+    require_generated_compute(uid, 'app_integration')
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     if not data.name:
@@ -1570,6 +1605,8 @@ async def generate_sample_prompts_endpoint(
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_integration')
     from utils.llm.clients import get_llm
     import json
 
@@ -1626,6 +1663,8 @@ async def generate_app_endpoint(
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator')
     from utils.llm.app_generator import generate_app_from_prompt
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
@@ -1674,6 +1713,8 @@ async def generate_app_icon_endpoint(
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
     from utils.llm.app_generator import generate_app_icon
     import base64
 
@@ -1782,6 +1823,7 @@ def get_twitter_initial_message(
     username: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:twitter_initial_message")),
 ):
+    require_generated_compute(uid, 'persona_clone')
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1839,6 +1881,10 @@ async def migrate_app_owner(
 
 
 async def update_omi_persona_connected_accounts(uid: str):
+    if generated_compute_configured() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'persona_clone'
+    ):
+        return
     try:
         personas = await run_blocking(db_executor, get_omi_persona_apps_by_uid_db, uid)
 
@@ -1941,7 +1987,13 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 detail='MCP server requires OAuth but does not support dynamic client registration',
             )
 
-        state = generate_state_token(app_id, uid)
+        # Single-use server-side state: the callback trusts only a state this server issued,
+        # so a caller cannot forge one that binds the connection to another account.
+        try:
+            state = await run_blocking(db_executor, create_mcp_oauth_state, app_id, uid)
+        except Exception as e:
+            logger.error(f'[MCP OAuth] Failed to store state in Redis: {e}')
+            raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
 
         # Generate PKCE pair (required by MCP OAuth 2.1 spec)
         code_verifier, code_challenge = generate_pkce_pair()
@@ -2046,14 +2098,16 @@ async def mcp_oauth_callback(code: str, state: str):
     Exchanges the authorization code for tokens, discovers tools, updates the app.
     Returns an HTML success/failure page.
     """
-    try:
-        app_id, uid = parse_state_token(state)
-    except ValueError:
-        return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
+    subject = await run_blocking(db_executor, consume_mcp_oauth_state, state)
+    if not subject:
+        return HTMLResponse('<html><body><h1>Invalid or expired state parameter</h1></body></html>', status_code=400)
+    app_id, uid = subject
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+    if app_data.get('uid') != uid:
+        return HTMLResponse('<html><body><h1>OAuth state does not match app owner</h1></body></html>', status_code=403)
 
     ext = app_data.get('external_integration', {})
     oauth_tokens = ext.get('mcp_oauth_tokens', {})
@@ -2242,24 +2296,106 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = _safe_app_from_dict(app)
     if not app:
+        logger.warning('app_install_failure class=missing_app')
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
+        logger.warning('app_install_failure class=disabled')
         raise HTTPException(status_code=400, detail=_disabled_app_install_detail(app, uid))
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
+            logger.warning('app_install_failure class=private_access')
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if app.works_externally() and app.external_integration.setup_completed_url:
-        client = get_webhook_client()
-        setup_url = app.external_integration.setup_completed_url
-        separator = '&' if '?' in setup_url else '?'
-        res = await client.get(f'{setup_url}{separator}uid={uid}')
-        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not _setup_completed_from_response(res):
-            raise HTTPException(status_code=400, detail='App setup is not completed')
-
     # Check payment status
     if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+        logger.warning('app_install_failure class=payment_required')
+        raise HTTPException(
+            status_code=403,
+            detail='This app requires a paid subscription. Complete the purchase on the app page, then try again.',
+        )
+    if app.works_externally():
+        if app.external_integration is None:
+            logger.warning('app_install_failure class=setup_configuration')
+            raise HTTPException(
+                status_code=422,
+                detail='This app is missing its integration setup configuration. Contact its developer.',
+            )
+        if app.external_integration.setup_completed_url:
+            client = get_pinned_delivery_client()
+            setup_url = app.external_integration.setup_completed_url
+            # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
+            # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
+            # IP while presenting the original Host/SNI, so a DNS record swapped between check and
+            # connect (SSRF / DNS rebinding) cannot redirect this probe at an internal service.
+            # Pinned URLs run on the non-pooling client: a pooled keep-alive connection keyed by
+            # the resolved IP could be reused for another setup hostname resolving to the same IP
+            # and skip that hostname's TLS certificate verification.
+            try:
+                pinned_targets = await run_blocking(db_executor, safe_request_targets, setup_url)
+            except UnsafeWebhookURLError:
+                logger.warning('app_install_failure class=setup_configuration')
+                raise HTTPException(
+                    status_code=422,
+                    detail='This app has an invalid setup endpoint. Contact its developer.',
+                )
+            res = None
+            for pinned_url, pin_kwargs in pinned_targets:
+                separator = '&' if '?' in pinned_url else '?'
+                try:
+                    async with get_webhook_semaphore():
+                        res = await client.get(
+                            f'{pinned_url}{separator}uid={uid}',
+                            headers=pin_kwargs['headers'],
+                            extensions=pin_kwargs['extensions'],
+                            follow_redirects=False,
+                        )
+                    break
+                except (UnsafeWebhookURLError, httpx.InvalidURL):
+                    # InvalidURL: a malformed developer URL that survived pinning (e.g. illegal
+                    # characters in the path) must not 500 — it is an app misconfiguration,
+                    # and no resolved address can fix the path. UnsafeWebhookURLError from the
+                    # request stack keeps the same invalid-configuration mapping.
+                    logger.warning('app_install_failure class=setup_configuration')
+                    raise HTTPException(
+                        status_code=422,
+                        detail='This app has an invalid setup endpoint. Contact its developer.',
+                    )
+                except httpx.RequestError as exc:
+                    # Multi-A / dual-stack hostnames: try every safe resolved address
+                    # before reporting the setup service unavailable, matching
+                    # HTTPX's normal address fallback that pinning replaced.
+                    logger.info(
+                        f'app setup probe: pinned address unreachable reason={type(exc).__name__}; '
+                        'trying next resolved address'
+                    )
+                    res = None
+                    continue
+            if res is None:
+                logger.warning('app_install_failure class=setup_unavailable')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if res.status_code != 200:
+                logger.warning(f'app_install_failure class=setup_unavailable status={res.status_code}')
+                raise HTTPException(
+                    status_code=503,
+                    detail='Unable to verify app setup. Try again, or contact the app developer if this continues.',
+                )
+            if not _setup_completed_from_response(res):
+                logger.warning('app_install_failure class=setup_incomplete')
+                integration = app.external_integration
+                has_setup_ui = bool(
+                    integration and (integration.auth_steps or integration.setup_instructions_file_path)
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        'App setup is not completed. Open the app setup instructions and connect the '
+                        'required account, then try again.'
+                        if has_setup_ui
+                        else 'App setup is not completed. Finish the setup on the developer side, then try again.'
+                    ),
+                )
 
     newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
     if (
@@ -2298,7 +2434,7 @@ def disable_app_endpoint(app_id: str, request: Request, uid: str = Depends(auth.
 
 @router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
 def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2312,7 +2448,7 @@ def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2324,7 +2460,7 @@ def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(..
 
 @router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
 def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
@@ -2343,7 +2479,7 @@ def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     apps = get_unapproved_public_apps_db()
     return apps
@@ -2351,7 +2487,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
 
 @router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
@@ -2361,7 +2497,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
@@ -2377,7 +2513,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
@@ -2427,7 +2563,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     personas = get_persona_by_id_db(persona_id)
     if not personas:
@@ -2438,7 +2574,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
 
 @router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     persona = get_personas_by_username_db(persona_id)
     if not persona:
@@ -2503,7 +2639,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 @router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
@@ -2514,7 +2650,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
 @router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = add_conversation_summary_app_id(app_id)
@@ -2527,7 +2663,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
 @router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     success = remove_conversation_summary_app_id(app_id)

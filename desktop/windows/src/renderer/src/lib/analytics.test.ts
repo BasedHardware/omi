@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./firebase', () => ({ auth: { currentUser: { uid: 'user-123' } } }))
 
-import { trackEvent } from './analytics'
+import { trackEvent, trackPaywallOpened, trackUpgradePlanSelected } from './analytics'
 
 describe('analytics capture contract', () => {
   beforeEach(() => {
@@ -53,5 +53,33 @@ describe('analytics capture contract', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://us.i.posthog.com/i/v0/e/')
     vi.unstubAllEnvs()
+  })
+
+  it('collapses plan and interval aliases onto the closed funnel vocabulary', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response())
+
+    trackPaywallOpened('Usage Page Plan Sheet', 'pro')
+    trackUpgradePlanSelected('free', 'Annual', 'windows_billing')
+    trackUpgradePlanSelected('plus', 'Plus Yearly Monthly', 'windows_settings_view')
+
+    const bodies = fetchMock.mock.calls.map((call) =>
+      JSON.parse(String((call[1] as RequestInit).body))
+    )
+    expect(bodies.map((body: { event: string }) => body.event)).toEqual([
+      'Paywall Opened',
+      'Upgrade Plan Selected',
+      'Upgrade Plan Selected'
+    ])
+    expect(bodies[0].properties).toMatchObject({ source: 'unknown', current_plan: 'unknown' })
+    expect(bodies[1].properties).toMatchObject({
+      plan: 'basic',
+      billing_interval: 'year',
+      source: 'windows_billing'
+    })
+    expect(bodies[2].properties).toMatchObject({
+      plan: 'plus',
+      billing_interval: 'year',
+      source: 'windows_settings_view'
+    })
   })
 })

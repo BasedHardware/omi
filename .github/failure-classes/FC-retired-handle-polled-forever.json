@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-retired-handle-polled-forever",
+  "violated_contract": "A server-side path that retires an accepted upload's job handle must leave that handle with a terminal, client-actionable status answer. A handle that only ever 404s, against a client that confirms missing jobs only by a second same-process 404 minutes later, stays 'uploaded' on the phone indefinitely and consumes the shared poll budget that new uploads need.",
+  "canonical_prevention": "Record every retired handle with its owner and custody state, and answer status polls for it with a terminal status the released client acknowledges (completed with an explicit reason code when bytes are held server-side) after real completion reconciliation declines. The client persists missing-job confirmation across sessions and never orders dead handles ahead of fresh uploads.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_retired_handle_ack.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/retired_handle_ack.py",
+    "backend/routers/sync.py",
+    "backend/database/sync_backfill_sequencer.py",
+    "app/lib/services/wals/sync_job_poller.dart"
+  ],
+  "status": "open"
+}

@@ -64,7 +64,12 @@ final class SubscriptionEntitlementService: @unchecked Sendable {
     observeAuthChanges: Bool = true,
     now: @escaping @Sendable () -> Date = { Date() },
     fetchSubscription: @escaping @Sendable () async throws -> UserSubscriptionResponse = {
-      try await APIClient.shared.getUserSubscription()
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      let response = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+      if let authorization {
+        ScreenCloudEntitlementService.shared.accept(response, authorization: authorization)
+      }
+      return response
     },
     isByokActive: @escaping @Sendable () -> Bool = { APIKeyService.isByokActive }
   ) {
@@ -245,9 +250,6 @@ enum ManagedPlanGateHTTP {
   /// classified it. Distinct from chat-quota / trial-expired 402.
   static func isPlanGatedWarmFailure(_ error: Error) -> Bool {
     if case GeminiClient.GeminiClientError.planGated = error {
-      return true
-    }
-    if case ProactiveLaneClientError.planGated = error {
       return true
     }
     if let mint = error as? RealtimeTokenMintError {

@@ -1,0 +1,8 @@
+# Reuse the pinned, import-complete route/model environment; no full backend
+# runtime lock, ML build toolchain, or network access during the tests.
+-r openapi-requirements.txt
+pytest==8.4.1
+pytest-asyncio==1.4.0
+iniconfig==2.3.0
+pluggy==1.6.0
+pygments==2.20.0

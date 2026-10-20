@@ -10,6 +10,8 @@ from anthropic import Anthropic
 import requests
 import logging
 
+REQUEST_TIMEOUT = (5, 30)
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -115,7 +117,7 @@ def get_default_branch(owner: str, repo: str, github_token: str) -> str:
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             default_branch = response.json().get('default_branch', 'main')
             logger.info(f"Default branch for {owner}/{repo}: {default_branch}")
@@ -147,7 +149,7 @@ def get_repo_context_via_api(owner: str, repo: str, github_token: str, path: str
     }
 
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
         if response.status_code == 200:
             items = response.json()
 
@@ -203,7 +205,7 @@ def create_or_update_files_via_api(
         # Step 1: Get the base branch reference
         logger.info(f"Getting reference for base branch: {base_branch}")
         ref_url = f'https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{base_branch}'
-        response = requests.get(ref_url, headers=headers)
+        response = requests.get(ref_url, headers=headers, timeout=REQUEST_TIMEOUT)
 
         if response.status_code != 200:
             return {
@@ -217,7 +219,7 @@ def create_or_update_files_via_api(
         # Step 2: Get the base tree
         logger.info(f"Getting base tree...")
         commit_url = f'https://api.github.com/repos/{owner}/{repo}/git/commits/{base_sha}'
-        response = requests.get(commit_url, headers=headers)
+        response = requests.get(commit_url, headers=headers, timeout=REQUEST_TIMEOUT)
 
         if response.status_code != 200:
             return {
@@ -240,7 +242,7 @@ def create_or_update_files_via_api(
                 'encoding': 'utf-8'
             }
 
-            response = requests.post(blob_url, headers=headers, json=blob_data)
+            response = requests.post(blob_url, headers=headers, json=blob_data, timeout=REQUEST_TIMEOUT)
 
             if response.status_code != 201:
                 logger.error(f"Failed to create blob for {file_path}: {response.status_code}")
@@ -270,7 +272,7 @@ def create_or_update_files_via_api(
             'tree': tree_items
         }
 
-        response = requests.post(tree_url, headers=headers, json=tree_data)
+        response = requests.post(tree_url, headers=headers, json=tree_data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code != 201:
             return {
@@ -290,7 +292,7 @@ def create_or_update_files_via_api(
             'parents': [base_sha]
         }
 
-        response = requests.post(commit_url, headers=headers, json=commit_data)
+        response = requests.post(commit_url, headers=headers, json=commit_data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code != 201:
             return {
@@ -309,7 +311,7 @@ def create_or_update_files_via_api(
             'sha': new_commit_sha
         }
 
-        response = requests.post(ref_url, headers=headers, json=ref_data)
+        response = requests.post(ref_url, headers=headers, json=ref_data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code not in [201, 422]:  # 422 means already exists
             return {
@@ -373,7 +375,7 @@ def create_pr_with_github_api(
     logger.info(f"Creating PR: {branch} -> {base_branch}")
 
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code == 201:
             pr_data = response.json()
@@ -425,7 +427,7 @@ def merge_pr_with_github_api(
     logger.info(f"Merging PR #{pr_number} using {merge_method} method")
 
     try:
-        response = requests.put(url, headers=headers, json=data)
+        response = requests.put(url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
 
         if response.status_code == 200:
             logger.info(f"PR #{pr_number} merged successfully")

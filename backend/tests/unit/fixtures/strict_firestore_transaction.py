@@ -4,6 +4,8 @@ This fixture models document-reference ``get(transaction=...)`` plus transaction
 ``create``, ``set``, and ``update``. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
+Parent reference navigation preserves the owning store and performs no IO.
+
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
@@ -38,6 +40,21 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
+class InvalidFirestoreValueError(ValueError):
+    """Raised for a value Firestore rejects with InvalidArgument (an array directly inside an array)."""
+
+
+def _assert_storable(value: Any, *, in_array: bool = False) -> None:
+    if isinstance(value, (list, tuple)):
+        if in_array:
+            raise InvalidFirestoreValueError('Firestore cannot store an array directly inside an array')
+        for item in value:
+            _assert_storable(item, in_array=True)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _assert_storable(item)
+
+
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
     'projected client folder-membership BatchGet'
@@ -64,6 +81,11 @@ class StrictFirestoreDocument:
         """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
         return self.path[-1]
 
+    @property
+    def parent(self) -> StrictFirestoreCollection:
+        """Navigate to the owning collection without reading or changing stores."""
+        return StrictFirestoreCollection(self._database, self.path[:-1])
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
@@ -75,12 +97,26 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths not in (["is_locked"], ["folder_id"]):
-                raise UnsupportedFirestoreOperationError("only privacy and folder membership projections are supported")
+            if field_paths not in (
+                ["is_locked"],
+                ["folder_id"],
+                ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
+                [
+                    'deleted',
+                    'discarded',
+                    'is_locked',
+                    'manual_speaker_assignments',
+                    'manual_speaker_assignments_compressed',
+                ],
+            ):
+                raise UnsupportedFirestoreOperationError(
+                    "only privacy, folder membership and speaker-receipt projections are supported"
+                )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
 
     def create(self, data: dict[str, Any]) -> None:
+        _assert_storable(data)
         if self.path in self._database.rows:
             raise RuntimeError('document already exists')
         self._database.rows[self.path] = deepcopy(data)
@@ -93,6 +129,12 @@ class StrictFirestoreCollection:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
+
+    @property
+    def parent(self) -> StrictFirestoreDocument | None:
+        if len(self._path) == 1:
+            return None
+        return StrictFirestoreDocument(self._database, self._path[:-1])
 
     def document(self, name: str) -> StrictFirestoreDocument:
         return StrictFirestoreDocument(self._database, (*self._path, name))
@@ -199,6 +241,7 @@ class StrictFirestoreTransaction:
 
     def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
@@ -206,6 +249,7 @@ class StrictFirestoreTransaction:
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(data)
         self.has_written = True
         if ref.path in self._database.rows:
             raise RuntimeError('document already exists')
@@ -215,6 +259,7 @@ class StrictFirestoreTransaction:
 
     def update(self, ref: StrictFirestoreDocument, patch: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
+        _assert_storable(patch)
         self.has_written = True
         if ref.path not in self._database.rows:
             raise RuntimeError('missing row')

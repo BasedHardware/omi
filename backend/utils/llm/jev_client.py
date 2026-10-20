@@ -15,13 +15,14 @@ answer" and keep their existing safe default. Nothing here raises.
 """
 
 from __future__ import annotations
+from utils.generated_compute import current_generated_compute_allowed
 
 import logging
 import math
 import os
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, cast
 
 import httpx
@@ -49,6 +50,7 @@ class JevAnswers:
 
     served_model: Optional[str]
     answers: Mapping[str, Mapping[str, Any]]
+    usage: Mapping[str, Any] = field(default_factory=dict)
 
     def noul(self, name: str) -> float:
         """Probability that the answer to a noul (yes/no) question is true."""
@@ -86,22 +88,29 @@ def ask_jev(
     questions: Mapping[str, Mapping[str, Any]],
     *,
     lane: str,
+    model: str | None = None,
+    expected_model: str = JEV_MODEL,
     timeout_seconds: float = JEV_CLIENT_TIMEOUT_SECONDS,
     max_attempts: int = JEV_CLIENT_MAX_ATTEMPTS,
     outcome_observer: Callable[[str], None] | None = None,
+    record_decision_metrics: bool = True,
 ) -> Optional[JevAnswers]:
     """Ask Jev ``questions`` about ``state``. ``None`` on any failure.
 
     ``lane`` is the bounded product decision name used for metrics and gateway
-    usage attribution (``conversation_relevance`` or ``memory_owner``).
+    usage attribution (currently ``conversation_relevance``).
+    ``record_decision_metrics=False`` suppresses ``omi_jev_decision_total`` and
+    its latency histogram when another verifier uses the shared Jev client.
     """
+    if not current_generated_compute_allowed('jev_decisions', allow_byok=False):
+        return None
     started = time.monotonic()
     outcome = 'success'
     try:
         if not os.getenv(LLM_GATEWAY_URL_ENV_VAR, '').strip():
             outcome = 'unconfigured'
             return None
-        body = {'model': JEV_AUTO_LANE_ID, 'state': truncate_state(state), 'questions': dict(questions)}
+        body = {'model': model or JEV_AUTO_LANE_ID, 'state': truncate_state(state), 'questions': dict(questions)}
         attempts = max(1, max_attempts)
         for attempt in range(1, attempts + 1):
             try:
@@ -111,7 +120,7 @@ def ask_jev(
                 if exc.retryable and attempt < attempts:
                     continue
                 return None
-            answers = _validated_answers(raw, questions)
+            answers = _validated_answers(raw, questions, expected_model=expected_model)
             if answers is None:
                 outcome = 'malformed'
                 return None
@@ -130,7 +139,8 @@ def ask_jev(
                 logger.warning('jev outcome observer failed lane=%s', lane)
         if outcome != 'success':
             logger.info('jev decision unavailable lane=%s outcome=%s', lane, outcome)
-        record_jev_decision(lane=lane, outcome=outcome, latency_seconds=time.monotonic() - started)
+        if record_decision_metrics:
+            record_jev_decision(lane=lane, outcome=outcome, latency_seconds=time.monotonic() - started)
 
 
 def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) -> object:
@@ -147,7 +157,7 @@ def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) ->
     except httpx.HTTPError as exc:
         raise _AttemptFailed('transport_error', retryable=True) from exc
     if response.status_code == 429:
-        raise _AttemptFailed('http_error', retryable=False)
+        raise _AttemptFailed('http_429', retryable=False)
     if response.status_code in _RETRYABLE_STATUS_CODES:
         raise _AttemptFailed('http_error', retryable=True)
     if response.status_code >= 400:
@@ -159,12 +169,17 @@ def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) ->
         return None
 
 
-def _validated_answers(raw: object, questions: Mapping[str, Mapping[str, Any]]) -> Optional[JevAnswers]:
+def _validated_answers(
+    raw: object,
+    questions: Mapping[str, Mapping[str, Any]],
+    *,
+    expected_model: str = JEV_MODEL,
+) -> Optional[JevAnswers]:
     if not isinstance(raw, Mapping):
         return None
     body = cast(Mapping[str, Any], raw)
     served_model = body.get('model')
-    if served_model is not None and not _is_pinned_model(served_model):
+    if served_model is not None and not _is_pinned_model(served_model, expected_model=expected_model):
         return None
     answers = body.get('answers')
     if not isinstance(answers, Mapping):
@@ -187,12 +202,16 @@ def _validated_answers(raw: object, questions: Mapping[str, Mapping[str, Any]]) 
             ):
                 return None
         validated[name] = typed_answer
-    return JevAnswers(served_model=served_model if isinstance(served_model, str) else None, answers=validated)
+    return JevAnswers(
+        served_model=served_model if isinstance(served_model, str) else None,
+        answers=validated,
+        usage=cast(Mapping[str, Any], body['usage']) if isinstance(body.get('usage'), Mapping) else {},
+    )
 
 
-def _is_pinned_model(value: object) -> bool:
+def _is_pinned_model(value: object, *, expected_model: str = JEV_MODEL) -> bool:
     """The served model must be the pinned version or one of its dated snapshots."""
-    return isinstance(value, str) and (value == JEV_MODEL or value.startswith(f'{JEV_MODEL}-'))
+    return isinstance(value, str) and (value == expected_model or value.startswith(f'{expected_model}-'))
 
 
 def _is_probability(value: object) -> bool:

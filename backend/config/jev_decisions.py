@@ -7,19 +7,24 @@ gateway owns the OpenRouter credential. Both the lane definition
 (``llm_gateway/gateway/config_loader.py``) and the backend client
 (``utils/llm/jev_client.py``) read the pinned model and route from here.
 
-Each decision that consults Jev has its own deployment flag. Every flag
-defaults off, and flags are read at the call boundary, never at import.
+The conversation relevance Jev cohort is selected by one percentage flag,
+read at the call boundary. An unset percentage defaults off so a formerly
+disabled host cannot become enabled when the old gate is removed.
 """
 
 from __future__ import annotations
 
+import hashlib
+import math
 import os
-from datetime import datetime, timezone
+from typing import Literal
 
 JEV_AUTO_LANE_ID = 'omi:auto:jev-decisions'
+SCREEN_TASK_JEV_AUTO_LANE_ID = 'omi:auto:jev-screen-task'
 # Pinned: a new Jev version changes calibration, and every threshold below was
 # measured on 1.13. Bump only with a re-measured threshold.
 JEV_MODEL = 'typesafe/jev-1.13'
+SCREEN_TASK_JEV_MODEL = 'typesafe/jev-1.14'
 JEV_PROVIDER = 'openrouter'
 # The upstream route's context window is 32k tokens. Characters are a
 # conservative proxy (CJK text can approach one token per character), and the
@@ -32,41 +37,32 @@ JEV_CLIENT_TIMEOUT_SECONDS = 3.0
 # One retry, only for transport failures and 5xx — never for a malformed answer.
 JEV_CLIENT_MAX_ATTEMPTS = 2
 
-CONVERSATION_RELEVANCE_JEV_ENABLED_ENV = 'CONVERSATION_RELEVANCE_JEV_ENABLED'
-MEMORY_OWNER_JEV_FLIP_ENABLED_ENV = 'MEMORY_OWNER_JEV_FLIP_ENABLED'
-CAPTURE_JEV_SHADOW_ENABLED_ENV = 'CAPTURE_JEV_SHADOW_ENABLED'
-CAPTURE_JEV_SHADOW_EXPIRY_ENV = 'CAPTURE_JEV_SHADOW_EXPIRY'
-CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY = '2026-10-18T00:00:00Z'
-
-_TRUE_VALUES = frozenset({'1', 'true', 'yes', 'on'})
+RelevanceArm = Literal['jev', 'nano']
+CONVERSATION_RELEVANCE_JEV_PERCENT_ENV = 'CONVERSATION_RELEVANCE_JEV_PERCENT'
 
 
-def _flag(name: str) -> bool:
-    return os.getenv(name, '').strip().lower() in _TRUE_VALUES
+def uid_bucket(uid: str, salt: str) -> float:
+    """Stable salted identity bucket; ``uid`` may also be a conversation ID."""
+    digest = hashlib.sha256(f'{salt}\0{uid}'.encode()).digest()
+    # Floating-point rounding of the largest uint64 must not produce 100.
+    return min(int.from_bytes(digest[:8], 'big') / 2**64 * 100, math.nextafter(100.0, 0.0))
 
 
-def conversation_relevance_jev_enabled() -> bool:
-    """The model tier of conversation relevance asks Jev instead of ``conv_discard``."""
-    return _flag(CONVERSATION_RELEVANCE_JEV_ENABLED_ENV)
-
-
-def memory_owner_jev_flip_enabled() -> bool:
-    """Capture may re-attribute a third-party memory candidate to the user on a confident Jev answer."""
-    return _flag(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
-
-
-def capture_jev_shadow_enabled(now: datetime | None = None) -> tuple[bool, str]:
-    """A malformed deadline disables the experiment; its default is a hard UTC stop."""
-    if not _flag(CAPTURE_JEV_SHADOW_ENABLED_ENV):
-        return False, 'flag_off'
+def percentage(name: str, *, default: float = 0.0) -> float:
+    """Invalid, non-finite and out-of-range configuration admits nobody."""
     try:
-        configured = datetime.fromisoformat(
-            os.getenv(CAPTURE_JEV_SHADOW_EXPIRY_ENV, CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY).replace('Z', '+00:00')
-        )
-        hard_stop = datetime.fromisoformat(CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY.replace('Z', '+00:00'))
-        expiry = min(configured, hard_stop)
-        if expiry.tzinfo is None or (now or datetime.now(timezone.utc)) >= expiry:
-            return False, 'expired'
+        value = float(os.getenv(name, str(default)))
+        return value if math.isfinite(value) and 0 <= value <= 100 else 0.0
     except ValueError:
-        return False, 'expired'
-    return True, 'enabled'
+        return 0.0
+
+
+def relevance_arm(conversation_id: str) -> RelevanceArm:
+    """Select the Jev cohort by stable conversation hash; invalid values fail closed."""
+    bucket = uid_bucket(conversation_id, 'relevance-arm-v2')
+    return 'jev' if bucket < percentage(CONVERSATION_RELEVANCE_JEV_PERCENT_ENV, default=0.0) else 'nano'
+
+
+def relevance_experiment_active() -> bool:
+    """Record the selected arm when a host explicitly configures the percentage."""
+    return os.getenv(CONVERSATION_RELEVANCE_JEV_PERCENT_ENV) is not None

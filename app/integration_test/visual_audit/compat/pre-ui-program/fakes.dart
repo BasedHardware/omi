@@ -108,6 +108,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
+  @override
   int get batteryLevel => battery;
   @override
   bool get isCharging => charging;
@@ -167,6 +169,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   bool get isRateLimited => false;
   @override
+  @override
+  ({int processed, int total}) get offlineServerProcessingCounts => (processed: 0, total: 0);
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

@@ -487,6 +487,43 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("requires a persisted desktop approval before authorizing sensitive tools", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "list_message_chats",
+      toolInput: {},
+    };
+
+    expectCode(() => broker.authorize({ ...base, invocationId: "without-approval" }), "approval_required");
+    // The model relays this message; it must not send the user hunting for an approval control.
+    expect(() => broker.authorize({ ...base, invocationId: "without-approval-message" }))
+      .toThrow(/no approval prompt.*do not ask the user to approve/);
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      capability: "desktop.messaging.read",
+      operation: "list_message_chats",
+      resourcePattern: "*",
+      effect: "allow",
+      source: "user",
+    });
+    const authorized = broker.authorize({ ...base, invocationId: "with-approval" });
+    expect(authorized.canonicalToolName).toBe("list_message_chats");
+    store.close();
+  });
+
   it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
     // Regression: realtime-voice runs relay Swift-executed voice tools that no
     // chat adapter advertises. An adapter-only allowlist rejected every such
@@ -528,7 +565,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(capability.allowedToolNames).toContain("think_deeper");
     expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
-    expect(capability.allowedToolNames).toContain("record_interject_feedback");
+    expect(capability.allowedToolNames).not.toContain("record_interject_feedback");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
       invocationId: "invoke-voice",
@@ -882,123 +919,5 @@ describe("RunToolCapabilityBroker spawn-time tool policy", () => {
       );
       store.close();
     }
-  });
-});
-
-describe("RunToolCapabilityBroker JIT knowledge-ledger gate", () => {
-  const LEDGER_TOOLS = [
-    "search_knowledge",
-    "read_playbook",
-    "search_historical_facts",
-    "get_entity_timeline_tool",
-    "save_playbook",
-    "create_standing_trigger",
-    "close_fact",
-  ];
-
-  it("keeps the ledger tools out of the authorized allowlist by default", () => {
-    const { store, session, run, attempt } = fixture("coordinator");
-    const broker = createBroker(store);
-    const capability = broker.register({
-      ownerId: session.ownerId,
-      sessionId: session.sessionId,
-      runId: run.runId,
-      attemptId: attempt.attemptId,
-    });
-
-    for (const toolName of LEDGER_TOOLS) {
-      expect(capability.allowedToolNames, toolName).not.toContain(toolName);
-    }
-    expectCode(
-      () => broker.authorize({
-        capabilityRef: capability.capabilityRef,
-        invocationId: "ledger-gate-off-1",
-        runId: run.runId,
-        attemptId: attempt.attemptId,
-        activeOwnerId: session.ownerId,
-        toolName: "search_knowledge",
-        toolInput: { query: "release checklist" },
-      }),
-      "tool_not_allowed",
-    );
-    store.close();
-  });
-
-  it("authorizes the ledger tools once the run's admitted metadata carries the JIT gate", () => {
-    const { store, session, run, attempt } = fixture("coordinator");
-    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
-      JSON.stringify({ prompt: "save a playbook", metadata: { jitKnowledgeToolsEnabled: true } }),
-      run.runId,
-    ]);
-    const broker = createBroker(store);
-    const capability = broker.register({
-      ownerId: session.ownerId,
-      sessionId: session.sessionId,
-      runId: run.runId,
-      attemptId: attempt.attemptId,
-    });
-
-    for (const toolName of LEDGER_TOOLS) {
-      expect(capability.allowedToolNames, toolName).toContain(toolName);
-    }
-    const authorized = broker.authorize({
-      capabilityRef: capability.capabilityRef,
-      invocationId: "ledger-gate-on-1",
-      runId: run.runId,
-      attemptId: attempt.attemptId,
-      activeOwnerId: session.ownerId,
-      toolName: "search_knowledge",
-      toolInput: { query: "release checklist" },
-    });
-    expect(authorized.canonicalToolName).toBe("search_knowledge");
-    store.close();
-  });
-
-  it("narrows an admitted service JIT run to read-only ledger retrieval", () => {
-    const { store, session, run, attempt } = fixture("coordinator", "ask", "service");
-    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
-      JSON.stringify({
-        prompt: "ground this notification",
-        metadata: {
-          jitKnowledgeToolsEnabled: true,
-          jitBudget: {
-            contractVersion: "jit-cloud-qa-v1",
-            executionID: "execution-1",
-            maxProviderAttempts: 3,
-            maxOutputTokensPerAttempt: 2048,
-            maxNormalizedInputTokensPerAttempt: 32768,
-            maxEstimatedSpendMicroUSD: 50000,
-          },
-        },
-      }),
-      run.runId,
-    ]);
-    const broker = createBroker(store);
-    const capability = broker.register({
-      ownerId: session.ownerId,
-      sessionId: session.sessionId,
-      runId: run.runId,
-      attemptId: attempt.attemptId,
-    });
-
-    expect(capability.allowedToolNames).toEqual([
-      "get_entity_timeline_tool",
-      "read_playbook",
-      "search_historical_facts",
-      "search_knowledge",
-    ]);
-    expectCode(
-      () => broker.authorize({
-        capabilityRef: capability.capabilityRef,
-        invocationId: "jit-service-write-1",
-        runId: run.runId,
-        attemptId: attempt.attemptId,
-        activeOwnerId: session.ownerId,
-        toolName: "save_playbook",
-        toolInput: { description: "not admitted", body: "not admitted" },
-      }),
-      "tool_not_allowed",
-    );
-    store.close();
   });
 });

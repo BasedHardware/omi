@@ -18,6 +18,9 @@ LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
     'backend/database/conversation_finalization_jobs.py',
+    # Storage primitive for the 1 MiB-ceiling in_progress terminal; its only
+    # caller is lifecycle.close_oversized_in_progress_conversation.
+    'backend/database/oversized_conversation_terminal.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -167,6 +170,8 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'upsert_conversation_with_lifecycle': '_reapply_current_manual_assignments',
         'persist_processing_result_with_lifecycle': '_reapply_current_manual_assignments',
         'update_conversation_segments': 'apply_manual_assignments',
+        # Revision-fenced final-pass replacement remaps and reapplies current receipts.
+        'promote_final_pass_if_current': 'apply_manual_assignments',
         'assign_conversation_speaker': 'manual_assignment',
         # These rewrite current transactional content rather than caller snapshots.
         'update_conversation_segment_text': 'prepare_conversation_for_read',

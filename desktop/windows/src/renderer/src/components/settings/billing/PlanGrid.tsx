@@ -9,8 +9,10 @@ import {
   planStartingPrice,
   sortedPrices,
   canPurchasePlan,
-  planAccent
+  planAccent,
+  RESUBSCRIBE_FIRST
 } from '../../../lib/billing'
+import { planDisplayName } from '../../../lib/billingPlans'
 import type { Subscription, SubscriptionPlan } from '../../../lib/omiApi.generated'
 
 /**
@@ -62,7 +64,11 @@ function PlanCard(props: {
   const { plan, sub, selected, onSelect, activePriceId, onBuy } = props
   const [promo, setPromo] = useState('')
   const [promoOpen, setPromoOpen] = useState(false)
+  const title = planDisplayName(plan.id)
   const purchasable = canPurchasePlan(plan, sub)
+  const cancelPending = sub.cancel_at_period_end === true
+  const currentPrice = (plan.prices ?? []).find((price) => price.id === sub.current_price_id)
+  const blockedChange = cancelPending && currentPrice == null
   const accent = planAccent(plan)
   const checkColor = accent === 'green' ? 'text-emerald-400' : 'text-white/55'
   const anyCheckoutActive = activePriceId != null
@@ -88,7 +94,7 @@ function PlanCard(props: {
           {planEyebrow(plan)}
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-lg font-semibold text-text-primary">{plan.title}</span>
+          <span className="text-lg font-semibold text-text-primary">{title}</span>
           <span className="shrink-0 text-right text-xs text-white/45">
             {planStartingPrice(plan)}
             <span className="ml-1 text-white/30">starting</span>
@@ -130,23 +136,39 @@ function PlanCard(props: {
             />
           ) : null}
           <div className="mt-1 text-xs font-medium text-white/45">Choose billing</div>
-          {sortedPrices(plan).map((price) => {
-            const busy = activePriceId === price.id
-            return (
-              <button
-                key={price.id}
-                onClick={() => onBuy(price.id, promo.trim() || undefined)}
-                disabled={anyCheckoutActive}
-                className="flex w-full items-center justify-between gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
-              >
-                <span>{price.title}</span>
-                <span className="flex items-center gap-2">
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {price.price_string}
-                </span>
-              </button>
-            )
-          })}
+          {blockedChange ? (
+            <p className="text-sm text-amber-300">{RESUBSCRIBE_FIRST}</p>
+          ) : cancelPending && currentPrice ? (
+            <button
+              onClick={() => onBuy(currentPrice.id, promo.trim() || undefined)}
+              disabled={anyCheckoutActive}
+              className="flex w-full items-center justify-between gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+            >
+              <span>Resubscribe</span>
+              <span className="flex items-center gap-2">
+                {activePriceId === currentPrice.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {currentPrice.price_string}
+              </span>
+            </button>
+          ) : (
+            sortedPrices(plan).map((price) => {
+              const busy = activePriceId === price.id
+              return (
+                <button
+                  key={price.id}
+                  onClick={() => onBuy(price.id, promo.trim() || undefined)}
+                  disabled={anyCheckoutActive}
+                  className="flex w-full items-center justify-between gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <span>{price.title}</span>
+                  <span className="flex items-center gap-2">
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {price.price_string}
+                  </span>
+                </button>
+              )
+            })
+          )}
         </div>
       ) : (
         <button
@@ -154,7 +176,7 @@ function PlanCard(props: {
           onClick={() => onSelect(plan.id)}
           className="btn-ghost mt-auto w-full"
         >
-          Select {plan.title}
+          Select {title}
         </button>
       )}
     </div>

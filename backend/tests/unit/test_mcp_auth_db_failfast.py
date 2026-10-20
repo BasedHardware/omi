@@ -128,7 +128,7 @@ def test_legacy_key_store_outage_is_503_not_401(mcp_sse, monkeypatch):
     monkeypatch.setattr(mcp_sse.mcp_api_key_db, "get_api_key_auth_result", boom)
 
     with pytest.raises(HTTPException) as excinfo:
-        mcp_sse.authenticate_mcp_request("Bearer omi_mcp_deadbeef")
+        mcp_sse.authenticate_mcp_request("Bearer omi_mcp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 
     assert excinfo.value.status_code == 503
 
@@ -164,3 +164,34 @@ def test_importing_the_helper_stays_cheap():
         check=True,
     )
     assert result.stdout.strip() == "False False", result.stdout
+
+
+def test_developer_key_on_hosted_mcp_preserves_discovery_and_explains_family(mcp_sse, monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError("Wrong key family must not reach a token lookup")
+
+    monkeypatch.setattr(mcp_sse.mcp_api_key_db, 'get_api_key_auth_result', unexpected)
+    monkeypatch.setattr(mcp_sse.mcp_oauth_db, 'validate_access_token', unexpected)
+    with pytest.raises(HTTPException) as exc:
+        mcp_sse.authenticate_mcp_request('Bearer omi_dev_' + 'a' * 32)
+    assert exc.value.status_code == 401
+    assert '/v1/dev/' in exc.value.detail and 'MCP API key' in exc.value.detail
+    assert 'resource_metadata=' in exc.value.headers['WWW-Authenticate']
+
+
+def test_malformed_hosted_mcp_key_is_distinct_from_unknown(mcp_sse, monkeypatch):
+    from types import SimpleNamespace
+
+    calls = []
+    monkeypatch.setattr(
+        mcp_sse.mcp_api_key_db,
+        'get_api_key_auth_result',
+        lambda token: calls.append(token) or SimpleNamespace(context=None, repairs=frozenset()),
+    )
+    with pytest.raises(HTTPException) as malformed:
+        mcp_sse.authenticate_mcp_request('Bearer omi_mcp_short')
+    assert 'Malformed MCP API key' in malformed.value.detail and calls == []
+    with pytest.raises(HTTPException) as unknown:
+        mcp_sse.authenticate_mcp_request('Bearer omi_mcp_' + 'a' * 32)
+    assert 'Unknown or revoked' in unknown.value.detail
+    assert len(calls) == 1

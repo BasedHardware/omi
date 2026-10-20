@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass, replace
 import json
-import re
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -18,13 +17,13 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     UsageStatus,
     cache_requested_for_openai_request,
-    encode_jit_gateway_receipt,
     image_usage,
-    jit_gateway_receipt_for_trace,
-    jit_gateway_receipt_sse_frame,
     openai_usage_from_sse_payload,
 )
+from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
+from llm_gateway.gateway.dream_usage import with_dream_usage
+from llm_gateway.gateway.dream_lanes import DREAM_LANES
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import (
@@ -39,11 +38,9 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayInvalidRequestError,
 )
+from llm_gateway.gateway.schemas import ProviderRejection
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
-    jit_reservation_units,
-    reserve_jit_attempt,
-    settle_jit_attempt,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     output_budget_for,
@@ -63,9 +60,10 @@ from llm_gateway.gateway.metrics import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.jit_budget import JITAttemptReservation
-from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for, request_id_for
-from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
+from llm_gateway.gateway.request_context import request_id_for
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
+from llm_gateway.gateway.resolver import ResolvedRoute, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEvent, SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
@@ -80,7 +78,6 @@ _THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureCla
 # Keep CRLF atomic: without the atomic group, the regex engine can backtrack
 # from ``\r\n`` to ``\r`` + ``\n`` and split a multi-line SSE event at its
 # first line ending.
-_SSE_FRAME_BOUNDARY = re.compile(br'(?>\r\n|\r|\n){2}')
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -99,14 +96,6 @@ async def create_chat_completion(
     attempt_trace = AttemptTrace()
     try:
         request_body = await _request_json(request)
-        try:
-            jit_budget = jit_budget_headers_for(request, owner_uid=caller.user_uid)
-            if jit_budget is not None and not caller.user_uid:
-                raise ValueError('JIT budget requires authenticated owner attribution')
-        except ValueError as exc:
-            raise GatewayInvalidRequestError(str(exc), param='x-omi-jit-contract-version') from exc
-        if jit_budget is not None:
-            _apply_jit_request_budget(request_body, jit_budget)
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = _resolve_credentials(request, caller)
         credential_source = credentials.source.value
@@ -116,9 +105,13 @@ async def create_chat_completion(
             api_surface='openai_chat_completions',
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
-            jit_budget=jit_budget,
         )
+        proactivity = context_from_request(request, caller, accounting_context)
         is_streaming = resolved_route.validated_request.forwarded_params.get('stream') is True
+        if proactivity is not None and is_streaming:
+            raise GatewayInvalidRequestError(
+                'proactivity requires a nonstreaming exclusive budget', rejection_reason='proactivity_streaming'
+            )
         if is_streaming:
             return await _streaming_response(
                 resolved_route,
@@ -128,23 +121,14 @@ async def create_chat_completion(
                 request_id=request_id,
                 accounting_context=accounting_context,
                 attempt_trace=attempt_trace,
-                max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
-                jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
-                jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
-                jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-                jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
             )
-        result = await execute_chat_completion(
-            resolved_route,
-            credentials,
-            provider_registry,
-            attempt_trace=attempt_trace,
-            max_provider_attempts=jit_budget.max_attempts if jit_budget is not None else None,
-            jit_max_spend_micro_usd=jit_budget.max_spend_micro_usd if jit_budget is not None else None,
-            jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-            jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
-            jit_owner_uid=jit_budget.owner_uid if jit_budget is not None else None,
-        )
+        with attempt_scope(proactivity):
+            result = await execute_chat_completion(
+                resolved_route,
+                credentials,
+                provider_registry,
+                attempt_trace=attempt_trace,
+            )
         schedule_attempt_trace(accounting_context, attempt_trace)
         _safe_observe(
             lambda: observe_success(
@@ -158,7 +142,9 @@ async def create_chat_completion(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return JSONResponse(content=result.response, headers=_jit_receipt_headers(accounting_context, attempt_trace))
+        return JSONResponse(
+            content=with_dream_usage(result.response, resolved_route.lane.lane_id, attempt_trace),
+        )
     except asyncio.CancelledError:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -212,11 +198,16 @@ async def create_chat_completion(
                     api_surface='openai_chat_completions',
                     error_class=exc.code.value,
                     request_id=request_id,
+                    error=exc,
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
             )
-        return _error_response(exc)
+        response = _error_response(exc)
+        if resolved_route is not None:
+            content = with_dream_usage(json.loads(bytes(response.body)), resolved_route.lane.lane_id, attempt_trace)
+            return JSONResponse(status_code=response.status_code, content=content)
+        return response
     except Exception:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -269,9 +260,11 @@ async def _request_json(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except ValueError as exc:
-        raise GatewayInvalidRequestError('request body must be valid JSON') from exc
+        raise GatewayInvalidRequestError(
+            'request body must be valid JSON', rejection_reason='request_body_json'
+        ) from exc
     if not isinstance(body, dict):
-        raise GatewayInvalidRequestError('request body must be an object')
+        raise GatewayInvalidRequestError('request body must be an object', rejection_reason='request_body_object')
     return cast(dict[str, Any], body)
 
 
@@ -294,6 +287,11 @@ def _error_response(exc: GatewayError) -> JSONResponse:
         # Backend composition boundaries need it to preserve intentional
         # credential policy without conflating distinct throttling failures.
         error['failure_class'] = exc.failure_class.value
+    if exc.provider_rejection is not ProviderRejection.NONE:
+        # Bounded gateway-owned classifier over an allowlisted param set, never
+        # an upstream body. Downstream composition boundaries (file chat) need
+        # it to tell request-shape 400s from unreadable user attachments.
+        error['provider_rejection'] = exc.provider_rejection.value
     content: dict[str, object] = {'error': error}
     return JSONResponse(
         status_code=_status_code_for_error(exc),
@@ -453,10 +451,6 @@ async def _streaming_response(
     accounting_context: AccountingContext,
     attempt_trace: AttemptTrace,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
     output_budget = output_budget_for(resolved_route, route)
@@ -468,10 +462,6 @@ async def _streaming_response(
         route,
         attempt_trace=attempt_trace,
         max_provider_attempts=max_provider_attempts,
-        jit_max_spend_micro_usd=jit_max_spend_micro_usd,
-        jit_owner_uid=jit_owner_uid,
-        jit_run_id=jit_run_id,
-        jit_contract_version=jit_contract_version,
     )
     async_iterator = _stream_with_terminal_metrics(
         prepared,
@@ -497,7 +487,6 @@ class _PreparedStream:
     fallback_used: bool
     fallback_reason: str | None
     cache_requested: bool = False
-    reservation: JITAttemptReservation | None = None
 
 
 async def _prepared_streaming_iterator(
@@ -508,17 +497,13 @@ async def _prepared_streaming_iterator(
     *,
     attempt_trace: AttemptTrace,
     max_provider_attempts: int | None = None,
-    jit_max_spend_micro_usd: int | None = None,
-    jit_owner_uid: str | None = None,
-    jit_run_id: str | None = None,
-    jit_contract_version: str | None = None,
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
-    for provider_ref in [route.primary, *route.fallbacks]:
+    refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
+    for provider_ref in refs:
         if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
-            raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
-        reservation: JITAttemptReservation | None = None
+            raise GatewayInvalidRequestError('provider attempt budget exhausted')
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -527,29 +512,6 @@ async def _prepared_streaming_iterator(
             continue
         provider_request = provider_request_for(resolved_route, provider_ref)
         _request_stream_usage(provider_request, provider_ref.provider)
-        if jit_run_id is not None:
-            try:
-                units = jit_reservation_units(provider_request)
-                reservation = await reserve_jit_attempt(
-                    owner_uid=cast(str, jit_owner_uid),
-                    run_id=jit_run_id,
-                    contract_version=cast(str, jit_contract_version),
-                    max_attempts=cast(int, max_provider_attempts),
-                    max_spend_micro_usd=jit_max_spend_micro_usd or 50_000,
-                    provider=provider_ref.provider,
-                    model=provider_ref.model,
-                    input_tokens=int(cast(int | str, units['input_tokens'])),
-                    cached_input_tokens=int(cast(int | str, units['cached_input_tokens'])),
-                    output_tokens=int(cast(int | str, units['output_tokens'])),
-                    cache_write_tokens=int(cast(int | str, units['cache_write_tokens'])),
-                    cache_ttl=cast(str | None, units['cache_ttl']),
-                )
-            except ValueError as exc:
-                raise GatewayInvalidRequestError(str(exc)) from exc
-            except Exception as exc:
-                raise GatewayInvalidRequestError('JIT budget authority unavailable') from exc
-            if reservation is None:
-                raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         stream = stream_chat_completion(
             provider_request,
             provider_ref=provider_ref,
@@ -558,17 +520,11 @@ async def _prepared_streaming_iterator(
         )
         try:
             while True:
-                first_chunk = await anext(stream)
+                with vertex_attempt_scope(route, provider_ref):
+                    first_chunk = await anext(stream)
                 if first_chunk:
                     break
         except StopAsyncIteration:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             return _PreparedStream(
                 first_chunk=None,
                 stream=stream,
@@ -579,15 +535,11 @@ async def _prepared_streaming_iterator(
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
         except ProviderFailure as exc:
-            await settle_jit_attempt(
-                reservation,
-                provider=provider_ref.provider,
-                model=provider_ref.model,
-                metadata=None,
-                status='failed',
-            )
             last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
+                lane_id=route.lane_id,
+                cache_policy=provider_request.get('_gateway_cache_policy'),
+                metadata=exc.accounting,
                 provider=provider_ref.provider,
                 configured_model=provider_ref.model,
                 route_artifact_id=route.route_artifact_id,
@@ -598,12 +550,9 @@ async def _prepared_streaming_iterator(
                 usage_status=UsageStatus.INDETERMINATE,
             )
             first_failure = first_failure or exc.failure_class.value
-            if jit_run_id is not None:
-                # A provider failure has unknown usage.  The reservation
-                # authority blocks this run, so do not attempt a fallback that
-                # would immediately spend around the blocked reservation.
-                raise last_error
-            if not is_lkg_eligible(route, exc.failure_class):
+            if not can_try_next_provider(route, provider_ref, exc.failure_class):
+                if provider_ref != route.primary:
+                    record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
                 raise last_error
             continue
         return _PreparedStream(
@@ -614,9 +563,9 @@ async def _prepared_streaming_iterator(
             fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
-            reservation=reservation,
         )
     if last_error is not None:
+        record_reserved_rejection_fallback(route, first_failure, outcome='exhausted')
         raise last_error
     raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
@@ -642,43 +591,26 @@ async def _stream_with_terminal_metrics(
     completion_characters = 0
     finish_reason = 'unknown'
     usage_metadata: ProviderResponseMetadata | None = None
-    passthrough_buffer = b''
-    terminal_settlement_ok = True
     output_budget = output_budget or OutputBudgetDecision(source='none', max_completion_tokens=None)
 
-    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> bool:
-        nonlocal terminal_observed, terminal_settlement_ok
+    async def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
+        nonlocal terminal_observed
         if terminal_observed:
-            return terminal_settlement_ok
+            return
         terminal_observed = True
-        settlement_ok = await settle_jit_attempt(
-            prepared.reservation,
-            provider=prepared.provider,
-            model=prepared.model,
-            metadata=usage_metadata if outcome == 'success' else None,
-            status='succeeded' if outcome == 'success' else ('cancelled' if outcome == 'cancelled' else 'failed'),
-        )
-        terminal_settlement_ok = settlement_ok
-        if outcome == 'success' and not settlement_ok:
-            # The provider bytes may already be visible to the caller, but a
-            # successful JIT receipt is only valid after durable settlement.
-            outcome = 'error'
-            error_class = 'jit_budget_settlement_failed'
-            # Keep provider-observed usage for diagnostics and reconciliation;
-            # the failed settlement still suppresses the success receipt below.
-            usage_for_trace = usage_metadata
-        else:
-            # A provider may report usage or a response ID before an error or
-            # client cancellation. Preserve those diagnostics, but mark their
-            # completeness and cost as indeterminate below.
-            usage_for_trace = usage_metadata
+        usage_for_trace = usage_metadata
         # Per the PR behavioral contract, actual fallback requires a subsequent
         # successful provider/route.  Only stamp the actual-fallback labels when
         # the terminal outcome is success; an error or cancellation means the
         # failover did not complete, so dashboards and ad-hoc queries must not
         # count it as a completed failover.
         completed_fallback = prepared.fallback_used and outcome == 'success'
+        if prepared.fallback_used:
+            record_reserved_rejection_fallback(
+                route, prepared.fallback_reason, outcome='recovered' if outcome == 'success' else 'exhausted'
+            )
         trace.record(
+            lane_id=route.lane_id,
             provider=prepared.provider,
             configured_model=prepared.model,
             route_artifact_id=route.route_artifact_id,
@@ -728,7 +660,6 @@ async def _stream_with_terminal_metrics(
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
-        return settlement_ok
 
     async def handle_events(frame_events: list[SSEEvent]) -> bool:
         nonlocal completion_characters, finish_reason, terminal_marker_seen, usage_metadata
@@ -749,6 +680,17 @@ async def _stream_with_terminal_metrics(
                     cache_requested=prepared.cache_requested,
                 )
                 if observed_usage is not None:
+                    if usage_metadata is not None and '_gateway_cache_receipt' not in payload:
+                        observed_usage = replace(
+                            observed_usage,
+                            lane_id=usage_metadata.lane_id,
+                            resolved_model=usage_metadata.resolved_model,
+                            cache_mode=usage_metadata.cache_mode,
+                            cacheable_prefix_tokens=usage_metadata.cacheable_prefix_tokens,
+                            cache_write_tokens=usage_metadata.cache_write_tokens,
+                            cache_storage_token_seconds=usage_metadata.cache_storage_token_seconds,
+                            cache_operation_usage_complete=usage_metadata.cache_operation_usage_complete,
+                        )
                     usage_metadata = observed_usage
             completion_characters += _stream_completion_character_count(data)
             observed_finish_reason = _stream_finish_reason(data)
@@ -756,42 +698,9 @@ async def _stream_with_terminal_metrics(
                 finish_reason = observed_finish_reason
         return done_seen
 
-    async def process_jit_frame(raw_frame: bytes, *, force_boundary: bool = False) -> list[bytes]:
-        normalized = raw_frame.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
-        if force_boundary and not normalized.endswith(b'\n\n'):
-            normalized += b'\n\n'
-        done_seen = await handle_events(decoder.feed(normalized))
-        emitted: list[bytes] = []
-        if done_seen and terminal_settlement_ok:
-            receipt = (
-                jit_gateway_receipt_for_trace(accounting_context, trace) if accounting_context is not None else None
-            )
-            if receipt is not None:
-                emitted.append(jit_gateway_receipt_sse_frame(receipt))
-        emitted.append(raw_frame)
-        return emitted
-
     async def inspect_chunk(chunk: bytes) -> list[bytes]:
-        nonlocal passthrough_buffer
-        # Non-JIT callers must receive provider bytes unchanged.  The decoder
-        # observes a copy of each chunk only for metrics and terminal state.
-        if accounting_context is None or accounting_context.jit_run_id is None:
-            await handle_events(decoder.feed(chunk))
-            return [chunk]
-
-        emitted: list[bytes] = []
-        passthrough_buffer += chunk
-        if len(passthrough_buffer) > 1024 * 1024:
-            raise ValueError('SSE frame exceeds bounded decoder buffer')
-        while True:
-            boundary = _SSE_FRAME_BOUNDARY.search(passthrough_buffer)
-            if boundary is None:
-                break
-            end = boundary.end()
-            raw_frame = passthrough_buffer[:end]
-            passthrough_buffer = passthrough_buffer[end:]
-            emitted.extend(await process_jit_frame(raw_frame))
-        return emitted
+        await handle_events(decoder.feed(chunk))
+        return [chunk]
 
     if prepared.first_chunk is None:
         await observe_terminal(outcome='error', error_class='empty_stream_before_output', phase='before_output')
@@ -825,17 +734,7 @@ async def _stream_with_terminal_metrics(
         await observe_terminal(outcome='error', error_class='transport_midstream', phase='midstream')
         raise
     else:
-        if passthrough_buffer:
-            # A provider may close after a valid data line without the usual
-            # blank-line delimiter.  Inspect a synthetic delimiter while
-            # yielding the original residual bytes unchanged.
-            residual = passthrough_buffer
-            passthrough_buffer = b''
-            if accounting_context is not None and accounting_context.jit_run_id is not None:
-                for emitted in await process_jit_frame(residual, force_boundary=True):
-                    yield emitted
-            else:
-                await handle_events(decoder.feed(residual + b'\n\n'))
+        await handle_events(decoder.feed(b'\n\n'))
         if not terminal_marker_seen:
             await observe_terminal(outcome='error', error_class='eof_before_terminal_marker', phase='midstream')
     finally:
@@ -854,7 +753,6 @@ def _accounting_context(
     api_surface: str,
     payer: str,
     fallback_feature: str,
-    jit_budget: JITBudgetHeaders | None = None,
 ) -> AccountingContext:
     feature = caller.usage_feature or fallback_feature
     return AccountingContext.create(
@@ -865,62 +763,9 @@ def _accounting_context(
         api_surface=api_surface,
         payer=payer,
         app_platform=caller.app_platform,
-        jit_run_id=jit_budget.run_id if jit_budget is not None else None,
-        jit_contract_version=jit_budget.contract_version if jit_budget is not None else None,
+        product_lane=caller.product_lane,
+        client_platform=caller.client_platform,
     )
-
-
-def _jit_receipt_headers(context: AccountingContext, trace: AttemptTrace) -> dict[str, str]:
-    """Return a receipt only for the explicit QA capability."""
-    receipt = jit_gateway_receipt_for_trace(context, trace)
-    if receipt is None:
-        return {}
-    return {'x-omi-jit-gateway-receipt': encode_jit_gateway_receipt(receipt)}
-
-
-def _apply_jit_request_budget(request_body: dict[str, Any], budget: JITBudgetHeaders) -> None:
-    """Apply a qualification-only output cap and conservative input preflight."""
-    if _contains_jit_unsupported_modality(request_body):
-        raise GatewayInvalidRequestError(
-            'JIT qualification currently accepts text-only provider inputs',
-            param='messages',
-        )
-    # A character-count heuristic underestimates non-ASCII text and ignores
-    # tool/system fields. UTF-8 bytes are a conservative tokenizer-independent
-    # upper bound (every token consumes at least one byte), so the QA gate
-    # fails closed before a provider attempt rather than guessing low.
-    estimated_input_tokens = len(json.dumps(request_body, separators=(',', ':'), ensure_ascii=False).encode('utf-8'))
-    if estimated_input_tokens > budget.max_input_tokens:
-        raise GatewayInvalidRequestError('JIT input budget exceeded', param='messages')
-    has_output_limit = False
-    for key in ('max_tokens', 'max_completion_tokens'):
-        if key not in request_body or request_body[key] is None:
-            # OpenAI treats the two fields as aliases.  Remove explicit nulls so
-            # they cannot suppress the qualification ceiling or reach a
-            # provider that coerces null unexpectedly.
-            request_body.pop(key, None)
-            continue
-        value = request_body[key]
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            raise GatewayInvalidRequestError('invalid JIT output token budget', param=key)
-        request_body[key] = min(value, budget.max_output_tokens)
-        has_output_limit = True
-    if not has_output_limit:
-        request_body['max_completion_tokens'] = budget.max_output_tokens
-
-
-def _contains_jit_unsupported_modality(value: object) -> bool:
-    """Reject image/audio payloads whose billable input envelope is not tokenized here."""
-    if isinstance(value, Mapping):
-        modality = value.get('type')
-        # Tool schemas can define a property named "type" whose value is itself
-        # a schema, or use a list of JSON Schema types. Neither is a modality tag.
-        if isinstance(modality, str) and modality in {'image_url', 'image', 'input_audio', 'audio'}:
-            return True
-        return any(_contains_jit_unsupported_modality(child) for child in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_contains_jit_unsupported_modality(child) for child in value)
-    return False
 
 
 def _request_stream_usage(request: dict[str, Any], provider: str) -> None:

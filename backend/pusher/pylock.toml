@@ -77,6 +77,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/e7/45/282a04df72c17cc6c
 wheels = [{ url = "https://files.pythonhosted.org/packages/51/95/d43a02410e4e1cb6397a675facf5a65285d670697c0762a0e29c0c3615b4/av-12.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-21T11:15:50Z, size = 34691295, hashes = { sha256 = "7a6d4f1e261df48932128e6495772faa4cc23f5dd1512eec73daab82ad9f3240" } }]
 
 [[packages]]
+name = "babel"
+version = "2.18.0"
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", upload-time = 2026-02-01T12:30:56Z, size = 9959554, hashes = { sha256 = "b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", upload-time = 2026-02-01T12:30:53Z, size = 10196845, hashes = { sha256 = "e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35" } }]
+
+[[packages]]
+name = "backoff"
+version = "2.2.1"
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", upload-time = 2022-10-05T19:19:32Z, size = 17001, hashes = { sha256 = "03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", upload-time = 2022-10-05T19:19:30Z, size = 15148, hashes = { sha256 = "63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8" } }]
+
+[[packages]]
 name = "cachecontrol"
 version = "0.14.0"
 sdist = { url = "https://files.pythonhosted.org/packages/06/55/edea9d90ee57ca54d34707607d15c20f72576b96cb9f3e7fc266cb06b426/cachecontrol-0.14.0.tar.gz", upload-time = 2024-02-02T02:53:30Z, size = 28899, hashes = { sha256 = "7db1195b41c81f8274a7bbd97c956f44e8348265a1bc7641c37dfebc39f0c938" } }
@@ -490,6 +502,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/55/79/de6c16cc902f4fc37
 wheels = [{ url = "https://files.pythonhosted.org/packages/be/2f/5108cb3ee4ba6501748c4908b908e55f42a5b66245b4cfe0c99326e1ef6e/marshmallow-3.26.2-py3-none-any.whl", upload-time = 2025-12-22T06:53:51Z, size = 50964, hashes = { sha256 = "013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73" } }]
 
 [[packages]]
+name = "monotonic"
+version = "1.6"
+sdist = { url = "https://files.pythonhosted.org/packages/ea/ca/8e91948b782ddfbd194f323e7e7d9ba12e5877addf04fb2bf8fca38e86ac/monotonic-1.6.tar.gz", upload-time = 2021-08-11T14:37:28Z, size = 7615, hashes = { sha256 = "3a55207bcfed53ddd5c5bae174524062935efed17792e9de2ad0205ce9ad63f7" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/9a/67/7e8406a29b6c45be7af7740456f7f37025f0506ae2e05fb9009a53946860/monotonic-1.6-py2.py3-none-any.whl", upload-time = 2021-04-09T21:58:05Z, size = 8154, hashes = { sha256 = "68687e19a14f11f26d140dd5c86f3dba4bf5df58003000ed467e0e2a69bca96c" } }]
+
+[[packages]]
 name = "msgpack"
 version = "1.1.0"
 sdist = { url = "https://files.pythonhosted.org/packages/cb/d0/7555686ae7ff5731205df1012ede15dd9d927f6227ea151e901c7406af4f/msgpack-1.1.0.tar.gz", upload-time = 2024-09-10T04:25:52Z, size = 167260, hashes = { sha256 = "dd432ccc2c72b914e4cb77afce64aab761c1137cc698be3984eee260bcb2896e" } }
@@ -580,6 +598,12 @@ name = "portalocker"
 version = "2.10.1"
 sdist = { url = "https://files.pythonhosted.org/packages/ed/d3/c6c64067759e87af98cc668c1cc75171347d0f1577fab7ca3749134e3cd4/portalocker-2.10.1.tar.gz", upload-time = 2024-07-13T23:15:34Z, size = 40891, hashes = { sha256 = "ef1bf844e878ab08aee7e40184156e1151f228f103aa5c6bd0724cc330960f8f" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/9b/fb/a70a4214956182e0d7a9099ab17d50bfcba1056188e9b14f35b9e2b62a0d/portalocker-2.10.1-py3-none-any.whl", upload-time = 2024-07-13T23:15:32Z, size = 18423, hashes = { sha256 = "53a5984ebc86a025552264b459b46a2086e269b21823cb572f8f28ee759e45bf" } }]
+
+[[packages]]
+name = "posthog"
+version = "3.5.2"
+sdist = { url = "https://files.pythonhosted.org/packages/22/a6/a260008b95152d31ef19845ae3100411b481279ec98d22e8c87606abe78e/posthog-3.5.2.tar.gz", upload-time = 2024-08-21T16:58:52Z, size = 38380, hashes = { sha256 = "a383a80c1f47e0243f5ce359e81e06e2e7b37eb39d1d6f8d01c3e64ed29df2ee" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/53/62/2e7f75beedf9b5411f133a5af558cc7d76e20bbf6778a51ade15e6d3152b/posthog-3.5.2-py2.py3-none-any.whl", upload-time = 2024-08-21T16:58:51Z, size = 41545, hashes = { sha256 = "605b3d92369971cc99290b1fcc8534cbddac3726ef7972caa993454a5ecfb644" } }]
 
 [[packages]]
 name = "prometheus-client"
@@ -870,9 +894,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
 
 [[packages]]
 name = "urllib3"
-version = "2.7.0"
-sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+version = "2.8.0"
+sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
 
 [[packages]]
 name = "uuid-utils"

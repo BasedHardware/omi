@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -177,6 +178,27 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
   }
+}
+
+Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
+  int offset = 0,
+  int limit = 100,
+  ApiSend? send,
+}) {
+  return executeApi<wire.GeneratedAppSearchResponse>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
+      method: 'GET',
+    ),
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
+    },
+    send: send,
+  );
 }
 
 Future<List<App>> retrievePopularApps() async {
@@ -702,7 +724,8 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId/keys', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    log('listApiKeysServer: ${response.body}');
+    // The key schema carries an optional `secret`; never echo the body into logs.
+    Logger.debug('listApiKeysServer: ${response.statusCode}');
     return (jsonDecode(response.body) as List)
         .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
         .map(AppApiKey.fromGenerated)
@@ -720,7 +743,8 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to create apps API key');
     }
-    log('createApiKeyServer: ${response.body}');
+    // The body holds the newly generated key secret; log only the status.
+    Logger.debug('createApiKeyServer: ${response.statusCode}');
     return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -783,7 +807,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
   );
   try {
     if (response == null) return null;
-    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    // The body can carry an OAuth `auth_url` with its state token; log only the status.
+    Logger.debug('addMcpServer: ${response.statusCode}');
     if (response.statusCode == 200) {
       return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }

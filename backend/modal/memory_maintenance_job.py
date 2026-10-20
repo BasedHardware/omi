@@ -2,7 +2,7 @@
 
 Concurrency: Cloud Run Jobs default to max-retries / single-execution semantics per
 execution ID. Overlapping Scheduler + manual runs are still possible; maintenance
-ops are designed to be idempotent (required normalization, TTL, total L2 routing,
+ops are designed to be idempotent (required normalization, TTL, receipted required intake completion,
 and leased projection-outbox delivery), and
 operators should prefer ``gcloud run jobs execute ... --wait`` before asserting
 state. A distributed lease can be added later if overlap becomes observable.
@@ -17,15 +17,13 @@ import os
 
 import firebase_admin
 
+from database.firestore_read_origin import read_origin
 from services.frame_request_retention import run_frame_request_retention_maintenance
 from utils.env_loader import firebase_admin_options
 from utils.memory.canonical_short_term_maintenance_cron import (
     run_canonical_short_term_maintenance_cron,
 )
-from utils.task_intelligence.workstream_association import (
-    drain_recurrence_inbox_for_maintenance,
-    persist_recurrence_signals_for_maintenance,
-)
+from utils.task_intelligence.workstream_association import drain_recurrence_inbox_for_maintenance
 
 logging.basicConfig(level=logging.INFO)
 
@@ -54,6 +52,7 @@ def _init_firebase() -> None:
         firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 
+@read_origin('job:memory_maintenance')
 def main() -> None:
     _init_firebase()
     logger.info("Starting memory-maintenance-job...")
@@ -66,10 +65,7 @@ def main() -> None:
         except Exception:
             logger.exception("legacy frame retention safety pass failed; canonical maintenance continues")
     summary = asyncio.run(
-        run_canonical_short_term_maintenance_cron(
-            recurrence_signal_persister=persist_recurrence_signals_for_maintenance,
-            recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance,
-        )
+        run_canonical_short_term_maintenance_cron(recurrence_inbox_drain=drain_recurrence_inbox_for_maintenance)
     )
     fatal_errors = _fatal_job_errors(
         list(summary.errors or []),

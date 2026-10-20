@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -17,9 +18,12 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/memories/widgets/memory_graph_catalog.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/memory_graph_identity.dart';
 
 class GraphNode3D {
   final String id;
@@ -220,35 +224,52 @@ class ForceDirectedSimulation3D {
   }
 }
 
+/// Label of the user's own node: their given name, else the localized "You".
+/// The backend's English 'me' / 'the user' labels still identify that node.
+@visibleForTesting
+String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
+  final name = givenName.trim();
+  return name.isNotEmpty ? name : l10n.you;
+}
+
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
 
-  /// A non-interactive card (the Memories page header): card surface, and no retry button on
-  /// failure because the card itself opens the full graph.
+  /// The Memories page header card. It draws its own card: a compact skeleton while loading, a
+  /// non-interactive graph that calls [onOpen] on tap once loaded, and a single row with
+  /// Try Again on failure. The page's list never waits on it.
   final bool preview;
+
+  /// Opens the full graph from the [preview] card.
+  final VoidCallback? onOpen;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  final bool fitToBounds;
   @visibleForTesting
   final Future<Map<String, dynamic>> Function() loadGraph;
+  final Future<Map<String, dynamic>> Function(String cursor)? loadMoreGraph;
 
   const MemoryGraphPage({
     super.key,
     this.embedded = false,
     this.preview = false,
+    this.onOpen,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.fitToBounds = true,
     this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
+    this.loadMoreGraph,
   });
 
   @override
-  State<MemoryGraphPage> createState() => _MemoryGraphPageState();
+  State<MemoryGraphPage> createState() => MemoryGraphPageState();
 }
 
-class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late ForceDirectedSimulation3D simulation;
   late Ticker _ticker;
 
@@ -263,15 +284,76 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   double _zoom = 1.0;
   double _baseZoom = 1.0;
 
+  @visibleForTesting
+  double get zoom => _zoom;
+
+  @visibleForTesting
+  bool get hasFittedBounds => _hasFittedBounds;
+
   Offset? _lastPanStart;
 
   bool _isLoading = true;
   String? _error;
+  Map<String, dynamic> _graphData = {'nodes': [], 'edges': []};
+  int _loadGeneration = 0;
+  bool _loadingMore = false;
+
+  bool get _hasContent => simulation.nodes.length > 1 || (_graphData['catalog_nodes'] as List? ?? []).isNotEmpty;
+
+  Widget? get _loadMoreButton => _graphData['has_more'] != true
+      ? null
+      : OmiButton.secondary(
+          key: const ValueKey('mind_map_load_more'),
+          label: context.l10n.showMore,
+          isLoading: _loadingMore,
+          onPressed: () => _loadGraph(loadMore: true),
+          size: OmiButtonSize.compact,
+        );
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
   final Set<String> _highlightedNodeIds = {};
+  bool _hasFittedBounds = false;
+
+  void _fitGraphToBounds(Size size) {
+    if (!_hasFittedBounds && widget.fitToBounds && simulation.nodes.isNotEmpty && size.width > 0 && size.height > 0) {
+      double maxExtentX = 0.0;
+      double maxExtentY = 0.0;
+      const cameraZ = 1500.0;
+
+      for (final node in simulation.nodes) {
+        final px = node.position.x;
+        final py = node.position.y;
+        final pz = node.position.z;
+
+        final denom = cameraZ - pz;
+        final perspective = (denom > 100.0) ? (cameraZ / denom) : (cameraZ / 100.0);
+
+        final extentX = (px * perspective).abs();
+        final extentY = (py * perspective).abs();
+
+        if (extentX > maxExtentX) maxExtentX = extentX;
+        if (extentY > maxExtentY) maxExtentY = extentY;
+      }
+
+      if (maxExtentX > 0.0 && maxExtentY > 0.0) {
+        const padding = 50.0;
+        final availW = (size.width / 2) - padding;
+        final availH = (size.height / 2) - padding;
+
+        if (availW > 0 && availH > 0) {
+          final zoomX = availW / maxExtentX;
+          final zoomY = availH / maxExtentY;
+          final targetZoom = min(zoomX, zoomY).clamp(0.05, widget.initialZoom);
+
+          _zoom = targetZoom;
+          _baseZoom = targetZoom;
+          _hasFittedBounds = true;
+        }
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -317,84 +399,86 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     _repaintNotifier.value++;
   }
 
-  Future<void> _loadGraph({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-
+  Future<void> _loadGraph({bool silent = false, bool loadMore = false}) async {
+    if (!mounted) return;
+    if (loadMore && _loadingMore) return;
+    final cursor = loadMore ? _graphData['next_cursor'] as String? : null;
+    if (loadMore && cursor == null) return;
+    final generation = ++_loadGeneration;
+    setState(() {
+      _loadingMore = loadMore;
+      if (!silent && !loadMore) _isLoading = true;
+      _error = null;
+    });
     try {
-      final data = await widget.loadGraph();
-      if (!mounted) return;
-
-      final newNodes = data['nodes'] as List<dynamic>? ?? [];
-      final newEdges = data['edges'] as List<dynamic>? ?? [];
-
-      if (_error != null && mounted) {
-        setState(() {
-          _error = null;
-        });
+      final data = loadMore
+          ? await (widget.loadMoreGraph?.call(cursor!) ?? KnowledgeGraphApi.getKnowledgeGraph(cursor: cursor))
+          : await widget.loadGraph();
+      if (!mounted || generation != _loadGeneration) return;
+      final merged = loadMore ? mergeKnowledgeGraphPages(_graphData, data) : data;
+      final unchanged = jsonEncode(_graphData['nodes']) == jsonEncode(merged['nodes']) &&
+          jsonEncode(_graphData['edges']) == jsonEncode(merged['edges']);
+      setState(() => _graphData = merged);
+      if (!unchanged) {
+        _populateGraph(merged);
+        _hasFittedBounds = false;
+        _runLayoutSync();
       }
-
-      if (_isSameGraph(newNodes, newEdges)) {
-        if (!silent) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      _populateGraph(data);
-      _runLayoutSync();
     } catch (e) {
       Logger.debug('Knowledge graph load failed: $e');
-      if (!mounted) return;
-      if (!silent) {
-        setState(() {
-          _error = context.l10n.couldNotLoadKnowledgeGraph;
-        });
+      if (!mounted || generation != _loadGeneration) return;
+      if (e is KnowledgeGraphSessionChanged) {
+        _clearGraph();
+        setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
+      } else if (e is KnowledgeGraphCursorExpired) {
+        // The old revision may contain a memory that was just deleted.
+        // Discard it before restarting, including if that restart fails.
+        _clearGraph();
+        await _loadGraph();
+      } else if (_hasContent) {
+        OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
+            actionLabel: context.l10n.tryAgain, onAction: () => _loadGraph(loadMore: loadMore));
+      } else {
+        setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       }
     } finally {
-      if (mounted && !silent) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _isLoading = false;
+          _loadingMore = false;
         });
       }
     }
   }
 
-  bool _isSameGraph(List<dynamic> newNodes, List<dynamic> newEdges) {
-    final hasUserNode = simulation.nodes.any((n) => n.id == 'user-node');
-    // If we expect N+1 nodes (content + user), we should account for that
-    if (newNodes.length + (hasUserNode ? 0 : 1) != simulation.nodes.length) return false;
-    if (newEdges.length != simulation.edges.length) return false;
-
-    final currentIds = simulation.nodes.map((n) => n.id).toSet();
-    for (var n in newNodes) {
-      if (!currentIds.contains(n['id'])) return false;
-    }
-    return true;
+  void _clearGraph() {
+    setState(() {
+      simulation.nodes.clear();
+      simulation.edges.clear();
+      simulation.nodeMap.clear();
+      _graphData = {'nodes': [], 'edges': []};
+      _selectedNodeId = null;
+      _highlightedNodeIds.clear();
+      _hasFittedBounds = false;
+    });
   }
 
   void _populateGraph(Map<String, dynamic> data) {
+    _selectedNodeId = null;
+    _highlightedNodeIds.clear();
     simulation.nodes.clear();
     simulation.edges.clear();
     simulation.nodeMap.clear();
 
-    final nodes = data['nodes'] as List<dynamic>? ?? [];
+    // The canvas runs a quadratic force simulation. Keep the legacy endpoint's
+    // 200-entity overview bound when canonical pages contain more records.
+    final nodes = (data['nodes'] as List<dynamic>? ?? []).take(200).toList();
     final edges = data['edges'] as List<dynamic>? ?? [];
 
-    final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
-    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
-      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
-    }
+    final givenName = SharedPreferencesUtil().givenName;
+    final userLabel = memoryGraphUserLabel(givenName, context.l10n);
+    final knownUserLabels = memoryGraphKnownUserLabels(givenName);
+    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) => memoryGraphIsUserNode(nodeData, knownUserLabels);
 
     String? primaryUserId;
     for (final nodeData in nodes) {
@@ -555,10 +639,88 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
   }
 
+  /// Height of the preview card while it loads and once it shows the graph, so the list below does
+  /// not jump when the graph arrives.
+  static const double _previewHeight = 140;
+
+  Widget _buildPreviewCard() {
+    final l10n = context.l10n;
+    if (_error != null && !_isLoading) {
+      // Failure collapses to one row so the memory list moves up; Try Again reloads in place.
+      return Container(
+        key: const ValueKey('memories_mind_map_error'),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs),
+        constraints: const BoxConstraints(minHeight: 52),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: Icon(Icons.hub_outlined, size: 20, color: OmiColors.textTertiary)),
+            const SizedBox(width: OmiSpacing.sm),
+            Expanded(
+              child: Text(
+                _error!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
+            OmiButton(
+              key: const ValueKey('memories_mind_map_retry'),
+              variant: OmiButtonVariant.tertiary,
+              size: OmiButtonSize.compact,
+              label: l10n.tryAgain,
+              onPressed: _loadGraph,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Semantics(
+      button: true,
+      label: l10n.memoryGraph,
+      child: GestureDetector(
+        key: const ValueKey('memories_mind_map_preview'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onOpen,
+        child: ClipRRect(
+          borderRadius: OmiRadius.xlAll,
+          child: SizedBox(
+            height: _previewHeight,
+            child: ColoredBox(
+              color: OmiColors.surface1,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: ExcludeSemantics(
+                        child: _isLoading
+                            ? const MemoryGraphSkeleton(key: ValueKey('memories_mind_map_loading'))
+                            : _buildBody(),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: ExcludeSemantics(
+                      child: Icon(Icons.open_in_full_rounded, size: 18, color: OmiColors.textTertiary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.preview) return _buildPreviewCard();
     if (widget.embedded) {
-      return ColoredBox(color: widget.preview ? OmiColors.surface1 : OmiColors.surface0, child: _buildBody());
+      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
@@ -569,19 +731,27 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               title: Text(context.l10n.memoryGraphTitle),
               backgroundColor: Colors.transparent,
               leading: const OmiBackButton(),
-              actions: widget.showShareButton
-                  ? [
-                      OmiIconButton(
-                        key: _shareButtonKey,
-                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
-                        label: context.l10n.share,
-                        onPressed: _shareGraph,
-                      ),
-                    ]
-                  : null,
+              actions: [
+                OmiIconButton(
+                  key: const ValueKey('mind_map_refresh'),
+                  icon: const Icon(Icons.refresh),
+                  label: context.l10n.refresh,
+                  onPressed: _loadGraph,
+                ),
+                if (widget.showShareButton && simulation.nodes.length > 1)
+                  OmiIconButton(
+                      key: _shareButtonKey,
+                      icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                      label: context.l10n.share,
+                      onPressed: _shareGraph),
+              ],
             )
           : null,
-      body: _buildBody(),
+      body: Column(children: [
+        Expanded(child: _buildBody()),
+        if (_loadMoreButton != null && simulation.nodes.length > 1)
+          SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(OmiSpacing.sm), child: _loadMoreButton!)),
+      ]),
     );
   }
 
@@ -591,41 +761,29 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
-      if (widget.preview) {
-        // The preview ignores pointers, so it cannot offer a retry; tapping the card opens the full
-        // graph, which loads (and retries) on its own.
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.hub_outlined, size: 28, color: OmiColors.textTertiary),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
       return SafeArea(
-        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
+        child: SingleChildScrollView(
+          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
+        ),
       );
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
-    final bool isEmpty =
-        simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
+    final bool isEmpty = simulation.nodes.every((node) => node.isFixed);
 
     if (isEmpty) {
+      final catalog = _graphData['catalog_nodes'] as List? ?? [];
+      if (catalog.isNotEmpty) {
+        return MemoryGraphCatalog(records: catalog, compact: widget.preview, loadMore: _loadMoreButton);
+      }
       final emptyState = OmiEmptyState(
         icon: Icons.hub_outlined,
         title: context.l10n.noKnowledgeGraphYet,
         message: context.l10n.knowledgeGraphWillBuildAutomatically,
+        action: widget.preview
+            ? null
+            : (_loadMoreButton ??
+                OmiButton.secondary(label: context.l10n.refresh, onPressed: _loadGraph, size: OmiButtonSize.compact)),
       );
       if (!widget.embedded) {
         return SafeArea(child: emptyState);
@@ -643,6 +801,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        _fitGraphToBounds(size);
         return Stack(
           children: [
             GestureDetector(
@@ -946,10 +1106,12 @@ class GraphPainter3D extends CustomPainter {
       }
     }
 
+    final readableOverview = nodes.length <= 20 && zoom < 0.7;
+    final placedLabels = <Rect>[];
     for (var p in projectedNodes) {
       final node = p.node;
       final centerOffset = Offset(p.x, p.y);
-      final radius = node.radius * p.scale;
+      final radius = readableOverview ? max(4.0, node.radius * p.scale) : node.radius * p.scale;
 
       if (radius < 0.5) continue;
 
@@ -968,7 +1130,11 @@ class GraphPainter3D extends CustomPainter {
         radius * 1.2,
         [
           (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
-          Color.lerp(OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white, node.baseColor, 0.5)!
+          Color.lerp(
+            OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white,
+            node.baseColor,
+            0.5,
+          )!
               .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
@@ -978,28 +1144,59 @@ class GraphPainter3D extends CustomPainter {
       canvas.drawCircle(centerOffset, radius, _nodePaint);
       _nodePaint.shader = null;
 
-      final showLabel = screenshotMode || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
+      final showLabel =
+          screenshotMode || (readableOverview && p.alpha > 0.2) || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
       if (showLabel) {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
-                .withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
-            fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
+              alpha: screenshotMode ? 0.95 : (readableOverview ? max(0.8, p.alpha) : p.alpha) * 0.9,
+            ),
+            fontSize: screenshotMode ? 11.0 : (readableOverview ? 12.0 : (10 * p.scale).clamp(8, 14)),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        var labelOffset = centerOffset + Offset(-tp.width / 2, radius + 3);
+        if (readableOverview) {
+          // A fitted small graph must remain readable without labels colliding
+          // near the owner node. Keep these choices in screen coordinates.
+          Offset? available;
+          for (final candidate in [
+            labelOffset,
+            centerOffset + Offset(-tp.width / 2, -radius - tp.height - 3),
+            centerOffset + Offset(radius + 6, -tp.height / 2),
+            centerOffset + Offset(-radius - tp.width - 6, -tp.height / 2),
+          ]) {
+            final rect = candidate & tp.size;
+            if (rect.left >= 0 &&
+                rect.right <= size.width &&
+                rect.top >= 0 &&
+                rect.bottom <= size.height &&
+                !placedLabels.any((placed) => placed.overlaps(rect.inflate(2)))) {
+              available = candidate;
+              placedLabels.add(rect);
+              break;
+            }
+          }
+          if (available == null) continue;
+          labelOffset = available;
+        }
         if (OmiColors.active == OmiPalette.light) {
-          final labelRect =
-              Rect.fromLTWH(centerOffset.dx - tp.width / 2 - 4, centerOffset.dy + radius, tp.width + 8, tp.height + 6);
+          final labelRect = Rect.fromLTWH(
+            labelOffset.dx - 4,
+            labelOffset.dy - 3,
+            tp.width + 8,
+            tp.height + 6,
+          );
           canvas.drawRRect(
             RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
           );
         }
-        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
+        tp.paint(canvas, labelOffset);
       }
     }
   }
@@ -1024,4 +1221,93 @@ class _ProjectedNode {
     required this.scale,
     required this.alpha,
   });
+}
+
+/// The preview card's loading state: a faint, static node-and-edge sketch at the card's size. It
+/// pulses gently a few times (not at all under Reduce Motion) and then rests, so a slow load does
+/// not animate forever.
+class MemoryGraphSkeleton extends StatefulWidget {
+  const MemoryGraphSkeleton({super.key});
+
+  @override
+  State<MemoryGraphSkeleton> createState() => _MemoryGraphSkeletonState();
+}
+
+class _MemoryGraphSkeletonState extends State<MemoryGraphSkeleton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+    value: 1,
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduce = OmiMotion.of(context).standard == Duration.zero;
+    if (reduce) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else if (!_started) {
+      _started = true;
+      _pulse.repeat(min: 0.55, max: 1, reverse: true, count: 6);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _pulse,
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _GraphSkeletonPainter(node: OmiColors.surface3, edge: OmiColors.border),
+      ),
+    );
+  }
+}
+
+class _GraphSkeletonPainter extends CustomPainter {
+  _GraphSkeletonPainter({required this.node, required this.edge});
+
+  final Color node;
+  final Color edge;
+
+  // Positions as fractions of the card, and radii in logical pixels: a hub with a few clusters.
+  static const _nodes = <(double, double, double)>[
+    (0.50, 0.50, 9),
+    (0.30, 0.32, 6),
+    (0.68, 0.28, 6),
+    (0.72, 0.68, 7),
+    (0.32, 0.72, 5),
+    (0.16, 0.50, 4),
+    (0.86, 0.46, 4),
+    (0.52, 0.16, 4),
+    (0.55, 0.84, 4),
+  ];
+  static const _edges = <(int, int)>[(0, 1), (0, 2), (0, 3), (0, 4), (1, 5), (2, 7), (3, 6), (3, 8), (4, 5), (1, 7)];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    Offset at(int i) => Offset(_nodes[i].$1 * size.width, _nodes[i].$2 * size.height);
+    final edgePaint = Paint()
+      ..color = edge
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    for (final (a, b) in _edges) {
+      canvas.drawLine(at(a), at(b), edgePaint);
+    }
+    final nodePaint = Paint()..color = node;
+    for (var i = 0; i < _nodes.length; i++) {
+      canvas.drawCircle(at(i), _nodes[i].$3, nodePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GraphSkeletonPainter old) => old.node != node || old.edge != edge;
 }

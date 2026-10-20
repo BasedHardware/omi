@@ -1,10 +1,12 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 
@@ -53,6 +55,7 @@ Map<String, dynamic> _wire({Object? summaryRetryable, bool includeKey = true}) =
     };
 
 void main() {
+  setUpAll(() => initializeDateFormatting());
   final l10n = lookupAppLocalizations(const Locale('en'));
   final emitted = <ConversationUntitledRendered>[];
 
@@ -90,10 +93,7 @@ void main() {
     test('discarded, locked and in-flight rows stay quiet', () {
       expect(_conversation(summaryRetryable: true, discarded: true).showsSummaryRetry, isFalse);
       expect(_conversation(summaryRetryable: true, isLocked: true).showsSummaryRetry, isFalse);
-      expect(
-        _conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry,
-        isFalse,
-      );
+      expect(_conversation(summaryRetryable: true, status: ConversationStatus.processing).showsSummaryRetry, isFalse);
     });
   });
 
@@ -130,6 +130,19 @@ void main() {
       expect(emitted, isEmpty);
     });
 
+    test('date fallback respects the supplied 24-hour formatter without changing the model', () {
+      final conversation = _conversation(createdAt: DateTime(2026, 10, 1, 15, 12));
+      final title = conversationDisplayTitle(
+        conversation,
+        l10n,
+        surface: ConversationUntitledRenderedSurface.list,
+        dates: OmiDateFormat(locale: const Locale('en'), use24HourFormat: true, l10n: l10n),
+      );
+      expect(title, 'Oct 1, 2026 15:12');
+      expect(conversation.structured.title, isEmpty);
+      expect(conversation.showsSummaryRetry, isFalse);
+    });
+
     test('an untitled legacy row falls back to transcript text and emits nothing', () {
       final title = conversationDisplayTitle(
         _conversation(segments: [_segment('Lunch plans for Friday')]),
@@ -140,12 +153,16 @@ void main() {
       expect(emitted, isEmpty);
     });
 
-    test('bare untitled renders the fallback string and reports once per row and surface', () {
+    test('missing title renders a recording date and reports once per row and surface', () {
       final conversation = _conversation(createdAt: DateTime.now().subtract(const Duration(days: 3)));
       for (var i = 0; i < 3; i++) {
         expect(
           conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.list),
-          l10n.untitledConversation,
+          OmiDateFormat(
+            locale: const Locale('en'),
+            use24HourFormat: false,
+            l10n: l10n,
+          ).dateTime(conversation.createdAt.toLocal()),
         );
       }
       conversationDisplayTitle(conversation, l10n, surface: ConversationUntitledRenderedSurface.map);

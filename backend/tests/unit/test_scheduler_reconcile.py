@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import pytest
+import yaml
 
 from scripts import scheduler_reconcile as reconcile
 
@@ -86,23 +87,43 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
     prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
     assert set(dev_jobs) == {
-        "daily-memory-sweep-hourly",
+        "dream-agent-canary-half-hourly",
         "day3-reengagement-email-daily",
         "frame-request-retention-hourly",
-        "knowledge-ledger-drain-hourly",
         "memory-maintenance-hourly",
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "cap-hold-durable-redrive",
+        "candidate-integration-sweep",
+        "dream-agent-canary-half-hourly",
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
+        "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
+        "omi-tv-rollup-daily",
         "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
+    rollup = prod_jobs["omi-tv-rollup-daily"]
+    assert rollup["lifecycle"] == "planned"
+    assert rollup["state"] == "PAUSED"
+    assert rollup["target"]["oauth"]["service_account"] == (
+        "finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com"
+    )
+
     assert "agent-vm-reconciler-5m" not in dev_jobs
+    assert "candidate-integration-sweep" not in dev_jobs
+    assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
+    assert "lifecycle" not in prod_jobs["candidate-integration-sweep"]  # active once backend-sync serves the route
+    messaging = prod_jobs["messaging-maintenance-hourly"]
+    assert "lifecycle" not in messaging
+    assert messaging["target"]["oauth"]["service_account"] == (
+        "msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com"
+    )
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
         assert job["lifecycle"] == "planned"
@@ -116,6 +137,30 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         assert job["target"]["oauth"]["service_account"] == (
             f"frame-retention-scheduler@{project}.iam.gserviceaccount.com"
         )
+
+
+@pytest.mark.parametrize('auth_type', ['oauth', 'oidc'])
+@pytest.mark.parametrize('account_id', ['abcde', 'a' * 31, 'messaging-maintenance-scheduler', 'Uppercase', 'abcde-'])
+def test_manifest_rejects_invalid_service_account_ids_before_io(tmp_path, auth_type, account_id):
+    manifest = copy.deepcopy(reconcile.load_manifest())
+    job = manifest['environments']['prod']['jobs'][0]
+    job['target'].pop('oauth')
+    job['target'][auth_type] = {'service_account': f'{account_id}@based-hardware.iam.gserviceaccount.com'}
+    path = tmp_path / 'jobs.yaml'
+    path.write_text(yaml.safe_dump(manifest))
+    with pytest.raises(reconcile.ReconcileError, match='6-30 character ID'):
+        reconcile.load_manifest(path)
+
+
+@pytest.mark.parametrize('account_id', ['abcdef', 'a' * 30])
+def test_manifest_accepts_service_account_id_length_boundaries(tmp_path, account_id):
+    manifest = copy.deepcopy(reconcile.load_manifest())
+    manifest['environments']['prod']['jobs'][0]['target']['oauth'][
+        'service_account'
+    ] = f'{account_id}@based-hardware.iam.gserviceaccount.com'
+    path = tmp_path / 'jobs.yaml'
+    path.write_text(yaml.safe_dump(manifest))
+    assert reconcile.load_manifest(path)
 
 
 def _planned_frame_retention_manifest():
@@ -182,9 +227,13 @@ def test_explicitly_selected_planned_job_can_be_created():
 
     assert differences == [resource]
     assert messages == [f"APPLIED {resource}: missing, state"]
-    assert [
-        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
-    ] == [("post", "frame-request-retention-hourly")]
+    # Cloud Scheduler v1 create takes the full job name in the body; it has no jobId parameter.
+    posts = [(url, kwargs) for method, url, kwargs in session.calls if method == "post"]
+    assert len(posts) == 1
+    url, kwargs = posts[0]
+    assert url.endswith("/projects/based-hardware-dev/locations/us-central1/jobs")
+    assert "params" not in kwargs
+    assert kwargs["json"]["name"] == resource
 
 
 def test_check_validates_a_planned_job_after_it_exists():
@@ -260,8 +309,6 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     root = Path(__file__).resolve().parents[3]
     owner_checks = {
         ".github/actions/sync-backfill-lifecycle/action.yml": "--check --jobs sync-backfill-uid-sequencer",
-        ".github/workflows/gcp_daily_memory_sweep_job.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
-        ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_frame_request_retention_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
@@ -292,3 +339,51 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert '--project "$PROJECT_ID" --check' in central
     assert '--project "$PROJECT_ID" --check --jobs' not in central
+
+
+def test_notifications_cadence_covers_every_local_hour_boundary():
+    manifest = reconcile.load_manifest()
+    job = next(
+        job for job in manifest['environments']['prod']['jobs'] if job['name'] == 'notifications-job-scheduler-trigger'
+    )
+    assert job['schedule'] == '*/15 * * * *'
+    assert job['state'] == 'ENABLED'
+    assert job.get('lifecycle') is None  # Existing managed resource, scoped by the owner workflow.
+    assert job['owner'] == '.github/workflows/gcp_notifications_job.yml'
+    assert job['target']['uri'].endswith('/jobs/notifications-job:run')
+    assert job['retry']['max_retry'] == '0s'
+    # Dedicated least-privilege invoker, never the project default compute account.
+    assert (
+        job['target']['oauth']['service_account']
+        == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
+    )
+
+
+def test_operator_gcloud_auth_is_explicit_and_never_prints_tokens(monkeypatch, capsys):
+    import subprocess
+    from google.auth.transport import requests as auth_requests
+
+    seen = []
+    monkeypatch.setattr(
+        reconcile.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "private-token\n", "")
+    )
+    monkeypatch.setattr(
+        auth_requests, "AuthorizedSession", lambda credentials: seen.append(credentials.token) or object()
+    )
+    monkeypatch.setattr(reconcile, "reconcile", lambda *a, **k: ([], ["MATCH messaging-maintenance-hourly"]))
+    assert (
+        reconcile.main(
+            [
+                "--gcloud-auth",
+                "--environment",
+                "prod",
+                "--project",
+                "based-hardware",
+                "--check",
+                "--jobs",
+                "messaging-maintenance-hourly",
+            ]
+        )
+        == 0
+    )
+    assert seen == ["private-token"] and "private-token" not in capsys.readouterr().out

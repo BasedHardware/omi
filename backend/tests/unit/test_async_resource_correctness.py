@@ -46,11 +46,14 @@ def gmail_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "utils.retrieval.agentic", agentic)
 
     database = types.ModuleType("database")
-    database.__path__ = []
+    database.__path__ = [str(BACKEND_DIR / "database")]
     users_db = types.ModuleType("database.users")
     users_db.get_integration = MagicMock()
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
+    notifications_db = types.ModuleType("database.notifications")
+    notifications_db.get_user_time_zone = lambda _uid: "UTC"
+    monkeypatch.setitem(sys.modules, "database.notifications", notifications_db)
 
     tools_mod = types.ModuleType("langchain_core.tools")
     tools_mod.tool = _ToolWrapper
@@ -115,10 +118,12 @@ async def test_gmail_tool_exercises_async_interface_and_refreshes_once(gmail_mod
     monkeypatch.setattr(gmail_module, "get_gmail_messages", fake_get_gmail_messages)
     monkeypatch.setattr(gmail_module, "refresh_google_token", fake_refresh)
 
-    result = await gmail_module.get_gmail_messages_tool.coroutine(query="subject:async", config={})
+    result = await gmail_module.get_gmail_messages_tool.coroutine(
+        query="subject:async", config={"configurable": {"user_timezone": "UTC"}}
+    )
 
     assert calls == ["old-token", "new-token"]
-    assert "Gmail Messages (1 found)" in result
+    assert "Gmail Messages (1 found, Gmail search order)" in result
     assert "Async" in result
 
 

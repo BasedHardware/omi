@@ -36,10 +36,27 @@ import time
 import uuid
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+AUTH_MODE = os.environ.get("FINOPS_AUTH", "local")  # 'local' (laptop cron) | 'cloudrun'
+if AUTH_MODE == "cloudrun":
+    import cloudrun as gcpauth  # noqa: E402
+else:
+    import gcpauth  # noqa: E402
+
 RUN_ROOT = pathlib.Path(
     os.environ.get("FINOPS_RUN_ROOT", os.environ.get("SCRATCH_ROOT", "/Volumes/scratch") + "/finops-runs")
 )
 SETTLEMENT_LAG_DAYS = 2
+
+
+def pull_log_tail(log: pathlib.Path, n: int = 80) -> str:
+    """Last lines of a pull log. Child stderr is redirected here, so Cloud Logging
+    never sees a provider failure unless we copy this tail onto our own stderr."""
+    try:
+        lines = log.read_text(errors="replace").splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[-n:])
 
 
 def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) -> bool:
@@ -52,6 +69,8 @@ def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) ->
     ok = p.returncode == 0
     sys.stderr.write("[%s] %s in %.0fs\n" % (label, "ok" if ok else "FAILED rc=%d" % p.returncode, time.time() - t0))
     if not ok and required:
+        tail = pull_log_tail(log)
+        sys.stderr.write("FINOPS PULL FAILED %s rc=%d; last pull.log lines follow\n%s\n" % (label, p.returncode, tail))
         raise SystemExit("required pull %s failed; see %s" % (label, log))
     return ok
 
@@ -113,6 +132,8 @@ def validate(derived: pathlib.Path, raw: pathlib.Path, tol_pct: float, dates: li
         "gcp_total_export",
         "one_time",
     }
+    # Measured STT pools are absent: those rows publish the invoice itself and
+    # carry a null delta, so they are not a pool-versus-allocation check.
     failures = []
     for r in recon:
         if r["pool"] not in variable:
@@ -171,7 +192,9 @@ def main() -> None:
     ap.add_argument("--cohort-lookback-days", type=int, default=7)
     ap.add_argument("--reuse-raw", action="store_true", help="skip the pulls and use the run dir as-is")
     ap.add_argument(
-        "--skip", default="", help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,providers,stripe,posthog"
+        "--skip",
+        default="",
+        help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,providers,mercury,stripe,posthog",
     )
     ap.add_argument("--recon-tolerance-pct", type=float, default=0.5)
     ap.add_argument("--allow-unsettled", action="store_true")
@@ -211,6 +234,8 @@ def main() -> None:
             sh([str(HERE / "pull_prometheus.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "prom")
         if "providers" not in skip:
             sh([str(HERE / "pull_providers.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "providers")
+        if "mercury" not in skip:
+            sh([str(HERE / "pull_mercury.py"), "--end", end, "--raw", str(raw)], log, "mercury")
         if "stripe" not in skip:
             sh([str(HERE / "pull_stripe.py"), "--raw", str(raw)], log, "stripe", required=False)
         if "posthog" not in skip:
@@ -222,6 +247,23 @@ def main() -> None:
                 "posthog",
                 required=False,
             )
+
+    # Provider stderr normally stays in pull.log. Surface optional skips in Cloud Logging too.
+    stt_invoice = raw / "stt_vendor_cost_daily.json"
+    if stt_invoice.exists():
+        stt_payload = json.loads(stt_invoice.read_text())
+        skipped = stt_payload.get("skipped", [])
+        for provider in ("soniox", "deepgram"):
+            if provider in skipped:
+                sys.stderr.write("WARNING: %s measured STT unavailable; see pull.log\n" % provider)
+            if provider in (stt_payload.get("incomplete") or {}):
+                sys.stderr.write(
+                    "WARNING: %s measured STT incomplete; unclassified line items; see pull.log\n" % provider
+                )
+
+    mercury_invoice = raw / "mercury_vendor_spend_daily.json"
+    if mercury_invoice.exists() and json.loads(mercury_invoice.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Mercury vendor spend unavailable; see pull.log\n")
 
     cws = a.cohort_window_start
     with open(run / "assembly_output.md", "w") as fh:
@@ -294,7 +336,13 @@ def main() -> None:
     summary = json.load(open(derived / "day_summary.json"))["days"]
     print("Omi unit cost %s..%s  (run %s)" % (start, end, run_id))
     worst = max(
-        (abs(float(r["delta_pct"])) for r in recon if r["pool"] not in ("llm_openai_ledger_coverage",)), default=0.0
+        (
+            abs(float(r["delta_pct"]))
+            for r in recon
+            if r["pool"] not in ("llm_openai_ledger_coverage", "stt_soniox_measured", "stt_deepgram_measured")
+            and r["delta_pct"] not in ("", None)
+        ),
+        default=0.0,
     )
     print(
         "reconciliation: worst |delta| %.4f%% (tolerance %.2f%%)  |  %s"

@@ -22,7 +22,6 @@ class HeaderCircleButton extends StatelessWidget {
     this.color,
     this.diameter = kHeaderCircleDiameter,
     this.badgeCount = 0,
-    this.quietBadge = false,
   });
 
   final Widget icon;
@@ -36,10 +35,6 @@ class HeaderCircleButton extends StatelessWidget {
   /// A count shown in a small pill on the circle's top-right edge; hidden at zero. Visual only:
   /// put the count in [semanticLabel] too, since the pill is excluded from semantics.
   final int badgeCount;
-
-  /// Shows the count as a bare tertiary number by the glyph instead of an accent pill, for
-  /// controls that report a state and should not draw the eye.
-  final bool quietBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -56,11 +51,11 @@ class HeaderCircleButton extends StatelessWidget {
       children: [
         button,
         Positioned(
-          top: quietBadge ? 9 : 0,
-          right: quietBadge ? 7 : 0,
+          top: 0,
+          right: 0,
           child: IgnorePointer(
             child: ExcludeSemantics(
-              child: HeaderCountBadge(count: badgeCount, quiet: quietBadge),
+              child: HeaderCountBadge(count: badgeCount),
             ),
           ),
         ),
@@ -72,28 +67,13 @@ class HeaderCircleButton extends StatelessWidget {
 /// The count pill on a [HeaderCircleButton]: capped at "9+", ringed in the page
 /// surface so it reads as sitting on top of the circle.
 class HeaderCountBadge extends StatelessWidget {
-  const HeaderCountBadge({super.key, required this.count, this.quiet = false});
+  const HeaderCountBadge({super.key, required this.count});
 
   final int count;
-
-  /// Muted look: just the number in [OmiColors.textTertiary], no pill.
-  final bool quiet;
 
   @override
   Widget build(BuildContext context) {
     final label = count > 9 ? '9+' : '$count';
-    if (quiet) {
-      return Text(
-        label,
-        key: const ValueKey('header_count_badge'),
-        textScaler: TextScaler.noScaling,
-        style: OmiType.caption.copyWith(
-          color: OmiColors.textTertiary,
-          fontWeight: FontWeight.w600,
-          height: 1.0,
-        ),
-      );
-    }
     return Container(
       key: const ValueKey('header_count_badge'),
       constraints: const BoxConstraints(minWidth: 20, minHeight: 20),

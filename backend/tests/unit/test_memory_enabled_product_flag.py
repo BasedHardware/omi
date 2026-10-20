@@ -39,7 +39,7 @@ def test_retired_aliases_do_not_enable_memory():
 def test_dev_and_prod_overlays_pin_memory_enabled_on():
     import yaml
 
-    composed = yaml.safe_load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"))
+    composed = yaml.load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"), Loader=yaml.CSafeLoader)
     dev = composed["environments"]["dev"]
     prod = composed["environments"]["prod"]
 
@@ -59,7 +59,7 @@ def test_dev_and_prod_overlays_pin_memory_enabled_on():
     assert "MEMORY_MODE" not in dev_job and "MEMORY_V3_GET_ENABLED" not in dev_job
     assert _value(dev_job, "MEMORY_ENABLED") == "on"
     assert _value(dev_job, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") == "true"
-    assert _value(dev_job, "MEMORY_CANONICAL_MAINTENANCE_FLEX") == "true"
+    assert "MEMORY_CANONICAL_MAINTENANCE_FLEX" not in dev_job
 
     for scope, env_map in (
         ("prod/gke/backend-listen", prod["gke"]["backend-listen"]["env"]),
@@ -75,7 +75,7 @@ def test_dev_and_prod_overlays_pin_memory_enabled_on():
     assert "MEMORY_MODE" not in prod_job and "MEMORY_V3_GET_ENABLED" not in prod_job
     assert _value(prod_job, "MEMORY_ENABLED") == "on"
     assert _value(prod_job, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") == "true"
-    assert _value(prod_job, "MEMORY_CANONICAL_MAINTENANCE_FLEX") == "true"
+    assert "MEMORY_CANONICAL_MAINTENANCE_FLEX" not in prod_job
 
 
 def test_memory_enabled_on_does_not_require_maintenance():

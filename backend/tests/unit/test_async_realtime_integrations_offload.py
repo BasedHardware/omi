@@ -13,10 +13,8 @@ test_async_app_integrations.py so the heavy router-tier imports resolve without
 real Firestore / Redis / langchain / httpx packages.
 """
 
-import contextvars
 import os
 import sys
-import threading
 import types
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -304,8 +302,6 @@ import importlib
 app_integrations = importlib.import_module("utils.app_integrations")
 _restore_stub_modules()
 
-from utils.executors import run_blocking as _production_run_blocking
-
 
 def _make_app(app_id: str, webhook_url: str, triggers_realtime=True, uid=None):
     app = MagicMock()
@@ -395,119 +391,23 @@ class TestRealtimeIntegrationsOffload:
         assert record_usage in offloaded_fns, "record_app_usage was not offloaded via run_blocking"
 
     @pytest.mark.asyncio
-    async def test_mentor_pipeline_uses_postprocess_executor(self):
+    async def test_mentor_admission_and_cohort_resolution_offloaded(self, monkeypatch):
+        """The v2-only mentor section must run through run_blocking, never on the loop."""
         tracking, calls = _make_executor_tracking_run_blocking()
-        mentor_processor = MagicMock(return_value=None)
+        admission = MagicMock(return_value=[{"text": "hi"}])
+        resolve = MagicMock(return_value=None)  # flag denies; no v2 dispatch
 
+        monkeypatch.setenv("MENTOR_PIPELINE", "cohort")
         with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-        ), patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
-            app_integrations, "_process_mentor_proactive_notification", mentor_processor
+            app_integrations, "process_mentor_notification", admission
+        ), patch.object(app_integrations.proactivity_flags, "mentor_pipeline", resolve), patch.object(
+            app_integrations, "get_available_apps", MagicMock(return_value=[])
         ):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
-        call = next(call for call in calls if call[1] is mentor_processor)
-        assert call[0] is app_integrations.postprocess_executor
-        assert call[2] == ("uid-1", [{"text": "hi"}])
-
-    @pytest.mark.asyncio
-    async def test_third_party_pipeline_uses_postprocess_executor(self):
-        app = _make_app("a1", "https://app1.test/hook")
-        app.has_capability.return_value = True
-        response = MagicMock(status_code=200, text="")
-        response.json.return_value = {"notification": {"prompt": "Help"}}
-        client = AsyncMock()
-        client.post.return_value = response
-        tracking, calls = _make_executor_tracking_run_blocking()
-        proactive_processor = MagicMock(return_value=None)
-
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=None
-        ), patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
-            app_integrations, "get_webhook_client", return_value=client
-        ), patch.object(
-            app_integrations, "_process_proactive_notification", proactive_processor
-        ):
-            await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
-
-        call = next(call for call in calls if call[1] is proactive_processor)
-        assert call[0] is app_integrations.postprocess_executor
-        assert call[2] == ("uid-1", app, {"prompt": "Help"})
-
-    @pytest.mark.asyncio
-    async def test_mentor_pipeline_preserves_usage_context_without_blocking_loop(self):
-        from concurrent.futures import ThreadPoolExecutor
-
-        usage_context = contextvars.ContextVar("proactive_usage_context", default=None)
-        started = threading.Event()
-        release = threading.Event()
-        loop_progressed = threading.Event()
-        observations = {}
-        worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-postprocess")
-
-        @_cm
-        def tracked_usage(_uid, _feature):
-            token = usage_context.set("realtime-integrations")
-            try:
-                yield
-            finally:
-                usage_context.reset(token)
-
-        def blocking_mentor_processor(_uid, _messages):
-            observations["context"] = usage_context.get()
-            started.set()
-            assert release.wait(timeout=2)
-            observations["loop_progressed_before_release"] = loop_progressed.is_set()
-
-        async def routing_run_blocking(executor, fn, *args, **kwargs):
-            if executor is worker:
-                return await _production_run_blocking(executor, fn, *args, **kwargs)
-            return fn(*args, **kwargs)
-
-        safety_release = threading.Timer(1, release.set)
-        safety_release.start()
-        try:
-            with patch.object(app_integrations, "run_blocking", routing_run_blocking), patch.object(
-                app_integrations, "postprocess_executor", worker
-            ), patch.object(app_integrations, "track_usage", tracked_usage), patch.object(
-                app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-            ), patch.object(
-                app_integrations, "get_available_apps", return_value=[]
-            ), patch.object(
-                app_integrations,
-                "_process_mentor_proactive_notification",
-                blocking_mentor_processor,
-            ):
-                task = _asyncio.create_task(
-                    app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
-                )
-                deadline = _asyncio.get_running_loop().time() + 0.75
-                while not started.is_set() and _asyncio.get_running_loop().time() < deadline:
-                    await _asyncio.sleep(0.005)
-                assert started.is_set()
-                loop_progressed.set()
-                release.set()
-                await task
-        finally:
-            release.set()
-            safety_release.cancel()
-            worker.shutdown(wait=True)
-
-        assert observations == {
-            "context": "realtime-integrations",
-            "loop_progressed_before_release": True,
-        }
-
-    @pytest.mark.asyncio
-    async def test_mentor_pipeline_preserves_failure_semantics(self):
-        tracking, _calls = _make_executor_tracking_run_blocking()
-
-        with patch.object(app_integrations, "run_blocking", tracking), patch.object(
-            app_integrations, "process_mentor_notification", return_value=[{"text": "hi"}]
-        ), patch.object(
-            app_integrations,
-            "_process_mentor_proactive_notification",
-            side_effect=RuntimeError("mentor failed"),
-        ):
-            with pytest.raises(RuntimeError, match="mentor failed"):
-                await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
+        admission_call = next(call for call in calls if call[1] is admission)
+        assert admission_call[0] is app_integrations.db_executor
+        assert admission_call[2] == ("uid-1", [{"text": "hi"}])
+        resolve_call = next(call for call in calls if call[1] is resolve)
+        assert resolve_call[0] is app_integrations.db_executor
+        assert resolve_call[2] == ("uid-1",)

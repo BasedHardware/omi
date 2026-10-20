@@ -10,6 +10,7 @@ import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -29,6 +30,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -69,6 +71,7 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => true)),
       ChangeNotifierProvider(create: (_) => HomeProvider()),
       ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
       ChangeNotifierProvider(create: (_) => FolderProvider()),
       ChangeNotifierProvider(create: (_) => UsageProvider()),
       ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
@@ -87,7 +90,8 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
       ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
       ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
-      ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => const [])),
+      ChangeNotifierProvider(
+          create: (_) => PeopleProvider(loadPeople: () async => const PeopleListResponse(people: []))),
       ChangeNotifierProvider(create: (_) => OnboardingProvider()),
       ChangeNotifierProvider(create: (_) => McpProvider()),
       ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),
@@ -111,6 +115,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get connectedDevice => connected ? device : null;
   @override
   BtDevice? get pairedDevice => device;
+  @override
+  bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
   @override
   int get batteryLevel => battery;
   @override
@@ -151,6 +157,8 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => const [];
   @override
+  bool canPlayOrShareWal(Wal wal) => false;
+  @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override
   int get clearableWalsCount => 0;
@@ -158,6 +166,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   int get missingWalsInSeconds => 0;
   @override
   int get needsAttentionWalsCount => 0;
+  @override
+  List<Wal> get retryableAttentionWals =>
+      allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+  @override
+  Future<void> retryNeedsAttentionWals() async {}
   @override
   bool get isSyncing => false;
   @override
@@ -170,6 +183,11 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   List<Wal> get displaySortedWals => const [];
   @override
   bool get isRateLimited => false;
+  @override
+  ({int processed, int total}) get offlineServerProcessingCounts => (processed: 0, total: 0);
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

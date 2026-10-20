@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from models.shared import StatusResponse
 
 import database.fair_use as fair_use_db
-from database._client import db
+from database.serving_query_reads import find_fair_use_case_snapshots
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
@@ -185,6 +185,10 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     if stage == 'none':
         updates['throttle_until'] = None
         updates['restrict_until'] = None
+    elif stage == 'restrict':
+        # Stage reads expire a restriction with no future restrict_until, so give a manual
+        # restrict the same 30-day window escalate_enforcement applies.
+        updates['restrict_until'] = datetime.now(timezone.utc) + timedelta(days=30)
 
     fair_use_db.update_fair_use_state(uid, updates)
     invalidate_enforcement_cache(uid)
@@ -195,8 +199,7 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
 def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
     # Search across all users' events for this case_ref
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
+    for doc in find_fair_use_case_snapshots(case_ref):
         data = doc.to_dict()
         path_parts = doc.reference.path.split('/')
         if len(path_parts) >= 2:
@@ -226,8 +229,7 @@ def get_public_case_status(case_ref: str):
     Returns only non-sensitive info: stage, message, timestamps, support email.
     No usage data or user identity exposed.
     """
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
+    for doc in find_fair_use_case_snapshots(case_ref):
         data = doc.to_dict()
         # Extract uid to get current enforcement stage
         path_parts = doc.reference.path.split('/')
@@ -235,7 +237,7 @@ def get_public_case_status(case_ref: str):
 
         stage = 'none'
         if uid:
-            state = fair_use_db.get_fair_use_state(uid)
+            state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
             stage = state.get('stage', 'none')
 
         created_at = data.get('created_at')

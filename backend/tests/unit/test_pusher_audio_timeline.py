@@ -24,6 +24,7 @@ from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
 import utils.pusher_protocol as pusher_protocol
+from utils.metrics import OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL
 from utils.pusher_protocol import AUDIO_TIMELINE_PROTOCOL, audio_timeline_ack_frame
 
 
@@ -109,7 +110,7 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
 
-    def upload(chunks, uid, cid, level=None):
+    def upload(chunks, uid, cid, level=None, **_kwargs):
         uploads.extend((cid, chunk) for chunk in chunks)
         return [f'chunks/{uid}/{cid}/{chunk["timestamp"]:.3f}.batch.bin' for chunk in chunks]
 
@@ -304,7 +305,7 @@ async def test_batch_dropped_after_retries_leaves_no_digest_entry(env, monkeypat
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.05)
     attempts = []
 
-    def failing_upload(chunks, uid, cid, level=None):
+    def failing_upload(chunks, uid, cid, level=None, **_kwargs):
         attempts.append(cid)
         raise RuntimeError('gcs down')
 
@@ -407,7 +408,7 @@ async def test_failed_upload_retries_on_a_later_process_tick(env, monkeypatch):
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', interval)
     attempts: list[float] = []
 
-    def flaky_upload(chunks, uid, cid, level=None):
+    def flaky_upload(chunks, uid, cid, level=None, **_kwargs):
         attempts.append(time.monotonic())
         if len(attempts) == 1:
             raise RuntimeError('transient gcs error')
@@ -443,3 +444,133 @@ async def test_failed_upload_retries_on_a_later_process_tick(env, monkeypatch):
     ), 'the ready-lane retry must be paced by a later process tick, not retried in the same loop turn'
     assert len(env) == 3, 'every closed run still uploads'
     assert [chunk['data'] for _cid, chunk in env] == [run_a, run_b, run_c]
+
+
+async def test_off_uploaded_objects_match_baseline_golden_bytes_and_metadata(env):
+    """Flag-off golden equivalence: with no protocol negotiated the current
+    handler must produce exactly the uploaded chunk objects the pinned
+    baseline produced for these frames (verified byte-identical against
+    `git show 6b23e737acdfc0635fb33f3a6e956edd30645e64` during review), no ack
+    bytes on the wire and no span metadata."""
+    pcm_a = b'\x21\x00' * (RATE // 2)
+    pcm_b = b'\x22\x00' * (RATE // 2)
+    frames = [
+        _conversation('c1'),
+        _audio(100.0, pcm_a),
+        _audio(100.5, pcm_b),
+        _conversation('c2'),
+        _audio(200.0, pcm_a),
+    ]
+    ws_current = FakeWebSocket(list(frames))
+
+    await pusher._websocket_util_trigger(ws_current, 'uid-at', RATE, 'test', None)
+
+    golden = [
+        ('c1', {'data': pcm_a + pcm_b, 'timestamp': 100.0}),
+        ('c2', {'data': pcm_a, 'timestamp': 200.0}),
+    ]
+    assert ws_current.sent_bytes == []
+    current_uploads = [(cid, dict(chunk)) for cid, chunk in env]
+    assert current_uploads == golden
+    assert all('span' not in chunk for _cid, chunk in current_uploads)
+
+
+async def test_upload_metric_counts_span_and_spanless_objects_once_each(env, monkeypatch):
+    pcm = b'\x23\x00' * (RATE // 2)
+    frames = [_conversation('c1'), _audio(100.0, pcm), _audio(110.5, pcm)]
+
+    with_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+    without_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get()
+    await _run(FakeWebSocket(list(frames)), audio_timeline=None)
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() == with_before
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='without_spans')._value.get() == without_before + len(
+        env
+    )
+
+    env.clear()
+    with_before = OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get()
+    await _run(FakeWebSocket(list(frames)))
+    assert OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans')._value.get() == with_before + len(env)
+    assert len(env) == 2
+
+
+def _observe_record_owner(monkeypatch):
+    audio = MagicMock()
+    audio.model_dump.return_value = {'id': 'synthetic-audio'}
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *_: [audio])
+
+    def update(uid, cid, data, *, record_owner_out=None):
+        assert set(data) == {'audio_files'}  # The pre-existing metadata write.
+        if record_owner_out is not None:
+            record_owner_out[cid] = 'batch_live_v1'
+        return True
+
+    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *_: None)
+    monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', lambda *_: None)
+
+
+async def test_record_upload_close_receipt_follows_successful_tail_flush(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    _observe_record_owner(monkeypatch)
+    sealed = []
+
+    def seal(uid, conversation):
+        assert env and env[-1][0] == conversation
+        sealed.append(conversation)
+        return True
+
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert sealed == ['record']
+
+
+async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
+    ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert sealed == []
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+
+    def failed(*args, **kwargs):
+        raise ValueError('synthetic storage failure')
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', failed)
+    ws = FakeWebSocket([_conversation('other'), _audio(100, b'\x01\x00' * RATE)])
+    await _run(ws)
+    assert sealed == []
+
+
+async def test_owned_close_drains_when_dark_using_existing_audio_metadata_snapshot(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    _observe_record_owner(monkeypatch)
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read'))
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    await _run(FakeWebSocket([_conversation('owned'), _audio(100, b'\x01\x00' * RATE)]))
+    assert sealed == ['owned']
+
+
+async def test_failed_record_upload_does_not_block_another_durable_record(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    _observe_record_owner(monkeypatch)
+    original = pusher.upload_audio_chunks_batch
+
+    def upload(chunks, uid, cid, *args, **kwargs):
+        if cid == 'failed-record':
+            raise ValueError('synthetic source failure')
+        return original(chunks, uid, cid, *args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    pcm = b'\x01\x00' * RATE
+    await _run(
+        FakeWebSocket(
+            [_conversation('failed-record'), _audio(100, pcm), _conversation('durable-record'), _audio(200, pcm)]
+        )
+    )
+    assert sealed == ['durable-record']

@@ -29,6 +29,7 @@ from google.cloud import firestore
 from utils import encryption
 from ._client import db, get_firestore_client
 from .conversations import conversations_collection, prepare_conversation_for_read
+from .firestore_retry import FIRESTORE_NO_RETRY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 screen_frames_subcollection = 'screen_frames'
@@ -254,7 +255,7 @@ def _state_payload(bucket: str, field: str, value: Any) -> Dict[str, Any]:
 
 def _rpc_bounds(rpc_timeout: Optional[float]) -> Dict[str, Any]:
     # A caller with a deadline gets one attempt within it: no library retry past the bound.
-    return {'timeout': rpc_timeout, 'retry': None} if rpc_timeout is not None else {}
+    return {'timeout': rpc_timeout, 'retry': FIRESTORE_NO_RETRY} if rpc_timeout is not None else {}
 
 
 def _read_state(conversation_ref: Any, bucket: str, field: str, rpc_timeout: Optional[float] = None) -> Any:

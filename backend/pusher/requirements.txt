@@ -25,6 +25,9 @@ google-cloud-tasks==2.16.4
 google-auth==2.32.0
 google-api-python-client==2.139.0
 
+# Localized storefront copy (utils/storefront_copy.py is in the pusher import closure via utils/subscription + utils/ladder_v1)
+babel==2.18.0
+
 # Cache & rate limiting
 redis==5.0.8
 
@@ -43,6 +46,8 @@ numpy==1.26.4
 
 # Metrics
 prometheus-client==0.21.1
+# Cohort flag evaluation (utils.proactivity_flags) and integration telemetry
+posthog==3.5.2
 
 # LLM services (for process_conversation)
 anthropic>=0.52.0

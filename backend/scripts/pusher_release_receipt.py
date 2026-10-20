@@ -115,6 +115,12 @@ def rendered_chart_documents(
             [
                 "--set-string",
                 f"fullnameOverride={release}",
+                # Workload Identity binds only the shared release's KSA; a
+                # release-named canary KSA has no binding and cannot mint tokens.
+                "--set",
+                "serviceAccount.create=false",
+                "--set-string",
+                f"serviceAccount.name={environment}-omi-pusher",
                 "--set",
                 "autoscaling.enabled=false",
                 "--set",
@@ -209,7 +215,7 @@ def pod_template_semantic_projection(template: dict[str, Any]) -> dict[str, Any]
             if http_get is not None:
                 http_get.setdefault("scheme", "HTTP")
     # The API server marshals env value with omitempty, so a Helm-rendered
-    # `value: ""` (e.g. FREE_TIER_LOCAL_PROCESSING_COHORT from an unset repo
+    # `value: ""` (e.g. an optional ConfigMap entry from an unset repo
     # variable) is stored and read back as {name} without the value key. Strip
     # the empty value key from the rendered projection before hashing, the same
     # way this projection already normalizes probe defaults and quantities.

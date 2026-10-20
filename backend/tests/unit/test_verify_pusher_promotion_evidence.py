@@ -917,7 +917,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
     """Helm renders `value: ""` (unset repo variable) but the API server stores
     the env entry without the value key (omitempty marshalling). The rendered
     projection must normalize to the API form before hashing (2026-09-22 prod
-    canary: FREE_TIER_LOCAL_PROCESSING_COHORT)."""
+    canary: OPTIONAL_EMPTY_FIXTURE)."""
     expected = {
         "spec": {
             "serviceAccountName": "prod-omi-pusher",
@@ -927,7 +927,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE", "value": ""},
                     ],
                 }
             ],
@@ -942,7 +942,7 @@ def test_live_receipt_projection_drops_helm_empty_string_env_value(
                     "image": f"repo@{DIGEST}",
                     "env": [
                         {"name": "MEMORY_ENABLED", "value": "on"},
-                        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT"},
+                        {"name": "OPTIONAL_EMPTY_FIXTURE"},
                     ],
                 }
             ],
@@ -1025,7 +1025,29 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         for entry in container["env"]
         if isinstance(entry.get("valueFrom"), dict) and isinstance(entry["valueFrom"].get("configMapKeyRef"), dict)
     }
-    assert explicit_refs == {"REDIS_DB_HOST": config_name, "TYPESENSE_HOST": config_name}
+    assert explicit_refs == {
+        "PROACTIVITY_REDIS_HOST": config_name,
+        "REDIS_DB_HOST": config_name,
+        "TYPESENSE_HOST": config_name,
+    }
+
+
+def test_isolated_canary_runs_as_the_workload_identity_bound_shared_ksa(
+    receipt_builder: SimpleNamespace,
+) -> None:
+    # Workload Identity binds only prod-omi-backend/prod-omi-pusher to pusher-runtime@.
+    # A release-named canary KSA has no binding and the metadata server returns 500.
+    documents = receipt_builder.rendered_chart_documents(
+        "prod",
+        "gcr.io/based-hardware/pusher",
+        DIGEST,
+        release_name=f"prod-omi-pusher-canary-{CANARY_RUN_ID}",
+        isolated_canary=True,
+        config_map_name=f"prod-omi-backend-config-canary-{CANARY_RUN_ID}",
+    )
+    deployment = next(document for document in documents if document.get("kind") == "Deployment")
+    assert deployment["spec"]["template"]["spec"]["serviceAccountName"] == "prod-omi-pusher"
+    assert not [document for document in documents if document.get("kind") == "ServiceAccount"]
 
 
 def test_semantic_probe_attributes_the_durable_finalization_handoff_not_socket_presence() -> None:

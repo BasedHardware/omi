@@ -4,8 +4,9 @@ import SwiftUI
 // MARK: - App Selector Sheet
 
 struct AppSelectorSheet: View {
-  let apps: [OmiApp]
+  @ObservedObject var picker: ConversationSummaryAppPicker
   let isLoading: Bool
+  let processingAppId: String?
   /// App behind the current primary summary (apps_results[0]); the row shows a
   /// checkmark so the picker opens on the active summarization app.
   var selectedAppId: String? = nil
@@ -13,6 +14,7 @@ struct AppSelectorSheet: View {
   var preferredAppId: String? = nil
   let onSelect: (OmiApp) -> Void
   var onSetPreferred: ((OmiApp) -> Void)? = nil
+  let onBrowseApps: () -> Void
   let onDismiss: () -> Void
 
   var body: some View {
@@ -32,33 +34,49 @@ struct AppSelectorSheet: View {
       Divider()
         .background(Ink.rowFillHover)
 
-      // Apps list
-      if apps.isEmpty {
-        VStack(spacing: OmiSpacing.md) {
-          Image(systemName: "square.grid.2x2")
-            .scaledFont(size: OmiType.hero)
-            .foregroundColor(Ink.secondary)
-
-          Text("No Apps Available")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.secondary)
-
-          Text("Enable apps with memory capability to reprocess conversations")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-            .multilineTextAlignment(.center)
+      if picker.phase == .ready && !picker.apps.isEmpty {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "magnifyingglass")
+            .foregroundStyle(Ink.secondary)
+            .accessibilityHidden(true)
+          TextField("Search installed apps", text: $picker.searchText)
+            .textFieldStyle(.plain)
+            .accessibilityLabel("Search installed summary apps")
+            .accessibilityIdentifier("summary-app-search")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-      } else {
+        .padding(OmiSpacing.md)
+      }
+
+      switch picker.phase {
+      case .idle, .loading:
+        GlassLoadingState(label: "Loading installed summary apps…")
+      case .failed:
+        GlassErrorState(title: "Couldn’t Load Apps", retry: { Task { await picker.load() } })
+      case .ready where picker.apps.isEmpty:
+        GlassEmptyState(
+          systemImage: "square.grid.2x2", title: "No Summary Apps Installed",
+          message: "Install a summary app to use it for this conversation"
+        ) {
+          Button("Browse Apps", action: onBrowseApps)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        }
+      case .ready where picker.visibleApps.isEmpty:
+        GlassEmptyState(
+          systemImage: "magnifyingglass", title: "No Apps Found",
+          message: "Try another name or author"
+        ) {
+          Button("Clear Search") { picker.searchText = "" }
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        }
+      case .ready:
         ScrollView {
           LazyVStack(spacing: OmiSpacing.hairline) {
-            ForEach(apps) { app in
+            ForEach(picker.visibleApps) { app in
               AppSelectorRow(
                 app: app,
                 isSelected: selectedAppId == app.id,
                 isPreferred: preferredAppId == app.id,
-                isLoading: isLoading && selectedAppId == app.id,
+                isLoading: isLoading && processingAppId == app.id,
                 onSelect: { onSelect(app) },
                 onSetPreferred: onSetPreferred == nil ? nil : { onSetPreferred?(app) }
               )
@@ -141,6 +159,11 @@ struct AppSelectorRow: View {
     .buttonStyle(.plain)
     .disabled(isLoading)
     .onHover { isHovering = $0 }
+    .accessibilityValue(
+      [isSelected ? "Selected" : nil, isPreferred ? "Default" : nil]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    )
     // macOS analog of mobile's swipe-to-set-default: right-click a row to pin
     // the preferred summarization app for future conversations.
     .contextMenu {

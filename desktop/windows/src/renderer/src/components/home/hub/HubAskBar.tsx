@@ -217,7 +217,15 @@ export function HubAskBar(props: {
         ) : canSend ? (
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={() => {
+              onSubmit()
+              // Clicking Send moves keyboard focus to this button (Enter never does —
+              // the input keeps focus for a keyboard submit). Return it to the input so
+              // the next message can be typed immediately. Deferred a frame for the same
+              // reason as focusFromPill above; a no-op if the bar re-docked/unmounted by
+              // then (inputRef.current is null or detached).
+              requestAnimationFrame(() => inputRef.current?.focus())
+            }}
             aria-label="Send"
             className="focus-ring flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
           >

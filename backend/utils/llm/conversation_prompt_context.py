@@ -1,0 +1,353 @@
+"""Pure production conversation context builder, independent of cache-route clients."""
+
+from __future__ import annotations
+
+import json
+import re
+import unicodedata
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Iterable, List, Optional
+
+from models.calendar_context import CalendarMeetingContext
+from models.conversation_photo import ConversationPhoto
+from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
+from utils.llm.meeting_notes_validation import strip_speaker_placeholders
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
+from utils.llm.shaped_agent import route_for_uid
+from utils.model_text import DisplayClock, format_instant
+
+from utils.llm.conversation_notes_prompts import SHARED_CONVERSATION_PREAMBLE
+
+
+@dataclass(frozen=True)
+class ConversationPromptPrefix:
+    """Rendered prefix bytes plus the per-conversation routing key.
+
+    Consumers append their own instructions after these messages. Keeping this
+    value immutable prevents feature-specific text from leaking before the
+    explicit cache breakpoint.
+    """
+
+    conversation_id: str
+    context: str
+    # The IDs come from the source conversation, not from parsing untrusted
+    # transcript text.  Consumers use this set to validate model-authored
+    # evidence references.
+    transcript_segment_ids: frozenset[str] = frozenset()
+    has_usable_content: bool = True
+    shaped_context: Optional[str] = None
+
+    # Non-owner people bound to a speaker cluster who said enough to name in the
+    # title (#3602), most-spoken first, plus the account owner's bound name(s).
+    # Neither is rendered into ``context``, so the shared prefix bytes and cache
+    # key are unchanged; the notes task carries them in its volatile suffix.
+    title_people: tuple[str, ...] = ()
+    owner_names: tuple[str, ...] = ()
+    # Task-specific ownership metadata, including rich notes where title naming
+    # uses a roster. Never render it into the shared prefix or capture evidence.
+    account_owner_name: Optional[str] = None
+    # Account vocabulary is volatile context, outside the shared cache boundary.
+    known_spellings: str = ''
+
+    @property
+    def cache_key(self) -> str:
+        return f'omi-conv-{self.conversation_id}'
+
+    @property
+    def cache_eligible(self) -> bool:
+        return has_cacheable_prefix(f'{SHARED_CONVERSATION_PREAMBLE}\n{self.context}')
+
+    def messages(self, *, cache_enabled: bool) -> List[dict[str, Any]]:
+        context_block: dict[str, Any] = {'type': 'text', 'text': self.context}
+        if cache_enabled and self.cache_eligible:
+            context_block['prompt_cache_breakpoint'] = EXPLICIT_CACHE_BREAKPOINT
+        messages = [
+            {'role': 'system', 'content': SHARED_CONVERSATION_PREAMBLE},
+            {'role': 'system', 'content': [context_block]},
+        ]
+        if self.known_spellings:
+            messages.append({'role': 'system', 'content': self.known_spellings})
+        return messages
+
+
+def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) -> bool:
+    """True when the compact transcript carries text beyond its structural headers.
+
+    A ``[<segment-id> <cluster>]`` opener only counts as a header when the id is
+    one of the conversation's own segment ids; the same bracketed shape for an
+    unknown id is user text.
+    """
+    if not source_ids:
+        return bool(transcript.strip())
+    id_pattern = '|'.join(re.escape(segment_id) for segment_id in source_ids)
+    header = re.compile(rf'^\[(?:{id_pattern})(?:\s+\S+)?\]')
+    for line in transcript.splitlines():
+        remainder = header.sub('', line, count=1) if line.startswith('[') else line
+        if remainder.strip():
+            return True
+    return False
+
+
+_ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
+
+
+# A bound person must have spoken at least this share of the conversation's talk
+# to be named in its title; a one-word greeting is not what the conversation was.
+TITLE_PERSON_MIN_TALK_SHARE = 0.1
+
+# Identity key for the account owner; no casefolded name can equal it.
+_OWNER_IDENTITY = '\x00owner'
+
+
+def _one_line(name: str) -> str:
+    """A stored name as one line of plain text, so it cannot add a line to the prompt."""
+    return ' '.join(''.join(' ' if unicodedata.category(ch) == 'Cc' else ch for ch in name).split())
+
+
+def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return ``(title_people, owner_names)`` for the general notes path.
+
+    Only the hard voice/tag bindings an owner-aware ``SpeakerMap`` (from
+    ``conversation_transcript_and_speaker_map``) records can name someone: a bare
+    mapping names nobody rather than risk titling a note with its owner's name,
+    and a calendar name bound by elimination never reaches the title.
+
+    ``owner_names`` is the real profile name whenever one is known, even with no
+    ``is_user`` cluster: the owner can be addressed by name in any transcript.
+    The profile holds only a first name, so a person record whose name or first
+    token matches it is the owner's own record (a namesake is left unnamed too).
+
+    The rendered ``spk`` lines key on ``speaker_id`` alone while clusters are
+    ``(speaker_id_scope, speaker_id)``: an id that is the owner anywhere, or whose
+    clusters name different people, is never named; other ids still are. Talk
+    share is speech time, or words when no segment carries timing.
+    """
+    clusters = getattr(source_map, 'clusters', None)
+    if clusters is None:
+        return (), ()
+    owner_name = _one_line(getattr(source_map, 'owner_name', None) or '')
+    owner_fold = unicodedata.normalize('NFC', owner_name).casefold()
+    owner_first = owner_fold.split()[0] if owner_fold else ''
+
+    def identity(name: str) -> str:
+        fold = unicodedata.normalize('NFC', name).casefold()
+        return _OWNER_IDENTITY if owner_first and (fold == owner_fold or fold.split()[0] == owner_first) else fold
+
+    identities: dict[int, set[str]] = {}
+    for cluster in clusters:
+        folds = identities.setdefault(cluster.speaker_id, set())
+        folds.update(identity(name) for name in cluster.names)
+        if cluster.owner:
+            folds.add(_OWNER_IDENTITY)
+    nameable = {key for key, folds in identities.items() if len(folds) == 1 and _OWNER_IDENTITY not in folds}
+    timed = any(cluster.speech_seconds > 0 for cluster in clusters)
+
+    def talk(cluster: Any) -> float:
+        return cluster.speech_seconds if timed else cluster.words
+
+    total = sum(talk(cluster) for cluster in clusters)
+    spoken: dict[str, float] = {}
+    display: dict[str, str] = {}
+    for cluster in clusters:
+        if cluster.speaker_id not in nameable or not cluster.names:
+            continue
+        name = _one_line(cluster.names[0])
+        if not name or strip_speaker_placeholders(name) != name:
+            continue
+        fold = unicodedata.normalize('NFC', name).casefold()
+        display.setdefault(fold, name)
+        spoken[fold] = spoken.get(fold, 0) + talk(cluster)
+    # No talk at all names nobody: a share of nothing is no evidence of who spoke.
+    people = [fold for fold in spoken if total and spoken[fold] / total >= TITLE_PERSON_MIN_TALK_SHARE]
+    people.sort(key=lambda fold: -spoken[fold])  # stable: ties keep first-appearance order
+    return tuple(display[fold] for fold in people), (owner_name,) if owner_name else ()
+
+
+def _speaker_metadata_lines(
+    speaker_names: Mapping[int, Optional[str]],
+    roster: MeetingRoster,
+    desktop_meeting_capture: bool,
+) -> List[str]:
+    bound_names = {name.casefold() for name in speaker_names.values() if name}
+    remote = [entry for entry in roster.entries if entry.kind != 'owner' and not is_silent_recorder(entry)]
+    unbound_remote_labels = [
+        entry.display_name or entry.email or 'unknown'
+        for entry in remote
+        if not (entry.display_name and entry.display_name.casefold() in bound_names)
+        and not (entry.email and entry.email.casefold() in bound_names)
+    ]
+    annotate_remote = desktop_meeting_capture and len(remote) > 1 and bool(unbound_remote_labels)
+    lines: List[str] = []
+    for key, name in speaker_names.items():
+        if name:
+            lines.append(f'spk {key} {name}')
+        elif annotate_remote:
+            lines.append(
+                f'spk {key} ? (remote audio channel; may contain several people: '
+                f'{", ".join(unbound_remote_labels)})'
+            )
+        else:
+            lines.append(f'spk {key} ?')
+    return lines
+
+
+def build_conversation_prompt_prefix(
+    *,
+    conversation_id: str,
+    transcript: str,
+    started_at: datetime,
+    timezone_name: str,
+    language_code: str,
+    calendar_context: Optional[CalendarMeetingContext] = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    speaker_map: Optional[Mapping[int, Optional[str]]] = None,
+    transcript_segment_ids: Optional[Iterable[str]] = None,
+    roster: Optional[MeetingRoster] = None,
+    desktop_meeting_capture: bool = False,
+    uid: Optional[str] = None,
+    known_spellings: str = '',
+) -> ConversationPromptPrefix:
+    """Render the shared context prefix for conversation-wide LLM tasks.
+
+    ``speaker_map`` (from ``conversation_transcript_and_speaker_map``) is rendered
+    once as compact ``spk <cluster> <name|?>`` metadata lines, so the transcript
+    below it can key turns by cluster instead of carrying ``Speaker N:`` labels the
+    model copies into titles (SCA-454).
+
+    ``roster`` (the normalized ``MeetingRoster``) is the rich-meeting-notes path:
+    it replaces the calendar participant line with a factual PARTICIPANTS block
+    and uses the stricter speaker-binding guard. ``None`` renders the original
+    metadata byte-identically. ``desktop_meeting_capture`` marks the remote
+    audio channel as mixed, so a bound cluster is demoted to ``?`` when several
+    remote participants could share it.
+    """
+    display_clock = DisplayClock.from_name(timezone_name)
+    aware_started_at = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
+    started_at_local = format_instant(aware_started_at, display_clock)
+    speaker_names: dict[int, Optional[str]] = dict(speaker_map) if speaker_map else {}
+    metadata_lines = [
+        f'- Captured at: {started_at_local}',
+    ]
+    account_owner_name = _one_line(getattr(speaker_map, 'owner_name', None) or '')
+    if roster is not None:
+        if roster.display_title:
+            metadata_lines.append(f'- Meeting title: {roster.display_title}')
+        if calendar_context:
+            metadata_lines.extend(
+                [
+                    f'- Platform: {calendar_context.platform or "Not specified"}',
+                    f'- Meeting notes: {calendar_context.notes or "Not specified"}',
+                ]
+            )
+        bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
+        if speaker_names:
+            metadata_lines.extend(_speaker_metadata_lines(speaker_names, roster, desktop_meeting_capture))
+        if roster.entries:
+            metadata_lines.append('PARTICIPANTS')
+            metadata_lines.extend(
+                f'- {entry.display_name or entry.email or "unknown"} | {entry.organization or "-"} '
+                f'| {_ROSTER_KIND_LABELS.get(entry.kind, entry.kind)} | via {entry.source}'
+                for entry in roster.entries
+            )
+    elif calendar_context:
+        participants = ', '.join(
+            filter(
+                None,
+                [
+                    (
+                        f'{participant.name} <{participant.email}>'
+                        if participant.name and participant.email
+                        else participant.name or participant.email
+                    )
+                    for participant in calendar_context.participants
+                ],
+            )
+        )
+        metadata_lines.extend(
+            [
+                f'- Meeting title: {calendar_context.title}',
+                f'- Participants: {participants or "Not specified"}',
+                f'- Platform: {calendar_context.platform or "Not specified"}',
+                f'- Meeting notes: {calendar_context.notes or "Not specified"}',
+            ]
+        )
+
+        # One-name rename guard (SCA-454), keyed off the spk map rather than a
+        # ``Speaker N:`` dialogue label: when exactly one cluster is unresolved and
+        # exactly one calendar participant is not already bound, that participant
+        # names the cluster. Anything less certain stays ``?`` — never invented.
+        unresolved_keys = [key for key, name in speaker_names.items() if not name]
+        bound_names = {name.casefold() for name in speaker_names.values() if name}
+        remaining_names = [
+            participant.name
+            for participant in calendar_context.participants
+            if participant.name and participant.name.casefold() not in bound_names
+        ]
+        if len(unresolved_keys) == 1 and len(remaining_names) == 1:
+            speaker_names[unresolved_keys[0]] = remaining_names[0]
+
+    if roster is None and speaker_names:
+        metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
+
+    context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
+    photo_descriptions = (
+        ConversationPhoto.photos_as_string(photos, include_timestamps=True, clock=display_clock) if photos else ''
+    )
+    if photo_descriptions and photo_descriptions != 'None':
+        context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
+
+    shaped_context = None
+    if uid is not None and route_for_uid(uid) != 'old':
+        # Build from the original map, never the roster/calendar-bound copy above.
+        # Calendar invitees are expected; screen listings are observed UI data.
+        # Neither listing establishes attendance or speaker identity.
+        evidence: dict[str, Any] = {
+            'started_at': format_instant(started_at, display_clock),
+            'timezone': timezone_name,
+            'language': language_code,
+            'speaker_map': dict(speaker_map or {}),
+            'expected_calendar': None,
+            'observed_screen_listing': None,
+            'photo_descriptions': photo_descriptions,
+        }
+        if calendar_context:
+            primary_key = (
+                'observed_screen_listing'
+                if calendar_context.calendar_source == 'screen_activity'
+                else 'expected_calendar'
+            )
+            sources = calendar_context.participants_by_source()
+            for key, participants in (
+                ('expected_calendar', sources.expected_calendar),
+                ('observed_screen_listing', sources.observed_screen_listing),
+            ):
+                if participants is None:
+                    continue
+                # Scalar metadata describes the winning source only. Never copy
+                # the legacy participant union into either source's evidence.
+                source_context = (
+                    calendar_context.model_dump(mode='json', exclude={'participants', 'participant_sources'})
+                    if key == primary_key
+                    else {}
+                )
+                source_context['participants'] = [participant.model_dump(mode='json') for participant in participants]
+                evidence[key] = source_context
+        shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
+
+    source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
+    # Rich meeting notes name people through their roster rules instead.
+    title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
+    return ConversationPromptPrefix(
+        conversation_id=conversation_id,
+        context='\n\n'.join(context_parts),
+        transcript_segment_ids=source_ids,
+        has_usable_content=_transcript_has_source_content(transcript, source_ids)
+        or bool(photo_descriptions and photo_descriptions != 'None'),
+        shaped_context=shaped_context,
+        title_people=title_people,
+        owner_names=owner_names,
+        account_owner_name=account_owner_name or None,
+        known_spellings=known_spellings,
+    )

@@ -1,0 +1,139 @@
+name: Provision Grafana dashboards
+
+# Custom dashboards under backend/charts/monitoring/dashboards/ are
+# exported-from-Grafana JSON kept version-controlled here (repo-first). Until
+# now the live boards were updated by manual import, so repo and Grafana
+# drifted (omi-core-features sat 2 versions behind for 5 weeks). This
+# workflow applies development dashboards on main. Production dashboards and
+# alert rules require explicit environment=prod dispatch and Environment approval.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/charts/monitoring/dashboards/**'
+      - 'backend/charts/monitoring/alerts/**'
+      - 'backend/charts/monitoring/alert-rules.json'
+      - 'backend/scripts/provision_monitoring_alerts.py'
+      - 'backend/scripts/provision_grafana_dashboards.py'
+      - '.github/workflows/grafana_dashboard_provisioning.yml'
+      - '.github/scripts/provision_grafana_dashboards.py'
+      - '.github/scripts/grafana_business.py'
+      - 'web/admin/grafana/dashboards/omi-tv-v2.json'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the Grafana to provision'
+        type: choice
+        options: [prod, dev]
+        default: prod
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-dashboard-provisioning-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate dashboard JSON
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "INVALID JSON: $f" >&2
+              fail=1
+            else
+              uid=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('uid',''))" "$f")
+              if [ -z "$uid" ]; then
+                echo "MISSING UID: $f" >&2
+                fail=1
+              else
+                echo "OK: $f (uid=$uid)"
+              fi
+            fi
+          done < <(find backend/charts/monitoring/dashboards -name '*.json' -print0)
+          python3 backend/scripts/provision_monitoring_alerts.py --lint
+          exit $fail
+
+  provision:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    environment: ${{ matrix.environment == 'prod' && 'prod' || 'development' }}
+    concurrency:
+      group: grafana-alert-provisioning-${{ matrix.environment }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: ["${{ github.event.inputs.environment || 'dev' }}"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Provision dashboards
+        env:
+          # Ops Grafana service-account token (same secret family the pusher
+          # auto-deploy uses for alert-route verification). The former TV
+          # instance credential is reserved for the separate retirement tool.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+          # First land provisions only the custom repo-first boards (string
+          # uids). Community/helm-managed boards keep their manual flow.
+          DASHBOARD_ALLOWLIST: ${{ matrix.environment == 'prod' && 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,omi-services-overview.json,fleet-telemetry.json' || 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,fleet-telemetry.json' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          python3 backend/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir backend/charts/monitoring/dashboards \
+            --grafana-url "$GRAFANA_URL" \
+            --token-env MONITOR_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
+            --allowlist "$DASHBOARD_ALLOWLIST"
+      - name: Provision private Business board (prod only)
+        if: matrix.environment == 'prod'
+        env:
+          BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
+          GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 .github/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir web/admin/grafana/dashboards \
+            --grafana-url "$GRAFANA_URL" \
+            --token-env BUSINESS_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --allowlist omi-tv-v2.json \
+            --folder-uid business
+      - name: Apply production alert definitions and check drift
+        if: matrix.environment == 'prod'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/provision_monitoring_alerts.py \
+            --apply --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Preserve pre-apply dashboard definitions for reviewed rollback
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-dashboard-backup-${{ matrix.environment }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-dashboard-backup.json
+          if-no-files-found: ignore
+          retention-days: 15
+      - name: Preserve pre-apply alert definitions for reviewed rollback
+        if: always() && matrix.environment == 'prod'
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-alert-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: ignore
+          retention-days: 15

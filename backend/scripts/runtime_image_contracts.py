@@ -579,25 +579,40 @@ def third_party_dependency_modules(contract: ImageContract) -> tuple[str, ...]:
 
 
 def _dependency_probe_code(modules: tuple[str, ...]) -> str:
-    """Return an offline probe for module paths and ``from`` import attributes."""
+    """Return an offline probe for module paths and ``from`` import attributes.
+
+    A failed import used to collapse to a bare missing-module name. The message
+    now includes the exception type and first line so a version clash is visible
+    in the image build log.
+    """
     return (
         "import importlib, importlib.util\n"
         f"modules = {list(modules)!r}\n"
+        "import_errors = []\n"
+        "def record_import_error(target, exc):\n"
+        "    message = str(exc).splitlines()[0][:300] if str(exc) else ''\n"
+        "    item = f'{target}: {type(exc).__name__}: {message}'.rstrip()\n"
+        "    if item not in import_errors:\n"
+        "        import_errors.append(item)\n"
         "def is_importable(target):\n"
         "    try:\n"
         "        if importlib.util.find_spec(target) is not None:\n"
         "            return True\n"
-        "    except (ImportError, AttributeError, ModuleNotFoundError):\n"
-        "        pass\n"
+        "    except (ImportError, AttributeError, ModuleNotFoundError) as exc:\n"
+        "        record_import_error(target, exc)\n"
         "    parent, separator, attribute = target.rpartition('.')\n"
         "    if not separator:\n"
         "        return False\n"
         "    try:\n"
         "        return hasattr(importlib.import_module(parent), attribute)\n"
-        "    except (ImportError, AttributeError, ModuleNotFoundError):\n"
+        "    except (ImportError, AttributeError, ModuleNotFoundError) as exc:\n"
+        "        record_import_error(target, exc)\n"
         "        return False\n"
         "missing = [module for module in modules if not is_importable(module)]\n"
-        "assert not missing, f'missing installed dependency modules: {missing}'"
+        "if missing:\n"
+        "    related = [item for item in import_errors if item.split(':', 1)[0] in missing]\n"
+        "    detail = ('; ' + '; '.join(related)) if related else ''\n"
+        "    raise AssertionError('missing installed dependency modules: ' + ', '.join(missing) + detail)\n"
     )
 
 

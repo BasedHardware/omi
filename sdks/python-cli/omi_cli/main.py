@@ -11,6 +11,8 @@ Global flags:
 * ``--api-base URL`` Override the API base URL (handy for staging/local).
 * ``-v/--verbose``   Log HTTP traffic to stderr.
 * ``--no-color``     Disable colored output (also honors ``NO_COLOR`` env var).
+* ``--timeout SECONDS`` Per-operation HTTP timeout in seconds (default: 30). Applies to
+  Developer API and local Desktop API requests; retries/backoff may exceed this limit.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
 import click
+import httpx
 import typer
 
 from omi_cli import __version__
@@ -28,7 +31,9 @@ from omi_cli import config as cfg
 from omi_cli.auth.api_key import validate_api_key_format
 from omi_cli.client import OmiClient
 from omi_cli.commands import action_item as action_item_cmd
+from omi_cli.commands import app as app_cmd
 from omi_cli.commands import auth as auth_cmd
+from omi_cli.commands import chat as chat_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
@@ -61,6 +66,7 @@ class AppContext:
     api_base_override: Optional[str]
     renderer: Renderer
     verbose: bool
+    timeout: Optional[float] = None
     _config: Optional[cfg.Config] = field(default=None, init=False)
 
     def load_config(self) -> cfg.Config:
@@ -82,21 +88,32 @@ class AppContext:
             profile.api_base = env_base
         return profile
 
+    def httpx_timeout(self) -> Optional[httpx.Timeout]:
+        """Per-operation timeout from ``--timeout``, or None for the client default."""
+        if self.timeout is None:
+            return None
+        return httpx.Timeout(self.timeout, connect=min(self.timeout, 10.0))
+
     def make_client(self) -> OmiClient:
         profile = self.get_profile()
-        # Apply the per-command key only to cloud API requests. Local Desktop
-        # commands and saved-profile management use their own credentials.
+        # Apply the per-command key only to cloud API requests. Saved-profile
+        # management uses its own credentials.
         env_key = os.environ.get(cfg.ENV_API_KEY)
         if env_key:
             profile.api_key = validate_api_key_format(env_key)
             profile.auth_method = "api_key"
-        return OmiClient(profile, verbose=self.verbose)
+        return OmiClient(profile, verbose=self.verbose, timeout=self.httpx_timeout())
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
         local_api_url = os.environ.get(cfg.ENV_LOCAL_API_URL) or profile.local_api_url
         local_token = os.environ.get(cfg.ENV_LOCAL_TOKEN) or profile.local_token
-        return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
+        return LocalOmiClient(
+            api_url=local_api_url or "",
+            token=local_token or "",
+            timeout=self.httpx_timeout(),
+            verbose=self.verbose,
+        )
 
 
 def _version_callback(value: bool) -> None:
@@ -129,6 +146,13 @@ def _root(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Log HTTP traffic to stderr."),
     no_color: bool = typer.Option(False, "--no-color", help="Disable color output (also honors $NO_COLOR)."),
+    timeout: Optional[float] = typer.Option(
+        None,
+        "--timeout",
+        help="Per-operation HTTP timeout in seconds (default: 30). Applies to Developer API and local Desktop API requests; retries/backoff may exceed this limit.",
+        min=0.001,
+        max=600.0,
+    ),
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -149,6 +173,7 @@ def _root(
         api_base_override=api_base,
         renderer=renderer,
         verbose=verbose,
+        timeout=timeout,
     )
 
 
@@ -205,6 +230,18 @@ def ask(
                 typer.echo(line)
 
 
+@app.command(help="Chat with Omi in your terminal, with streaming replies and shared history.")
+def chat(
+    typer_ctx: typer.Context,
+    prompt: Optional[str] = typer.Argument(None, help="One message to send; omit for interactive chat."),
+    history: bool = typer.Option(False, "--history", help="Show recent shared chat messages."),
+    clear: bool = typer.Option(False, "--clear", help="Clear shared chat history across clients."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Confirm --clear without a prompt."),
+    limit: int = typer.Option(20, "--limit", min=1, max=1000, help="Messages shown by --history or /history."),
+) -> None:
+    chat_cmd.run(typer_ctx.obj, prompt=prompt, history=history, clear=clear, yes=yes, limit=limit)
+
+
 # ---------------------------------------------------------------------------
 # Sub-command registration
 # ---------------------------------------------------------------------------
@@ -216,6 +253,7 @@ app.add_typer(conversation_cmd.app, name="conversation", help="Conversations —
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
 app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
+app.add_typer(app_cmd.app, name="app", help="Build and test Omi apps: webhook events, samples, local receiver.")
 
 
 # ---------------------------------------------------------------------------

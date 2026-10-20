@@ -15,10 +15,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from datetime import tzinfo
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Iterable, List, Optional, cast
 
+from config.summary_guarantee import enabled
 from models.conversation_enums import CategoryEnum
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import Structured
 
 # ~60 chars, cut on a word boundary. Long enough for a real first sentence,
 # short enough to stay one line in every conversation list we ship.
@@ -144,14 +145,19 @@ def build_deterministic_minimum_structured(
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
     no action items, no events. Every other field keeps its model default."""
+    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if enabled() else {}
     return Structured(
+        **metadata,
         title=deterministic_minimum_title(
             conversation,
             source_label=source_label,
             tz_name_provider=tz_name_provider,
         ),
         overview='',
-        category=MINIMUM_CATEGORY,
+        # The typed SDK model owns an equivalent CategoryEnum class while the
+        # backend's canonical enum remains the public domain authority. Pydantic
+        # converts the canonical str-enum at this boundary before validation.
+        category=cast(Any, MINIMUM_CATEGORY),
         sections=[],
         action_items=[],
         events=[],

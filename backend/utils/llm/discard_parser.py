@@ -18,16 +18,24 @@ class DiscardConversation(BaseModel):
 
 
 # Matches the decision in `{"discard": True}` and in the bare `discard = True`
-# line the prompt asks for — neither is valid JSON.
-_DISCARD_DECISION_PATTERN = re.compile(r'discard\W{0,4}(true|false)\b', re.IGNORECASE)
+# line the prompt asks for — neither is valid JSON. Anchored to the whole
+# (fence-stripped) reply so prose that merely mentions "discard" — e.g.
+# `do_not_discard = True` or a quoted `discard = True` inside a reason string —
+# is rejected instead of silently read as a decision.
+_CODE_FENCE_PATTERN = re.compile(r'^```\w*\n(.*)\n```$', re.DOTALL)
+_DISCARD_DECISION_PATTERN = re.compile(r'^\{?\s*"?discard"?\s*[:=]\s*(true|false)\s*\}?$', re.IGNORECASE)
 
 
 def parse_discard_decision(text: str) -> Optional[bool]:
     """Read the discard decision out of a non-JSON reply, or None if there is none."""
-    matches = _DISCARD_DECISION_PATTERN.findall(text)
-    if not matches:
+    stripped = text.strip()
+    fence_match = _CODE_FENCE_PATTERN.match(stripped)
+    if fence_match:
+        stripped = fence_match.group(1).strip()
+    match = _DISCARD_DECISION_PATTERN.match(stripped)
+    if not match:
         return None
-    return matches[-1].lower() == 'true'
+    return match.group(1).lower() == 'true'
 
 
 class LenientDiscardParser(PydanticOutputParser):

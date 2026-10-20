@@ -23,6 +23,7 @@ import utils.mcp_analytics as mcp_analytics
 import utils.mcp_server.transport as mcp_transport
 from models.memories import MemoryCategory
 from routers import mcp_sse as sse
+from tests.unit.fixtures import offline_firestore_sdk as _offline_sdk
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 from utils.mcp_server import cursors as mcp_cursors
 from utils.mcp_server.auth import MCPAuthContext
@@ -789,6 +790,48 @@ class TestConversationKeysetPage:
         assert [d["id"] for d in page2] == ["v2", "v0"]
         assert resume2 is None
 
+    def test_completed_rule_discards_are_hidden_but_user_curated_rows_remain_visible(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+
+        t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
+        decision = {"verdict": "discard", "decided_by": "rule", "reason": "filler_only"}
+        docs = [
+            _FakeDoc(
+                "hidden",
+                {
+                    "created_at": t0 + timedelta(minutes=1),
+                    "status": "completed",
+                    "discarded": False,
+                    "relevance_decision": decision,
+                },
+            ),
+            _FakeDoc(
+                "starred",
+                {
+                    "created_at": t0,
+                    "status": "completed",
+                    "discarded": False,
+                    "relevance_decision": decision,
+                    "starred": True,
+                },
+            ),
+        ]
+        query = _DescKeysetQuery(docs)
+        with self._stub_client(query):
+            page, resume = pages_db.get_mcp_conversation_cards_page(UID, 1)
+        assert [row["id"] for row in page] == ["starred"]
+        assert resume is None
+
+    def test_card_projection_includes_server_visibility_fields_without_transcripts(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+        query = _DescKeysetQuery([])
+        selected = []
+        query.select = lambda fields: selected.extend(fields) or query
+        with self._stub_client(query):
+            pages_db.get_mcp_conversation_cards_page(UID, 2)
+        assert {"status", "relevance_decision", "starred", "folder_user_set", "has_photos"} <= set(selected)
+        assert "transcript_segments" not in selected
+
     def test_equal_created_at_rows_resume_by_document_id(self):
         pages_db = _import_real_module("database.mcp_conversation_pages")
 
@@ -856,6 +899,23 @@ class TestConversationKeysetPage:
             page, _resume = pages_db.get_mcp_conversation_cards_page(UID, 5)
         assert page[0]["decrypted_for"] == UID
         assert "decrypted_for" not in page[1]  # standard level untouched
+
+    def test_developer_projection_does_not_select_parent_and_child_paths(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+        query = _DescKeysetQuery([])
+        selected = []
+
+        def select(fields):
+            selected.extend(fields)
+            assert not any(left != right and left.startswith(right + '.') for left in fields for right in fields)
+            return query
+
+        query.select = select
+        with self._stub_client(query):
+            pages_db.get_mcp_conversation_cards_page(UID, 2, extra_field_paths=['structured', 'source', 'folder_id'])
+        assert 'structured' in selected and 'source' in selected
+        assert 'structured.title' not in selected
+        assert 'transcript_segments' not in selected
 
     def test_none_created_at_resume_position_is_rejected(self):
         pages_db = _import_real_module("database.mcp_conversation_pages")
@@ -1077,9 +1137,9 @@ class TestFirestoreSdkCursorTransform:
 
     def _client(self):
         firestore = self._firestore()
-        from google.auth.credentials import AnonymousCredentials
-
-        return firestore.Client(project="test-project", credentials=AnonymousCredentials())
+        if _offline_sdk.CollectionReference is not firestore.CollectionReference:
+            pytest.fail('offline fixture bound stubbed SDK classes')
+        return _offline_sdk.OfflineFirestoreClient(project="test-project")
 
     def test_screen_activity_keyset_protobuf(self):
         col = self._client().collection("users").document(UID).collection("screen_activity")

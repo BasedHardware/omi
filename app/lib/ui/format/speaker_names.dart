@@ -55,6 +55,7 @@ class SpeakerNames {
   /// The name for [segment]'s speaker. [person] overrides the people lookup (callers that already
   /// resolved it).
   String forSegment(TranscriptSegment segment, {Person? person}) {
+    if (segment.sttProvider?.startsWith('on_device:') == true) return '';
     if (segment.isUser) return _ownerName ?? _l10n.you;
     if (segment.speakerId == omiSpeakerId) return _l10n.omiAppName;
     final assigned = person ?? (segment.personId == null ? null : _peopleById[segment.personId]);
@@ -62,10 +63,17 @@ class SpeakerNames {
     return anonymousName(segment.speakerId);
   }
 
+  /// Server-projected Review excerpts have resolved names, but no complete diarization map.
+  /// Localize the owner and unnamed speaker through the same speaker naming authority.
+  static String excerptLabel({required bool isUser, String? speakerLabel, required AppLocalizations l10n}) {
+    if (isUser) return l10n.you;
+    return speakerLabel == null || speakerLabel.trim().isEmpty ? l10n.unnamedSpeakerLabel : speakerLabel;
+  }
+
   /// "Speaker N" for a diarized [speakerId], with N from [ordinalFor].
   String anonymousName(int speakerId) {
     if (speakerId == omiSpeakerId) return _l10n.omiAppName;
-    if (_unresolved) return _l10n.speakerWithId('?');
+    if (_unresolved) return _l10n.unnamedSpeakerLabel;
     return _l10n.speakerWithId('${ordinalFor(speakerId)}');
   }
 
@@ -89,11 +97,7 @@ class SpeakerNames {
   static AppLocalizations contextFreeL10n() {
     final name = Intl.defaultLocale ?? Intl.systemLocale;
     final parts = name.split(RegExp('[_-]'));
-    for (final locale in [
-      if (parts.length > 1) Locale(parts[0], parts[1]),
-      Locale(parts[0]),
-      const Locale('en'),
-    ]) {
+    for (final locale in [if (parts.length > 1) Locale(parts[0], parts[1]), Locale(parts[0]), const Locale('en')]) {
       try {
         return lookupAppLocalizations(locale);
       } catch (_) {

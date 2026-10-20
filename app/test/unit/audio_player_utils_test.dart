@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:flutter/services.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -171,6 +174,65 @@ void main() {
       ]);
       final parsed = parseLengthPrefixedFrames(data);
       expect(parsed.length, equals(0));
+    });
+  });
+
+  group('writeRecordingWav', () {
+    late Directory dir;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      dir = await Directory.systemTemp.createTemp('recording_wav_');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (call) async => dir.path,
+      );
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      await dir.delete(recursive: true);
+    });
+
+    /// A phone-local PCM16 file whose single frame is [samples], in the WAL on-disk frame format.
+    Future<Wal> pcmFile(int timerStart, List<int> samples) async {
+      final name = 'audio_$timerStart.bin';
+      final frame = Uint8List.fromList(samples);
+      final bytes = BytesBuilder()
+        ..add((ByteData(4)..setUint32(0, frame.length, Endian.little)).buffer.asUint8List())
+        ..add(frame);
+      await File('${dir.path}/$name').writeAsBytes(bytes.takeBytes());
+      return Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.pcm16,
+        seconds: 10,
+        filePath: name,
+        storage: WalStorage.disk,
+        device: 'pendant',
+      );
+    }
+
+    test('joins a recording\'s files into one WAV, oldest first', () async {
+      final later = await pcmFile(2010, [3, 3, 4, 4]);
+      final earlier = await pcmFile(2000, [1, 1, 2, 2]);
+      final stillOnDevice = Wal(timerStart: 2020, codec: BleAudioCodec.pcm16, seconds: 10, storage: WalStorage.sdcard);
+
+      final out = await player.writeRecordingWav([later, stillOnDevice, earlier], outputPath: '${dir.path}/out.wav');
+
+      final wav = await out!.readAsBytes();
+      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
+      expect(ByteData.sublistView(wav).getUint32(40, Endian.little), 8,
+          reason: 'both files\' PCM, nothing from the device');
+      expect(wav.sublist(44), [1, 1, 2, 2, 3, 3, 4, 4]);
+    });
+
+    test('returns null when no file in the recording has audio on the phone', () async {
+      final onDevice = Wal(timerStart: 3000, codec: BleAudioCodec.pcm16, seconds: 10, storage: WalStorage.disk);
+
+      expect(await player.writeRecordingWav([onDevice], outputPath: '${dir.path}/out.wav'), isNull);
     });
   });
 }

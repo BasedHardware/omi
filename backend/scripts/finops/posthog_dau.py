@@ -13,8 +13,21 @@ except Exception:  # noqa: BLE001
         os.execv(str(_VENV), [str(_VENV), os.path.abspath(__file__), *sys.argv[1:]])
     raise
 
-sys.path.insert(0, os.path.expanduser("~/.claude/skills/omi-posthog-macos/scripts"))
-from posthog_http import posthog_mcp_session
+_PROJECT = 302298
+
+# in cloudrun mode the PostHog key comes from a Secret Manager volume mount; no venv re-exec
+# (the image ships a modern `mcp`), and no ~/.claude path exists in the container.
+import os as _os
+
+if _os.environ.get("FINOPS_AUTH") == "cloudrun":
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cloudrun import secret as _secret
+
+    os.environ.setdefault("MCP_POSTHOG_API_KEY", _secret("posthog"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "posthog_client_shim"))
+else:
+    sys.path.insert(0, os.path.expanduser("~/.claude/skills/omi-posthog-macos/scripts"))
+from posthog_http import posthog_mcp_session  # noqa: E402
 
 PROJECT = 302298
 CTX = "Computing daily active users by platform for an Omi unit-cost report across mobile and desktop clients."

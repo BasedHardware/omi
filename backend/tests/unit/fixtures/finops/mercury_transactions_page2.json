@@ -1,0 +1,40 @@
+{
+  "transactions": [
+    {
+      "id": "txn-1",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -100.25,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-11",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -30,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "ANOTHER_PRIVATE_PERSON",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    }
+  ],
+  "page": {
+    "nextPage": null,
+    "previousPage": "txn-10"
+  }
+}

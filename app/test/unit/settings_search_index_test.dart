@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 
@@ -67,7 +68,11 @@ void main() {
     final transcription = searchSettings(en, en.transcription, disconnected);
     expect(transcription.first.destination, SettingsDestination.transcription);
     expect(searchSettings(en, en.exportAllData, disconnected).single.destination, SettingsDestination.exportData);
-    expect(searchSettings(en, en.phoneCalls, disconnected).first.destination, SettingsDestination.phoneCalls);
+    // Phone calls are hidden for now (PhoneCallsFeature.visible): search must not lead to them.
+    expect(
+      searchSettings(en, en.phoneCalls, disconnected).where((e) => e.destination == SettingsDestination.phoneCalls),
+      PhoneCallsFeature.visible ? isNotEmpty : isEmpty,
+    );
 
     // Rows inside a page open that row's page, not the top of Profile.
     expect(searchSettings(en, en.language, disconnected).first.destination, SettingsDestination.language);
@@ -75,6 +80,22 @@ void main() {
       searchSettings(en, en.deleteAccountTitle, disconnected).single.destination,
       SettingsDestination.deleteAccount,
     );
+  });
+
+  test('a remembered-but-disconnected pendant keeps Device Settings searchable', () {
+    const remembered = SettingsSearchScope(
+      deviceConnected: false,
+      supportLinks: false,
+      android: false,
+      rememberedDevice: true,
+    );
+    const forgotten = SettingsSearchScope(deviceConnected: false, supportLinks: false, android: false);
+
+    // The page itself stays findable, but its live-link rows (firmware, mic gain) do not.
+    expect(searchSettings(en, en.deviceSettings, remembered).map((e) => e.key), contains('deviceSettings'));
+    expect(searchSettings(en, en.deviceSettings, forgotten), isEmpty);
+    expect(searchSettings(en, en.firmware, remembered).map((e) => e.key), isNot(contains('firmware')));
+    expect(searchSettings(en, en.micGain, remembered).map((e) => e.key), isNot(contains('micGain')));
   });
 
   test('"Profile" still finds the Account row (its old name) and Voice Profile', () {

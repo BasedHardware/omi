@@ -6,6 +6,7 @@ import {
   useMemo,
   useTransition,
   useEffect,
+  useRef,
   useDeferredValue,
   lazy,
   Suspense,
@@ -39,6 +40,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { readHighlightParam } from '@/lib/itemList';
 
 // Lazy load heavy components for better performance
 const KnowledgeGraph = lazy(() =>
@@ -78,9 +80,6 @@ export function MemoriesPage() {
     error,
     hasMore,
     truncated,
-    beliefEnabled,
-    memoryView,
-    setMemoryView,
     loadMore,
     refresh,
     addMemory,
@@ -90,7 +89,6 @@ export function MemoriesPage() {
     toggleVisibility,
     acceptMemory,
     rejectMemory,
-    setMemoryUse,
     setCategories,
     activeCategories,
   } = useMemories();
@@ -258,6 +256,33 @@ export function MemoriesPage() {
       }
     }, 100);
   }, []);
+
+  // `/memories?highlight=<id>` (from an item-list link): scroll to and highlight that memory once
+  // it is in the loaded list. MemoryList virtualizes rows, so a DOM lookup misses anything
+  // outside the first viewport; setting highlightedMemoryId lets the list scroll itself.
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(() =>
+    readHighlightParam(),
+  );
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (highlightTimer.current != null) clearTimeout(highlightTimer.current);
+    };
+  }, []);
+  useEffect(() => {
+    if (!pendingHighlight || loading || !memoriesById.has(pendingHighlight)) return;
+    const id = pendingHighlight;
+    setPendingHighlight(null);
+    setSelectedTag(null);
+    setSearchQuery('');
+    setViewMode('list');
+    setHighlightedMemoryId(id);
+    if (highlightTimer.current != null) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => {
+      highlightTimer.current = null;
+      setHighlightedMemoryId((current) => (current === id ? null : current));
+    }, 2000);
+  }, [pendingHighlight, loading, memoriesById]);
 
   // Handle selection toggle for a single memory
   const handleToggleSelect = useCallback((memoryId: string) => {
@@ -493,34 +518,6 @@ export function MemoriesPage() {
                     activeCategories={activeCategories}
                     onCategoriesChange={setCategories}
                   />
-
-                  {beliefEnabled === true && (
-                    <div
-                      className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1"
-                      aria-label="Memory view"
-                    >
-                      {(
-                        [
-                          ['useful_now', 'Useful now'],
-                          ['history', 'History'],
-                          ['all', 'All'],
-                        ] as const
-                      ).map(([value, label]) => (
-                        <button
-                          key={value}
-                          onClick={() => setMemoryView(value)}
-                          className={cn(
-                            'rounded-md px-2.5 py-1 text-sm font-medium transition-all duration-150',
-                            memoryView === value
-                              ? 'bg-white text-black'
-                              : 'text-text-tertiary hover:text-text-primary',
-                          )}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -643,7 +640,6 @@ export function MemoriesPage() {
                           onToggleVisibility={toggleVisibility}
                           onAccept={acceptMemory}
                           onReject={rejectMemory}
-                          onSetUse={beliefEnabled === true ? setMemoryUse : undefined}
                           highlightedMemoryId={highlightedMemoryId}
                           // Only pass selection props when in select mode
                           selectedIds={isSelectMode ? selectedIds : undefined}

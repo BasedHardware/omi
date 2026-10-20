@@ -4,13 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
+import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
+import { BudgetUpsellBanner, StorefrontPanel } from './storefront/StorefrontHost';
 import {
-  User,
-  Bell,
   Shield,
   LogOut,
   Trash2,
-  Globe,
   Clock,
   ChevronDown,
   Loader2,
@@ -18,25 +17,13 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  BarChart3,
-  Puzzle,
   Plus,
   X,
-  Webhook,
-  BookOpen,
   MessageSquare,
-  Calendar,
-  Github,
-  Twitter,
   Settings,
   Brain,
-  Download,
-  Network,
   Mic,
-  Radio,
-  FileText,
   Lightbulb,
-  ArrowLeft,
   Crown,
   ChevronRight,
   Zap,
@@ -44,15 +31,15 @@ import {
   Scale,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Toggle } from './SettingsToggle';
 import { Card } from '@/components/settings/SettingsCard';
-import { McpSection } from '@/components/settings/McpSection';
 import {
   SECTION_INFO,
   SIGNED_OUT_DESTINATION,
+  developerRedirectTarget,
   isSettingsSectionId,
   type SettingsSectionId,
 } from '@/lib/settingsSections';
@@ -70,38 +57,34 @@ import {
   getUserSubscription,
   getCustomVocabulary,
   updateCustomVocabulary,
-  getDeveloperWebhook,
-  getDeveloperWebhooksStatus,
-  setDeveloperWebhook,
-  enableDeveloperWebhook,
-  disableDeveloperWebhook,
-  getDeveloperApiKeys,
-  createDeveloperApiKey,
-  deleteDeveloperApiKey,
-  getMcpApiKeys,
-  createMcpApiKey,
-  deleteMcpApiKey,
-  exportAllData,
-  deleteKnowledgeGraph,
   getAvailablePlans,
   createCheckoutSession,
   upgradeSubscription,
   cancelSubscription,
   getCustomerPortal,
 } from '@/lib/api';
-import { SUPPORTED_LANGUAGES, API_KEY_SCOPES } from '@/types/user';
-import { decodePlan, planGrantsPaidCapability } from '@/types/user';
+import { SUPPORTED_LANGUAGES } from '@/types/user';
+import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
+import {
+  RESUBSCRIBE_FIRST,
+  isPendingCancelConflict,
+  renewalDateSeconds,
+  yourPlanEndsOn,
+  yourPlanWillRenewOn,
+} from '@/lib/cancelPending';
 import type {
   DailySummarySettings,
-  UserUsage,
   UserSubscription,
   AllUsageData,
-  DeveloperWebhooks,
-  DeveloperApiKey,
-  McpApiKey,
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
+import {
+  trackPaywallOpened,
+  trackUpgradePlanSelected,
+  trackUpgradeSucceeded,
+} from '@/lib/analytics/subscriptionFunnel';
+import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
 // ============================================================================
@@ -113,38 +96,6 @@ type SettingsSection = SettingsSectionId;
 // ============================================================================
 // Reusable Components
 // ============================================================================
-
-function Toggle({
-  enabled,
-  onChange,
-  disabled = false,
-}: {
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onChange(!enabled)}
-      disabled={disabled}
-      className={cn(
-        'relative h-6 w-11 flex-shrink-0 rounded-full transition-all duration-200',
-        enabled
-          ? 'bg-text-primary shadow-[0_0_12px_rgba(255,255,255,0.25)]'
-          : 'bg-white/[0.08]',
-        disabled && 'cursor-not-allowed opacity-50',
-      )}
-    >
-      <div
-        className={cn(
-          'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200',
-          enabled ? 'left-[22px]' : 'left-0.5',
-        )}
-      />
-    </button>
-  );
-}
 
 function SettingRow({
   label,
@@ -574,6 +525,7 @@ function ProfileSection({
               enabled={dailySummary?.enabled ?? false}
               onChange={onDailySummaryToggle}
               disabled={dailySummary === null}
+              label="Daily Summary"
             />
           </SettingRow>
 
@@ -613,7 +565,11 @@ function PrivacySection({
           label="Store Recordings"
           description="Allow storing audio recordings for improved accuracy"
         >
-          <Toggle enabled={recordingPermission} onChange={onRecordingChange} />
+          <Toggle
+            enabled={recordingPermission}
+            onChange={onRecordingChange}
+            label="Store Recordings"
+          />
         </SettingRow>
 
         <SettingRow
@@ -624,6 +580,7 @@ function PrivacySection({
             enabled={trainingDataOptIn}
             onChange={onTrainingDataChange}
             disabled={trainingDataOptIn}
+            label="Training Data"
           />
         </SettingRow>
       </Card>
@@ -892,7 +849,7 @@ function UnknownPlanCard() {
   );
 }
 
-function UsageSectionContent({
+export function UsageSectionContent({
   allUsage,
   subscription,
   onSubscriptionUpdate,
@@ -908,9 +865,19 @@ function UsageSectionContent({
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
+  const [storefrontEnabled, setStorefrontEnabled] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void PlanStorefrontGate.sheetEnabled().then((on) => live && setStorefrontEnabled(on));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Set initial selected price when plans load, and keep it in sync when the
   // subscription's current price changes (e.g. after a plan change or
@@ -956,26 +923,28 @@ function UsageSectionContent({
   const monthlyUsage = allUsage?.monthly;
   const periods: UsagePeriod[] = ['today', 'monthly', 'yearly', 'all_time'];
 
-  // Default limits for basic plan (1200 minutes = 72000 seconds)
-  const limits = {
-    transcription_seconds: 72000, // 1200 minutes
-    words_transcribed: 50000,
-    insights_gained: 100,
-    memories_created: 50,
-  };
-
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
     : null;
-  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  // Paid status chooses billing actions, never the size of the listening allowance.
+  const isPaid = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
   const isUnknownPlan = planIdentity?.kind === 'unknown';
+  const currentPlanName = planIdentity
+    ? planDisplayName(planIdentity)
+    : 'Plan unavailable';
   const isCancelingSubscription = subscription?.cancel_at_period_end;
-
-  // Calculate usage percentages for basic plan
-  const getUsagePercent = (used: number, limit: number) => {
-    if (limit <= 0) return 0;
-    return Math.min((used / limit) * 100, 100);
-  };
+  // `Paywall Opened` is an impression of the plan choices actually being
+  // visible. Basic users reach them through "See plans", paid users see the
+  // grid on mount; unknown-plan users never see choices here.
+  const plansImpressionRecorded = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'plan' || !cachedPlans?.length) return;
+    if (!subscription || plansImpressionRecorded.current) return;
+    if (isUnknownPlan) return;
+    if (!isPaid && !showUpgradeOptions) return;
+    plansImpressionRecorded.current = true;
+    trackPaywallOpened('usage_page', subscription.plan);
+  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions, activeTab, cachedPlans]);
 
   // Sort pricing options: monthly first, then annual
   const sortedOptions = cachedPlans
@@ -1002,13 +971,17 @@ function UsageSectionContent({
         selectedOption?.id === subscription?.current_price_id;
 
       if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
-        setError('Plan changes are available after your current subscription ends.');
+        setError(RESUBSCRIBE_FIRST);
         return;
       }
 
-      if (isUnlimited && !isCancelingSubscription && !isCurrentPlan) {
+      const tier = selectedOption?.plan_id ?? 'unknown';
+      const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
+      trackUpgradePlanSelected(tier, interval, 'usage_page');
+      if (isPaid && !isCancelingSubscription && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError(result?.message || 'Failed to upgrade plan');
@@ -1023,13 +996,28 @@ function UsageSectionContent({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          const seconds = renewalDateSeconds(
+            result.next_billing_date,
+            subscription?.current_period_end,
+          );
+          setRenewalConfirmation(
+            seconds == null
+              ? 'Your plan will renew.'
+              : yourPlanWillRenewOn(currentPlanName, formatDate(seconds)),
+          );
+          setError(null);
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError('Failed to create checkout session');
         }
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(
+        isPendingCancelConflict(err)
+          ? RESUBSCRIBE_FIRST
+          : 'An error occurred. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1101,13 +1089,36 @@ function UsageSectionContent({
         </button>
       </div>
 
+      <p className="text-sm leading-relaxed text-text-tertiary">
+        <strong className="font-medium text-text-secondary">
+          Using your own keys on desktop?
+        </strong>{' '}
+        Those keys stay on that device and are not synced to the web app. This web app
+        uses your Omi plan. Omi-hosted usage draws from the same account allowance across
+        devices. Desktop BYOK applies only when that service uses your own key.
+      </p>
+
       {/* Tab Content */}
       {activeTab === 'plan' ? (
         /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
         <div className="space-y-6">
-          {isUnknownPlan ? (
+          {storefrontEnabled ? (
+            /* Ladder-v1 plans payload; the backend owns every plan string. */
+            <>
+              <BudgetUpsellBanner
+                showMeter={false}
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+              <StorefrontPanel
+                source="web_plans"
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+            </>
+          ) : isUnknownPlan ? (
             <UnknownPlanCard />
-          ) : !isUnlimited ? (
+          ) : !isPaid ? (
             /* BASIC PLAN VIEW */
             <>
               {/* Current Plan Card */}
@@ -1120,7 +1131,7 @@ function UsageSectionContent({
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
-                        Basic Plan
+                        {currentPlanName}
                       </h3>
                       <p className="text-sm text-text-tertiary">Free tier</p>
                     </div>
@@ -1130,7 +1141,7 @@ function UsageSectionContent({
                       onClick={() => setShowUpgradeOptions(true)}
                       className="rounded-xl bg-text-primary px-5 py-2.5 text-sm font-semibold text-bg-primary shadow-lg shadow-black/40 transition-all hover:bg-text-primary/90"
                     >
-                      Upgrade to Unlimited
+                      See plans
                     </button>
                     {subscription?.stripe_subscription_id && (
                       <button
@@ -1144,93 +1155,21 @@ function UsageSectionContent({
                   </div>
                 </div>
 
-                {/* Monthly Listening Usage */}
-                <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-400" />
-                    <span className="text-sm font-semibold text-amber-400">
-                      Monthly Listening Limit
-                    </span>
-                  </div>
-                  <div className="mb-2 flex items-baseline justify-between">
-                    <span className="text-2xl font-bold text-text-primary">
-                      {monthlyUsage
-                        ? Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 0}
-                      <span className="ml-1 text-sm font-normal text-text-tertiary">
-                        / 1,200 min
-                      </span>
-                    </span>
-                    <span className="text-sm text-text-tertiary">
-                      {monthlyUsage
-                        ? 1200 - Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 1200}{' '}
-                      min left
-                    </span>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-bg-quaternary">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-500"
-                      style={{
-                        width: `${
-                          monthlyUsage
-                            ? getUsagePercent(
-                                monthlyUsage.transcription_seconds,
-                                limits.transcription_seconds,
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
+                <TranscriptionUsageMeter subscription={subscription} />
 
                 {/* What's Included - Checklist */}
                 <div>
                   <h4 className="mb-3 text-sm font-semibold text-text-secondary">
                     What&apos;s included
                   </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-amber-500/20">
-                        <Clock className="h-3 w-3 text-amber-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">
-                          1,200 minutes
-                        </span>{' '}
-                        of listening per month
-                        <span className="ml-1 text-xs text-amber-400">(limited)</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        words transcribed
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        insights
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-green-500/20">
-                        <Check className="h-3 w-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        memories
-                      </span>
-                    </div>
-                  </div>
+                  <ul className="space-y-3">
+                    {DEFAULT_PLAN_FEATURES.map((feature) => (
+                      <li key={feature} className="flex items-center gap-3">
+                        <Check className="h-4 w-4 text-text-secondary" />
+                        <span className="text-sm text-text-secondary">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </Card>
 
@@ -1250,9 +1189,7 @@ function UsageSectionContent({
                       <h4 className="text-lg font-semibold text-text-primary">
                         Choose a Plan
                       </h4>
-                      <p className="text-sm text-text-tertiary">
-                        Unlock unlimited listening time
-                      </p>
+                      <p className="text-sm text-text-tertiary">Choose your plan</p>
                     </div>
                     <button
                       onClick={() => setShowUpgradeOptions(false)}
@@ -1387,7 +1324,7 @@ function UsageSectionContent({
               </Card>
             </>
           ) : (
-            /* UNLIMITED PLAN VIEW */
+            /* PAID PLAN VIEW — the server allowance remains independent. */
             <>
               {/* Header */}
               <div className="flex items-center gap-3">
@@ -1396,17 +1333,24 @@ function UsageSectionContent({
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
+                    {currentPlanName}
                   </h3>
-                  {subscription?.current_period_end && (
+                  {renewalConfirmation ? (
+                    <p className="text-xs text-green-400">{renewalConfirmation}</p>
+                  ) : subscription?.current_period_end ? (
                     <p className="text-xs text-text-quaternary">
                       {isCancelingSubscription
-                        ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                        ? yourPlanEndsOn(
+                            currentPlanName,
+                            formatDate(subscription.current_period_end),
+                          )
                         : `Renews ${formatDate(subscription.current_period_end)}`}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
+
+              <TranscriptionUsageMeter subscription={subscription} />
 
               {/* Plan Selection */}
               {sortedOptions.length > 0 ? (
@@ -1423,15 +1367,11 @@ function UsageSectionContent({
                       <button
                         key={option.id}
                         onClick={() => setSelectedPriceId(option.id)}
-                        disabled={isCancelingSubscription && !isCurrent}
                         className={cn(
                           'relative rounded-xl border-2 p-4 text-left transition-all',
                           isSelected
                             ? 'border-white/25 bg-white/[0.08]'
                             : 'border-bg-tertiary bg-bg-tertiary/50 hover:border-bg-quaternary',
-                          isCancelingSubscription &&
-                            !isCurrent &&
-                            'cursor-not-allowed opacity-50',
                         )}
                       >
                         {isAnnual && (
@@ -1468,12 +1408,10 @@ function UsageSectionContent({
                 </div>
               )}
 
-              {isCancelingSubscription && subscription?.current_period_end && (
-                <p className="text-sm text-text-tertiary">
-                  You can reactivate your current plan now. Plan changes are available
-                  after {formatDate(subscription.current_period_end)}.
-                </p>
-              )}
+              {isCancelingSubscription &&
+                selectedPriceId !== subscription?.current_price_id && (
+                  <p className="text-sm text-text-tertiary">{RESUBSCRIBE_FIRST}</p>
+                )}
 
               {/* Features List */}
               <div className="space-y-2">
@@ -1504,9 +1442,7 @@ function UsageSectionContent({
                   !selectedPriceId ||
                   (!isCancelingSubscription &&
                     (selectedOption?.is_active ||
-                      selectedOption?.id === subscription?.current_price_id)) ||
-                  (isCancelingSubscription &&
-                    selectedPriceId !== subscription?.current_price_id)
+                      selectedOption?.id === subscription?.current_price_id))
                 }
                 className={cn(
                   'w-full rounded-xl py-3 font-medium transition-colors',
@@ -1521,7 +1457,7 @@ function UsageSectionContent({
                     Processing...
                   </span>
                 ) : isCancelingSubscription ? (
-                  'Reactivate Subscription'
+                  'Resubscribe'
                 ) : selectedOption?.is_active ||
                   selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'
@@ -1639,650 +1575,6 @@ function UsageSectionContent({
         isDestructive={true}
         isLoading={isCanceling}
       />
-    </div>
-  );
-}
-
-// ============================================================================
-// Developer Section
-// ============================================================================
-
-// Create API Key Dialog
-function CreateApiKeyDialog({
-  isOpen,
-  onClose,
-  onCreateKey,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onCreateKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
-}) {
-  const [keyName, setKeyName] = useState('');
-  const [scopes, setScopes] = useState<Record<string, boolean>>({
-    'conversations:read': false,
-    'conversations:write': false,
-    'memories:read': false,
-    'memories:write': false,
-    'action_items:read': false,
-    'action_items:write': false,
-  });
-  const [isCreating, setIsCreating] = useState(false);
-  const [createdKey, setCreatedKey] = useState<DeveloperApiKey | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const selectedScopes = Object.entries(scopes)
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-  const isReadOnly =
-    scopes['conversations:read'] &&
-    scopes['memories:read'] &&
-    scopes['action_items:read'] &&
-    !scopes['conversations:write'] &&
-    !scopes['memories:write'] &&
-    !scopes['action_items:write'];
-  const isFullAccess = Object.values(scopes).every((v) => v);
-
-  const selectReadOnly = () => {
-    setScopes({
-      'conversations:read': true,
-      'conversations:write': false,
-      'memories:read': true,
-      'memories:write': false,
-      'action_items:read': true,
-      'action_items:write': false,
-    });
-  };
-
-  const selectFullAccess = () => {
-    setScopes(Object.fromEntries(Object.keys(scopes).map((k) => [k, true])));
-  };
-
-  const handleCreate = async () => {
-    if (!keyName.trim()) return;
-    setIsCreating(true);
-    const key = await onCreateKey(
-      keyName.trim(),
-      selectedScopes.length > 0 ? selectedScopes : (undefined as unknown as string[]),
-    );
-    if (key) {
-      setCreatedKey(key);
-    }
-    setIsCreating(false);
-  };
-
-  const handleCopy = () => {
-    if (createdKey?.key) {
-      navigator.clipboard.writeText(createdKey.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleClose = () => {
-    setKeyName('');
-    setScopes(Object.fromEntries(Object.keys(scopes).map((k) => [k, false])));
-    setCreatedKey(null);
-    setCopied(false);
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={handleClose}
-    >
-      <div
-        className="mx-4 w-full max-w-md overflow-hidden rounded-2xl bg-bg-secondary"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {createdKey ? (
-          <div className="p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-green-500/20 p-3">
-                <Check className="h-6 w-6 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  API Key Created
-                </h3>
-                <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
-                </p>
-              </div>
-            </div>
-            <div className="mb-4 rounded-xl bg-bg-tertiary p-4">
-              <p className="mb-2 text-xs text-text-tertiary">Your API Key</p>
-              <code className="break-all font-mono text-sm text-text-primary">
-                {createdKey.key}
-              </code>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-colors',
-                  copied
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                )}
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
-              </button>
-              <button
-                onClick={handleClose}
-                className="rounded-xl bg-bg-tertiary px-4 py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-text-primary">Create API Key</h3>
-              <button
-                onClick={handleClose}
-                className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
-              >
-                <X className="h-5 w-5 text-text-tertiary" />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                  Key Name
-                </label>
-                <input
-                  type="text"
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., My App Integration"
-                  className="w-full rounded-xl border border-white/[0.06] bg-bg-tertiary px-4 py-3 text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                    Permissions
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={selectReadOnly}
-                      className={cn(
-                        'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-                        isReadOnly
-                          ? 'bg-text-primary text-bg-primary'
-                          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-                      )}
-                    >
-                      Read Only
-                    </button>
-                    <button
-                      onClick={selectFullAccess}
-                      className={cn(
-                        'rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-                        isFullAccess
-                          ? 'bg-text-primary text-bg-primary'
-                          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-                      )}
-                    >
-                      Full Access
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {['Conversations', 'Memories', 'Action Items'].map((resource) => {
-                    const readKey = `${resource.toLowerCase().replace(' ', '_')}:read`;
-                    const writeKey = `${resource.toLowerCase().replace(' ', '_')}:write`;
-                    return (
-                      <div
-                        key={resource}
-                        className="flex items-center justify-between rounded-xl bg-bg-tertiary p-3"
-                      >
-                        <span className="text-sm text-text-primary">{resource}</span>
-                        <div className="flex overflow-hidden rounded-lg bg-bg-quaternary">
-                          <button
-                            onClick={() =>
-                              setScopes({ ...scopes, [readKey]: !scopes[readKey] })
-                            }
-                            className={cn(
-                              'px-3 py-1.5 text-xs font-semibold transition-colors',
-                              scopes[readKey]
-                                ? 'bg-blue-500 text-white'
-                                : 'text-text-quaternary hover:text-text-secondary',
-                            )}
-                          >
-                            R
-                          </button>
-                          <button
-                            onClick={() =>
-                              setScopes({ ...scopes, [writeKey]: !scopes[writeKey] })
-                            }
-                            className={cn(
-                              'px-3 py-1.5 text-xs font-semibold transition-colors',
-                              scopes[writeKey]
-                                ? 'bg-text-primary text-bg-primary'
-                                : 'text-text-quaternary hover:text-text-secondary',
-                            )}
-                          >
-                            W
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="mt-2 text-xs text-text-quaternary">
-                  R = Read, W = Write. Defaults to read-only if nothing selected.
-                </p>
-              </div>
-
-              <button
-                onClick={handleCreate}
-                disabled={!keyName.trim() || isCreating}
-                className={cn(
-                  'w-full rounded-xl py-3 font-medium transition-colors',
-                  keyName.trim() && !isCreating
-                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
-                    : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
-                )}
-              >
-                {isCreating ? 'Creating...' : 'Create Key'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DeveloperSection({
-  apiKeys,
-  mcpKeys,
-  webhooks,
-  onCreateApiKey,
-  onDeleteApiKey,
-  onCreateMcpKey,
-  onDeleteMcpKey,
-  onWebhookChange,
-  onExportData,
-  isExporting,
-  onDeleteKnowledgeGraph,
-}: {
-  apiKeys: DeveloperApiKey[];
-  mcpKeys: McpApiKey[];
-  webhooks: DeveloperWebhooks;
-  onCreateApiKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
-  onDeleteApiKey: (keyId: string) => void;
-  onCreateMcpKey: (name: string) => Promise<McpApiKey | null>;
-  onDeleteMcpKey: (keyId: string) => void;
-  onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
-  onExportData: () => void;
-  isExporting?: boolean;
-  onDeleteKnowledgeGraph: () => void;
-}) {
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
-  const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
-
-  // Parse audio_bytes URL which may contain comma-separated URL and delay (e.g., "https://example.com,5")
-  const parseAudioBytesUrl = (rawUrl: string) => {
-    if (!rawUrl) return { url: '', delay: '5' };
-    const parts = rawUrl.split(',');
-    if (parts.length >= 2) {
-      return { url: parts[0], delay: parts[1] };
-    }
-    return { url: rawUrl, delay: '5' };
-  };
-
-  const initialAudioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
-
-  const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({
-    memory_created: webhooks.memory_created?.url || '',
-    transcript_received: webhooks.transcript_received?.url || '',
-    audio_bytes: initialAudioBytes.url,
-    day_summary: webhooks.day_summary?.url || '',
-  });
-  const [audioBytesDelay, setAudioBytesDelay] = useState(initialAudioBytes.delay);
-
-  // Update webhook URLs when webhooks prop changes
-  useEffect(() => {
-    const audioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
-    setWebhookUrls({
-      memory_created: webhooks.memory_created?.url || '',
-      transcript_received: webhooks.transcript_received?.url || '',
-      audio_bytes: audioBytes.url,
-      day_summary: webhooks.day_summary?.url || '',
-    });
-    setAudioBytesDelay(audioBytes.delay);
-  }, [webhooks]);
-
-  const webhookTypes = [
-    {
-      id: 'memory_created',
-      label: 'Conversation Events',
-      description: 'New conversation created',
-      icon: MessageSquare,
-    },
-    {
-      id: 'transcript_received',
-      label: 'Real-time Transcript',
-      description: 'Transcript received',
-      icon: FileText,
-    },
-    {
-      id: 'audio_bytes',
-      label: 'Audio Bytes',
-      description: 'Audio data received',
-      icon: Radio,
-      hasDelay: true,
-    },
-    {
-      id: 'day_summary',
-      label: 'Day Summary',
-      description: 'Summary generated',
-      icon: Calendar,
-    },
-  ];
-
-  return (
-    <div className="space-y-8">
-      {/* Developer API Keys */}
-      <div id="api-keys" className="scroll-mt-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            Developer API Keys
-          </h3>
-          <button
-            onClick={() => setShowApiKeyDialog(true)}
-            className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-white/[0.14]"
-          >
-            <Plus className="h-3 w-3" />
-            Create Key
-          </button>
-        </div>
-        <Card>
-          {apiKeys.length > 0 ? (
-            <div className="space-y-3">
-              {apiKeys.map((apiKey) => (
-                <div
-                  key={apiKey.id}
-                  className="flex items-center justify-between rounded-xl bg-bg-tertiary p-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-text-primary">
-                        {apiKey.name}
-                      </span>
-                      <code className="rounded bg-bg-quaternary px-2 py-0.5 font-mono text-xs text-text-tertiary">
-                        {apiKey.key_prefix}...
-                      </code>
-                      {apiKey.scopes && apiKey.scopes.length > 0 && (
-                        <span className="rounded bg-white/[0.08] px-2 py-0.5 text-xs text-text-secondary">
-                          {apiKey.scopes.length} scopes
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-text-quaternary">
-                      Created {new Date(apiKey.created_at).toLocaleDateString()}
-                      {apiKey.last_used_at &&
-                        ` • Last used ${new Date(
-                          apiKey.last_used_at,
-                        ).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => onDeleteApiKey(apiKey.id)}
-                    className="rounded-lg p-2 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-400"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="py-6 text-center text-sm text-text-quaternary">
-              No API keys created yet
-            </p>
-          )}
-        </Card>
-      </div>
-
-      {/* MCP Section */}
-      <McpSection
-        mcpKeys={mcpKeys}
-        onCreateMcpKey={onCreateMcpKey}
-        onDeleteMcpKey={onDeleteMcpKey}
-      />
-
-      {/* Webhooks */}
-      <div id="webhooks" className="scroll-mt-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            Webhooks
-          </h3>
-          <a
-            href="https://docs.omi.me/doc/developer/apps/Introduction"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-text-secondary transition-colors hover:text-text-secondary"
-          >
-            Docs ↗
-          </a>
-        </div>
-        <Card>
-          <div className="space-y-1">
-            {webhookTypes.map((webhook, index) => {
-              const webhookData = webhooks[webhook.id as keyof DeveloperWebhooks];
-              const isEnabled = webhookData?.enabled || false;
-              const Icon = webhook.icon;
-
-              return (
-                <div key={webhook.id}>
-                  {index > 0 && <div className="my-4 border-t border-white/[0.06]" />}
-                  <div className="py-2">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-lg bg-bg-tertiary p-2">
-                          <Icon className="h-4 w-4 text-text-tertiary" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">
-                            {webhook.label}
-                          </p>
-                          <p className="text-xs text-text-tertiary">
-                            {webhook.description}
-                          </p>
-                        </div>
-                      </div>
-                      <Toggle
-                        enabled={isEnabled}
-                        onChange={(enabled) =>
-                          onWebhookChange(
-                            webhook.id,
-                            enabled,
-                            webhookUrls[webhook.id],
-                            webhook.hasDelay ? audioBytesDelay : undefined,
-                          )
-                        }
-                      />
-                    </div>
-                    {isEnabled && (
-                      <div className="mt-3 space-y-2">
-                        <input
-                          type="url"
-                          value={webhookUrls[webhook.id] || ''}
-                          onChange={(e) =>
-                            setWebhookUrls({
-                              ...webhookUrls,
-                              [webhook.id]: e.target.value,
-                            })
-                          }
-                          onBlur={() =>
-                            onWebhookChange(
-                              webhook.id,
-                              true,
-                              webhookUrls[webhook.id],
-                              webhook.hasDelay ? audioBytesDelay : undefined,
-                            )
-                          }
-                          placeholder="https://your-server.com/webhook"
-                          className="w-full rounded-lg border border-white/[0.06] bg-bg-tertiary px-3 py-2 text-sm text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
-                        />
-                        {webhook.hasDelay && (
-                          <input
-                            type="number"
-                            value={audioBytesDelay}
-                            onChange={(e) => setAudioBytesDelay(e.target.value)}
-                            onBlur={() =>
-                              onWebhookChange(
-                                webhook.id,
-                                true,
-                                webhookUrls[webhook.id],
-                                audioBytesDelay,
-                              )
-                            }
-                            placeholder="Interval (seconds)"
-                            className="w-full rounded-lg border border-white/[0.06] bg-bg-tertiary px-3 py-2 text-sm text-text-primary placeholder:text-text-quaternary focus:border-white/25 focus:outline-none"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
-
-      {/* Data Management */}
-      <div id="data-management" className="scroll-mt-4 space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-          Data Management
-        </h3>
-        <Card>
-          <button
-            onClick={onExportData}
-            disabled={isExporting}
-            className={cn(
-              'flex w-full items-center gap-4 py-3 transition-colors',
-              isExporting
-                ? 'cursor-not-allowed text-text-tertiary'
-                : 'text-text-primary hover:text-text-secondary',
-            )}
-          >
-            <div className="rounded-lg bg-bg-tertiary p-2">
-              {isExporting ? (
-                <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
-              ) : (
-                <Download className="h-5 w-5 text-text-tertiary" />
-              )}
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">
-                {isExporting ? 'Exporting...' : 'Export All Data'}
-              </p>
-              <p className="text-xs text-text-tertiary">
-                {isExporting
-                  ? 'This may take a moment'
-                  : 'Export conversations to a JSON file'}
-              </p>
-            </div>
-            {!isExporting && <ExternalLink className="h-4 w-4 text-text-quaternary" />}
-          </button>
-        </Card>
-        <Card className="border-red-500/20">
-          <button
-            onClick={() => setShowDeleteGraphDialog(true)}
-            className="flex w-full items-center gap-4 py-3 text-text-primary transition-colors hover:text-red-400"
-          >
-            <div className="rounded-lg bg-red-500/10 p-2">
-              <Network className="h-5 w-5 text-red-400" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">Delete Knowledge Graph</p>
-              <p className="text-xs text-text-tertiary">
-                Clear all nodes and connections
-              </p>
-            </div>
-            <Trash2 className="h-4 w-4 text-text-quaternary" />
-          </button>
-        </Card>
-      </div>
-
-      {/* Links */}
-      <Card>
-        <a
-          href="https://docs.omi.me"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between py-3 text-text-primary transition-colors hover:text-text-secondary"
-        >
-          <div className="flex items-center gap-3">
-            <BookOpen className="h-5 w-5 text-text-tertiary" />
-            <span>API Documentation</span>
-          </div>
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </Card>
-
-      {/* Dialogs */}
-      <CreateApiKeyDialog
-        isOpen={showApiKeyDialog}
-        onClose={() => setShowApiKeyDialog(false)}
-        onCreateKey={onCreateApiKey}
-      />
-
-      {/* Delete Knowledge Graph Dialog */}
-      {showDeleteGraphDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => setShowDeleteGraphDialog(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-md rounded-2xl bg-bg-secondary p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-red-500/20 p-3">
-                <AlertTriangle className="h-6 w-6 text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-text-primary">
-                Delete Knowledge Graph?
-              </h3>
-            </div>
-            <p className="mb-6 text-sm text-text-secondary">
-              This will delete all derived knowledge graph data (nodes and connections).
-              Your original memories will remain safe. The graph will be rebuilt over
-              time.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteGraphDialog(false)}
-                className="flex-1 rounded-xl bg-bg-tertiary py-3 text-text-secondary transition-colors hover:bg-bg-quaternary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  onDeleteKnowledgeGraph();
-                  setShowDeleteGraphDialog(false);
-                }}
-                className="flex-1 rounded-xl bg-red-500 py-3 text-white transition-colors hover:bg-red-600"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2410,13 +1702,21 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
-  const { showToast } = useToast();
-  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'account'
   const sectionParam = searchParams.get('section');
   const activeSection: SettingsSection =
     sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : 'account';
+
+  // Developer moved to its own destination; old `?section=developer` links
+  // (docs, desktop, mobile, bookmarks) land there with their anchor intact.
+  const developerRedirect = developerRedirectTarget(
+    sectionParam,
+    typeof window === 'undefined' ? '' : window.location.hash,
+  );
+  useEffect(() => {
+    if (developerRedirect) router.replace(developerRedirect);
+  }, [developerRedirect, router]);
 
   // Track which sections have been loaded (using ref to avoid dependency issues)
   const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set());
@@ -2435,9 +1735,6 @@ export function SettingsPage() {
   const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [cachedPlans, setCachedPlans] = useState<PricingOption[] | null>(null);
-  const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
-  const [mcpKeys, setMcpKeys] = useState<McpApiKey[]>([]);
-  const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
 
   // Dialog states
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
@@ -2486,53 +1783,6 @@ export function SettingsPage() {
             if (plansData?.plans) {
               setCachedPlans(plansData.plans);
             }
-            break;
-          case 'developer':
-            // Fetch API keys, MCP keys, webhook status, and individual webhook URLs in parallel
-            // Note: Status API returns boolean fields, URL API returns {url: string}
-            const [
-              keys,
-              mKeys,
-              webhookStatus,
-              memoryUrl,
-              transcriptUrl,
-              audioBytesUrl,
-              daySummaryUrl,
-            ] = await Promise.all([
-              getDeveloperApiKeys().catch(() => []),
-              getMcpApiKeys().catch(() => []),
-              getDeveloperWebhooksStatus().catch(() => ({})),
-              getDeveloperWebhook('memory_created').catch(() => ({ url: '' })),
-              getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
-              getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
-              getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
-            ]);
-            setApiKeys(keys);
-            // Full MCP key is only returned at creation time; keep secrets in memory for this session only.
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('omi_mcp_api_key_secrets');
-            }
-            setMcpKeys(mKeys);
-            // Combine status (booleans) with URLs
-            const statusMap = webhookStatus as Record<string, boolean>;
-            setWebhooks({
-              memory_created: {
-                url: memoryUrl?.url || '',
-                enabled: statusMap['memory_created'] ?? false,
-              },
-              transcript_received: {
-                url: transcriptUrl?.url || '',
-                enabled: statusMap['realtime_transcript'] ?? false,
-              },
-              audio_bytes: {
-                url: audioBytesUrl?.url || '',
-                enabled: statusMap['audio_bytes'] ?? false,
-              },
-              day_summary: {
-                url: daySummaryUrl?.url || '',
-                enabled: statusMap['day_summary'] ?? false,
-              },
-            });
             break;
           // sections not listed here don't need API calls
         }
@@ -2642,118 +1892,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleCreateApiKey = async (
-    name: string,
-    scopes: string[],
-  ): Promise<DeveloperApiKey | null> => {
-    try {
-      const newKey = await createDeveloperApiKey(name, scopes);
-      setApiKeys([...apiKeys, newKey]);
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create API key:', error);
-      return null;
-    }
-  };
-
-  const handleDeleteApiKey = async (keyId: string) => {
-    try {
-      await deleteDeveloperApiKey(keyId);
-      setApiKeys(apiKeys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete API key:', error);
-    }
-  };
-
-  const handleCreateMcpKey = async (name: string): Promise<McpApiKey | null> => {
-    try {
-      const newKey = await createMcpApiKey(name);
-      setMcpKeys([...mcpKeys, newKey]);
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create MCP key:', error);
-      return null;
-    }
-  };
-
-  const handleDeleteMcpKey = async (keyId: string) => {
-    try {
-      await deleteMcpApiKey(keyId);
-      setMcpKeys(mcpKeys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete MCP key:', error);
-    }
-  };
-
-  const handleExportData = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const blob = await exportAllData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'omi-export.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('Data exported successfully', 'success');
-    } catch (error) {
-      console.error('Failed to export data:', error);
-      showToast('Failed to export data. Please try again.', 'error');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleDeleteKnowledgeGraph = async () => {
-    try {
-      await deleteKnowledgeGraph();
-    } catch (error) {
-      console.error('Failed to delete knowledge graph:', error);
-    }
-  };
-
-  const handleWebhookChange = async (
-    type: string,
-    enabled: boolean,
-    url?: string,
-    delay?: string,
-  ) => {
-    // Convert internal type names to API type names
-    // UI uses 'transcript_received' but API expects 'realtime_transcript'
-    const apiType = type === 'transcript_received' ? 'realtime_transcript' : type;
-    const webhookType = apiType as
-      | 'memory_created'
-      | 'realtime_transcript'
-      | 'audio_bytes'
-      | 'day_summary';
-    try {
-      // For audio_bytes, combine URL and delay if both are provided
-      const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;
-      if (webhookUrl) {
-        await setDeveloperWebhook(webhookType, webhookUrl);
-      }
-      if (enabled) {
-        await enableDeveloperWebhook(webhookType);
-      } else {
-        await disableDeveloperWebhook(webhookType);
-      }
-      setWebhooks({
-        ...webhooks,
-        [type]: {
-          enabled,
-          // Mirror what was sent: audio_bytes keeps its interval in the URL, and
-          // storing the bare URL here made the interval field fall back to 5.
-          url: webhookUrl || webhooks[type as keyof DeveloperWebhooks]?.url || '',
-        },
-      });
-    } catch (error) {
-      console.error('Failed to update webhook:', error);
-    }
-  };
-
   const handleSignOut = async () => {
     await signOut();
     router.push(SIGNED_OUT_DESTINATION);
@@ -2815,22 +1953,6 @@ export function SettingsPage() {
             />
           </div>
         );
-      case 'developer':
-        return (
-          <DeveloperSection
-            apiKeys={apiKeys}
-            mcpKeys={mcpKeys}
-            webhooks={webhooks}
-            onCreateApiKey={handleCreateApiKey}
-            onDeleteApiKey={handleDeleteApiKey}
-            onCreateMcpKey={handleCreateMcpKey}
-            onDeleteMcpKey={handleDeleteMcpKey}
-            onWebhookChange={handleWebhookChange}
-            onExportData={handleExportData}
-            isExporting={isExporting}
-            onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
-          />
-        );
       default:
         return null;
     }
@@ -2852,13 +1974,6 @@ export function SettingsPage() {
           { id: 'actions', label: 'Actions' },
           { id: 'support', label: 'Support' },
         ];
-      case 'developer':
-        return [
-          { id: 'api-keys', label: 'API Keys' },
-          { id: 'mcp', label: 'MCP' },
-          { id: 'webhooks', label: 'Webhooks' },
-          { id: 'data-management', label: 'Data' },
-        ];
       default:
         return [];
     }
@@ -2866,36 +1981,10 @@ export function SettingsPage() {
 
   const quickNavSections = getQuickNavSections();
 
+  if (developerRedirect) return null;
+
   return (
     <div className="flex h-full flex-col">
-      {/* Export in-progress dialog */}
-      {isExporting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative mx-4 w-full max-w-sm rounded-2xl border border-white/[0.06] bg-bg-secondary p-6 shadow-2xl">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="rounded-full bg-white/[0.08] p-3">
-                <Loader2 className="h-8 w-8 animate-spin text-text-secondary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  Exporting Your Data
-                </h3>
-                <p className="mt-2 text-sm text-text-secondary">
-                  This may take a moment depending on the amount of data in your account.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl bg-yellow-500/10 px-4 py-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
-                <span className="text-xs text-yellow-400">
-                  Please don&apos;t close this tab
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 

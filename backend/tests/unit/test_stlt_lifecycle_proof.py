@@ -45,7 +45,7 @@ def test_dry_run_is_ok(mod: Any) -> None:
     assert result.mode == "dry_run"
     assert result.batch_cap == 1
     assert result.memory_id == ""
-    assert os.environ.get("MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP") == "1"
+    assert "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP" not in os.environ
 
 
 def test_apply_requires_confirm_and_encryption(mod: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,9 +76,9 @@ def test_apply_requires_gateway_unless_allow_direct(mod: Any, monkeypatch: pytes
     assert any("gateway" in e for e in result.errors)
 
 
-def test_configure_env_forces_batch_cap_one(mod: Any) -> None:
+def test_configure_env_does_not_resurrect_retired_planner_flags(mod: Any) -> None:
     mod._configure_env(project="based-hardware")
-    assert os.environ["MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"] == "1"
+    assert "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP" not in os.environ
     assert os.environ["GOOGLE_CLOUD_PROJECT"] == "based-hardware"
 
 

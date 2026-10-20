@@ -20,8 +20,8 @@ extension ConversationChunkSummarizer: ConversationSummarizing {
 
 /// When S11 attaches the S10 stored `client_processing` blob.
 ///
-/// Identified basic (`planGated`) is the only plan that attaches. Paid,
-/// unknown, and BYOK fail open so the server still decides. Thermal
+/// Attach only when funded processing is known unavailable. Unknown funding
+/// and BYOK leave the decision to the server. Thermal
 /// `.serious+` defers generation but will send a hash-matching stored
 /// blob so a retry does not drop a finished local summary.
 enum LocalProjectionFinalization {
@@ -29,6 +29,34 @@ enum LocalProjectionFinalization {
     case skip
     case generate
     case storedOnly
+  }
+
+  /// Server allowance is authoritative when present. Current main's basic-only
+  /// managed-compute gate is the fallback only without an allowance snapshot.
+  /// TODO(#21488 follow-up): consume a dedicated funded-processing capability
+  /// after #21488 and the backend fold; that PR projects funding via this field.
+  static func fundingUnavailable(
+    subscription: UserSubscriptionResponse?, isByokActive: Bool
+  ) -> Bool {
+    guard !isByokActive, let subscription else { return false }
+    if SubscriptionEntitlement.hasByokFeature(subscription.subscription.features) { return false }
+    if let allowance = subscription.transcriptionAllowance {
+      switch allowance.mode {
+      case "managed": return false
+      case "on_device":
+        guard allowance.remainingSeconds == 0 else { return false }
+        switch allowance.reason {
+        case "usage_budget_exhausted": return true  // Ladder shared funded budget (#21488).
+        case "plan_allowance_exhausted", "subscription_inactive":
+          // On current main this field measures STT separately from processing.
+          // A paid user's STT cap is not proof that summary funding is exhausted.
+          return subscription.subscription.plan == .basic
+        default: return false  // Includes usage_invalid and allowance_unavailable.
+        }
+      default: return false
+      }
+    }
+    return subscription.subscription.plan == .basic
   }
 
   static func decision(

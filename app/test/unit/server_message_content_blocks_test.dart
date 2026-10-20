@@ -19,6 +19,46 @@ void main() {
     };
   }
 
+  test('automatic provenance survives cache roundtrip while reply blocks stay visible', () {
+    final blocks = [
+      {'type': 'taskCard', 'id': 'task-block', 'taskId': 'task'},
+      {'type': 'goalLink', 'id': 'goal-block', 'goalId': 'goal', 'summary': 'Goal'},
+      {'type': 'conversationLink', 'id': 'notes-block', 'conversationId': 'meeting', 'summary': 'Notes'},
+    ];
+    final reply = ServerMessage.fromJson(messageJson(text: '', contentBlocks: blocks));
+    expect(reply.isAutomaticChatEntry, isFalse);
+    expect(reply.typedContentBlocks.length, 3);
+    for (final source in [
+      'daily_opener',
+      'cold_start_rich',
+      'cold_start_sparse',
+      'capture_arrival',
+      'agent_judgment',
+      'deferral_reraise'
+    ]) {
+      final automatic = ServerMessage.fromJson(
+          messageJson(text: '', contentBlocks: blocks, metadata: '{"chatFirstIntentSource":"$source"}'));
+      expect(automatic.isAutomaticChatEntry, isTrue);
+      expect(ServerMessage.fromJson(automatic.toJson()).isAutomaticChatEntry, isTrue);
+    }
+    expect(ServerMessage.fromJson({...messageJson(text: 'Old task'), 'type': 'task'}).isAutomaticChatEntry, isTrue);
+    expect(ServerMessage.fromJson(messageJson(text: 'Answer', metadata: 'broken')).isAutomaticChatEntry, isFalse);
+  });
+
+  test('notification continuity and cold-start answer metadata keep user messages visible', () {
+    for (final metadata in [
+      '{"continuityKey":"notification:old"}',
+      '{"coldStartSequence":{"id":"old-sequence","step":1}}',
+    ]) {
+      final user = ServerMessage.fromJson({...messageJson(text: 'My answer', metadata: metadata), 'sender': 'human'});
+      expect(user.isAutomaticChatEntry, isFalse);
+      expect(ServerMessage.fromJson(user.toJson()).isAutomaticChatEntry, isFalse);
+    }
+    final automatic =
+        ServerMessage.fromJson(messageJson(text: 'Notice', metadata: '{"continuityKey":"notification:old"}'));
+    expect(automatic.isAutomaticChatEntry, isTrue);
+  });
+
   test(
     'uses first-class conversation block fallback instead of a blank bubble',
     () {

@@ -15,6 +15,7 @@ class TranscriptSegment {
   late int idx;
 
   String text;
+  String? originalText;
   String? speaker;
   late int speakerId;
   bool isUser;
@@ -25,9 +26,13 @@ class TranscriptSegment {
   bool speechProfileProcessed;
   String? sttProvider;
 
+  /// How this label was made: `manual`, `auto`, `carried`, or null for an unnamed speaker.
+  String? speakerLabelSource;
+
   TranscriptSegment({
     required this.id,
     required this.text,
+    this.originalText,
     required this.speaker,
     required this.isUser,
     required this.personId,
@@ -36,6 +41,7 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.speakerLabelSource,
     int? speakerId,
   }) {
     final parts = speaker?.split('_') ?? [];
@@ -63,6 +69,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
+      originalText: generated.originalText,
       speakerId: generated.speakerId,
       speaker: generated.speaker ?? 'SPEAKER_00',
       isUser: generated.isUser,
@@ -72,6 +79,7 @@ class TranscriptSegment {
       translations: generated.translations ?? const [],
       speechProfileProcessed: generated.speechProfileProcessed,
       sttProvider: generated.sttProvider,
+      speakerLabelSource: generated.speakerLabelSource,
     );
   }
 
@@ -79,6 +87,7 @@ class TranscriptSegment {
     return wire.GeneratedTranscriptSegment(
       id: id,
       text: text,
+      originalText: originalText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,
@@ -88,6 +97,7 @@ class TranscriptSegment {
       translations: translations,
       speechProfileProcessed: speechProfileProcessed,
       sttProvider: sttProvider,
+      speakerLabelSource: speakerLabelSource,
     );
   }
 
@@ -183,18 +193,22 @@ class TranscriptSegment {
     List<Person>? people,
     String? ownerName,
     List<TranscriptSegment>? numberingSegments,
+    bool unresolved = false,
   }) {
     final names = SpeakerNames.forSegments(
       numberingSegments ?? segments,
       people: people ?? SharedPreferencesUtil().cachedPeople,
       ownerName: ownerName ?? SharedPreferencesUtil().givenName,
       l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+      unresolved: unresolved,
     );
     final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (final segment in segments) {
       final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      buffer.write('$timestampStr ${names.forSegment(segment)}: ${segment.text.trim()} ');
+      final name = names.forSegment(segment);
+      final label = name.isEmpty ? '' : '$name: ';
+      buffer.write('$timestampStr $label${segment.text.trim()} ');
       buffer.write('\n\n');
     }
     return buffer.toString().trim();

@@ -255,3 +255,9 @@ def test_prompt_asks_for_call_tile_names_but_not_the_owner_tile():
     assert "visible_participant_names" in prompt and "screen_summary" in prompt
     assert '"You"' in prompt
     assert policy_mod.get_purpose_policy("meeting_note_v1").prompt_version.endswith(".v2")
+
+
+def test_approval_model_matches_managed_judge_route():
+    from utils.llm.model_config import get_model
+
+    assert policy_mod.get_purpose_policy("meeting_note_v1").model == get_model("screen_frame_judge")

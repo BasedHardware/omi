@@ -1,6 +1,7 @@
 """Unit tests for rate limiting config and logic."""
 
 import asyncio
+import ast
 import importlib
 import os
 import sys
@@ -123,10 +124,18 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
-        expensive = ['knowledge_graph:rebuild', 'wrapped:generate', 'conversations:reprocess']
+        expensive = ['knowledge_graph:rebuild', 'wrapped:generate']
         for name in expensive:
             max_req, _ = RATE_POLICIES[name]
             self.assertLessEqual(max_req, 5, f"{name} should have low base limit")
+
+    def test_reprocess_allows_template_exploration_below_create_ceiling(self):
+        """Reprocess must allow trying several templates but never exceed full-create spend."""
+        max_req, window = RATE_POLICIES['conversations:reprocess']
+        create_max, create_window = RATE_POLICIES['conversations:create']
+        self.assertEqual(window, 3600)
+        self.assertGreaterEqual(max_req, 10)
+        self.assertLessEqual(max_req / window, create_max / create_window)
 
     def test_bursty_endpoints_have_high_limits(self):
         """Agent/MCP endpoints should allow bursts."""
@@ -251,6 +260,11 @@ class TestBoostExemption(unittest.TestCase):
         """With the default boost of 1.0 the exemption is a no-op for everyone."""
         for name, (base, window) in RATE_POLICIES.items():
             self.assertEqual(get_effective_limit(name, boost=1.0), (base, window))
+
+
+def test_transcript_upload_budget_ignores_boost():
+    assert 'import:upload' in BOOST_EXEMPT_POLICIES
+    assert get_effective_limit('import:upload', boost=100) == (30, 3600)
 
 
 class TestShadowMode(unittest.TestCase):
@@ -520,8 +534,15 @@ class TestWithRateLimitWrapper(unittest.TestCase):
         dep_func = self.ep.with_rate_limit(lambda: "test_uid", "chat:send_message")
         # The inner dependency expects uid as a keyword arg (from Depends)
         result = asyncio.run(dep_func(uid="user123"))
-        mock_enforce.assert_called_once_with("user123", "chat:send_message")
+        mock_enforce.assert_called_once_with("user123", "chat:send_message", fail_closed=False)
         self.assertEqual(result, "user123")
+
+    def test_with_rate_limit_can_fail_closed(self):
+        with patch.object(self.ep, 'check_rate_limit', side_effect=self.ep.redis_pkg.exceptions.RedisError('down')):
+            dependency = self.ep.with_rate_limit(lambda: 'uid', 'import:upload', fail_closed=True)
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(dependency(uid='uid'))
+        self.assertEqual(error.exception.status_code, 503)
 
     @patch('utils.other.endpoints._enforce_rate_limit', side_effect=HTTPException(status_code=429, detail="blocked"))
     def test_with_rate_limit_dependency_propagates_429(self, mock_enforce):
@@ -559,14 +580,14 @@ class TestWithRateLimitWrapper(unittest.TestCase):
             entered = asyncio.Event()
             release = threading.Event()
 
-            def blocking_enforce(_uid, _policy):
+            def blocking_enforce(_uid, _policy, *, fail_closed=False):
                 loop.call_soon_threadsafe(entered.set)
                 release.wait()
 
             dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
             with patch.object(self.ep, "_enforce_rate_limit", blocking_enforce):
                 dependency_task = asyncio.create_task(dep_func(uid="user123"))
-                await entered.wait()
+                await asyncio.wait_for(entered.wait(), timeout=5)
 
                 # If the Redis/Lua boundary were still running on the event loop,
                 # execution could not reach this assertion until release was set.
@@ -631,6 +652,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "voice:message",
             "voice:transcribe",
             "file:upload",
+            "import:upload",
             "agent:execute_tool",
             "mcp:sse",
             "memories:create",
@@ -699,8 +721,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
-        # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 7
-        self.assertEqual(len(matches), 7, f"chat.py expected 7 rate limits, got {len(matches)}")
+        # send_message, device_tool_result, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 8
+        self.assertEqual(len(matches), 8, f"chat.py expected 8 rate limits, got {len(matches)}")
 
     def test_legacy_file_upload_rate_limited(self):
         """Legacy v1/files must also be rate limited to prevent bypass."""
@@ -851,7 +873,21 @@ class TestRouterWiring(unittest.TestCase):
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
         mcp_source = open("routers/mcp.py", encoding='utf-8').read()
-        self.assertIn("min(limit, 25 if include_transcript else 100)", developer_source)
+        # Pin the route's shared-clamp cap independently of formatting.
+        # test_external_list_cache exercises its negative/oversized inputs.
+        tree = ast.parse(developer_source)
+        handler = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'get_conversations'
+        )
+        clamps = [
+            node
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'clamp_list_page'
+        ]
+        self.assertEqual(len(clamps), 1)
+        self.assertEqual(ast.literal_eval(clamps[0].args[2]), 200)
         self.assertIn("min(limit, 200)", mcp_source)
 
     def test_integration_router_has_rate_limits(self):
@@ -1003,7 +1039,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
-            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10], client=None
         )
 
         self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]

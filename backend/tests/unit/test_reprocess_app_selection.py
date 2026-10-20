@@ -177,8 +177,7 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.EXPLICIT_SELECTION
 
 
-@pytest.mark.parametrize('partial_proactive_engine', [False, True])
-def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_proactive_engine):
+def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
     conversation = {'id': 'c1', 'deferred': True}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
@@ -187,22 +186,148 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
     monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: function())
-    if partial_proactive_engine:
-        # CI reproduced this: the file-backed module was already in sys.modules
-        # without persist_desktop_meeting_arrival_best_effort (circular import
-        # left it partially initialized). monkeypatch.setattr raising=True then
-        # fails before the route is exercised.
-        partial = ModuleType('utils.task_intelligence.proactive_engine')
-        partial.__file__ = 'partial-proactive-engine'
-        monkeypatch.setitem(sys.modules, 'utils.task_intelligence.proactive_engine', partial)
-    # create=True binds the in-function import seam whether or not that name
-    # already exists on the cached module.
-    with patch(
-        'utils.task_intelligence.proactive_engine.persist_desktop_meeting_arrival_best_effort',
-        create=True,
-    ), patch.object(conv_router, 'process_conversation', return_value=model) as process:
+    with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False
     assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+def test_successful_reprocess_schedules_durable_learning():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    model.id = 'c1'
+    tasks = []
+    background_tasks = SimpleNamespace(add_task=lambda fn, *a: tasks.append((fn, a)))
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', background_tasks=background_tasks)
+
+    assert result is model
+    assert len(tasks) == 1
+    from utils.speaker_learning_jobs import run_speaker_learning_jobs
+
+    assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
+
+
+@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
+def test_busy_claim_answers_409_only_under_the_result_contract(monkeypatch, enabled):
+    """Another writer owns the conversation: never report the stale row as an update."""
+    from database import processing_attention as attention
+
+    if enabled:
+        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
+    else:
+        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+    monkeypatch.setattr(attention, 'claim', lambda *a, **k: ({'operation_id': 'other'}, False))
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        if enabled:
+            with pytest.raises(HTTPException) as exc:
+                conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
+            assert exc.value.status_code == 409
+            assert exc.value.detail['code'] == 'conversation_processing_in_progress'
+        else:
+            assert conv_router.reprocess_conversation(conversation_id='c1', uid='u1') is model
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('app_id', 'overview', 'apps_results', 'expected'),
+    [
+        (None, 'Omi notes', [], 'succeeded'),
+        (None, '', [SimpleNamespace(app_id='summary-app', content='APP')], 'failed'),
+        ('summary-app', '', [SimpleNamespace(app_id='summary-app', content='APP')], 'succeeded'),
+        ('summary-app', 'Omi notes', [SimpleNamespace(app_id='other', content='OTHER')], 'failed'),
+        ('summary-app', 'Omi notes', [SimpleNamespace(app_id='summary-app', content='  ')], 'failed'),
+    ],
+)
+def test_attention_outcome_follows_the_requested_summary(monkeypatch, app_id, overview, apps_results, expected):
+    from database import processing_attention as attention
+
+    states = []
+    real_finish = attention.finish
+
+    def record_finish(uid, operation, state, *args, **kwargs):
+        states.append(state)
+        return real_finish(uid, operation, state, *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'finish', record_finish)
+    selected = _app()
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app={'id': selected.id}, available_app=selected, enabled=True
+    )
+    model.structured = SimpleNamespace(overview=overview)
+    model.apps_results = apps_results
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        conv_router.reprocess_conversation(conversation_id='c1', app_id=app_id, uid='u1')
+
+    assert states == [expected]
+
+
+def test_suggested_apps_hydrate_concurrently_in_suggestion_order(monkeypatch):
+    import asyncio
+    import threading
+
+    conversation = SimpleNamespace(suggested_summarization_apps=['a', 'missing', 'b'])
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda data: conversation)
+    barrier = threading.Barrier(3, timeout=5)
+
+    def hydrate(app_id, uid):
+        barrier.wait()  # deadlocks (BrokenBarrierError) unless all three run at once
+        if app_id == 'missing':
+            return None
+        return SimpleNamespace(model_dump=lambda: {'id': app_id})
+
+    monkeypatch.setattr(conv_router, '_hydrate_suggested_app', hydrate)
+    result = asyncio.run(conv_router.get_conversation_suggested_apps('c1', uid='u1'))
+
+    assert result == {'suggested_apps': [{'id': 'a'}, {'id': 'b'}], 'conversation_id': 'c1'}
+
+
+def test_hydrate_suggested_app_adds_user_specific_fields(monkeypatch):
+    app_data = {
+        'id': 'good',
+        'name': 'Summary assistant',
+        'category': 'productivity',
+        'author': 'omi',
+        'description': 'Summarizes conversations',
+        'image': '',
+        'capabilities': [],
+        'payment_link': 'https://pay.example/x',
+        'thumbnails': ['t1'],
+    }
+    monkeypatch.setattr(
+        conv_router, 'get_app_thumbnail_url', lambda thumbnail_id: f'https://cdn.example/{thumbnail_id}'
+    )
+    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=dict(app_data)), patch(
+        'utils.apps.get_is_user_paid_app', return_value=True
+    ):
+        app = conv_router._hydrate_suggested_app('good', 'u1')
+    with patch('utils.apps.get_available_app_by_id_with_reviews', return_value=None):
+        missing = conv_router._hydrate_suggested_app('gone', 'u1')
+
+    assert app.is_user_paid is True
+    assert app.payment_link == 'https://pay.example/x?client_reference_id=uid_u1'
+    assert app.thumbnail_urls == ['https://cdn.example/t1']
+    assert missing is None
+
+
+@pytest.fixture(autouse=True)
+def retry_ledger(monkeypatch):
+    from database import processing_attention as attention
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    client = StrictFirestore({('users', 'u1', 'conversations', 'c1'): {'id': 'c1', 'status': 'completed'}})
+    monkeypatch.setattr(attention, 'db', client)
+    monkeypatch.setattr(attention.firestore, 'transactional', lambda fn: fn)
+
+    def run(client, fn, *args, **kwargs):
+        with client.lock:
+            return fn(client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'run_transactional', run)

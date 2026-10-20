@@ -90,15 +90,19 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'SyncAssignmentConflict',
         'FirestoreContentionExhausted',
         'SyncConversationPersistenceFenced',
+        'FirstSummaryCallbackPending',
+        'SummaryOutputUnavailable',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',
+        'RefreshConversationUnavailable',
         'OtherException',
     }
 )
 
 # Only these bounded, data-shape exception types can identify a repeatable
-# persistence failure. Transport, contention, assignment conflicts, and
-# catch-all exception classes must never count against content.
+# persistence failure. Transport, contention, and catch-all exception classes
+# must never count against content. Assignment conflicts are classified by
+# subtype separately, never by the exception class alone.
 SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
     {
         'AssertionError',
@@ -111,6 +115,19 @@ SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
         'ValueError',
     }
 )
+
+# The closed set of persistence fingerprints that may count as a strike in the
+# three-strike / 24-hour repeat-failure pause. ``persistence:mixed`` is the one
+# generic token for a batch whose failing segments carry different fingerprints;
+# per-segment diagnostics retain the cause.
+SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS = frozenset(
+    {
+        'persistence:provenance_mismatch',
+        'persistence:redirect_cycle',
+        'persistence:document_size_limit',
+        'persistence:mixed',
+    }
+) | frozenset(f'persistence:{name}' for name in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS)
 
 
 def bounded_sync_phase(phase: object) -> str:

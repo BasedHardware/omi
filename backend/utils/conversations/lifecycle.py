@@ -8,16 +8,22 @@ lifecycle fields directly.
 
 from __future__ import annotations
 
+from utils.observability.sync_phases import sync_phase
+from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
+
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
+from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
+from database import sync_cap_recovery
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
@@ -93,9 +99,19 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
         raise LifecycleTransitionError(f'lifecycle persistence rejects status={status}')
 
 
+@set_data_protection_level(data_arg_name='conversation_data')
+def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
+    # Resolve privacy at the existing write boundary before deciding ownership.
+    # The downstream DB decorator sees the resolved value and performs no second lookup.
+    if record_capture_eligible(uid, conversation_data):
+        conversation_data['record_lane_owner'] = 'batch_live_v1'
+
+
 def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
+    if live_record_enabled_for(uid):
+        _reserve_batch_live_capture(uid, conversation_data)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
@@ -130,15 +146,22 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     return created
 
 
-def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
+@sync_phase('firestore')
+def ingest_sync_conversation(
+    uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None, recovery_checkpoint: dict | None = None
+):
     """Admit a retained deterministic sync row and atomically append later chunks.
 
     Enrichment follows persistence; filler remains recoverable under Show discarded.
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
+    checkpoint_hooks: dict[str, Any] = {}
+    if recovery_checkpoint is not None:
+        before, after = sync_cap_recovery.ingest_hooks(uid, recovery_checkpoint, incoming)
+        checkpoint_hooks = {'before_assign': before, 'after_assign': after}
     assigned, created, survivors = conversations_db.assign_sync_conversation(
-        uid, incoming, candidate_id=candidate_id, target_id=target_id
+        uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
     record_sync_intake_outcome(created=created)
     if created:
@@ -146,6 +169,7 @@ def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id
     return assigned, created, survivors
 
 
+@sync_phase('firestore')
 def persist_processed_conversation(
     uid: str, conversation_data: dict[str, Any], *, smart_merge_refresh: tuple[int, str] | None = None
 ) -> bool:
@@ -265,6 +289,19 @@ def complete(uid: str, conversation_id: str) -> bool:
         ConversationStatus.merging,
         ConversationStatus.completed,
     )
+
+
+def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, quiet_for: timedelta) -> str:
+    """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
+
+    The only lifecycle edge from ``in_progress`` straight to ``completed``, and
+    only for this case: the finalization binding grows the document, so the
+    normal ``in_progress -> processing`` admission is rejected on every attempt
+    and the row would stay invisible while each reconnect retried it. Content is
+    kept as-is; the row becomes a visible conversation without a generated
+    summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
+    """
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
@@ -436,9 +473,20 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict[str, Any]) -> bool:
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
     """A relevance verdict reached after the fact; never overrides a restore."""
-    return conversations_db.discard_by_relevance(uid, conversation_id, relevance_decision)
+    return conversations_db.discard_by_relevance(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
 
 
 def restore_discarded(uid: str, conversation_id: str) -> bool:
@@ -902,7 +950,19 @@ def request_finalization(
         return dict(intent) | {'route': 'pusher'}
 
     try:
-        enqueue_listen_finalization_job(intent['job_id'], int(intent['dispatch_generation'] or 1))
+        from utils.conversations.demand_processing import schedule
+        from utils.cloud_tasks import listen_finalization_binding
+
+        generation = int(intent['dispatch_generation'] or 1)
+        if schedule(
+            uid,
+            intent['job_id'],
+            {'job_id': intent['job_id'], 'dispatch_generation': generation},
+            listen_finalization_binding(),
+            f"listen-finalization-{intent['job_id']}-{generation}",
+        ):
+            return dict(intent) | {'route': 'cloud_tasks'}
+        enqueue_listen_finalization_job(intent['job_id'], generation)
     except Exception:
         record_fallback(
             component='pusher',

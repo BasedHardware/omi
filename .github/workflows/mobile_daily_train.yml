@@ -1,0 +1,81 @@
+name: Mobile daily train
+
+# Codemagic schedules live only in its UI, so the daily store train is dispatched
+# from here: one Codemagic `mobile-daily-train` run per day on main. The train
+# self-drives the release once the stores approve: iOS submissions use
+# AFTER_APPROVAL with the automatic phased rollout (pausable in App Store
+# Connect), Android starts a staged production rollout at 1% (haltable in Play
+# Console) and promotes it one ladder hop per 4-hour observation window via
+# mobile_rollout_watch.yml. Store review and the console brakes still gate
+# everything; it never bypasses them.
+# See .github/agent-docs/mobile-release-process.md.
+#
+# Dispatch is owned by the operator-side release gate (Hermes cron
+# `Omi mobile daily release gate`, collector
+# ~/.hermes/scripts/omi-mobile-daily-release-check.py): the gate audits the
+# candidate against the live store baseline (PostHog guardrail rates, jank and
+# relaunch proxies, health endpoints, release-notes preflight) and only a green
+# verdict dispatches this workflow. The fixed 14:00 UTC schedule was removed
+# 2026-10-14 so an ungated train can no longer fire on a bad candidate.
+# Manual dispatch (workflow_dispatch, with optional dry_run) remains available.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read store state and print the plan without submitting or drafting
+        type: boolean
+        default: false
+      pin_ios:
+        description: "Audited iOS candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
+        type: string
+        default: ""
+      pin_android:
+        description: "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
+        type: string
+        default: ""
+
+concurrency:
+  group: mobile-daily-train
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Start the Codemagic train
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+          TRAIN_DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+          TRAIN_PIN_IOS: ${{ inputs.pin_ios }}
+          TRAIN_PIN_ANDROID: ${{ inputs.pin_android }}
+        run: |
+          set -euo pipefail
+          PIN_IOS_FLAG=""
+          if [ -n "$TRAIN_PIN_IOS" ]; then
+            PIN_IOS_FLAG="--pin-ios $TRAIN_PIN_IOS"
+          fi
+          PIN_ANDROID_FLAG=""
+          if [ -n "$TRAIN_PIN_ANDROID" ]; then
+            PIN_ANDROID_FLAG="--pin-android $TRAIN_PIN_ANDROID"
+          fi
+          python3 .github/scripts/dispatch_mobile_daily_train.py \
+            --app-id "$CODEMAGIC_APP_ID" \
+            --dry-run "$TRAIN_DRY_RUN" \
+            $PIN_IOS_FLAG \
+            $PIN_ANDROID_FLAG | tee "$RUNNER_TEMP/dispatch.txt"
+          {
+            echo "### Mobile daily train"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/dispatch.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -2,8 +2,31 @@
 
 from contextlib import contextmanager
 import importlib.util
+import os
+import tempfile
+
+# Unit tests never build a real Google client from the developer's or agent's ambient credentials:
+# an unstubbed Firestore read would reach whatever project those credentials grant (prod read-only
+# on agent hosts). ADC points at a file google-auth rejects without any network call, and gcloud
+# gets an empty config, so an accidental client fails at once instead of authenticating.
+# Integration suites keep their configured credentials; emulator-backed runs are left alone.
+if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
+    _no_credentials_dir = tempfile.mkdtemp(prefix='omi-unit-no-adc-')
+    _no_credentials_file = os.path.join(_no_credentials_dir, 'adc.json')
+    with open(_no_credentials_file, 'w', encoding='utf-8') as handle:
+        handle.write('{"type": "omi_unit_tests_have_no_google_credentials"}')
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = _no_credentials_file
+    os.environ['CLOUDSDK_CONFIG'] = _no_credentials_dir
+    os.environ.pop('GOOGLE_CLOUD_PROJECT', None)
+
 import sys
 import types
+from unittest.mock import MagicMock
+
+import pytest
+
+# Capture the pure resolver boundary before legacy suites replace package objects.
+import config.rollout_cohorts as _rollout_cohorts
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
@@ -94,6 +117,8 @@ def _install_prometheus_client_stub():
     prometheus_client.REGISTRY = registry
     prometheus_client.CONTENT_TYPE_LATEST = 'text/plain; version=0.0.4; charset=utf-8'
     prometheus_client.generate_latest = lambda registry=None: b''
+    prometheus_client.disable_created_metrics = lambda: None
+    prometheus_client.start_http_server = lambda *args, **kwargs: (MagicMock(), MagicMock())
 
     sys.modules['prometheus_client'] = prometheus_client
 
@@ -203,3 +228,89 @@ def _install_cachetools_stub():
 _install_prometheus_client_stub()
 _install_redis_stub()
 _install_cachetools_stub()
+
+
+@pytest.fixture(autouse=True)
+def _reset_live_stt_fleet_health():
+    """Reset the module-level live STT fleet-health singleton in place.
+
+    Account quarantine now persists in the shared singleton even while the
+    cost-routing kill switch is off (a mode-independent hard exclusion), so a
+    test that records a synthetic bench must not withdraw providers from
+    later tests. The reset swaps instance state in place because sibling
+    modules (live_chain, streaming, live_session) keep import-time references
+    to this exact object; rebinding the module attribute would leave them
+    sharing the polluted instance.
+    """
+    import sys
+
+    if 'utils.stt.live_health' not in sys.modules:
+        # Unrelated shards must not pay this module's import chain.
+        yield
+        return
+    from utils.stt import live_health
+
+    shared = live_health.health
+    fresh = type(shared)()
+    with shared._lock:
+        vars(shared).update({key: value for key, value in vars(fresh).items() if key != '_lock'})
+    if 'utils.stt.streaming' in sys.modules:
+        # Clear both breaker evidence and its identity latch so the next test
+        # starts with closed family circuits, including account quarantine.
+        from utils.stt import streaming
+
+        # Import-isolation stubs register a bare streaming module. They have no
+        # family circuits to reset, and touching the missing lock fails the next file.
+        lock = getattr(streaming, '_family_circuits_lock', None)
+        circuits = (
+            getattr(streaming, '_parakeet_circuit', None),
+            getattr(streaming, '_deepgram_circuit', None),
+            getattr(streaming, '_modulate_circuit', None),
+            getattr(streaming, '_soniox_circuit', None),
+        )
+        identity = getattr(streaming, '_family_circuits_identity', None)
+        if lock is None or identity is None or any(circuit is None for circuit in circuits):
+            yield
+            return
+        with lock:
+            for circuit in (
+                streaming._parakeet_circuit,
+                streaming._deepgram_circuit,
+                streaming._modulate_circuit,
+                streaming._soniox_circuit,
+            ):
+                circuit.reset()
+            streaming._family_circuits_identity.clear()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def isolated_dream_dynamic_control(monkeypatch):
+    """Unit tests inject flag state instead of reading remote operator config."""
+    from config import dream_control
+
+    monkeypatch.setattr(dream_control, '_until', float('inf'))
+    monkeypatch.setattr(dream_control, '_allowed', True)
+    monkeypatch.setattr(dream_control, '_refreshing', False)
+
+
+@pytest.fixture(autouse=True)
+def empty_rollout_cohorts(monkeypatch):
+    """Inject an empty store without importing SDKs or scheduling real reads."""
+    cohorts = _rollout_cohorts
+
+    def membership(uid, name, *, legacy_members=None, legacy_all=False):
+        return cohorts.legacy_membership(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
+
+    def members(name):
+        return tuple(
+            sorted({item.strip() for item in cohorts.COHORT_ENVS[name]().split(',') if cohorts.valid_uid(item.strip())})
+        )
+
+    async def warm(_uid):
+        return None
+
+    monkeypatch.setattr(cohorts, '_membership_resolver', membership)
+    monkeypatch.setattr(cohorts, '_members_resolver', members)
+    monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
+    monkeypatch.setattr(cohorts, '_warm_resolver', warm)

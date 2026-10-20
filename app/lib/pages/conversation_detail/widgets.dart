@@ -9,12 +9,14 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
+import 'package:omi/pages/conversation_detail/widgets/note_sections_sliver.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_generation.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -32,9 +34,11 @@ String conversationDurationLabel(ServerConversation conversation, [AppLocalizati
 
 /// The conversation title, edited in place.
 ///
-/// Up to two lines with a Done key; an empty title shows the "Untitled Conversation" placeholder. The
-/// edit is saved when editing ends — Done, or tapping away — and the outcome is announced
-/// ("Saved" / an error that restores the old title). Blank or unchanged text is not saved.
+/// Up to three lines at the page's title size, with a Done key; a longer title ends in an ellipsis
+/// until it is edited (a text field would cut it off mid-line); an empty title shows the "Untitled
+/// Conversation" placeholder. The edit is saved when editing ends — Done, or tapping away — and the
+/// outcome is announced ("Saved" / an error that restores the old title). Blank or unchanged text is
+/// not saved.
 class ConversationTitleField extends StatefulWidget {
   final TextStyle style;
   final TextEditingController? controller;
@@ -60,6 +64,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
   void initState() {
     super.initState();
     widget.focusNode?.addListener(_onFocusChanged);
+    widget.controller?.addListener(_onTextChanged);
   }
 
   @override
@@ -69,15 +74,25 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
       oldWidget.focusNode?.removeListener(_onFocusChanged);
       widget.focusNode?.addListener(_onFocusChanged);
     }
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_onTextChanged);
+      widget.controller?.addListener(_onTextChanged);
+    }
   }
 
   @override
   void dispose() {
     widget.focusNode?.removeListener(_onFocusChanged);
+    widget.controller?.removeListener(_onTextChanged);
     super.dispose();
   }
 
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onFocusChanged() {
+    if (mounted) setState(() {});
     if (widget.focusNode?.hasFocus ?? true) return;
     _save();
   }
@@ -97,11 +112,38 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
 
   @override
   Widget build(BuildContext context) {
+    final text = widget.controller?.text ?? '';
+    // At rest the title is drawn as text so a long one ends in "…" instead of being cut off; the
+    // field stays underneath (invisible) so a tap still lands in it and starts editing.
+    final atRest = text.isNotEmpty && !(widget.focusNode?.hasFocus ?? false);
+    final field = _buildField(context);
+    if (!atRest) return field;
+    return Stack(
+      children: [
+        Opacity(opacity: 0, alwaysIncludeSemantics: true, child: field),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ExcludeSemantics(
+              child: Text(
+                text,
+                key: const Key('conversation_title_at_rest'),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: widget.style,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildField(BuildContext context) {
     return TextField(
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
       minLines: 1,
-      maxLines: 2,
+      maxLines: 3,
       focusNode: widget.focusNode,
       controller: widget.controller,
       onSubmitted: (_) => widget.focusNode?.unfocus(),
@@ -205,6 +247,7 @@ class AppResultDetailWidget extends StatefulWidget {
   final void Function(ConversationSummarySelection selection)? onEditStarted;
   final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
+  final ValueChanged<String>? onOpenSource;
   final bool asSliver;
 
   const AppResultDetailWidget({
@@ -218,6 +261,7 @@ class AppResultDetailWidget extends StatefulWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.onOpenSource,
     this.asSliver = false,
   });
 
@@ -285,15 +329,6 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     _exitEditing();
   }
 
-  /// Attribution label for the summary source. The selected non-app summary is
-  /// Omi's own "Summary" — the same name the bottom pill and desktop use;
-  /// "Unknown App" is reserved for an app result whose catalog lookup failed
-  /// (SCA-359), including legacy results without an app id.
-  String _summarySourceLabel(BuildContext context, ConversationSummarySelection selection) {
-    if (widget.app != null) return widget.app!.name.decodeString;
-    return selection.isApp ? context.l10n.unknownApp : context.l10n.summary;
-  }
-
   Widget _buildNoSummaryForApp(BuildContext context) {
     return Semantics(
       button: true,
@@ -336,7 +371,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                         ),
                       ),
           ),
-          if (content.isNotEmpty && !_isEditing) _buildAppAttribution(context, selection),
+          if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
         ],
       ),
     );
@@ -386,6 +421,10 @@ class GetAppsWidgets extends StatelessWidget {
   final void Function(ConversationSummarySelection selection)? onEditStarted;
   final void Function(ConversationSummarySelection selection)? onEditCancelled;
   final bool Function()? canStartEditing;
+  final ValueChanged<String>? onOpenSource;
+
+  /// Switches the page to the Transcript tab (the empty state's "Read Full Transcript").
+  final VoidCallback? onOpenTranscript;
   const GetAppsWidgets({
     super.key,
     this.searchQuery = '',
@@ -394,43 +433,74 @@ class GetAppsWidgets extends StatelessWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.onOpenSource,
+    this.onOpenTranscript,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, child) {
-        final selection = provider.getSummarySelection();
-        if (selection.kind == ConversationSummaryKind.empty) {
-          if (provider.conversation.showsSummaryRetry) {
-            return const SliverToBoxAdapter(child: SummaryRetryWidget());
+    return ValueListenableBuilder<bool>(
+      valueListenable: SummaryGenerationV2Gate.listenable,
+      builder: (context, _, __) => Consumer<ConversationDetailProvider>(
+        builder: (context, provider, child) {
+          final redesign = SummaryGenerationV2Gate.isEnabled;
+          // One progress surface: while a summary is being written, the tab shows that, never the
+          // summary it is about to replace (and never a second "Generate Summary").
+          if (provider.isReprocessingOpenConversation) {
+            return const SliverToBoxAdapter(child: SummaryGeneratingState());
           }
-          return SliverToBoxAdapter(child: child!);
-        }
+          final failure = redesign ? provider.summaryFailure : null;
+          final selection = provider.getDisplayedSummarySelection();
+          if (selection.kind == ConversationSummaryKind.empty) {
+            if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
+            final conversation = provider.conversation;
+            // A failed processing pass can be retried the same way as a failed summary.
+            if (conversation.showsSummaryRetry ||
+                (conversation.status == ConversationStatus.failed &&
+                    !conversation.discarded &&
+                    !conversation.isLocked)) {
+              return const SliverToBoxAdapter(child: SummaryRetryWidget());
+            }
+            if (conversation.status == ConversationStatus.processing) {
+              return SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 18.0),
+                  child: OmiLoadingState(label: context.l10n.processingConversationProgress),
+                ),
+              );
+            }
+            if (redesign) return SliverToBoxAdapter(child: SummaryEmptyState(onOpenTranscript: onOpenTranscript));
+            return SliverToBoxAdapter(child: child!);
+          }
 
-        return SliverMainAxisGroup(
-          slivers: [
-            if (!provider.conversation.discarded)
-              AppResultDetailWidget(
-                summarySelection: selection,
-                app: selection.isApp ? provider.findAppById(selection.appId) : null,
-                conversation: provider.conversation,
-                searchQuery: searchQuery,
-                currentResultIndex: currentResultIndex,
-                canStartEditing: canStartEditing,
-                onEditStarted: onEditStarted == null ? null : (_) => onEditStarted!(selection),
-                onEditCancelled: onEditCancelled == null ? null : (_) => onEditCancelled!(selection),
-                onSaveSummarySelection: onSaveSummarySelection,
-                asSliver: true,
-              ),
-            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xs)),
-          ],
-        );
-      },
-      child: _SummaryCallToAction(
-        message: context.l10n.noSummaryForConversation,
-        actionLabel: context.l10n.generateSummary,
-        onPressed: () => showSummarizedAppsSheet(context),
+          return SliverMainAxisGroup(
+            slivers: [
+              if (failure != null) SliverToBoxAdapter(child: SummaryFailureCard(failure: failure)),
+              if (redesign && !provider.conversation.discarded)
+                SliverToBoxAdapter(child: SummarySourceChips(selection: selection)),
+              if (!provider.conversation.discarded)
+                AppResultDetailWidget(
+                  summarySelection: selection,
+                  app: selection.isApp ? provider.findAppById(selection.appId) : null,
+                  conversation: provider.conversation,
+                  searchQuery: searchQuery,
+                  currentResultIndex: currentResultIndex,
+                  canStartEditing: canStartEditing,
+                  onOpenSource: onOpenSource,
+                  onEditStarted: onEditStarted == null ? null : (_) => onEditStarted!(selection),
+                  onEditCancelled: onEditCancelled == null ? null : (_) => onEditCancelled!(selection),
+                  onSaveSummarySelection: onSaveSummarySelection,
+                  asSliver: true,
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xs)),
+            ],
+          );
+        },
+        child: _SummaryCallToAction(
+          message: context.l10n.noSummaryForConversation,
+          actionLabel: context.l10n.generateSummary,
+          onPressed: () => showSummarizedAppsSheet(context),
+        ),
       ),
     );
   }
@@ -551,6 +621,17 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
       );
     }
 
+    if (selection.sections.isNotEmpty && widget.searchQuery.isEmpty) {
+      return NoteSectionsSliver(
+        sections: selection.sections,
+        transcriptSegments: widget.conversation.transcriptSegments,
+        onOpenSource: widget.onOpenSource,
+        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+            ? null
+            : () => _startEditing(content),
+      );
+    }
+
     return SliverMainAxisGroup(
       slivers: [
         SliverPadding(
@@ -564,52 +645,47 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 : () => _startEditing(content),
           ),
         ),
-        SliverToBoxAdapter(child: _buildAppAttribution(context, selection)),
+        if (widget.app != null) SliverToBoxAdapter(child: _buildAppAttribution(context, widget.app!)),
       ],
     );
   }
 
-  Widget _buildAppAttribution(BuildContext context, ConversationSummarySelection selection) {
+  /// The app that wrote this summary, opening its page. Omi's own summary (and an app the catalog no
+  /// longer knows) has nowhere to go, so it shows no row; the bottom pill names the source either way.
+  Widget _buildAppAttribution(BuildContext context, App app) {
     const avatarRadius = 12.0;
-    final app = widget.app;
-    final Widget avatar;
-    if (app != null) {
-      avatar = CachedNetworkImage(
-        imageUrl: app.getImageUrl(),
-        imageBuilder: (context, imageProvider) =>
-            CircleAvatar(backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
-        errorWidget: (context, url, error) => CircleAvatar(
-          backgroundColor: OmiColors.textPrimary,
-          radius: avatarRadius,
-          child: const Icon(Icons.error_outline_rounded, size: 12),
-        ),
-        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-          backgroundColor: OmiColors.surface2,
-          radius: avatarRadius,
-          child: const OmiSpinner(size: OmiSpinnerSize.small),
-        ),
-      );
-    } else {
-      avatar = Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
-          borderRadius: OmiRadius.mdAll,
-        ),
-        height: 24,
-        width: 24,
-        alignment: Alignment.center,
-        child: Image.asset(Assets.images.herologo.path, height: 16, width: 16),
-      );
-    }
+    // An app without an image has nothing to fetch.
+    final avatar = app.image.trim().isEmpty
+        ? CircleAvatar(
+            backgroundColor: OmiColors.surface3,
+            radius: avatarRadius,
+            child: Text(
+              app.name.decodeString.characters.firstOrNull?.toUpperCase() ?? '',
+              style: OmiType.caption.copyWith(fontWeight: FontWeight.w600),
+            ),
+          )
+        : CachedNetworkImage(
+            imageUrl: app.getImageUrl(),
+            imageBuilder: (context, imageProvider) => CircleAvatar(
+                backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
+            errorWidget: (context, url, error) => CircleAvatar(
+              backgroundColor: OmiColors.textPrimary,
+              radius: avatarRadius,
+              child: const Icon(Icons.error_outline_rounded, size: 12),
+            ),
+            progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+              backgroundColor: OmiColors.surface2,
+              radius: avatarRadius,
+              child: const OmiSpinner(size: OmiSpinnerSize.small),
+            ),
+          );
 
     return Semantics(
-      button: app != null,
+      button: true,
       child: GestureDetector(
         onTap: () async {
-          if (app != null) {
-            PlatformManager.instance.analytics.pageOpened('App Detail');
-            await routeToPage(context, AppDetailPage(app: app));
-          }
+          PlatformManager.instance.analytics.pageOpened('App Detail');
+          await routeToPage(context, AppDetailPage(app: app));
         },
         child: Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm, left: OmiSpacing.xxs),
@@ -622,17 +698,16 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _summarySourceLabel(context, selection),
+                      app.name.decodeString,
                       maxLines: 1,
                       style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                     ),
-                    if (app != null)
-                      Text(
-                        app.description.decodeString,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                      ),
+                    Text(
+                      app.description.decodeString,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                    ),
                   ],
                 ),
               ),

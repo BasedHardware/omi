@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  backend_sync_memory:
+    description: 'C023 memory trial: 8Gi baseline or 6Gi, independently reversible'
+    required: false
+    default: '8Gi'
   firebase_probe_signer_service_account:
     description: >-
       Optional service account for signing release-probe custom tokens when the
@@ -18,15 +22,6 @@ inputs:
       supplies it any more; every development lane signs through IAM signJwt as
       the named no-role signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT).
       Mutually exclusive with firebase_probe_signer_service_account.
-    required: false
-    default: ''
-  dev_free_tier_local_processing_cohort:
-    description: >-
-      Development-only free-tier cohort (`uid:<uid>[,uid:<uid>]`, or empty).
-      An input, not `vars.…`: a composite action cannot read the `vars` context
-      and fails to LOAD if it tries, which stops every deploy that uses it.
-      Callers pass it for development only; the prod overlay renders a literal
-      empty regardless of what arrives here.
     required: false
     default: ''
   deploy_profile:
@@ -251,6 +246,39 @@ runs:
     - name: Install Python deps for deploy scripts
       shell: bash
       run: python3 -m pip install -q pyyaml
+
+    - name: Preflight required deployment secrets before mutations
+      id: preflight-required-secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-secrets
+
+    - name: Validate backend GMP config without Secret Manager
+      id: prepare-backend-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Validate sync GMP config without Secret Manager
+      id: prepare-sync-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml" >> "$GITHUB_OUTPUT"
 
     - name: Resolve production account-deletion task target
       if: ${{ inputs.runtime_env == 'prod' }}
@@ -547,7 +575,6 @@ runs:
       id: runtime-env
       shell: bash
       env:
-        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
         LISTEN_FINALIZATION_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_handler_url }}
         LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
@@ -572,7 +599,6 @@ runs:
     - name: Validate backend runtime env before deploy
       shell: bash
       env:
-        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
@@ -617,8 +643,9 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -639,6 +666,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --config-env
           --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
@@ -688,9 +716,47 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+        identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
+        forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
+        remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+
+    - name: Validate backend-sync memory trial
+      shell: bash
+      env:
+        SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
+      run: |
+        case "$SYNC_MEMORY" in 6Gi|8Gi) ;; *) echo 'backend-sync memory must be 6Gi or 8Gi' >&2; exit 1 ;; esac
+
+    - name: Resolve live sync maxScale
+      id: live-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        # Service-level caps are the live ops control; older services may only have a revision cap.
+        # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
+        MAX_SCALE="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+            [.[] | select(.metadata.name == $service)]
+            | if length > 1 then error("Duplicate Cloud Run service") else
+                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
+                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
+                 // "50") end
+            | if type == "string" and test("^[1-9][0-9]*$") then .
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "50"
+              elif tonumber > 500 then "50" else . end')"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
       id: deploy-backend-sync
@@ -702,10 +768,14 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
+          --cpu=2
+          --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
+          --memory=${{ inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
@@ -726,6 +796,8 @@ runs:
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
+        # The manifest names the live backfill queue the reconcile step manages.
+        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}
         alert_notification_channels: ${{ inputs.sync_backfill_alert_channels }}
 
@@ -765,6 +837,36 @@ runs:
             --max-concurrent-dispatches=16
         fi
 
+    - name: Configure production batch quarantine recovery queue
+      if: ${{ inputs.runtime_env == 'prod' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Isolate accepted-work recovery from saturated legacy sync retries.
+        # Listing must succeed: permission/transport errors never imply absence.
+        queue=batch-quarantine-recovery
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        # gcloud prints the queue's short id for value(name), not the full
+        # resource path, so accept either form of this exact queue.
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected recovery queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=16 \
+          --max-dispatches-per-second=8 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=60s
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
@@ -775,10 +877,12 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_flags }}
           --cpu=2
           --memory=2Gi
           --concurrency=40
@@ -793,6 +897,30 @@ runs:
       shell: bash
       run: |
         echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    - name: Attach Managed Prometheus to sync and integration candidates
+      shell: bash
+      env:
+        GMP_CANDIDATE_TAG: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+      run: |
+        set -euo pipefail
+        for service in backend-sync backend-sync-backfill backend-integration; do
+          ingress=backend-1
+          if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
+          args=(
+            --project="${{ inputs.project_id }}"
+            --region="${{ inputs.region }}"
+            --service="$service"
+            --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
+            --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
+            --ingress-container="$ingress"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
+            --config-env
+            --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
+          )
+          if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
+          python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
+        done
 
     - name: Wait for Cloud Run revisions to become ready
       shell: bash
@@ -867,6 +995,17 @@ runs:
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           --check-live-cloud-run
 
+    - name: Report live Cloud Run env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
+
     - name: Gate candidate revisions with the acceptance manifest
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
       shell: bash
@@ -906,6 +1045,7 @@ runs:
       if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
       uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe
       with:
+        probe_fleet: 'true'
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
@@ -966,7 +1106,6 @@ runs:
         ENVIRONMENT: ${{ inputs.runtime_env }}
         RUNTIME_ENV_MANIFEST: ${{ github.workspace }}/backend/deploy/runtime_env.yaml
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
-        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         CONVERSATION_SUMMARIZED_APP_IDS: ${{ env.CONVERSATION_SUMMARIZED_APP_IDS }}
         GOOGLE_CLIENT_ID: ${{ env.GOOGLE_CLIENT_ID }}
         MCP_AUTHORIZATION_SERVER_URL: ${{ env.MCP_AUTHORIZATION_SERVER_URL }}
@@ -1012,7 +1151,7 @@ runs:
           --set gcpProjectId=${{ inputs.project_id }} \
           --set runtimeGcpProjectId=${{ inputs.runtime_gcp_project_id }} \
           --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
-        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=1800s; then
+        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=4200s; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen || true
           exit 1
         fi

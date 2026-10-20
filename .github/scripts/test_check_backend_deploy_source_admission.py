@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
@@ -155,6 +158,7 @@ class WorkflowContractTests(unittest.TestCase):
             CHECKER.ADMISSION_VERIFIER_PATH,
             CHECKER.AUTO_ADMISSION_VERIFIER_PATH,
             CHECKER.DEPLOY_BACKEND_STACK_ACTION,
+            CHECKER.FIRESTORE_READINESS_ACTION,
         ):
             source = ROOT / relative
             destination = temp / relative
@@ -174,21 +178,40 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn(old, composite_text)
         composite.write_text(composite_text.replace(old, new, 1), encoding="utf-8")
 
+    @staticmethod
+    def _step_end(text: str, start: int) -> int:
+        boundary = re.search(r"\n(?:      - |  \S)", text[start + 1 :])
+        if boundary is None:
+            return len(text)
+        return start + 1 + boundary.start() + 1
+
     def move_step_before(self, root: Path, relative: Path, name: str, before_name: str) -> None:
         path = root / relative
         text = path.read_text(encoding="utf-8")
         marker = f"      - name: {name}"
         before_marker = f"      - name: {before_name}"
         start = text.index(marker)
-        end = text.find("\n      - ", start + 1)
-        self.assertNotEqual(end, -1)
-        step = text[start : end + 1]
-        text = text[:start] + text[end + 1 :]
+        end = self._step_end(text, start)
+        step = text[start:end]
+        text = text[:start] + text[end:]
         before = text.index(before_marker)
         path.write_text(text[:before] + step + text[before:], encoding="utf-8")
 
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
+
+    def test_missing_firestore_readiness_action_fails_closed(self) -> None:
+        root = self.fixture_root()
+        (root / CHECKER.FIRESTORE_READINESS_ACTION).unlink()
+        self.assertIn(
+            "backend source-admission contract is missing: .github/actions/firestore-readiness/action.yml",
+            CHECKER.validate(root),
+        )
+
+    def test_action_only_edit_still_selects_source_admission_check(self) -> None:
+        manifest = yaml.safe_load((ROOT / ".github/checks-manifest.yaml").read_text(encoding="utf-8"))
+        check = next(item for item in manifest["checks"] if item["id"] == "backend-deploy-source-admission")
+        self.assertIn(".github/actions/firestore-readiness/**", check["triggers"])
 
     def test_auto_workflow_rejects_wrong_trigger_or_proof_workflow(self) -> None:
         root = self.fixture_root()
@@ -292,7 +315,8 @@ class WorkflowContractTests(unittest.TestCase):
         cases = (
             (
                 "compare-based supersession",
-                'compare_url="$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"\n          ' + anchor,
+                'compare_url="$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"\n          '
+                + anchor,
                 "auto backend scope decision must not decide supersession",
             ),
             (
@@ -434,22 +458,22 @@ class WorkflowContractTests(unittest.TestCase):
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution",
             ),
             (
-                "read-only Firestore auth",
-                "Google Auth for read-only Firestore inventory",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before read-only Firestore authentication",
-            ),
-            (
                 "admitted source checkout before credentials",
                 "Checkout admitted Firestore source",
                 "Require read-only Firestore credentials",
                 "read-only credential use must run before admitted-source checkout",
             ),
             (
-                "read-only Firestore auth before admitted source checkout",
-                "Google Auth for read-only Firestore inventory",
+                "Firestore readiness gate before admission",
+                "Verify serving Firestore indexes",
+                "Resolve and verify the newest proven main source",
+                "automatic release-proof freshness validation must run before the Firestore readiness gate",
+            ),
+            (
+                "Firestore readiness gate before admitted source checkout",
+                "Verify serving Firestore indexes",
                 "Checkout admitted Firestore source",
-                "admitted-source checkout must run before read-only Firestore authentication",
+                "admitted-source checkout must run before the Firestore readiness gate",
             ),
         )
         for name, moved_step, before_step, expected in cases:
@@ -494,6 +518,25 @@ class WorkflowContractTests(unittest.TestCase):
             CHECKER.validate(root),
         )
 
+    def test_readiness_gate_and_control_checkout_reject_fail_open_conditions(self) -> None:
+        for relative in (CHECKER.AUTO_WORKFLOW_PATH, CHECKER.MANUAL_WORKFLOW_PATH):
+            for step_name in (
+                "Checkout immutable Firestore gate controls",
+                "Verify serving Firestore indexes",
+            ):
+                for condition_line in ("        if: 'false'", "        continue-on-error: true"):
+                    root = self.fixture_root()
+                    self.mutate(
+                        root,
+                        relative,
+                        f"      - name: {step_name}\n",
+                        f"      - name: {step_name}\n{condition_line}\n",
+                    )
+                    self.assertTrue(
+                        CHECKER.validate(root),
+                        f"{relative} accepted {condition_line.strip()} on {step_name}",
+                    )
+
     def test_manual_workflow_rejects_fail_open_ref_or_mode_conditions(self) -> None:
         root = self.fixture_root()
         self.mutate(
@@ -508,8 +551,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy'\n",
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' || true\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only') || true\n",
         )
         self.assertIn("manual source admission must use exactly the main-ref deploy condition", CHECKER.validate(root))
 
@@ -520,7 +563,9 @@ class WorkflowContractTests(unittest.TestCase):
             "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
             "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
         )
-        self.assertIn("manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root))
+        self.assertIn(
+            "manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root)
+        )
 
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()
@@ -539,13 +584,111 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
-            "needs: firestore_readiness",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
+            "  deploy:\n    needs: firestore_readiness",
         )
         self.assertIn(
             "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
             CHECKER.validate(root),
         )
+
+    def test_build_only_requires_the_shared_admission_and_audit(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "  build-image:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
+            "  build-image:\n    needs: [validate-production-boundary, firestore_readiness]",
+        )
+        self.assertIn(
+            "build-only must depend on production-boundary validation, source admission, and break-glass audit",
+            CHECKER.validate(root),
+        )
+
+        for old, new in (
+            (
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            ),
+            (
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&",
+                "      github.event.inputs.mode == 'build-only' || true &&\n      needs.validate-production-boundary.result == 'success' &&",
+            ),
+        ):
+            root = self.fixture_root()
+            self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+            self.assertIn(
+                "build-only must use exactly the admitted, audited main-ref build condition", CHECKER.validate(root)
+            )
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}\n",
+            "          ref: ${{ github.event.inputs.release_sha }}\n",
+        )
+        errors = CHECKER.validate(root)
+        self.assertIn("build-only must check out exactly the admitted SHA", errors)
+        self.assertIn("build-only must build the admitted SHA, never the raw release_sha input", errors)
+
+    def test_build_only_keeps_admitted_smoked_and_uncancelled_publication(self) -> None:
+        cases = (
+            (
+                "    if: >-\n      always() && !cancelled() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "build-only must use exactly the admitted, audited main-ref build condition",
+            ),
+            (
+                'if [[ -z "$ADMITTED_SHA" || "$head_sha" != "$ADMITTED_SHA" ]]; then',
+                'if [[ -z "$ADMITTED_SHA" ]]; then',
+                "build-only must verify the checked-out HEAD is the admitted SHA",
+            ),
+            (
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "      - name: Replace admitted tree\n        uses: actions/checkout@v7\n\n"
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
+                "          path: .deploy-control\n",
+                "          path: ./\n",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
+                "          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "          docker push \"$IMAGE\"\n          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "build-only must smoke the built image before pushing its exact tag",
+            ),
+        )
+        for old, new, message in cases:
+            root = self.fixture_root()
+            self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+            self.assertIn(message, CHECKER.validate(root))
+
+    def test_build_only_never_reaches_a_serving_surface(self) -> None:
+        for injected in (
+            "uses: ./.github/actions/deploy-backend-stack",
+            "gcloud run services update-traffic backend --to-latest",
+            "uses: google-github-actions/get-gke-credentials@v3",
+            "helm upgrade --install backend-listen",
+            "docker push gcr.io/p/backend:latest",
+            "echo cache-to: type=registry",
+            "python3 .github/scripts/ensure_backend_route_5xx_alert.py",
+        ):
+            root = self.fixture_root()
+            self.mutate(
+                root,
+                CHECKER.MANUAL_WORKFLOW_PATH,
+                "      - name: Push verified runtime image\n        if: steps.image-tag.outputs.exists == 'false'\n",
+                f"      - name: Injected\n        run: {injected}\n\n"
+                "      - name: Push verified runtime image\n        if: steps.image-tag.outputs.exists == 'false'\n",
+            )
+            errors = CHECKER.validate(root)
+            self.assertTrue(
+                any(error.startswith("build-only must not touch a serving surface") for error in errors),
+                (injected, errors),
+            )
 
     def test_auto_workflow_rejects_github_sha_or_incomplete_source_binding(self) -> None:
         root = self.fixture_root()
@@ -612,7 +755,9 @@ class WorkflowContractTests(unittest.TestCase):
             "admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
             "admitted_sha: ${{ github.event.inputs.release_sha }}",
         )
-        self.assertIn("manual deployment must pass the admitted SHA to the deploy composite action", CHECKER.validate(root))
+        self.assertIn(
+            "manual deployment must pass the admitted SHA to the deploy composite action", CHECKER.validate(root)
+        )
 
         root = self.fixture_root()
         self.mutate(

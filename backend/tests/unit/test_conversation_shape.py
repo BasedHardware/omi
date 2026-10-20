@@ -111,6 +111,33 @@ def test_observe_records_live_duration_speech_and_segments(registries):
             assert SECRET_CONVERSATION not in sample.labels.values()
 
 
+def test_wall_clock_seconds_reads_naive_timestamps_as_utc():
+    naive_start = {'started_at': datetime(2026, 9, 19, 12, 0), 'finished_at': '2026-09-19T12:05:00Z'}
+    assert shape.wall_clock_seconds(naive_start) == 300.0
+    naive_finish = {
+        'started_at': datetime(2026, 9, 19, 12, 0, tzinfo=timezone.utc),
+        'finished_at': '2026-09-19T12:00:30',
+    }
+    assert shape.wall_clock_seconds(naive_finish) == 30.0
+
+
+def test_observe_mixed_naive_and_aware_timestamps_still_records_shape(registries):
+    payload = _live_payload()
+    payload['started_at'] = datetime(2026, 9, 19, 12, 0)
+    shape.observe_completed_conversation_shape(SECRET_UID, payload)
+    assert registries.get_sample_value('omi_conversation_duration_seconds_sum', {'source': 'live'}) == 11.0
+    assert registries.get_sample_value('omi_conversation_segments_sum', {'source': 'live'}) == 2.0
+    created_labels = {
+        'event': 'conversation_created',
+        'client_kind': 'unknown',
+        'app_build': 'unknown',
+        'outcome': 'ok',
+        'source': 'live',
+        'op': 'none',
+    }
+    assert registries.get_sample_value('omi_product_event_total', created_labels) == 1
+
+
 def test_observe_sync_logs_prebucketed_line(registries, caplog):
     payload = _live_payload()
     payload['sync_content_revision'] = 1

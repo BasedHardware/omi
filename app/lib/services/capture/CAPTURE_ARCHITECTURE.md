@@ -102,6 +102,21 @@ User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
 `TranscriptionSettingsChanged`, `RecordProfileChanged`,
 `OnboardingBatchChanged`.
 
+A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
+`FinishRequested` with the card's `SystemSurfaceTarget` (recording id and
+conversation revision). The reducer compares it with the environment when it
+applies the event and rejects a stale tap with no effects
+(`StaleSystemSurfaceTarget`), so a tap queued behind a stop, handoff or finish
+never acts on the recording or conversation that replaced the card's.
+
+The card is quiet by default. Healthy pendant capture shows no Live Activity;
+`CapturePresentationPolicy` (`app/ios/LiveActivity/OmiCaptureAttributes.swift`)
+shows one only while capture needs the user: paused, the pendant unheard for two
+minutes, or its battery at 15% or less. A phone recording the user started keeps
+the recording card. iOS starts a Live Activity only while Omi is in the
+foreground, so a notice that begins in the background appears the next time Omi
+is opened.
+
 External signals: `CallStateChanged`, `MicInterruptionChanged`,
 `NativeMicStalled`, `AppForegrounded`, `SocketClosed`, `SocketConnected`,
 `SocketError`, `KeepAliveTick`, `LaunchRecovery`.
@@ -210,6 +225,16 @@ interrupted→record/deviceRecord restore and the mic restart live in
 `_socketConnectedBody`, guarded by staged live ownership. None of these paths
 opens a capture source; their remaining bookkeeping belongs in the
 coordinator admission fence during the next seam extraction.
+
+The uplink-policy seam also reconciles keepalive when the legacy mirror becomes
+`deviceRecord` and after coordinator commits. An admitted `pendantLive` owner
+with transcription not ready must not lose its retry merely because socket
+setup/close ran before BLE activation finished. Reconciliation preserves an
+already-active timer and marks the device reconnect notification pending. The
+keepalive codec read has a ten-second deadline using the capture scheduler;
+expiry returns without failing capture or opening a socket, releasing the
+serialized tick so the next fifteen-second retry can run. Late codec results
+cannot execute reconnect effects.
 
 ### Synchronous surfaces that remain outside the reducer
 

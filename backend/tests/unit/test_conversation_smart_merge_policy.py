@@ -54,7 +54,7 @@ def _pair(gap_minutes=5.0, *, survivor_minutes=10, new_minutes=10):
     return survivor, s_segments, new, n_segments
 
 
-def test_new_conversation_exclusions():
+def test_new_conversation_exclusions(monkeypatch):
     good = _row('n', 0, 5)
     segments = _segments()
     assert policy.new_conversation_skip(good, segments, capture_end=True) is None
@@ -73,12 +73,16 @@ def test_new_conversation_exclusions():
         {'deleted': True},
         {'smart_merge': {'role': 'donor'}},
         {'smart_merge': {'role': 'survivor', 'revision': 1}},  # a merge target never becomes a donor
-        {'sync_merged_from': ['bridge-donor']},
     ):
         assert (
             policy.new_conversation_skip(dict(good, **change), segments, capture_end=True)
             == 'conversation_not_eligible'
         )
+    bridged = dict(good, sync_merged_from=['bridge-donor'])
+    assert policy.new_conversation_skip(bridged, segments, capture_end=True) is None
+    monkeypatch.setenv(config.SMART_MERGE_FLATTEN_ENV, 'off')
+    assert policy.new_conversation_skip(bridged, segments, capture_end=True) == 'conversation_not_eligible'
+    monkeypatch.delenv(config.SMART_MERGE_FLATTEN_ENV, raising=False)
     assert policy.new_conversation_skip(good, [], capture_end=True) == 'conversation_not_eligible'
     wake = [dict(segments[0], text='hey omi what is on my calendar')]
     assert policy.new_conversation_skip(good, wake, capture_end=True) == 'wake_word'
@@ -273,3 +277,12 @@ def test_fragment_segments_select_the_last_fragment_by_absolute_time():
     assert last.id == 'n'
     selected = policy.fragment_segments(merged, survivor_update['transcript_segments'], last)
     assert [s['id'] for s in selected] == [s['id'] for s in n_segments]
+
+
+def test_budget_waiting_conversations_never_merge_without_processing_consent():
+    waiting = _row('waiting', 0, 5, processing_deferred=True)
+    assert policy.new_conversation_skip(waiting, _segments(), capture_end=True) == 'conversation_not_eligible'
+    assert policy.predecessor_status_skip(waiting) == 'predecessor_not_completed'
+    waiting['processing_deferred'] = False
+    assert policy.new_conversation_skip(waiting, _segments(), capture_end=True) is None
+    assert policy.predecessor_status_skip(waiting) is None

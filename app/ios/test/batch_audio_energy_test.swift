@@ -18,7 +18,9 @@ final class CountingDefaults: UserDefaults {
 
 @main
 struct BatchAudioEnergyTests {
-    static func check(_ condition: Bool) { precondition(condition) }
+    static func check(_ condition: Bool, file: StaticString = #file, line: UInt = #line) {
+        precondition(condition, file: file, line: line)
+    }
 
     static func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -31,11 +33,66 @@ struct BatchAudioEnergyTests {
         try testCapturePolicyFixture()
         try testCapturePolicyAdmission()
         try testProcessMuteLatch()
+        try testIngressPolicyDecodeEconomy()
         try testRevisionRetiresQueuedBleWrites()
         try testPhoneWriterPolicyAcrossRestart()
         try testConfigChanges()
         try testLocationSnapshot()
         print("PASS: capture policy, revision retirement, single writes, partial failures, config changes, and location lifecycle")
+    }
+
+    // Exercise the same decoder injected into the BLE ingress owner. Authorization
+    // must see every durable change and the deny-only process latch immediately.
+    static func testIngressPolicyDecodeEconomy() throws {
+        let defaults = UserDefaults(suiteName: "ingress-decode-\(UUID().uuidString)")!
+        CaptureAdmissionPolicy.resetProcessLatchForTesting()
+        defer { CaptureAdmissionPolicy.resetProcessLatchForTesting() }
+        var parses = 0
+        let decoder = CaptureAdmissionPolicyDecoder {
+            parses += 1
+            return CaptureAdmissionPolicy.decodeCanonical($0)
+        }
+        let open = "{\"version\":1,\"revision\":7,\"muted\":false}"
+        defaults.set(open, forKey: CaptureAdmissionPolicy.defaultsKey)
+        for _ in 0..<10_000 {
+            check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder) == .init(muted: false, revision: 7))
+        }
+        check(parses == 1)
+        // Same revision is deliberately insufficient as a cache key.
+        defaults.set("{\"version\":1,\"revision\":7,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(parses == 2)
+        for value: Any in ["{broken", "{\"version\":2,\"revision\":8,\"muted\":false}", 123, String(repeating: "x", count: 4097)] {
+            defaults.set(value, forKey: CaptureAdmissionPolicy.defaultsKey)
+            check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        }
+        defaults.removeObject(forKey: CaptureAdmissionPolicy.defaultsKey)
+        defaults.set(true, forKey: "flutter.deviceMuted")
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set(false, forKey: "flutter.deviceMuted")
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set(open, forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: true, revision: 8, defaults: defaults) == .applied)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder) == .init(muted: true, revision: 8))
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 8, defaults: defaults) == .persistenceNotReady)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set("{\"version\":1,\"revision\":8,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 8, defaults: defaults) == .applied)
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+
+        if ProcessInfo.processInfo.environment["OMI_POLICY_BENCHMARK"] == "1" {
+            let iterations = 100_000
+            func measure(_ decoder: CaptureAdmissionPolicyDecoder?) -> Double {
+                let start = ProcessInfo.processInfo.systemUptime
+                for _ in 0..<iterations { check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted) }
+                return ProcessInfo.processInfo.systemUptime - start
+            }
+            let uncached = measure(nil)
+            let cached = measure(decoder)
+            print("POLICY_BENCHMARK iterations=\(iterations) uncached_seconds=\(uncached) cached_seconds=\(cached)")
+        }
     }
 
     private struct CapturePolicyFixture: Decodable {
@@ -184,8 +241,13 @@ struct BatchAudioEnergyTests {
         // Work admitted under revision 1 must be retired after mute revision 2
         // arrives, even though the BLE callback already returned to its caller.
         policy(1, muted: false)
+        // Hold the writer queue so this test deterministically exercises queued
+        // admission across a mute, rather than racing a frame written before it.
+        let pendingAdmission = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingAdmission.wait() }
         enqueue(0x11)
         policy(2, muted: true)
+        pendingAdmission.signal()
         writer.queue.sync {}
         precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
         defaults.set(false, forKey: "flutter.batchModeEnabled")
@@ -206,8 +268,13 @@ struct BatchAudioEnergyTests {
         enqueue(0x22)
         writer.queue.sync {}
         policy(4, muted: false)
+        // Keep this packet pending until the revision changes. Otherwise a
+        // fast writer may legitimately commit it before policy(5).
+        let pendingRevision = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingRevision.wait() }
         enqueue(0x33)
         policy(5, muted: false)
+        pendingRevision.signal()
         writer.queue.sync {}
         policy(5, muted: false)
         enqueue(0x44)

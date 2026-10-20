@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -24,16 +25,22 @@ import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
+  /// Switches the page to the Transcript tab.
+  final VoidCallback? onOpenTranscript;
+
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty});
+      this.onTapWhenSearchEmpty,
+      this.onOpenTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -61,7 +68,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, provider, child) {
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
-          final summarySelection = provider.getSummarySelection();
+          // Base the surrounding tab state on the summary the user is actually looking at
+          // (the displayed source chip), not the canonical server selection.
+          final summarySelection = provider.getDisplayedSummarySelection();
+          // Room under the tab row (Omi v8 `.sum`). A leading section heading brings its own.
+          final leadsWithHeading = summarySelection.content.trimLeft().startsWith('#');
           // App-result summaries require result coordinates for trustworthy
           // feedback provenance. Keep this prompt on the canonical overview /
           // sections population until that wire is available.
@@ -87,7 +98,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 !provider.loadingReprocessConversation &&
                 conversation?.status == ConversationStatus.completed &&
                 !discarded &&
-                provider.getSummarySelection().content.trim().isNotEmpty,
+                summarySelection.content.trim().isNotEmpty,
             child: Stack(
               children: [
                 CustomScrollView(
@@ -99,12 +110,18 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                       sliver: SliverMainAxisGroup(slivers: [
                         // Title and facts live in the page header, shared by every tab.
-                        const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                        SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                        // Where the transcript and summary were made, when the phone made them.
+                        // Redo with Omi Cloud waits on a re-transcription endpoint.
+                        if (conversation != null && !discarded)
+                          SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                onOpenSource: widget.onOpenSource,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
+                                onOpenTranscript: widget.onOpenTranscript,
                                 canStartEditing: () {
                                   final connectivityProvider =
                                       Provider.of<ConnectivityProvider>(context, listen: false);

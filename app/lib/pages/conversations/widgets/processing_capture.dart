@@ -1,3 +1,5 @@
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -7,21 +9,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
-import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
@@ -48,10 +45,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// remembered here: set while a realtime pendant capture is live, cleared when the pendant
   /// reconnects, is unpaired, or another source (the phone) takes over.
   String? _droppedSource;
-  DateTime? _droppedStartedAt;
-
-  /// When the drop was first seen: the card's time stops there, since nothing records meanwhile.
-  DateTime? _droppedAt;
 
   @override
   void initState() {
@@ -63,7 +56,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       final provider = context.read<CaptureProvider>();
       if (provider.offlineRecordingStartedAt != null ||
           provider.customSttBufferingDuration != null ||
-          provider.liveCaptureStartedAt != null ||
+          provider.liveCaptureSource != null ||
           (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
         setState(() {}); // the elapsed time on the card
       }
@@ -130,8 +123,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
         final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
         if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting),
-              padding: _liveCardPadding);
+          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
         }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
@@ -142,38 +134,46 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           return const SizedBox.shrink();
         }
 
-        return GestureDetector(
-          onTap: () async {
-            // Offline/batch mode has no live transcript — the card is informational,
-            // so swallow taps instead of opening the (empty) capturing page. Covers both
-            // device batch and the phone-mic Transcribe Later session.
-            if (provider.isPhoneMicBatchRecording ||
-                (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
-              return;
-            }
-            final isCaptureActive = provider.recordingState == RecordingState.record ||
-                provider.recordingState == RecordingState.systemAudioRecord ||
-                provider.recordingState == RecordingState.deviceRecord ||
-                provider.recordingState == RecordingState.initialising ||
-                provider.recordingState == RecordingState.interrupted ||
-                provider.recordingState == RecordingState.pause ||
-                provider.havingRecordingDevice ||
-                provider.isPaused;
-            if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
-            PlatformManager.instance.analytics.liveTranscriptCardClicked(
-              hasSegments: provider.segments.isNotEmpty,
-              hasPhotos: provider.photos.isNotEmpty,
-              segmentCount: provider.segments.length,
-              photoCount: provider.photos.length,
-            );
-            routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
-          },
-          child: Semantics(
-            button: !batch,
-            hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider), padding: _liveCardPadding),
+        return Column(children: [
+          if (provider.localSttFailure case final failure?)
+            LocalSttRecoveryNotice(
+                failure: failure,
+                onRetry: provider.retryLocalTranscription,
+                onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+          GestureDetector(
+            onTap: () async {
+              // Offline/batch mode has no live transcript — the card is informational,
+              // so swallow taps instead of opening the (empty) capturing page. Covers both
+              // device batch and the phone-mic Transcribe Later session.
+              if (provider.isPhoneMicBatchRecording ||
+                  (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
+                return;
+              }
+              final isCaptureActive = provider.recordingState == RecordingState.record ||
+                  provider.recordingState == RecordingState.systemAudioRecord ||
+                  provider.recordingState == RecordingState.deviceRecord ||
+                  provider.recordingState == RecordingState.initialising ||
+                  provider.recordingState == RecordingState.interrupted ||
+                  provider.recordingState == RecordingState.pause ||
+                  provider.havingRecordingDevice ||
+                  provider.isPaused;
+              if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
+              PlatformManager.instance.analytics.liveTranscriptCardClicked(
+                hasSegments: provider.segments.isNotEmpty,
+                hasPhotos: provider.photos.isNotEmpty,
+                segmentCount: provider.segments.length,
+                photoCount: provider.photos.length,
+              );
+              routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
+            },
+            child: Semantics(
+              button: !batch,
+              hint: batch ? null : context.l10n.liveTranscript,
+              child: _cardShell(_buildUnifiedRecordingUI(provider),
+                  padding: batch ? _liveCardPadding : EdgeInsets.zero, decorated: batch),
+            ),
           ),
-        );
+        ]);
       },
     );
   }
@@ -182,11 +182,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
   static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
 
-  Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
+  Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         width: double.maxFinite,
-        padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
+        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
+        decoration:
+            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
         child: child,
       );
 
@@ -196,30 +197,26 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final source = provider.liveCaptureSource;
     if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
       _droppedSource = source;
-      _droppedStartedAt = provider.liveCaptureStartedAt ?? _droppedStartedAt;
-      _droppedAt = null;
       return false;
     }
     if (source != null || connected || !paired) {
       _droppedSource = null;
-      _droppedStartedAt = null;
-      _droppedAt = null;
       return false;
     }
     if (_droppedSource == null) return false;
-    _droppedAt ??= DateTime.now();
     return true;
   }
 
   Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
     final l10n = context.l10n;
-    final startedAt = _droppedStartedAt;
     return LiveCaptureCard(
       source: _droppedSource!,
       status: l10n.disconnected,
-      detail: reconnecting ? l10n.reconnecting : null,
+      // Reconnecting is its own state; a drop that is not reconnecting yet still says what
+      // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
+      detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
       explanation: l10n.capturePendantDisconnectedDetail,
-      elapsed: startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt),
+      compact: true,
       lastLine: provider.segments.lastOrNull?.text,
     );
   }
@@ -251,12 +248,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // over from is not "device recording".
     final liveSource = provider.liveCaptureSource;
     bool isDeviceRecording = liveSource != null && liveSource != 'phone';
+    // Keep automatic repair and legitimate pendant sleep quiet. In particular,
+    // never animate a Listening timer solely because a restored link is ready.
+    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
     // "Listening" + transcript UI.
     if ((isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) || provider.isPhoneMicBatchRecording) {
-      return _buildBatchRecordingUI(provider);
+      return _buildBatchRecordingUI(provider, unverified: unverified);
     }
 
     // A phone-mic batch session reports RecordingState.record too; exclude it here so
@@ -284,7 +284,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       osHoldsMic: provider.isCallActive,
     );
     final micTaken = interruption == CaptureInterruption.micTaken;
-    final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
+    final hasTerminalTranscriptionFailure =
+        provider.terminalTranscriptionFailure != null || provider.localSttFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
@@ -303,13 +304,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final starting = isPhoneRecording &&
         provider.recordingState == RecordingState.initialising &&
         displayState == CaptureDisplayState.listening;
-    final copy = starting
-        ? CaptureCardCopy(context.l10n.captureStarting)
-        : captureCardCopy(context.l10n, displayState, micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+    final copy = provider.localSttFailure != null
+        ? CaptureCardCopy(context.l10n.transcriptionUnavailable,
+            detail: context.l10n.setupOnDevice, explanation: context.l10n.transcriptionUnavailableRecordingSaved)
+        : unverified
+            ? CaptureCardCopy(context.l10n.captureSourcePendant)
+            : starting
+                ? CaptureCardCopy(context.l10n.captureStarting)
+                : captureCardCopy(context.l10n, displayState,
+                    micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
-      final startedAt = provider.liveCaptureStartedAt;
       final card = LiveCaptureCard(
         source: isDeviceRecording ? liveSource : 'phone',
         status: copy.status,
@@ -318,7 +324,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
         paused: isPaused,
-        elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
+        // The session clock (how long the pendant has been connected) is not the conversation.
+        compact: true,
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
@@ -357,7 +364,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// the time with its consequence, then the controls. There is no live transcript. Storage running
   /// out is a problem (warning glyph, details sheet); a pendant that records on its own (Limitless)
   /// shows the minutes it holds and has no controls, since it records without the phone.
-  Widget _buildBatchRecordingUI(CaptureProvider provider) {
+  Widget _buildBatchRecordingUI(CaptureProvider provider, {bool unverified = false}) {
     final l10n = context.l10n;
     final isLimitless = provider.recordingDevice?.type == DeviceType.limitless;
     final prefs = SharedPreferencesUtil();
@@ -387,6 +394,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
     } else if (muted) {
       copy = CaptureCardCopy(l10n.paused);
+    } else if (unverified) {
+      copy = CaptureCardCopy(l10n.captureSourcePendant);
     } else {
       copy = CaptureCardCopy(l10n.recording, detail: l10n.captureAudioSavedTranscribesLater);
     }
@@ -434,7 +443,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           status: copy.status,
           detail: copy.detail,
           explanation: copy.explanation,
-          elapsed: isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
+          elapsed: unverified || isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
           note: note,
         ),
         if (actions.isNotEmpty) ...[
@@ -458,8 +467,14 @@ class _OfflineControls extends StatelessWidget {
 
   static const _gap = OmiSpacing.xs;
 
-  OmiButton _button(_OfflineAction a) =>
-      OmiButton.secondary(label: a.label, icon: a.icon, onPressed: a.onTap, size: OmiButtonSize.compact, expand: true);
+  OmiButton _button(_OfflineAction a) => OmiButton.secondary(
+        key: ValueKey(a.label),
+        label: a.label,
+        icon: a.icon,
+        onPressed: a.onTap,
+        size: OmiButtonSize.compact,
+        expand: true,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -636,218 +651,4 @@ getPhoneMicRecordingButton(
       ],
     ),
   );
-}
-
-Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // Only show at most 1 processing widget on homepage
-  if (conversations.isEmpty) {
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
-  }
-  // Live events append new IDs; list position is not recency. Processing begins
-  // at capture end, while the optimistic Process Now row has only createdAt.
-  final newest = conversations.reduce((a, b) {
-    final aTime = a.finishedAt ?? a.createdAt;
-    final bTime = b.finishedAt ?? b.createdAt;
-    return bTime.isAfter(aTime) ? b : a;
-  });
-  return SliverToBoxAdapter(
-    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
-  );
-}
-
-// PROCESSING CONVERSATION
-
-class ProcessingConversationWidget extends StatefulWidget {
-  final ServerConversation conversation;
-
-  /// Optional clock override for tests.
-  final DateTime Function()? now;
-
-  /// Optional reprocess override for tests.
-  final Future<ServerConversation?> Function(String conversationId)? reprocess;
-
-  const ProcessingConversationWidget({super.key, required this.conversation, this.now, this.reprocess});
-
-  @override
-  State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
-}
-
-class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
-  Timer? _timeoutTicker;
-  bool _timedOut = false;
-  bool _retrying = false;
-
-  /// Wall-clock when processing is treated as having started for the timeout.
-  /// Prefer [ServerConversation.finishedAt] (capture end ≈ processing start);
-  /// fall back to first paint / retry so long recordings are not instantly flagged.
-  late DateTime _processingStartedAt;
-
-  DateTime get _now => widget.now?.call() ?? DateTime.now();
-
-  DateTime _resolveProcessingStartedAt() {
-    return widget.conversation.finishedAt ?? _now;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _processingStartedAt = _resolveProcessingStartedAt();
-    _refreshTimeout();
-    _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      _refreshTimeout();
-    });
-  }
-
-  @override
-  void didUpdateWidget(ProcessingConversationWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversation.id != widget.conversation.id) {
-      _processingStartedAt = _resolveProcessingStartedAt();
-      _refreshTimeout();
-      return;
-    }
-    final nextFinishedAt = widget.conversation.finishedAt;
-    if (nextFinishedAt != null && nextFinishedAt != oldWidget.conversation.finishedAt) {
-      _processingStartedAt = nextFinishedAt;
-      _refreshTimeout();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timeoutTicker?.cancel();
-    super.dispose();
-  }
-
-  void _refreshTimeout() {
-    final timedOut = isConversationProcessingTimedOut(
-      conversationId: widget.conversation.id,
-      processingStartedAt: _processingStartedAt,
-      now: _now,
-    );
-    if (timedOut != _timedOut) {
-      setState(() => _timedOut = timedOut);
-    }
-  }
-
-  Future<void> _onRetry() async {
-    if (_retrying || widget.conversation.id == '0') return;
-    setState(() => _retrying = true);
-    try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
-      final updated = await reprocess(widget.conversation.id);
-      if (!mounted) return;
-      final provider = context.read<ConversationProvider>();
-      if (updated == null) {
-        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-        return;
-      }
-      if (updated.status == ConversationStatus.processing || updated.status == ConversationStatus.merging) {
-        // Fresh attempt — give the new processing pass another full timeout window.
-        _processingStartedAt = _now;
-        _timedOut = false;
-        provider.addProcessingConversation(updated);
-      } else {
-        provider.removeProcessingConversation(widget.conversation.id);
-        provider.upsertConversation(updated);
-      }
-    } catch (_) {
-      if (!mounted) return;
-      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
-    } finally {
-      if (mounted) setState(() => _retrying = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
-          // Static skeleton - no animation to save CPU/battery
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header row
-                Row(
-                  children: [
-                    // Icon placeholder
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Processing label
-                    Container(
-                      decoration: BoxDecoration(
-                        color: OmiColors.categorySurface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        captureStateLabel(context.l10n, CaptureDisplayState.processing),
-                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    const Spacer(),
-                    // The real start time, not a placeholder bar (hub audit #25).
-                    Text(
-                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Title placeholder
-                Container(
-                  width: double.maxFinite,
-                  height: 16,
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
-                ),
-                if (_timedOut) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.processingTakingLonger,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () {}, // absorb so the card's open-on-tap does not fire
-                      child: TextButton(
-                        key: const Key('processing_conversation_retry_button'),
-                        onPressed: _retrying ? null : _onRetry,
-                        style: TextButton.styleFrom(
-                          foregroundColor: OmiColors.textPrimary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: const Size(44, 44),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

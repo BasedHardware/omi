@@ -9,11 +9,16 @@
     "backend/tests/unit/test_sync_status_read_ownership.py",
     "contracts/parity/conversation_summary.json",
     "backend/tests/unit/test_conversation_summary_mutation.py",
+    "backend/tests/unit/test_summary_task_promotion.py",
+    "backend/tests/integration/test_summary_task_promotion_emulator.py",
+    "desktop/macos/Desktop/Tests/ConversationSummaryTaskPromoterTests.swift",
     "desktop/macos/Desktop/Tests/ConversationSummaryCompositionTests.swift",
     "app/test/fixtures/capture_policy.json",
     "app/test/unit/capture_mute_admission_test.dart",
     "backend/tests/unit/test_manual_speaker_assignments.py",
-    "app/test/unit/transcript_speaker_identity_test.dart"
+    "app/test/unit/transcript_speaker_identity_test.dart",
+    "backend/tests/unit/test_batch_pipeline_live.py",
+    "backend/tests/integration/test_batch_pipeline_live_firestore.py"
   ],
   "evidence_prs": [
     9365,

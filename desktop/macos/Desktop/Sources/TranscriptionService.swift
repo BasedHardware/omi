@@ -44,7 +44,10 @@ class TranscriptionService: @unchecked Sendable {
   /// Matches `models.transcript_segment.TranscriptSegment` on the backend
   struct BackendSegment: Decodable {
     let id: String?
-    let text: String
+    /// Mutable so ingest can strip the assistant's own playback off the front of a segment
+    /// the user talked over (`VoicePlaybackEchoPolicy`) before it reaches the transcript,
+    /// the wake word, or persistence.
+    var text: String
     let speaker: String?  // e.g. "SPEAKER_00"
     let speaker_id: Int?
     let is_user: Bool
@@ -328,6 +331,30 @@ class TranscriptionService: @unchecked Sendable {
   @MainActor private func detachClientState() {
     clientStateSubscription?.cancel()
     clientStateSubscription = nil
+  }
+
+  func notifySpeakerAssigned(personId: String, segmentIds: [String]) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let message = Self.speakerAssignedMessage(personId: personId, segmentIds: segmentIds)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send speaker assignment", error: error)
+      }
+    }
+  }
+
+  static func speakerAssignedMessage(personId: String, segmentIds: [String]) -> String? {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: [
+        "type": "speaker_assigned",
+        "person_id": personId,
+        "segment_ids": segmentIds,
+      ])
+    else { return nil }
+    return String(data: data, encoding: .utf8)
   }
 
   private func sendClientState(_ snapshot: ListenClientState.Snapshot) {

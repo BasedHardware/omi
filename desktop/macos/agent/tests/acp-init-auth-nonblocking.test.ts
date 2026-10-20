@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { beginProviderAuthWithoutBlocking } from "../src/adapters/acp.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { beginProviderAuthWithoutBlocking, requestProviderAuthFromHost } from "../src/adapters/acp.js";
 
 /**
  * Cold-start ACP `initialize` used to `await startAuthFlow()` on -32000, so a
@@ -72,5 +76,54 @@ describe("beginProviderAuthWithoutBlocking", () => {
 
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain("callback server refused to bind");
+  });
+});
+
+/**
+ * Settings' Connect Claude control. Before it existed, a token that expired
+ * mid-turn told the user to "reconnect Claude in Settings", where no control
+ * could produce a sign-in URL.
+ */
+describe("requestProviderAuthFromHost", () => {
+  function hostHarness(activeAuthUrl: string | undefined) {
+    const events: string[] = [];
+    const logs: string[] = [];
+    return {
+      events,
+      logs,
+      deps: {
+        activeAuthUrl: () => activeAuthUrl,
+        announceAuthUrl: (authUrl: string) => events.push(`announce:${authUrl}`),
+        startAuthFlow: () => {
+          events.push("flow_started");
+          return Promise.reject(new Error("callback timed out"));
+        },
+        logErr: (message: string) => logs.push(message),
+      },
+    };
+  }
+
+  it("starts a fresh flow when none is waiting for its callback", async () => {
+    const { events, logs, deps } = hostHarness(undefined);
+
+    requestProviderAuthFromHost(deps);
+    await Promise.resolve();
+
+    expect(events).toEqual(["flow_started"]);
+    expect(logs).toEqual(["Host-requested auth flow failed: callback timed out"]);
+  });
+
+  it("re-announces the live flow instead of replacing its callback server", () => {
+    const { events, deps } = hostHarness("https://claude.ai/oauth/authorize?state=live");
+
+    requestProviderAuthFromHost(deps);
+
+    expect(events).toEqual(["announce:https://claude.ai/oauth/authorize?state=live"]);
+  });
+
+  it("is wired to the start_provider_auth message", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    expect(source).toMatch(/case "start_provider_auth": \{\s*requestProviderAuthFromHost\(/);
   });
 });

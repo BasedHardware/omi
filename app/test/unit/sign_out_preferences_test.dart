@@ -37,6 +37,19 @@ void main() {
     expect(prefs.getBool('onboardingCompleted'), isNull);
   });
 
+  for (final mode in ['light', 'dark', 'system']) {
+    test('sign out preserves explicit $mode appearance across restart', () async {
+      await SharedPreferencesUtil().setAppearanceMode(mode);
+      await clearPreferencesForSignOut();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      expect(prefs.getString(SharedPreferencesUtil.appearanceModeKey), mode);
+      await SharedPreferencesUtil.init();
+
+      expect(SharedPreferencesUtil().appearanceMode, mode);
+    });
+  }
+
   test('the keep-list holds no credentials', () {
     for (final key in kPreferencesKeptOnSignOut) {
       expect(key.toLowerCase(), isNot(contains('token')));

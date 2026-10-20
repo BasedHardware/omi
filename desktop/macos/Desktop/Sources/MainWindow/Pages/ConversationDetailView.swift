@@ -99,6 +99,7 @@ struct ConversationDetailView: View {
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
+  @StateObject private var summaryAppPicker = ConversationSummaryAppPicker()
   /// Playback belongs to the canonical detail, not to the capture browser.
   /// This keeps the signed URL and AVPlayer lifecycle scoped to whichever
   /// conversation detail is currently visible.
@@ -444,8 +445,9 @@ struct ConversationDetailView: View {
     }
     .dismissableSheet(isPresented: $showAppSelector) {
       AppSelectorSheet(
-        apps: appProvider.apps.filter { $0.capabilities.contains("memories") },
+        picker: summaryAppPicker,
         isLoading: isReprocessing,
+        processingAppId: selectedAppForReprocess?.id,
         selectedAppId: ConversationSummarySelection.primarySummary(for: displayConversation).appId,
         preferredAppId: preferredSummaryAppId,
         onSelect: { app in
@@ -457,9 +459,22 @@ struct ConversationDetailView: View {
         onSetPreferred: { app in
           setPreferredSummaryApp(app)
         },
+        onBrowseApps: {
+          showAppSelector = false
+          NotificationCenter.default.post(
+            name: .navigateToSidebarItem, object: nil,
+            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
+        },
         onDismiss: { showAppSelector = false }
       )
       .frame(width: 400, height: 500)
+    }
+    .task(id: showAppSelector) {
+      if showAppSelector {
+        await summaryAppPicker.load()
+      } else {
+        summaryAppPicker.reset()
+      }
     }
     .dismissableSheet(item: $selectedSegmentForNaming) { segment in
       NameSpeakerSheet(
@@ -779,8 +794,25 @@ struct ConversationDetailView: View {
     // Action items sit directly under the summary: they are the part of a
     // meeting a reader acts on. Nothing here is a task until the reader says
     // so (I1) — each row carries its own "Add to Tasks".
-    ConversationActionItemsSection(conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask)
-      .padding(.top, OmiSpacing.xxl)
+    ConversationActionItemsSection(
+      conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask,
+      onTaskAdded: { selected, taskID in
+        guard
+          let linked = ConversationSummaryTaskPromoter.linkedConversation(
+            displayConversation, selected: selected, taskID: taskID)
+        else { return }
+        loadedConversation = linked
+        let canonical = serverClockConversation ?? linked
+        if let cached = ConversationSummaryTaskPromoter.linkedConversation(
+          canonical, selected: selected, taskID: taskID)
+        {
+          serverClockConversation = cached
+          AppState.current?.replaceConversation(cached)
+        }
+      }
+    )
+    .id(displayConversation.id)
+    .padding(.top, OmiSpacing.xxl)
   }
 
   @ViewBuilder

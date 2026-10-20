@@ -17,17 +17,6 @@ struct AssistantPromptStore {
   /// `save(defaultPrompt)`: that would record the default as the user's own choice.
   let reset: () -> Void
 
-  static var insight: AssistantPromptStore {
-    AssistantPromptStore(
-      title: "Insight Prompt",
-      subtitle: "Customize the AI instructions for proactive insights",
-      noun: "insight",
-      defaultPrompt: InsightAssistantSettings.defaultAnalysisPrompt,
-      load: { InsightAssistantSettings.shared.analysisPrompt },
-      save: { InsightAssistantSettings.shared.analysisPrompt = $0 },
-      reset: { InsightAssistantSettings.shared.resetPromptToDefault() })
-  }
-
   static var task: AssistantPromptStore {
     AssistantPromptStore(
       title: "Task Extraction Prompt",

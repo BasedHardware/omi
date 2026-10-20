@@ -13,6 +13,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from utils.retrieval.turn_refs import register_record_ref  # noqa: F401 - real pure module before package stubs
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -25,7 +27,9 @@ def _pkg(name):
     mod = sys.modules.get(name)
     if mod is None or not hasattr(mod, "__path__"):
         mod = types.ModuleType(name)
-        mod.__path__ = []
+        mod.__path__ = (
+            [str(BACKEND_DIR / name.replace('.', '/'))] if name.startswith('utils') or name == 'database' else []
+        )
         sys.modules[name] = mod
     return mod
 
@@ -77,6 +81,9 @@ for _p in [
 _conv_db_mod = _mod("database.conversations")
 _conv_db_mod.get_conversations = MagicMock(return_value=[])
 
+_auth_db_mod = _mod("database.auth")
+_auth_db_mod.get_user_name = MagicMock(return_value="Test User")
+
 _notif_db_mod = _mod("database.notifications")
 _notif_db_mod.get_user_time_zone = MagicMock(return_value="UTC")
 
@@ -88,6 +95,9 @@ _vector_db_mod = _mod("database.vector_db")
 # Stub models.other
 _models_other_mod = _mod("models.other")
 _models_other_mod.Person = MagicMock
+
+_transcript_segment_mod = _mod("models.transcript_segment")
+_transcript_segment_mod.TranscriptSegment = MagicMock
 
 # Stub utils.conversations modules
 _conv_factory_mod = _mod("utils.conversations.factory")
@@ -103,16 +113,29 @@ _conv_search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
 _conv_search_mod.merge_conversation_search_ids = MagicMock(return_value=[])
 _conv_search_mod.parse_exact_conversation_reference = MagicMock(return_value=None)
 
+_transcript_search_mod = _mod("utils.conversations.mcp_transcript_search")
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+_transcript_search_mod.ChatTranscriptSearch = _ChatTranscriptSearch
+_transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="Transcript coverage is partial.")
+_transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
+_transcript_search_mod.merge_chat_conversation_ids = MagicMock(return_value=[])
+_transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
 # Stub utils.retrieval.chat_scope
 _chat_scope_mod = _mod("utils.retrieval.chat_scope")
 _chat_scope_mod.apply_chat_scope_dates = lambda scope, s, e: (s, e, None)
 _chat_scope_mod.chat_scope_from_config = lambda cfg: None
-
-# Stub utils.retrieval.tools.conversation_jit
-_conv_jit_mod = _mod("utils.retrieval.tools.conversation_jit")
-_conv_jit_mod.MAX_JIT_CONVERSATIONS = 10
-_conv_jit_mod.format_active_jit_conversations = MagicMock(return_value="JIT conversations")
-_conv_jit_mod.is_jit_conversation_retrieval_enabled = MagicMock(return_value=False)
 
 
 def _load(module_name, rel_path):
