@@ -259,9 +259,10 @@ Deepgram measured dollars are streaming/sync `nova`, `base`, `enhanced`, and
 The day is stored under `incomplete` with `usd` (known STT) and `unclassified_usd`,
 and that provider is omitted from `providers`, so it is not published as
 `method=measured`. TTS such as `aura` stays out of the STT total; a new or unknown
-positive line item must not disappear inside a measured zero-delta row. A measured
-reconciliation `delta_pct` is `(published - invoice) / invoice` for an accepted
-day, which is zero only when the published total is the whole accepted invoice.
+positive line item must not disappear inside a measured row. A published measured
+row does not claim `delta_pct`: the dollars are the accepted invoice, and there
+is no separate allocation to compare. Incomplete days are omitted, so they do
+not publish a zero delta either.
 
 The existing assembler and `load_bigquery.py` publish the measured lines to:
 

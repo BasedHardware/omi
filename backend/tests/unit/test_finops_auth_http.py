@@ -4,7 +4,6 @@ import asyncio
 import http.client
 import importlib.util
 import io
-import json
 import pathlib
 import sys
 import types
@@ -54,9 +53,9 @@ def refuse(monkeypatch, module):
 def test_prometheus_redirect_does_not_send_the_credential(monkeypatch):
     prom = load(FINOPS / "pull_prometheus.py")
     capture = refuse(monkeypatch, prom)
-    result = prom.call("https://monitor.example/api/v1", SECRET, "query_range", [("query", "up")])
-    assert result == {"status": "error", "error": "prometheus redirect refused"}
-    assert SECRET not in json.dumps(result)
+    with pytest.raises(RuntimeError, match="prometheus redirect refused") as error:
+        prom.call("https://monitor.example/api/v1", SECRET, "query_range", [("query", "up")])
+    assert SECRET not in str(error.value)
     assert len(capture.seen) == 1
     assert capture.seen[0][0].startswith("https://monitor.example/")
     assert ("Authorization", "Bearer " + SECRET) in capture.seen[0][1]

@@ -148,13 +148,11 @@ def test_unclassified_deepgram_is_recorded_and_not_published(stt, monkeypatch, t
     assert [row["component"] for row in longs] == ["stt_soniox_measured"]
     assert all(row["method"] == "measured" for row in longs)
     assert "stt_deepgram_measured" not in {row["pool"] for row in recons}
-    published = Decimal("0.0409000000")
-    assert recons[0]["delta_pct"] == recon.reconciliation_delta_pct(published, published)
+    assert recons[0]["delta_pct"] is None
 
 
-def test_measured_delta_pct_is_computed_not_a_constant(monkeypatch, tmp_path):
+def test_measured_stt_does_not_claim_a_reconciliation_delta(tmp_path):
     recon = load("gcp_cost_reconciliation")
-    monkeypatch.setattr(recon, "reconciliation_delta_pct", lambda pool, allocated: 1.25)
     raw = tmp_path / "raw"
     raw.mkdir()
     (raw / "stt_vendor_cost_daily.json").write_text(
@@ -163,13 +161,8 @@ def test_measured_delta_pct_is_computed_not_a_constant(monkeypatch, tmp_path):
     longs, recons = recon.company_stt_rows(raw, ["2026-04-01"], None)
     assert longs[0]["method"] == "measured"
     assert recons[0]["pool"] == "stt_deepgram_measured"
-    assert recons[0]["delta_pct"] == 1.25
-
-
-def test_reconciliation_delta_pct_is_the_invoice_gap():
-    recon = load("gcp_cost_reconciliation")
-    assert recon.reconciliation_delta_pct(Decimal("4"), Decimal("3")) == -25.0
-    assert recon.reconciliation_delta_pct(Decimal("0"), Decimal("0")) == 0.0
+    assert recons[0]["pool_usd"] == recons[0]["allocated_usd"] == 0.35
+    assert recons[0]["delta_pct"] is None
 
 
 def test_overlapping_incomplete_provider_is_not_measured(tmp_path):
@@ -326,6 +319,7 @@ def test_company_total_reaches_existing_bq_loader_and_date_replacement(stt, monk
     assert [r["usd"] for r in measured] == [143, 0]
     assert [r["inputs_settled"] for r in measured] == [True, False]
     assert tables["unit_cost_reconciliation"][0]["pool"] == "stt_soniox_measured"
+    assert tables["unit_cost_reconciliation"][0]["delta_pct"] is None
     calls = []
     monkeypatch.setattr(loader, "bq", lambda args, stdin=None: calls.append((args, stdin)))
     monkeypatch.setattr(loader.subprocess, "run", lambda *a, **kw: None)
@@ -397,3 +391,6 @@ def test_offline_assembly_cli_emits_measured_company_line(stt, tmp_path):
     assert len(measured) == 1 and float(measured[0]["usd"]) == 143
     assert measured[0]["segment_type"] == "total"
     assert "stt_soniox_measured" not in (derived / "user_day_allocated.csv").read_text()
+    recon_rows = list(csv.DictReader((derived / "unit_cost_reconciliation.csv").open()))
+    measured_recon = [r for r in recon_rows if r["pool"] == "stt_soniox_measured"]
+    assert len(measured_recon) == 1 and measured_recon[0]["delta_pct"] == ""

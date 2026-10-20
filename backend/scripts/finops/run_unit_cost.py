@@ -129,11 +129,11 @@ def validate(derived: pathlib.Path, raw: pathlib.Path, tol_pct: float, dates: li
         "llm_openai",
         "llm_anthropic",
         "stt_vendor_low",
-        "stt_soniox_measured",
-        "stt_deepgram_measured",
         "gcp_total_export",
         "one_time",
     }
+    # Measured STT pools are absent: those rows publish the invoice itself and
+    # carry a null delta, so they are not a pool-versus-allocation check.
     failures = []
     for r in recon:
         if r["pool"] not in variable:
@@ -336,7 +336,13 @@ def main() -> None:
     summary = json.load(open(derived / "day_summary.json"))["days"]
     print("Omi unit cost %s..%s  (run %s)" % (start, end, run_id))
     worst = max(
-        (abs(float(r["delta_pct"])) for r in recon if r["pool"] not in ("llm_openai_ledger_coverage",)), default=0.0
+        (
+            abs(float(r["delta_pct"]))
+            for r in recon
+            if r["pool"] not in ("llm_openai_ledger_coverage", "stt_soniox_measured", "stt_deepgram_measured")
+            and r["delta_pct"] not in ("", None)
+        ),
+        default=0.0,
     )
     print(
         "reconciliation: worst |delta| %.4f%% (tolerance %.2f%%)  |  %s"

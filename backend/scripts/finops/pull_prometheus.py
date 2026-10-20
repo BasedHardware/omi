@@ -59,7 +59,7 @@ def call(base: str, tok: str, api: str, params) -> dict:
         with auth_http.open_authenticated(request, timeout=300) as response:
             return json.loads(response.read().decode())
     except auth_http.RedirectRefused:
-        return {"status": "error", "error": "prometheus redirect refused"}
+        raise RuntimeError("prometheus redirect refused") from None
     except urllib.error.HTTPError as error:
         return {"status": "error", "error": "prometheus HTTP %d" % error.code}
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):

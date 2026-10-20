@@ -148,27 +148,15 @@ def window_net(totals: dict[date, dict[str, Decimal]], today: date) -> Decimal:
     return sum((totals[day]["net"] for day in settlement_window(today) if day in totals), Decimal("0"))
 
 
-def reconciliation_delta_pct(pool_usd: Decimal, allocated_usd: Decimal) -> float:
-    """Percent gap of the published dollars versus the accepted invoice.
-
-    Zero means the published company total is the accepted invoice. It is not
-    a stand-in for a day that dropped unrecognized spend; those days are omitted.
-    """
-    if pool_usd == 0:
-        if allocated_usd != 0:
-            raise ValueError("measured STT published an allocation without an invoice")
-        return 0.0
-    return float((allocated_usd - pool_usd) / pool_usd * 100)
-
-
 def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> tuple[list[dict], list[dict]]:
     """Measured non-GCP invoices at total/all only; never allocate to plans/users.
 
     These components are additive to GCP/LLM invoices, NOT to gross_total (which
     already contains a modelled STT allowance). Missing provider means unknown,
     not zero. A provider listed under ``incomplete`` has unclassified positive
-    dollars and is not measured. The existing loader replaces these rows with
-    the rest of each date.
+    dollars and is not measured. There is no second figure to reconcile against
+    the accepted invoice, so ``delta_pct`` is null and is not a measured-zero
+    claim. The existing loader replaces these rows with the rest of each date.
     """
     import json
 
@@ -213,10 +201,10 @@ def company_stt_rows(raw, dates: Iterable[str], settled_through: str | None) -> 
                     "pool": component,
                     "pool_usd": published,
                     "allocated_usd": published,
-                    "delta_pct": reconciliation_delta_pct(amount, amount),
+                    "delta_pct": None,
                     "invoice_source": provider + "_usage_api",
                     "note": "company total only; allocated_usd is the accepted invoice, not a user allocation; "
-                    "delta_pct is (published - invoice) / invoice; "
+                    "delta_pct is not claimed because there is no separate allocation to compare; "
                     "do not add to modelled gross_total/stt_vendor_low",
                     "inputs_settled": settled_through is None or day <= settled_through,
                 }
