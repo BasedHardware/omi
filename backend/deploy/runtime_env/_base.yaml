@@ -164,16 +164,7 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
-        TRANSLATION_DEMAND_SHADOW_ENABLED:
-          value: 'false'
-          category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_ONDEMAND_GEMINI_ENABLED:
           value: 'true'
           category: rollout
         TRANSLATION_ONOPEN_ENABLED:
@@ -184,12 +175,6 @@ environment_shared:
           category: rollout
         TRANSLATION_NEGATIVE_CACHE_TTL:
           value: '21600'
-          category: rollout
-        TRANSLATION_ONDEMAND_COHORT_PERCENT:
-          value: '100'
-          category: rollout
-        TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-          value: ''
           category: rollout
         TRANSLATION_ONDEMAND_MAX_SEGMENTS:
           value: '50'
@@ -307,16 +292,8 @@ environment_shared:
         STT_NO_TEXT_SECONDS:
           value: '30'
           category: rollout
-        SONIOX_MONTHLY_CEILING_USD:
-          category: rollout
-        SONIOX_ESTIMATED_USD_PER_HOUR:
-          value: '0.07537'
-          category: rollout
         STT_MULTI_LANGUAGE_HINTS:
           value: 'true'
-          category: rollout
-        SONIOX_CONTEXT_TERMS:
-          value: 'false'
           category: rollout
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'true'
@@ -1097,16 +1074,7 @@ environment_shared:
           SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
-          TRANSLATION_DEMAND_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
           TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
             value: 'true'
             category: rollout
           TRANSLATION_ONOPEN_ENABLED:
@@ -1117,9 +1085,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '100'
             category: rollout
           TRANSLATION_ONDEMAND_MAX_SEGMENTS:
             value: '50'

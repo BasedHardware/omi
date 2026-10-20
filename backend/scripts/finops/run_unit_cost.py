@@ -129,11 +129,11 @@ def validate(derived: pathlib.Path, raw: pathlib.Path, tol_pct: float, dates: li
         "llm_openai",
         "llm_anthropic",
         "stt_vendor_low",
-        "stt_soniox_measured",
-        "stt_deepgram_measured",
         "gcp_total_export",
         "one_time",
     }
+    # Measured STT pools are absent: those rows publish the invoice itself and
+    # carry a null delta, so they are not a pool-versus-allocation check.
     failures = []
     for r in recon:
         if r["pool"] not in variable:
@@ -251,10 +251,15 @@ def main() -> None:
     # Provider stderr normally stays in pull.log. Surface optional skips in Cloud Logging too.
     stt_invoice = raw / "stt_vendor_cost_daily.json"
     if stt_invoice.exists():
-        skipped = json.loads(stt_invoice.read_text()).get("skipped", [])
+        stt_payload = json.loads(stt_invoice.read_text())
+        skipped = stt_payload.get("skipped", [])
         for provider in ("soniox", "deepgram"):
             if provider in skipped:
                 sys.stderr.write("WARNING: %s measured STT unavailable; see pull.log\n" % provider)
+            if provider in (stt_payload.get("incomplete") or {}):
+                sys.stderr.write(
+                    "WARNING: %s measured STT incomplete; unclassified line items; see pull.log\n" % provider
+                )
 
     mercury_invoice = raw / "mercury_vendor_spend_daily.json"
     if mercury_invoice.exists() and json.loads(mercury_invoice.read_text()).get("status") == "skipped":
@@ -331,7 +336,13 @@ def main() -> None:
     summary = json.load(open(derived / "day_summary.json"))["days"]
     print("Omi unit cost %s..%s  (run %s)" % (start, end, run_id))
     worst = max(
-        (abs(float(r["delta_pct"])) for r in recon if r["pool"] not in ("llm_openai_ledger_coverage",)), default=0.0
+        (
+            abs(float(r["delta_pct"]))
+            for r in recon
+            if r["pool"] not in ("llm_openai_ledger_coverage", "stt_soniox_measured", "stt_deepgram_measured")
+            and r["delta_pct"] not in ("", None)
+        ),
+        default=0.0,
     )
     print(
         "reconciliation: worst |delta| %.4f%% (tolerance %.2f%%)  |  %s"

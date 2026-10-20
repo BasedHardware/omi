@@ -92,15 +92,10 @@ environments:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
           TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
-          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
           TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
           TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
           TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
@@ -174,10 +169,7 @@ environments:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '0'}
-          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
-          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
@@ -851,14 +843,10 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
-            TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
-            TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
-            TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
             TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
             TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
             TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
@@ -2219,15 +2207,10 @@ environments:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
           TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-          TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
-          TRANSLATION_ONDEMAND_UID_ALLOWLIST: {value: '', category: rollout}
           TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
           TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
           TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}
@@ -2301,10 +2284,7 @@ environments:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '10000'}
-          SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
-          SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
           PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
@@ -3029,14 +3009,10 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
-            TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
-            TRANSLATION_DEMAND_LEASE_V1_ENABLED: {value: 'true', category: rollout}
-            TRANSLATION_ONDEMAND_GEMINI_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            TRANSLATION_ONDEMAND_COHORT_PERCENT: {value: '100', category: rollout}
             TRANSLATION_ONDEMAND_MAX_SEGMENTS: {value: '50', category: rollout}
             TRANSLATION_ONDEMAND_MAX_CHARS: {value: '12000', category: rollout}
             TRANSLATION_ONDEMAND_DEADLINE_SECONDS: {value: '3', category: rollout}

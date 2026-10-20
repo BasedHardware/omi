@@ -13,7 +13,7 @@ from threading import RLock
 import time
 from typing import Any, Callable
 
-from config import rollout_cohorts as policy
+from config import rollout_cohorts as policy, stt_cap_dispatch
 from config.policy.cohorts import batch_members, recovery_members
 from config.rollout_cohorts import (
     COLLECTION as COLLECTION,
@@ -27,6 +27,7 @@ from config.rollout_cohorts import (
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
+from utils.stt_cap_cohort import runtime_cohort
 
 TTL_SECONDS = 60
 MAX_USERS = 4096
@@ -133,6 +134,7 @@ def _in_rollout_cohort(
 def _load_rollout_cohorts(uid: str) -> None:
     """Preload in a synchronous request dependency (already on a worker thread)."""
     if valid_uid(uid):
+        runtime_cohort.tokens()
         _cache.get(uid)
 
 
@@ -140,6 +142,7 @@ async def _warm_rollout_cohorts(uid: str) -> None:
     """Await the first listen read without blocking the loop or extending SDK retries."""
     if not valid_uid(uid):
         return
+    runtime_cohort.tokens()
     future = _cache.request(uid, background=True)
     if future.done():
         return
@@ -167,6 +170,7 @@ def _rollout_cohort_members(name: str) -> tuple[str, ...]:
 
 
 def configure_rollout_runtime() -> None:
+    stt_cap_dispatch.configure_cohort_resolver(runtime_cohort.tokens)
     policy.configure_resolvers(
         _in_rollout_cohort,
         _rollout_cohort_members,

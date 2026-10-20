@@ -415,12 +415,15 @@ describe('get_daily_recap', () => {
       actionItem({ description: 'old task', createdAt: 100 })
     ]),
     focusSessions: vi.fn(() => [] as FocusSessionRecord[]),
-    memories: vi.fn(() => [{ content: 'likes tea', category: 'preference' }]),
+    memories: vi.fn((_from: number, _to: number, _limit: number) => [
+      { content: 'likes tea', category: 'preference' }
+    ]),
     insights: vi.fn(() => [] as InsightRecord[])
   })
 
   it('renders a Today recap and windows out old rows', async () => {
-    const exec = createGetDailyRecapExecutor(deps())
+    const d = deps()
+    const exec = createGetDailyRecapExecutor(d)
     const out = await exec({ days_ago: 0 }, ctx())
     expect(out).toContain('# Today Recap')
     // Chrome A+B counts merge → 180 captures ≈ 3 min.
@@ -432,6 +435,8 @@ describe('get_daily_recap', () => {
     expect(out).toContain('today task')
     expect(out).not.toContain('old task')
     expect(out).toContain('## Memories (1 recent)')
+    // Today's window: [startToday, now), same as the other sections.
+    expect(d.memories).toHaveBeenCalledWith(startToday, now, 10)
   })
 
   it('labels Yesterday and passes the day window to appActivity', async () => {

@@ -4,10 +4,15 @@ with no account reads, identifiers, network or credentials.
 
 import csv
 import datetime as dt
+from decimal import Decimal
+import http.client
 import importlib.util
+import io
 import json
 import pathlib
 import urllib.error
+import urllib.request
+import urllib.response
 
 import pytest
 
@@ -93,18 +98,150 @@ def test_summary_chunks_at_366_days_without_overlap(stt, monkeypatch):
     assert calls[0][-1] != calls[1][0]
 
 
-def test_deepgram_daily_bill_excludes_tts(stt, monkeypatch):
+def _deepgram_payload():
+    payload = fixture("deepgram_billing.json")
+    payload["results"].append(
+        {"dollars": 99, "grouping": {"start": "2026-04-02", "end": "2026-04-02", "line_item": "streaming::nova-3"}}
+    )
+    return payload
+
+
+def test_deepgram_known_stt_is_measured_and_ignores_the_next_day(stt, monkeypatch):
     def get(url, key, params, scheme):
         assert params == {"start": "2026-04-01", "end": "2026-04-02", "deployment": "hosted", "grouping": "line_item"}
         assert scheme == "Token"
-        payload = fixture("deepgram_billing.json")
-        payload["results"].append(
-            {"dollars": 99, "grouping": {"start": "2026-04-02", "end": "2026-04-02", "line_item": "streaming::nova-3"}}
-        )
+        payload = _deepgram_payload()
+        for row in payload["results"]:
+            if row["grouping"]["line_item"] == "sync::aura-2":
+                row["dollars"] = 0
         return payload
 
     monkeypatch.setattr(stt, "get_json", get)
-    assert stt.deepgram_costs("2026-04-01", "2026-04-02", "test", "company") == {"2026-04-01": "0.35"}
+    assert stt.deepgram_costs("2026-04-01", "2026-04-02", "test", "company") == {
+        "2026-04-01": {"usd": "0.35", "unclassified_usd": "0", "status": "measured"}
+    }
+
+
+def test_deepgram_unrecognized_positive_dollars_are_not_measured(stt, monkeypatch):
+    monkeypatch.setattr(stt, "get_json", lambda *args, **kwargs: _deepgram_payload())
+    day = stt.deepgram_costs("2026-04-01", "2026-04-02", "test", "company")["2026-04-01"]
+    assert day["status"] == "incomplete"
+    assert day["usd"] == "0.35"
+    assert Decimal(day["unclassified_usd"]) == Decimal("0.5")
+    assert "99" not in day["usd"] and "99" not in day["unclassified_usd"]
+
+
+def test_unclassified_deepgram_is_recorded_and_not_published(stt, monkeypatch, tmp_path):
+    monkeypatch.setenv("SONIOX_API_KEY", "soniox-test-key")
+    monkeypatch.setenv("DEEPGRAM_API_KEY", "deepgram-test-key")
+    monkeypatch.setenv("FINOPS_DEEPGRAM_PROJECT_ID", "company")
+    monkeypatch.setattr(stt, "soniox_costs", lambda *args: {"2026-04-01": "0.0409000000"})
+    monkeypatch.setattr(stt, "get_json", lambda *args, **kwargs: _deepgram_payload())
+    stt.pull(tmp_path, "2026-04-01", "2026-04-02")
+    document = json.loads((tmp_path / "stt_vendor_cost_daily.json").read_text())
+    assert "deepgram" not in document["providers"]
+    assert document["providers"]["soniox"]["2026-04-01"] == "0.0409000000"
+    assert document["incomplete"]["deepgram"]["2026-04-01"]["status"] == "incomplete"
+    assert Decimal(document["incomplete"]["deepgram"]["2026-04-01"]["unclassified_usd"]) == Decimal("0.5")
+    recon = load("gcp_cost_reconciliation")
+    longs, recons = recon.company_stt_rows(tmp_path, ["2026-04-01"], None)
+    assert [row["component"] for row in longs] == ["stt_soniox_measured"]
+    assert all(row["method"] == "measured" for row in longs)
+    assert "stt_deepgram_measured" not in {row["pool"] for row in recons}
+    assert recons[0]["delta_pct"] is None
+
+
+def test_measured_stt_does_not_claim_a_reconciliation_delta(tmp_path):
+    recon = load("gcp_cost_reconciliation")
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "stt_vendor_cost_daily.json").write_text(
+        json.dumps({"providers": {"deepgram": {"2026-04-01": "0.35"}}, "skipped": []})
+    )
+    longs, recons = recon.company_stt_rows(raw, ["2026-04-01"], None)
+    assert longs[0]["method"] == "measured"
+    assert recons[0]["pool"] == "stt_deepgram_measured"
+    assert recons[0]["pool_usd"] == recons[0]["allocated_usd"] == 0.35
+    assert recons[0]["delta_pct"] is None
+
+
+def test_overlapping_incomplete_provider_is_not_measured(tmp_path):
+    recon = load("gcp_cost_reconciliation")
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "stt_vendor_cost_daily.json").write_text(
+        json.dumps(
+            {
+                "providers": {"deepgram": {"2026-04-01": "0.35"}},
+                "incomplete": {"deepgram": {"2026-04-01": {"status": "incomplete", "unclassified_usd": "0.5"}}},
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="incomplete"):
+        recon.company_stt_rows(raw, ["2026-04-01"], None)
+
+
+def test_unreadable_secret_skips_that_vendor_only(stt, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("FINOPS_AUTH", "cloudrun")
+    monkeypatch.setenv("FINOPS_SECRETS_DIR", str(tmp_path))
+    monkeypatch.setenv("FINOPS_DEEPGRAM_PROJECT_ID", "company")
+    soniox = tmp_path / "SONIOX_API_KEY"
+    soniox.mkdir()
+    (soniox / "SONIOX_API_KEY").write_bytes(b"\xff\xfesoniox-secret-bytes")
+    deepgram = tmp_path / "DEEPGRAM_API_KEY"
+    deepgram.mkdir()
+    (deepgram / "DEEPGRAM_API_KEY").write_text("deepgram-test-key")
+    monkeypatch.setattr(stt, "soniox_costs", lambda *args: pytest.fail("unreadable secret must not pull"))
+    monkeypatch.setattr(
+        stt,
+        "deepgram_costs",
+        lambda *args: {"2026-04-01": {"usd": "0.35", "unclassified_usd": "0", "status": "measured"}},
+    )
+    stt.pull(tmp_path, "2026-04-01", "2026-04-02")
+    document = json.loads((tmp_path / "stt_vendor_cost_daily.json").read_text())
+    assert document["skipped"] == ["soniox"]
+    assert "soniox" not in document["providers"]
+    assert document["providers"]["deepgram"] == {"2026-04-01": "0.35"}
+    err = capsys.readouterr().err
+    assert "WARNING: soniox measured STT skipped: secret/config unavailable" in err
+    assert "soniox-secret" not in err
+    assert "deepgram-test-key" not in err
+
+
+def test_cross_host_redirect_does_not_send_the_credential(stt, monkeypatch):
+    secret = "stt-live-key-do-not-leak"
+    seen = []
+
+    class Capture(urllib.request.BaseHandler):
+        handler_order = 100
+
+        def https_open(self, req):
+            seen.append((req.full_url, req.get_header("Authorization")))
+            headers = http.client.HTTPMessage()
+            headers["Location"] = "https://evil.example/collect?echo=" + secret
+            response = urllib.response.addinfourl(io.BytesIO(b""), headers, req.full_url, 302)
+            response.msg = "Found"
+            return response
+
+        http_open = https_open
+
+    def build(ssl_context=None):
+        return urllib.request.build_opener(stt.auth_http.NoRedirect(), Capture())
+
+    monkeypatch.setattr(stt.auth_http, "build_opener", build)
+    monkeypatch.setattr(stt.urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("urlopen follows redirects"))
+    with pytest.raises(stt.InvoiceError, match="redirect refused") as error:
+        stt.get_json(
+            "https://api.deepgram.com/v1/projects/company/billing/breakdown",
+            secret,
+            {"start": "2026-04-01"},
+            scheme="Token",
+        )
+    assert secret not in str(error.value)
+    assert len(seen) == 1
+    assert seen[0][0].startswith("https://api.deepgram.com/")
+    assert seen[0][1] == "Token " + secret
+    assert "evil.example" not in seen[0][0]
 
 
 def test_missing_mount_warns_skips_and_replaces_stale_raw(stt, monkeypatch, tmp_path, capsys):
@@ -132,7 +269,11 @@ def test_permission_skip_is_independent_of_other_vendor(stt, monkeypatch, tmp_pa
     monkeypatch.setenv("DEEPGRAM_API_KEY", "never-log-this-either")
     monkeypatch.setenv("FINOPS_DEEPGRAM_PROJECT_ID", "company")
     monkeypatch.setattr(stt, "soniox_costs", lambda *a: (_ for _ in ()).throw(PermissionError("private")))
-    monkeypatch.setattr(stt, "deepgram_costs", lambda *a: {"2026-04-01": "0.35"})
+    monkeypatch.setattr(
+        stt,
+        "deepgram_costs",
+        lambda *a: {"2026-04-01": {"usd": "0.35", "unclassified_usd": "0", "status": "measured"}},
+    )
     stt.pull(tmp_path, "2026-04-01", "2026-04-02")
     result = json.loads((tmp_path / "stt_vendor_cost_daily.json").read_text())
     assert result["skipped"] == ["soniox"]
@@ -144,7 +285,7 @@ def test_http_error_does_not_expose_body_or_key(stt, monkeypatch):
     def deny(*args, **kwargs):
         raise urllib.error.HTTPError("private-key", 403, "private-body", {}, None)
 
-    monkeypatch.setattr(stt.urllib.request, "urlopen", deny)
+    monkeypatch.setattr(stt.auth_http, "open_authenticated", deny)
     with pytest.raises(PermissionError) as error:
         stt.get_json("https://example.invalid", "private-key", {})
     assert "private" not in str(error.value)
@@ -178,6 +319,7 @@ def test_company_total_reaches_existing_bq_loader_and_date_replacement(stt, monk
     assert [r["usd"] for r in measured] == [143, 0]
     assert [r["inputs_settled"] for r in measured] == [True, False]
     assert tables["unit_cost_reconciliation"][0]["pool"] == "stt_soniox_measured"
+    assert tables["unit_cost_reconciliation"][0]["delta_pct"] is None
     calls = []
     monkeypatch.setattr(loader, "bq", lambda args, stdin=None: calls.append((args, stdin)))
     monkeypatch.setattr(loader.subprocess, "run", lambda *a, **kw: None)
@@ -249,3 +391,6 @@ def test_offline_assembly_cli_emits_measured_company_line(stt, tmp_path):
     assert len(measured) == 1 and float(measured[0]["usd"]) == 143
     assert measured[0]["segment_type"] == "total"
     assert "stt_soniox_measured" not in (derived / "user_day_allocated.csv").read_text()
+    recon_rows = list(csv.DictReader((derived / "unit_cost_reconciliation.csv").open()))
+    measured_recon = [r for r in recon_rows if r["pool"] == "stt_soniox_measured"]
+    assert len(measured_recon) == 1 and measured_recon[0]["delta_pct"] == ""
