@@ -126,8 +126,6 @@ environment_shared:
           category: rollout
         AUDIO_TIMELINE_SPANS:
           category: rollout
-        LIVE_SPEAKER_SPAN_RESOLUTION:
-          category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
           value: 'false'
           category: rollout
@@ -606,8 +604,6 @@ environment_shared:
           category: rollout
         AUDIO_TIMELINE_SPANS:
           category: rollout
-        LIVE_SPEAKER_SPAN_RESOLUTION:
-          category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
           value: 'false'
           category: rollout
@@ -1033,8 +1029,6 @@ environment_shared:
           AUDIO_TIMELINE_SPANS:
             value: 'false'
             category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -1423,8 +1417,6 @@ environment_shared:
           AUDIO_TIMELINE_SPANS:
             value: 'false'
             category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -1789,8 +1781,6 @@ environment_shared:
           AUDIO_TIMELINE_SPANS:
             value: 'false'
             category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -2148,8 +2138,6 @@ environment_shared:
             category: rollout
           AUDIO_TIMELINE_SPANS:
             value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
             category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
