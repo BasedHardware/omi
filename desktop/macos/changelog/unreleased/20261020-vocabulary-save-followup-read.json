@@ -1,0 +1,3 @@
+{
+  "change": "Fixed custom vocabulary saves looking failed and reverting when the confirmation read failed, even though the account had already stored the change"
+}

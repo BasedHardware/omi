@@ -1,0 +1,47 @@
+name: Backend Edge (Rust)
+
+# listen-edge crate (plan D, D1). Build, lint and test only; nothing here
+# builds an image or deploys.
+on:
+  pull_request:
+    paths:
+      - "backend/edge/**"
+      - ".github/workflows/backend-edge.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/edge/**"
+      - ".github/workflows/backend-edge.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-edge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge:
+    name: edge
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend/edge
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Pinned toolchain (matches backend/edge/rust-toolchain.toml) so a new
+      # stable clippy lint cannot turn this job red without a code change.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: backend/edge
+      - run: cargo fmt --check
+      - run: cargo build --locked --all-targets
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked

@@ -17,8 +17,11 @@ PAID_EPOCH = 2
 
 
 class SpeechRedriveStore:
-    def __init__(self, store):
+    def __init__(self, store, *, server_flags):
+        """Operator-only. `server_flags` is the serving role's live settings for an
+        unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
+        self.server_flags = server_flags
 
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
@@ -51,7 +54,9 @@ class SpeechRedriveStore:
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id)
-            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
             if not policy.speech_empty_multilingual or not policy.recovery_enabled:
                 raise ProjectionBlocked('speech redrive disabled')
             existing = tx.get('results', segment_id)
@@ -96,7 +101,7 @@ class SpeechRedriveStore:
         return result
 
     def start(self, segment_id, token, plan_digest, now):
-        _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        _, policy = load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
         if policy is None or not policy.speech_empty_multilingual:
             return False
 

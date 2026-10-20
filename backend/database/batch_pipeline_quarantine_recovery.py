@@ -4,7 +4,12 @@ from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
 
-from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
+from database.batch_pipeline_policy import (
+    PROCESS_ENVIRONMENT,
+    load_stage_policy,
+    stage_in_transaction,
+    record_policy_observations,
+)
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -13,6 +18,10 @@ from utils.batch_pipeline.scheduler import owner_key
 
 
 class RecoveryStore:
+    # Serving workers resolve an unpinned part from their own env; operator
+    # subclasses replace this with explicit server settings or None (refuse).
+    server_flags: Any = PROCESS_ENVIRONMENT
+
     def __init__(self, store: Any):
         self.store = store
 
@@ -77,7 +86,7 @@ class RecoveryStore:
         return job, binding
 
     def prepare(self, segment_id, owner_id, now):
-        load_stage_policy(self.store, segment_id, 'recovery')
+        load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
         # Generated outside the retryable transaction; a lost reply is reconciled
         # by rereading this same intent, never by issuing a second provider call.
         token = uuid4().hex
@@ -316,6 +325,12 @@ def cancel_fenced_recovery(store, segment_id):
 class SilenceDispositionStore(RecoveryStore):
     """Explicit operator-only no-provider intent. The spent STT intent stays intact."""
 
+    def __init__(self, store: Any, *, server_flags):
+        """`server_flags` is the serving role's live settings for an unpinned unit,
+        or None to refuse it; never this process's environment."""
+        super().__init__(store)
+        self.server_flags = server_flags
+
     def prepare_silence(self, segment_id, owner_id, plan_digest, now):
         from config.batch_pipeline import empty_asr_disposition_enabled
 
@@ -327,7 +342,9 @@ class SilenceDispositionStore(RecoveryStore):
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id, allow_completed_silence=True)
-            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
             if not policy.recovery_enabled:
                 raise ProjectionBlocked('disposition disabled')
             existing = tx.get('results', segment_id)

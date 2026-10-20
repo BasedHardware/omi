@@ -120,6 +120,9 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--apply-limit', type=int, default=1, help='Fixed speech prefix, replay is idempotent')
+    parser.add_argument(
+        '--server-flags-file', help='Serving role env JSON for units with no stored policy; absent refuses them'
+    )
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
@@ -140,6 +143,7 @@ def main():
     offset = cutoff_time.utcoffset()
     require(offset is not None and offset.total_seconds() == 0, 'utc_cutoff_required')
     cutoff = cutoff_time.timestamp()
+    server_flags = held.load_server_flags(args.server_flags_file)
     secret = os.getenv('ENCRYPTION_SECRET', '').encode()
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
     require(len(secret) >= 32 and bool(bucket), 'secure_runtime_material_required')
@@ -217,6 +221,7 @@ def main():
         # Not in the digest: the approved census is unchanged by this report.
         'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
+        'unpinned_policy': 'server_flags' if server_flags else 'refuse',
         'source_census_sha256': census,
         'plan_sha256': digest,
         'maximum_additional_paid_calls': counts['speech'],
@@ -232,7 +237,7 @@ def main():
         # from the canary; it never silently selects one extra unattempted unit.
         for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
             job = checked_job(read_store, sid, uid, key)
-            outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'])] += 1
+            outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'], server_flags=server_flags)] += 1
         output['outcomes'] = dict(outcomes)
         del output['paid_stt_calls'], output['firestore_writes']
     print(json.dumps(output, indent=2, sort_keys=True))
