@@ -239,6 +239,10 @@ def compose_staging(
     secret_map = {str(k): str(v) for k, v in (_as_config_dict(spec.get('secret_map')) or {}).items()}
     secret_add = [str(name) for name in spec.get('secret_add') or []]
     scale_flags = {str(k): str(v) for k, v in (_as_config_dict(spec.get('scale_flags')) or {}).items()}
+    scale_flags_by_service = {
+        str(service): {str(k): str(v) for k, v in (_as_config_dict(values) or {}).items()}
+        for service, values in (_as_config_dict(spec.get('scale_flags_by_service')) or {}).items()
+    }
 
     cloud_run = _as_config_dict(merged.get('cloud_run')) or {}
     services_out: ConfigDict = {}
@@ -289,7 +293,11 @@ def compose_staging(
             report['dropped_secrets'][service] = sorted(dropped)
         if dropped_env:
             report['dropped_env'][service] = sorted(dropped_env)
-        flags = {**{str(k): v for k, v in (_as_config_dict(config.get('flags')) or {}).items()}, **scale_flags}
+        flags = {
+            **{str(k): v for k, v in (_as_config_dict(config.get('flags')) or {}).items()},
+            **scale_flags,
+            **scale_flags_by_service.get(service, {}),
+        }
         services_out[service] = {
             'deploy_name': f'{service}{suffix}',
             'url': run_url_template.format(service=service),

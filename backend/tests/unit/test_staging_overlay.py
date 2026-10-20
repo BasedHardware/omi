@@ -52,6 +52,15 @@ def test_staging_composes_and_passes_the_fence(composer):
     assert composer.staging_fence_errors(staging) == []
 
 
+def test_staging_batch_serving_leader_stays_warm(composer):
+    # The serving loop (reconcile, projection, recovery) runs only on backend-integration.
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    assert services['backend-integration']['env']['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'true'
+    assert services['backend-integration']['flags']['--min-instances'] == '1'
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill'):
+        assert services[name]['flags']['--min-instances'] == '0'
+
+
 def test_staging_backfill_service_owns_its_sync_tasks_audience(composer):
     # Prod's deploy gives backend-sync-backfill its own sync-jobs URL. With backend-sync's, the
     # backfill service rejected its own Cloud Tasks: 403, wrong OIDC audience.
