@@ -6,7 +6,12 @@ Authority (contract (g)), enforced here and by tests:
   batch-live-stt-retire, env vars, deploys, queues or scaling;
 - acts only while legacy_sync == 'on'; refuses while locked_by is set or the prod-train lock is held;
 - one ladder step per decision, at most one write per 10 minutes, never above 100, never skips;
-- stops after two rollbacks in 24h until a human clears locked_by (a ramp_set --clear-lock write).
+- stops after two rollbacks in 24h until a human clears locked_by (a ramp_set --clear-lock write);
+- never lowers a quality floor (QUALITY_FLOOR: first-summary); a rollback moves batch-pipeline only;
+- before any ADVANCE, runs the serving-revision preflight (--preflight-cmd; required for prod --apply).
+
+A --loop run pages the lead when it stops (signal, interrupt, exit) and after three consecutive failed ticks:
+the ramp keeps its step (it already passed its gate, and a restart resumes) but nothing is watching it.
 
 Host (decision S9): a supervised background process on m5 under the lead's prod-operator tier.
 All ramp state lives in Firestore (`_ramp` + history), so a restart resumes from it. A local
@@ -31,6 +36,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -50,6 +56,11 @@ LADDER = (0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0)
 HOLD_SECONDS = {5.0: 3 * 3600, 10.0: 3600, 25.0: 3600, 50.0: 3600, 75.0: 3600}  # 5% hold is the 3h ruling
 CONTROLLED_NAMES = ('batch-pipeline', 'first-summary')
 LEAD_NAME = 'batch-pipeline'
+# Quality guarantees, not ramp knobs: a rollback never lowers them. Every tested rollback set in the
+# workspace's infra/rollout/ramp_env.json keeps FIRST_SUMMARY_DEADLINE_PERCENT=100 (prod's live value), and
+# a rollback set that turned a recovery-quality flag off stranded 28 units in failed_held (2026-10-20).
+# The value is the floor the operator CLI refuses to write below without --allow-quality-decrease.
+QUALITY_FLOOR = {'first-summary': 100.0}
 MIN_WRITE_INTERVAL_SECONDS = 600
 ROLLBACK_STOP_COUNT = 2
 ROLLBACK_WINDOW_SECONDS = 24 * 3600
@@ -67,6 +78,9 @@ DATA_LOSS_TOKENS = frozenset(
         'projection_error',
         'projection_stalled',
         'failed_held_over_budget',  # settled failed_held quarantines are terminal recovery loss
+        # A failed_held loss of unknown size must FAIL, never pass or hold (ramp runs 8-11: the gate's
+        # threshold was mis-specified across five runs; lessons/batch-rollout-and-staging-traps.md #2).
+        'failed_held_duration_unknown',
         'parity_row_5',
     }
 )
@@ -251,26 +265,38 @@ def decide_all(
     now: float,
     context: ControllerContext = ControllerContext(),
 ) -> list[Decision]:
-    """Decisions for every controlled name from one gate verdict. Followers move only in lockstep with the lead."""
+    """Decisions for every controlled name from one gate verdict. Followers advance only in lockstep with the
+    lead; a quality-floor follower (QUALITY_FLOOR) is never lowered, and sitting above the lead is normal."""
     decisions = [decide(snapshot, verdict, name=name, now=now, context=context) for name in names]
     lead = next((item for item in decisions if item.name == LEAD_NAME), None)
     if lead is None:
         return decisions
     aligned = []
     for item in decisions:
-        if item.name != LEAD_NAME and item.from_percent != lead.from_percent:
-            # A follower off the lead's value is an operator state; never let one gate verdict move it.
-            item = Decision(
-                Action.HOLD,
-                item.name,
-                item.from_percent,
-                item.from_percent,
-                RampReason.UNKNOWN,
-                'follower_diverged',
-                True,
-            )
+        if item.name != LEAD_NAME:
+            item = _align_follower(item, lead, snapshot.percents.get(item.name))
         aligned.append(item)
     return aligned
+
+
+def _align_follower(item: Decision, lead: Decision, current: float | None) -> Decision:
+    def hold(reason: RampReason, detail: str, page: bool = False) -> Decision:
+        value = current if current is not None else 0.0
+        return Decision(Action.HOLD, item.name, value, value, reason, detail, page)
+
+    if item.name in QUALITY_FLOOR:
+        if current is None:
+            # Absent from `_ramp`, serving reads the env default (prod: 100). Writing the lead's value would lower it.
+            return hold(lead.reason, 'quality_floor_unseeded')
+        if lead.action in ROLLBACK_ACTIONS and current >= lead.from_percent:
+            return hold(lead.reason, 'quality_floor_kept')
+        if current > lead.from_percent:
+            return hold(lead.reason, 'quality_floor_above_lead')
+    if current is None or current != lead.from_percent:
+        # A follower below (or, for a plain follower, off) the lead's value is an operator state; never let one
+        # gate verdict move it.
+        return hold(RampReason.UNKNOWN, 'follower_diverged', page=True)
+    return item
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +509,9 @@ class Effects:
     append_state: Callable[[str], None]
     notify: Callable[[str, bool], None]  # (text, page)
     clock: Callable[[], float] = time.time
+    # Serving-revision preflight, consulted only before an ADVANCE (never blocks a rollback): (percent) ->
+    # (ok, token). Prod --apply requires it (ramp5.sh's lesson: check the revision that serves, not the source).
+    preflight: Callable[[float], tuple[bool, str]] | None = None
 
 
 @dataclass
@@ -539,6 +568,25 @@ def tick(
         resumed_after_gap=resumed_after_gap,
     )
     decisions = decide_all(snapshot, verdict, names=names, now=now, context=context)
+    if effects.preflight is not None and any(item.action is Action.ADVANCE for item in decisions):
+        ok, token = effects.preflight(current if current is not None else 0.0)
+        if not ok:
+            decisions = [
+                (
+                    Decision(
+                        Action.HOLD,
+                        item.name,
+                        item.from_percent,
+                        item.from_percent,
+                        RampReason.HOLD_INCOMPLETE,
+                        'preflight:' + token,
+                        item.name == LEAD_NAME,
+                    )
+                    if item.action is Action.ADVANCE
+                    else item
+                )
+                for item in decisions
+            ]
     writes = [item for item in decisions if item.action in WRITE_ACTIONS]
     new_revision = snapshot.revision
     wrote = False
@@ -646,6 +694,32 @@ def train_lock_probe(cmd: Sequence[str] | None, runner: Runner) -> Callable[[], 
     return held
 
 
+PREFLIGHT_TIMEOUT_SECONDS = 900
+
+
+def preflight_probe(cmd: Sequence[str], runner: Runner) -> Callable[[float], tuple[bool, str]]:
+    """`<cmd> <current percent>`: exit 0 = the serving revisions and backlog allow an ADVANCE. Anything else
+    holds (fail closed); the last output line, when it is a short token, names the reason."""
+
+    def check(percent: float) -> tuple[bool, str]:
+        code, stdout = runner([*cmd, fmt_percent(percent)], PREFLIGHT_TIMEOUT_SECONDS)
+        if code == 0:
+            return True, 'ok'
+        lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+        last = lines[-1].split()[-1] if lines else ''
+        return False, last if _SAFE_TOKEN.fullmatch(last) else 'preflight_failed'
+
+    return check
+
+
+def stop_notice(env: str, cause: str, last_percent: float | None) -> str:
+    at = fmt_percent(last_percent) if last_percent is not None else 'unknown'
+    return (
+        f'PAGE lead: ramp-controller {env} stopped ({cause}) at batch-pipeline={at}%. The ramp stays at that step '
+        f'with no gate watching it: restart the controller, or lock it with ramp_set --lock'
+    )
+
+
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
 DEFAULT_TARGET = {'prod': ('based-hardware', '(default)'), 'staging': ('based-hardware-dev', 'staging')}
 
@@ -660,6 +734,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--gate-minutes', type=float, default=15.0)
     parser.add_argument('--parity-cmd', help='Prod-shadow parity command (required from 25%% on prod)')
     parser.add_argument('--train-lock-cmd', help='B5 prod-train lock probe: exit 0 free, 1 held')
+    parser.add_argument(
+        '--preflight-cmd',
+        help='Serving-revision preflight run before any ADVANCE with the current percent appended; exit 0 = ok '
+        '(prod: the workspace infra/rollout/bin/controller_preflight.sh)',
+    )
     parser.add_argument('--state-file', default=STATE_FILE_DEFAULT)
     parser.add_argument('--anx-card', default=ANX_CARD_DEFAULT)
     parser.add_argument('--no-anx', action='store_true', help='Skip anx notes (rehearsal on a host without anx)')
@@ -684,6 +763,8 @@ def validate_args(args: argparse.Namespace) -> str | None:
             return 'prod_apply_requires_train_lock_cmd'
         if args.apply and not args.parity_cmd:
             return 'prod_apply_requires_parity_cmd'
+        if args.apply and not args.preflight_cmd:
+            return 'prod_apply_requires_preflight_cmd'
     if not 0 < args.hold_scale <= 1.0 or not math.isfinite(args.hold_scale):
         return 'hold_scale_out_of_range'
     if args.apply and os.getenv('GCP_AGENT_TIER') != EXPECTED_TIER[args.env]:
@@ -725,43 +806,101 @@ def main(
         train_lock_held=train_lock_probe(shlex.split(args.train_lock_cmd) if args.train_lock_cmd else None, runner),
         append_state=lambda line: append_line(state_path, line),
         notify=(lambda text, page: None) if args.no_anx else anx_notify(args.anx_card, runner),
+        preflight=preflight_probe(shlex.split(args.preflight_cmd), runner) if args.preflight_cmd else None,
     )
     heartbeat = (
         Path(args.heartbeat_file)
         if args.heartbeat_file
         else state_path.with_name(f'.ramp_controller_{args.env}.heartbeat')
     )
-    while True:
-        try:
-            last, streak = read_heartbeat(heartbeat)
-            gap = last is None or time.time() - last > args.max_gap
-            result = tick(args.env, effects, hold_scale=args.hold_scale, apply=args.apply, resumed_after_gap=gap)
-            # The streak survives a restart (it is in the heartbeat file) but a pause gap resets it.
-            streak = next_unavailable_streak(0 if gap else streak, result.verdict)
-            if should_escalate_unavailable(streak) and result.verdict is not None:
-                effects.notify(
-                    f'PAGE lead: ramp-controller {args.env} gate unavailable for {streak} consecutive ticks '
-                    f'(gate={result.verdict.status}:{result.verdict.reason}); holding at the current step',
-                    True,
-                )
-            write_heartbeat(heartbeat, time.time(), streak)
-            print(
-                json.dumps(
-                    {
-                        'decisions': [asdict(item) for item in result.decisions],
-                        'revision': result.revision,
-                        'wrote': result.wrote,
-                    },
-                    default=str,
-                )
-            )
-        except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
-            logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
-            if not args.loop:
-                return 1
-        if not args.loop:
-            return 0
-        time.sleep(args.interval)
+    if not args.loop:
+        return _one_tick(args, effects, heartbeat)
+    # A stopped loop leaves the ramp at its step with no gate watching (ramp5.sh rolled back on exit; the
+    # controller keeps the step, since it already passed its gate and a restart resumes, but it must say so).
+    previous = {sig: signal.signal(sig, _raise_stop) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    cause, last_percent, errors = 'exit', None, 0
+    try:
+        while True:
+            try:
+                result = _tick_once(args, effects, heartbeat)
+                errors = 0
+                lead = next((item for item in result.decisions if item.name == LEAD_NAME), None)
+                last_percent = lead.to_percent if lead is not None else last_percent
+            except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
+                errors += 1
+                logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
+                if args.apply and should_escalate_unavailable(errors):
+                    try:
+                        effects.notify(
+                            f'PAGE lead: ramp-controller {args.env} tick failed {errors} consecutive times '
+                            f'({type(error).__name__}); the ramp is unsupervised at its current step',
+                            True,
+                        )
+                    except Exception:  # noqa: BLE001 - a failed page must not end the loop
+                        logger.warning('event=ramp_controller_error_page outcome=failed')
+            _sleep(args.interval)
+    except KeyboardInterrupt:
+        cause = 'interrupted'
+        return 130
+    except _Stop as stop:
+        cause = 'signal_' + signal.Signals(stop.signum).name
+        return 128 + stop.signum
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        if args.apply:  # a dry-run loop supervises nothing
+            try:
+                effects.notify(stop_notice(args.env, cause, last_percent), True)
+            except Exception:  # noqa: BLE001 - best effort on the way out
+                logger.warning('event=ramp_controller_stop_notice outcome=failed')
+
+
+class _Stop(BaseException):
+    def __init__(self, signum: int):
+        super().__init__(signum)
+        self.signum = signum
+
+
+def _raise_stop(signum: int, _frame: Any) -> None:
+    raise _Stop(signum)
+
+
+_sleep = time.sleep  # tests replace it
+
+
+def _tick_once(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> TickResult:
+    last, streak = read_heartbeat(heartbeat)
+    gap = last is None or time.time() - last > args.max_gap
+    result = tick(args.env, effects, hold_scale=args.hold_scale, apply=args.apply, resumed_after_gap=gap)
+    # The streak survives a restart (it is in the heartbeat file) but a pause gap resets it.
+    streak = next_unavailable_streak(0 if gap else streak, result.verdict)
+    if should_escalate_unavailable(streak) and result.verdict is not None:
+        effects.notify(
+            f'PAGE lead: ramp-controller {args.env} gate unavailable for {streak} consecutive ticks '
+            f'(gate={result.verdict.status}:{result.verdict.reason}); holding at the current step',
+            True,
+        )
+    write_heartbeat(heartbeat, time.time(), streak)
+    print(
+        json.dumps(
+            {
+                'decisions': [asdict(item) for item in result.decisions],
+                'revision': result.revision,
+                'wrote': result.wrote,
+            },
+            default=str,
+        )
+    )
+    return result
+
+
+def _one_tick(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> int:
+    try:
+        _tick_once(args, effects, heartbeat)
+    except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
+        logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
