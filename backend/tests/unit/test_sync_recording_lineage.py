@@ -1140,7 +1140,10 @@ def coordinator():
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
 
 
-def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
+_DEFAULT_S1_CLAIMS = object()
+
+
+def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=_DEFAULT_S1_CLAIMS):
     pipeline = stubs['pipeline']
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     wav_path = '/tmp/job-lineage/w.wav'
@@ -1182,7 +1185,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
         '_candidate_rows',
         lambda *_args, **_kwargs: candidates,
     )
-    if s1_claims is None:
+    if s1_claims is _DEFAULT_S1_CLAIMS:
         s1_claims = {
             'f.opus': {
                 'capture_root': '12345678-1234-4234-8234-123456789abc',
