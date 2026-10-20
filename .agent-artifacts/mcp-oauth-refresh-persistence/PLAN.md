@@ -8,4 +8,4 @@ Related work: upstream PR #21991 addresses basic tool-call persistence and refre
 
 Verification plan: regression for later reconstructed tools beyond rotation grace; sibling and concurrent callers; reconnect/delete fencing; failed or revoked refresh; persistence failure; both transports; focused backend selectors, formatting, async/import checks and repository preflight. Exercise a disposable local MCP/OAuth peer with real HTTP. No production account or cloud deployment is part of this contribution.
 
-Status: kickoff only; implementation and verification pending. Keep the PR draft until code and required local/CI evidence are complete. Deployment and the real pendant/headphone retest remain external follow-up gates.
+Status: shared refresh owner implemented for normal HTTP/SSE tool calls and explicit discovery refresh. Focused and emulator regressions pass; full backend unit verification is running. See VERIFICATION.md. Keep the PR draft until required local/CI evidence is complete. Production deployment and released-client validation remain follow-up gates.
