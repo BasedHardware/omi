@@ -271,9 +271,8 @@ class WavBytesUtil {
   Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
     if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
-      Int16List samples = getPcmSamples(frames);
-      // TODO: try pcm16
-      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000);
+      List<int> samples = getPcmSamples(frames);
+      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000, sampleWidth: codec == BleAudioCodec.pcm8 ? 1 : 2);
     } else if (codec == BleAudioCodec.mulaw8 || codec == BleAudioCodec.mulaw16) {
       throw UnimplementedError('mulaw codec not implemented');
       // Int16List samples = getMulawSamples(frames);
