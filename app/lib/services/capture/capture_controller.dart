@@ -3231,10 +3231,11 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _stopDeviceSessionBody({required bool cleanDevice}) async {
+    final deviceRevision = _deviceIdentityRevision;
     _rollCaptureSession('stopped');
     await _cleanupCurrentState(disableNativeBackground: true);
     await _wal.getSyncs().phone.finalizeCurrentSession();
-    if (cleanDevice) {
+    if (cleanDevice && !_deviceIdentityStale(deviceRevision)) {
       _updateRecordingDeviceBody(null);
     }
     updateRecordingState(RecordingState.stop);

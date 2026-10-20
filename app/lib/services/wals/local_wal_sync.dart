@@ -599,33 +599,40 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       WidgetsBinding.instance.removeObserver(this);
     } catch (_) {}
 
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
-
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation)) return;
+      _drainPendantTailFrames(generation);
+      await _chunk(generation);
+      if (!_isCurrent(generation)) return;
+      _frames = [];
+      _pendingPhoneOnly = false;
+      _frameSynced = [];
+      await _flush(generation);
+    });
   }
 
   @override
   Future onAudioCodecChanged(BleAudioCodec codec) async {
     final generation = _sessionGeneration;
     // Always chunk+flush+clear to ensure clean session boundaries.
-    // This is safe when frames are empty (_chunk returns immediately).
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
-    if (!_isCurrent(generation)) return;
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
+    // Drain, clear, and advance codec/epoch before awaiting disk flush I/O so
+    // synchronous onFrameCaptured() calls during _flush() are not wiped.
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation)) return;
+      _drainPendantTailFrames(generation);
+      await _chunk(generation);
+      if (!_isCurrent(generation)) return;
+      _frames = [];
+      _pendingPhoneOnly = false;
+      _frameSynced = [];
 
-    _framesPerSecond = codec.getFramesPerSecond();
-    _codec = codec;
-    _sourceClockEpoch++;
-    _nextSourceFramePosition = 0;
-    _captureEvidenceGeneration++;
+      _framesPerSecond = codec.getFramesPerSecond();
+      _codec = codec;
+      _sourceClockEpoch++;
+      _nextSourceFramePosition = 0;
+      _captureEvidenceGeneration++;
+      await _flush(generation);
+    });
   }
 
   @override
@@ -886,69 +893,74 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  bool _drainPendantTailFrames(int generation) {
+    if (!_isCurrent(generation)) return false;
+    final indices = <int>[];
+    for (var i = 0; i < _frames.length; i++) {
+      if (_isPendantFrame(_frames[i])) indices.add(i);
+    }
+    if (indices.isEmpty) return false;
+    final frames = indices.map((i) => _frames[i]).toList();
+    final synced = indices.map((i) => _frameSynced[i]).toList();
+
+    var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    if (!shouldStore) shouldStore = synced.any((s) => !s);
+    if (!shouldStore) {
+      _removeFrameIndices(indices);
+      return false;
+    }
+    final syncedOffset = syncedPrefixCount(synced);
+
+    final frameCount = frames.length;
+    final now = _now();
+    var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
+    var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
+    final evidence = stableCaptureEvidence(frames);
+    final live = _liveEvidenceFor(frames);
+
+    if (partitionsEvidenceRuns(true, _codec, frames)) {
+      _storeSelectedRuns(
+        frames,
+        synced,
+        captureSelectionStartSeconds(now, frameCount, _framesPerSecond),
+        generation,
+        extendMemWal: false,
+        legacySelectionTimerStart: timerStart,
+      );
+    } else {
+      final wal = Wal(
+        codec: _codec,
+        timerStart: timerStart,
+        data: frames.map((f) => f.payload).toList(),
+        storage: WalStorage.mem,
+        onDeviceOnly: _pendingPhoneOnly,
+        capturedOnDeviceOnly: _pendingPhoneOnly,
+        status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
+        device: _deviceId ?? "omi",
+        deviceModel: _deviceModel ?? "Omi",
+        seconds: frameCount ~/ _framesPerSecond,
+        totalFrames: frameCount,
+        syncedFrameOffset: syncedOffset,
+        ownerUid: _currentWalOwnerUid(),
+        captureRoot: evidence.root,
+        sourceFrameStart: evidence.start,
+        sourceClockEpoch: evidence.epoch,
+        geolocation: _copyGeolocation(_sessionGeolocation),
+        recordingSessionId: _activeRecordingSessionId,
+        liveRingId: live.ringId,
+        liveOrdinalStart: live.start,
+        liveOrdinalEnd: live.end,
+      );
+      wal.liveConnectionEpoch = live.epoch;
+      _wals.add(wal);
+    }
+    _removeFrameIndices(indices);
+    _notifyUpdated(generation);
+    return true;
+  }
+
   Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
-        if (!_isCurrent(generation)) return;
-        final indices = <int>[];
-        for (var i = 0; i < _frames.length; i++) {
-          if (_isPendantFrame(_frames[i])) indices.add(i);
-        }
-        if (indices.isEmpty) return;
-        final frames = indices.map((i) => _frames[i]).toList();
-        final synced = indices.map((i) => _frameSynced[i]).toList();
-
-        var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-        if (!shouldStore) shouldStore = synced.any((s) => !s);
-        if (!shouldStore) {
-          _removeFrameIndices(indices);
-          return;
-        }
-        final syncedOffset = syncedPrefixCount(synced);
-
-        final frameCount = frames.length;
-        final now = _now();
-        var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
-        var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
-        final evidence = stableCaptureEvidence(frames);
-        final live = _liveEvidenceFor(frames);
-
-        if (partitionsEvidenceRuns(true, _codec, frames)) {
-          _storeSelectedRuns(
-            frames,
-            synced,
-            captureSelectionStartSeconds(now, frameCount, _framesPerSecond),
-            generation,
-            extendMemWal: false,
-            legacySelectionTimerStart: timerStart,
-          );
-        } else {
-          final wal = Wal(
-            codec: _codec,
-            timerStart: timerStart,
-            data: frames.map((f) => f.payload).toList(),
-            storage: WalStorage.mem,
-            onDeviceOnly: _pendingPhoneOnly,
-            capturedOnDeviceOnly: _pendingPhoneOnly,
-            status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
-            device: _deviceId ?? "omi",
-            deviceModel: _deviceModel ?? "Omi",
-            seconds: frameCount ~/ _framesPerSecond,
-            totalFrames: frameCount,
-            syncedFrameOffset: syncedOffset,
-            ownerUid: _currentWalOwnerUid(),
-            captureRoot: evidence.root,
-            sourceFrameStart: evidence.start,
-            sourceClockEpoch: evidence.epoch,
-            geolocation: _copyGeolocation(_sessionGeolocation),
-            recordingSessionId: _activeRecordingSessionId,
-            liveRingId: live.ringId,
-            liveOrdinalStart: live.start,
-            liveOrdinalEnd: live.end,
-          );
-          wal.liveConnectionEpoch = live.epoch;
-          _wals.add(wal);
-        }
-        _removeFrameIndices(indices);
-        _notifyUpdated(generation);
+        if (!_drainPendantTailFrames(generation)) return;
         await _flush(generation);
       });
 
