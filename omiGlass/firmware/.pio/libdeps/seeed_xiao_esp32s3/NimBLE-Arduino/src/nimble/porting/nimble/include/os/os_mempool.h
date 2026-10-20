@@ -46,10 +46,6 @@ struct os_memblock {
     SLIST_ENTRY(os_memblock) mb_next;
 };
 
-/* XXX: Change this structure so that we keep the first address in the pool? */
-/* XXX: add memory debug structure and associated code */
-/* XXX: Change how I coded the SLIST_HEAD here. It should be named:
-   SLIST_HEAD(,os_memblock) mp_head; */
 
 /**
  * Memory pool
@@ -68,7 +64,7 @@ struct os_mempool {
     /** Address of memory buffer used by pool */
     uint32_t mp_membuf_addr;
     STAILQ_ENTRY(os_mempool) mp_list;
-    SLIST_HEAD(,os_memblock);
+    SLIST_HEAD(,os_memblock) mp_head;
     /** Name for memory block */
     const char *name;
 };

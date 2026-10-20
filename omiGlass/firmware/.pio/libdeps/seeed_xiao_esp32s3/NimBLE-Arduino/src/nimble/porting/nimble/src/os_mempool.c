@@ -152,7 +152,7 @@ os_mempool_init_internal(struct os_mempool *mp, uint16_t blocks,
     mp->mp_num_blocks = blocks;
     mp->mp_membuf_addr = (uint32_t)(uintptr_t)membuf;
     mp->name = name;
-    SLIST_FIRST(mp) = membuf;
+    SLIST_FIRST(&(mp)->mp_head) = membuf;
 
     if (blocks > 0) {
         os_mempool_poison(mp, membuf);
@@ -261,7 +261,7 @@ os_mempool_clear(struct os_mempool *mp)
     mp->mp_min_free = mp->mp_num_blocks;
     os_mempool_poison(mp, (void *)mp->mp_membuf_addr);
     os_mempool_guard(mp, (void *)mp->mp_membuf_addr);
-    SLIST_FIRST(mp) = (void *)(uintptr_t)mp->mp_membuf_addr;
+    SLIST_FIRST(&(mp)->mp_head) = (void *)(uintptr_t)mp->mp_membuf_addr;
 
     /* Chain the memory blocks to the free list */
     block_addr = (uint8_t *)(uintptr_t)mp->mp_membuf_addr;
@@ -299,7 +299,7 @@ os_mempool_is_sane(const struct os_mempool *mp)
     struct os_memblock *block;
 
     /* Verify that each block in the free list belongs to the mempool. */
-    SLIST_FOREACH(block, mp, mb_next) {
+    SLIST_FOREACH(block, &(mp)->mp_head, mb_next) {
         if (!os_memblock_from(mp, block)) {
             return false;
         }
@@ -352,10 +352,10 @@ os_memblock_get(struct os_mempool *mp)
         /* Check for any free */
         if (mp->mp_num_free) {
             /* Get a free block */
-            block = SLIST_FIRST(mp);
+            block = SLIST_FIRST(&(mp)->mp_head);
 
             /* Set new free list head */
-            SLIST_FIRST(mp) = SLIST_NEXT(block, mb_next);
+            SLIST_FIRST(&(mp)->mp_head) = SLIST_NEXT(block, mb_next);
 
             /* Decrement number free by 1 */
             mp->mp_num_free--;
@@ -392,8 +392,8 @@ os_memblock_put_from_cb(struct os_mempool *mp, void *block_addr)
     OS_ENTER_CRITICAL(sr);
 
     /* Chain current free list pointer to this block; make this block head */
-    SLIST_NEXT(block, mb_next) = SLIST_FIRST(mp);
-    SLIST_FIRST(mp) = block;
+    SLIST_NEXT(block, mb_next) = SLIST_FIRST(&(mp)->mp_head);
+    SLIST_FIRST(&(mp)->mp_head) = block;
 
     /* XXX: Should we check that the number free <= number blocks? */
     /* Increment number free */
@@ -431,7 +431,7 @@ os_memblock_put(struct os_mempool *mp, void *block_addr)
     /*
      * Check for duplicate free.
      */
-    SLIST_FOREACH(block, mp, mb_next) {
+    SLIST_FOREACH(block, &(mp)->mp_head, mb_next) {
         assert(block != (struct os_memblock *)block_addr);
     }
 #endif
