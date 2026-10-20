@@ -66,7 +66,7 @@ overlay:
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
         BUCKET_SCREEN_FRAMES:
-          value: based-hardware-dev-screen-frames
+          value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -114,7 +114,7 @@ overlay:
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
         BUCKET_SCREEN_FRAMES:
-          value: based-hardware-dev-screen-frames
+          value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -332,7 +332,7 @@ overlay:
             value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -411,7 +411,7 @@ overlay:
             value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
