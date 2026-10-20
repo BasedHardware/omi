@@ -1,6 +1,6 @@
-"""Process-wide marker: this listen pod has begun draining (SIGTERM or shutdown).
+"""Process-wide marker: this listen pod has begun draining (SIGTERM).
 
-Once set, uvicorn closes every client websocket with 1012 and tears down
+Set by the SIGTERM handler. Once set, uvicorn closes every client websocket with 1012 and tears down
 live sessions; any provider leg that dies from then on died because of our
 restart, not because the provider failed. ``LiveLegOutcome`` censors those
 deaths so a rolling restart cannot feed the cost-gate burst detector.
