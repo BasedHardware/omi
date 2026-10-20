@@ -240,6 +240,44 @@ class AudioPlayerUtils extends ChangeNotifier {
     }
   }
 
+  /// One WAV for a whole recording, oldest file first: a recording can be hundreds of short files,
+  /// and sharing them one at a time is not practical. Files with no audio on the phone are left out.
+  @visibleForTesting
+  Future<File?> writeRecordingWav(
+    List<Wal> wals, {
+    required String outputPath,
+  }) async {
+    final parts = <File>[];
+    for (final wal in [
+      ...wals,
+    ]..sort((a, b) => a.timerStart.compareTo(b.timerStart))) {
+      if (!canPlayOrShare(wal)) continue;
+      final path = await _getOrCreateAudioFile(wal, forSharing: true);
+      if (path != null) parts.add(File(path));
+    }
+    if (parts.isEmpty) return null;
+    return WavCombiner.combineWavFiles(parts, outputPath);
+  }
+
+  Future<void> shareRecordingAsAudio(List<Wal> wals) async {
+    final start = wals.map((w) => w.timerStart).reduce((a, b) => a < b ? a : b);
+    final tempDir = await getTemporaryDirectory();
+    final file = await writeRecordingWav(
+      wals,
+      outputPath: '${tempDir.path}/omi_recording_$start.wav',
+    );
+    if (file == null)
+      throw Exception('No audio on this phone for this recording');
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'audio/wav')],
+        text:
+            'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(start * 1000).toString().split('.')[0]}',
+        sharePositionOrigin: shareSheetOrigin(),
+      ),
+    );
+  }
+
   Future<String?> _getOrCreateAudioFile(
     Wal wal, {
     bool forSharing = false,
