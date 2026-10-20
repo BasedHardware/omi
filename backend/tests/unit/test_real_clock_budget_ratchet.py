@@ -98,13 +98,14 @@ _PREFILTER = re.compile(
 )
 # Clock control: a fake/injected clock, a time-freezing library, or monotonic/perf_counter replaced by something
 # other than the real ``time.*`` function. ``'monotonic': time.monotonic`` and ``clock=None`` are real clocks.
-# Preceded by ``\s*``; rejecting ``\s`` here stops backtracking from testing the lookahead on a space.
-_REAL_CLOCK_VALUE = r'(?!\s|time\.|None\b)'
+# Possessive whitespace/parenthesis/keyword introducers, then a lookahead that rejects a real clock. Rejecting
+# ``\s``, ``(`` and a bare ``new=``/``value=`` too means skipping an introducer can never sneak past the check.
+_REAL_CLOCK_VALUE = r'\s*+(?:(?:new|value)\s*+=\s*+)?+(?:\(\s*+)*+(?!\s|\(|(?:new|value)\s*=|time\.|None\b)'
 _FAKE_CLOCK = re.compile(
     r'fake_?clock|freeze_?time|freezegun|time_machine|'
-    rf'\bclock\s*=(?!=)\s*{_REAL_CLOCK_VALUE}|'
-    rf'[\'"](?:monotonic|perf_counter)[\'"]\s*[,:]\s*(?:new\s*=\s*)?{_REAL_CLOCK_VALUE}|'
-    rf'\.(?:monotonic|perf_counter)\s*=(?!=)\s*{_REAL_CLOCK_VALUE}',
+    rf'\bclock\s*+=(?!=){_REAL_CLOCK_VALUE}|'
+    rf'[\'"](?:monotonic|perf_counter)[\'"]\s*+[,:]{_REAL_CLOCK_VALUE}|'
+    rf'\.(?:monotonic|perf_counter)\s*+=(?!=){_REAL_CLOCK_VALUE}',
     re.IGNORECASE,
 )
 # Callees whose timeout bounds the test harness, not the code under test.
@@ -390,6 +391,17 @@ def test_real_clock_mapping_is_not_a_fake(monkeypatch):
 def test_clock_none_is_not_a_fake():
     fetch(timeout_seconds=0.2, clock=None)
 
+def test_real_clock_via_new_is_not_a_fake():
+    with patch.object(module, 'monotonic', new=time.monotonic):
+        module.NEW_KW_TIMEOUT_SECONDS = 0.05
+
+def test_parenthesized_real_clock_is_not_a_fake():
+    fetch(timeout_seconds=0.3, clock=(time.monotonic))
+
+def test_fake_clock_via_new_is_exempt():
+    with patch.object(module, 'monotonic', new=lambda: 0.0):
+        module.NEW_KW_TIMEOUT_SECONDS = 0.05
+
 def test_more_spellings(monkeypatch):
     with patch.object(module, 'KW_TIMEOUT_SECONDS', new=0.02):
         pass
@@ -419,6 +431,8 @@ def test_scanner_flags_the_flaky_shapes_and_skips_harness_waits() -> None:
         prefix + 'TestShape.test_method::deadline_seconds=0.01',
         prefix + 'test_real_clock_mapping_is_not_a_fake::AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS=0.05',
         prefix + 'test_clock_none_is_not_a_fake::timeout_seconds=0.2',
+        prefix + 'test_real_clock_via_new_is_not_a_fake::NEW_KW_TIMEOUT_SECONDS=0.05',
+        prefix + 'test_parenthesized_real_clock_is_not_a_fake::timeout_seconds=0.3',
         prefix + 'test_more_spellings::KW_TIMEOUT_SECONDS=0.02',
         prefix + 'test_more_spellings::PAREN_TIMEOUT_SECONDS=0.05',
         prefix + 'test_more_spellings::STR_ENV_TIMEOUT=0.02',
