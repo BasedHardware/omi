@@ -1071,24 +1071,54 @@ def _two_workers(stack: BatchStack) -> None:
         workers = {e.get('worker_name') for e in starts}
         if workers != {stack.worker_name, peer}:
             raise StackFailure(f'expected both replicas to drain work, saw {sorted(map(str, workers))}')
+        # Compute is at-least-once by design: a lease that expires (or whose
+        # renewal is ambiguous at publication) is recovered and leased again,
+        # and the stale holder's result is fenced by its token. The emulator's
+        # collection-wide transaction lock stalls heartbeats on slow runners,
+        # so a re-lease is legitimate here. The cross-replica invariants are:
+        # every compute ran under its own lease (computes <= leases issued),
+        # and each segment committed exactly once to the result log.
+        recomputed: set[str] = set()
         for segment in segments:
-            if stack.words_calls(segment) != 1 or sum(e['segment_id'] == segment for e in results) != 1:
-                raise StackFailure('a segment was computed or completed more than once across replicas')
-            if stack.doc('jobs', segment).get('state') != 'committed':
+            job = stack.doc('jobs', segment)
+            leases = int(job.get('attempt') or 0)
+            computes = stack.words_calls(segment)
+            computed = sum(e['segment_id'] == segment for e in results)
+            if computes < 1 or computed < 1 or computes > leases or computed > leases:
+                _record_job_event(
+                    {'event': 'batch_two_workers_overcompute', 'units': _unit_states(stack, [*burst, *solos])}
+                )
+                raise StackFailure('a segment was computed more often than it was leased across replicas')
+            if computes > 1:
+                recomputed.add(segment)
+            if job.get('state') != 'committed':
                 raise StackFailure('a two-replica segment did not reach the committed result log')
+            if stack.doc('results', segment).get('segment_id') != segment:
+                raise StackFailure('a two-replica segment has no committed result log entry')
         chain = sorted(
             (stack.doc('results', upload.segment_ids[0]) for upload in burst), key=lambda entry: entry['log_sequence']
         )
+        if len({entry['log_sequence'] for entry in chain}) != len(chain):
+            raise StackFailure('two-replica burst committed a segment more than once to the result log')
+        committed = [entry['segment_id'] for entry in chain]
+        if [entry['previous_segment_id'] for entry in chain[1:]] != committed[:-1]:
+            raise StackFailure('two-replica burst result log has a broken predecessor chain')
         # Capture order is (capture_at, segment_id); second-resolution capture
         # names can tie, so upload order alone is not the commit contract.
         expected = sorted((entry['capture_at'], entry['segment_id']) for entry in chain)
         expected = [segment for _, segment in expected]
-        if [entry['segment_id'] for entry in chain] != expected:
-            raise StackFailure('two-replica burst was committed out of capture order')
-        if [entry['previous_segment_id'] for entry in chain[1:]] != expected[:-1]:
-            raise StackFailure('two-replica burst result log has a broken predecessor chain')
-        if any(entry.get('late_capture') for entry in chain):
-            raise StackFailure('two-replica burst marked an in-order capture late')
+        late = [entry['segment_id'] for entry in chain if entry.get('late_capture')]
+        if not late:
+            if committed != expected:
+                raise StackFailure('two-replica burst was committed out of capture order')
+        else:
+            # A re-leased head can outlast the bounded merge head wait (#22820);
+            # its successors then commit in capture order and the head appends
+            # as late_capture. Only a recomputed unit may be released late.
+            if not set(late) <= recomputed:
+                raise StackFailure('two-replica burst marked an in-order capture late')
+            if [s for s in committed if s not in late] != [s for s in expected if s not in late]:
+                raise StackFailure('two-replica burst was committed out of capture order')
 
         # Reconciles while the other captures drained may already have
         # prepared this unit's recovery intent; accept either held state.
@@ -1112,6 +1142,7 @@ def _two_workers(stack: BatchStack) -> None:
                 'event': 'batch_two_workers_verified',
                 'segments': len(segments),
                 'replicas': len(workers),
+                'recomputed_after_lease_loss': len(recomputed),
                 'per_replica': {
                     'primary': sum(e.get('worker_name') == stack.worker_name for e in starts),
                     'peer': sum(e.get('worker_name') == peer for e in starts),
