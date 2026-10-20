@@ -86,24 +86,29 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
             ),
         ];
         // One recording's fragments can straddle stages (an upload batch done, the next still
-        // syncing): group every pending fragment first, then a block is only as far along as its
-        // least advanced part. A live capture's uploaded audio carries the id of the conversation
+        // syncing): group every pending fragment first, then a block is only as far along as
+        // its least advanced part. A live capture's uploaded audio carries the id of the conversation
         // already listed as processing, so it is not repeated.
         final pending = [
           for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
             if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+          // Refused fragments of the same recording join the same grouping: a block
+          // selects its worst state, so a recording mid-upload with one refused
+          // fragment reads once — as refused — instead of twice, as both. The three
+          // lists partition by WAL status, so a fragment never repeats across them;
+          // a phone copy and its wearable source can share an id, and dropping one
+          // would hide the terminal state the block must show.
+          ...SyncPendingWork.attention(p),
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
         for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
-          if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
+          if (SyncPendingWork.needsAttention(block.state)) {
+            // Refused recordings stay on the day they were made, in the Offline Sync page's words.
+            items.add(_PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0));
+          } else if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
             items.add(_PendingItem.block(block, label: l.transcribing, step: 2));
           } else {
             items.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
           }
-        }
-        // Refused recordings stay on the day they were made, in the Offline Sync page's words.
-        final attention = groupRecordingBlocks(SyncPendingWork.attention(p));
-        for (final block in attention) {
-          items.add(_PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0));
         }
 
         final undated = <_PendingItem>[];
@@ -204,10 +209,10 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(l.syncDetailsTitle, style: OmiType.body),
-                                  if (attention.isNotEmpty) ...[
+                                  if (items.any((i) => i.needsAttention)) ...[
                                     const SizedBox(height: 3),
                                     Text(
-                                      l.syncCardNeedsAttention(attention.length),
+                                      l.syncCardNeedsAttention(items.where((i) => i.needsAttention).length),
                                       style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                                     ),
                                   ],

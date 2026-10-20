@@ -1151,7 +1151,7 @@ runs:
           --set gcpProjectId=${{ inputs.project_id }} \
           --set runtimeGcpProjectId=${{ inputs.runtime_gcp_project_id }} \
           --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
-        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=3000s; then
+        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=4200s; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen || true
           exit 1
         fi

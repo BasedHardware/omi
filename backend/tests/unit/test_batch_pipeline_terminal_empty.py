@@ -1,6 +1,8 @@
 """Exhaustion completes siblings without claiming silence or repeating paid STT."""
 
 from copy import deepcopy
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import importlib.util
 from pathlib import Path
 import sys
