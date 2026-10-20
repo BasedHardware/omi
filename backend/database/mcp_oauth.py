@@ -145,6 +145,21 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _coerce_utc_datetime(value: object) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text[:-1] + "+00:00" if text.endswith("Z") else text)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
 def _csv_env(name: str) -> List[str]:
     return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
 
@@ -641,8 +656,12 @@ def _grant_is_revoked(grant: Dict[str, Any]) -> bool:
     return bool(grant.get("revoked_at") or grant.get("status") == "revoked")
 
 
-def _grant_recency_key(grant: Dict[str, Any]) -> Any:
-    return grant.get("updated_at") or grant.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+def _grant_recency_key(grant: Dict[str, Any]) -> datetime:
+    return (
+        _coerce_utc_datetime(grant.get("updated_at"))
+        or _coerce_utc_datetime(grant.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc)
+    )
 
 
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
@@ -768,7 +787,7 @@ def consume_authorization_code(
             return None
         data: Dict[str, Any] = _typed_doc(doc)
         expires_at = data.get("expires_at")
-        if data.get("consumed_at") or (expires_at and expires_at <= _now()):
+        if data.get("consumed_at") or (expires_at is not None and not _is_unexpired(expires_at, _now())):
             return None
         if (
             data.get("client_id") != client_id
@@ -807,7 +826,7 @@ def exchange_authorization_code_for_tokens(
             return None
         code_data: Dict[str, Any] = _typed_doc(code_doc)
         expires_at = code_data.get("expires_at")
-        if code_data.get("consumed_at") or (expires_at and expires_at <= _now()):
+        if code_data.get("consumed_at") or (expires_at is not None and not _is_unexpired(expires_at, _now())):
             return None
         if (
             code_data.get("client_id") != client_id
@@ -948,12 +967,11 @@ def _nonempty_string(data: Dict[str, Any], field: str) -> Optional[str]:
 
 
 def _is_unexpired(value: object, now: datetime) -> bool:
-    if not isinstance(value, datetime):
+    coerced_value = _coerce_utc_datetime(value)
+    coerced_now = _coerce_utc_datetime(now)
+    if coerced_value is None or coerced_now is None:
         return False
-    try:
-        return value > now
-    except (TypeError, ValueError):
-        return False
+    return coerced_value > coerced_now
 
 
 def _validated_access_token_identity(
@@ -1061,8 +1079,8 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     _ensure_oauth_memory_grant(grant)
     if cache_ok:
         try:
-            expires_at = data.get("expires_at")
-            if isinstance(expires_at, datetime):
+            expires_at = _coerce_utc_datetime(data.get("expires_at"))
+            if expires_at is not None:
                 mcp_token_cache.fill_access_token(
                     access_token, identity, expires_at.timestamp(), index_ttl_seconds=ACCESS_TOKEN_TTL_SECONDS
                 )
@@ -1112,7 +1130,7 @@ def rotate_refresh_token(
             # canonical or legacy ``/sse`` form.
             or (resource is not None and not mcp_resource_urls_match(data.get("resource"), resource))
             or data.get("revoked_at")
-            or (expires_at and expires_at <= now)
+            or (expires_at is not None and not _is_unexpired(expires_at, now))
             or not grant
             or grant.get("revoked_at")
             or grant.get("status") == "revoked"
@@ -1121,9 +1139,9 @@ def rotate_refresh_token(
         grant.setdefault("id", data.get("grant_id"))
         replay_grace = False
         if data.get("used_at") or data.get("replaced_by"):
-            used_at = data.get("used_at")
+            used_at = _coerce_utc_datetime(data.get("used_at"))
             replay_grace = (
-                isinstance(used_at, datetime) and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
+                used_at is not None and 0 <= (now - used_at).total_seconds() <= MCP_OAUTH_REPLAY_GRACE_SECONDS
             )
             if replay_grace and int(data.get("replay_reissue_count") or 0) >= MCP_OAUTH_REPLAY_REISSUE_LIMIT:
                 # The window bounds duration; this bound caps how many durable
