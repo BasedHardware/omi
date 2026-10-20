@@ -385,7 +385,14 @@ async def run_session(
                 if now + delay + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc
                 gate_retry_sleeping = True
-                await _sleep_gate_retry(delay)
+                try:
+                    await _sleep_gate_retry(delay)
+                except (asyncio.CancelledError, TimeoutError):
+                    # A pass timeout during the sleep leaves no apply in flight; keep the flag for the outer rewrite.
+                    raise
+                except BaseException:
+                    gate_retry_sleeping = False
+                    raise
                 gate_retry_sleeping = False
                 if loop.time() + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc

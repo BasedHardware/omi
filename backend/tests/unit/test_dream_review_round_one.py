@@ -344,6 +344,44 @@ def test_committed_transcript_gate_retry_finishes_vector_projection(store, monke
     assert len([key for key in store.rows if key[2:3] == ('review_changes',)]) == 1
 
 
+def test_committed_transcript_gate_retry_keeps_applied_when_repair_fails(store, monkeypatch):
+    from database import vector_db
+
+    seen, _ = setup(store, monkeypatch)
+    source = {'conversations/one': seen()}
+    fences = tools.proposal_fences(UID, {'records': source})
+    started_at = datetime.now(timezone.utc)
+    operation = correction()
+    provider = Mock()
+    provider.list.return_value = [['synthetic-old-chunk']]
+    monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'default_db_client', store)
+    attempts = []
+
+    def contend_then_fail(*args, **kwargs):
+        attempts.append(None)
+        if len(attempts) == 1:
+            raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+        raise TimeoutError('synthetic embedding timeout')
+
+    monkeypatch.setattr(vector_db, 'upsert_transcript_chunk_vectors', contend_then_fail)
+    with pytest.raises(DestructiveOperationInProgress):
+        tools.apply_verified_edit(UID, operation, source, expected_records=fences, authority='dream')
+    assert (
+        tools.apply_verified_edit(
+            UID,
+            operation,
+            source,
+            expected_records=fences,
+            authority='dream',
+            gate_retry=True,
+            run_started_at=started_at,
+        )
+        == 'applied'
+    )
+    assert len(attempts) == 2
+
+
 def test_shared_session_uses_one_memory_ref_spelling_for_legacy_seed_aliases():
     from utils.agent_capabilities.session import Session
     from utils.agent_capabilities.limits import SessionLimits

@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import logging
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_URL
@@ -32,6 +33,9 @@ from utils.agent_capabilities.errors import ToolError
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
 from utils.review_projection import sync_transcript_chunks
+from database.legal_holds import DestructiveOperationInProgress
+
+logger = logging.getLogger(__name__)
 
 
 def edit_key(edit, records=None):
@@ -199,9 +203,15 @@ def apply_verified_edit(
             and change.get('undone', False) is False
         ):
             if prior.get('transcript_overlay'):
-                sync_transcript_chunks(
-                    uid, prior['transcript_overlay']['conversation_id'], firestore_client=review_store.client()
-                )
+                try:
+                    sync_transcript_chunks(
+                        uid, prior['transcript_overlay']['conversation_id'], firestore_client=review_store.client()
+                    )
+                except DestructiveOperationInProgress:
+                    raise
+                except Exception:
+                    # The change is committed; a provider failure in the repair must not fail the pass.
+                    logger.warning('dream transcript chunk repair failed after committed change', exc_info=True)
             return 'applied'
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
