@@ -122,6 +122,11 @@ def teardown_closer(close_code: Any) -> str:
     return US_DRAIN if close_code == POD_RESTART_CLOSE_CODE or is_draining() else US_CLIENT_GONE
 
 
+def session_teardown_closer(host: Any) -> str:
+    """``teardown_closer`` for a listen session host; a host without state is an ordinary teardown."""
+    return teardown_closer(getattr(getattr(host, 'state', None), 'close_code', None))
+
+
 def _headers(source: Any) -> Optional[Mapping[str, Any]]:
     # websockets 12 legacy client: ``response_headers``; asyncio client: ``response.headers``;
     # handshake rejections: ``headers`` or ``response.headers``.

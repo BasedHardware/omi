@@ -123,7 +123,7 @@ from utils.stt.resilient_stream import (
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import fallback_socket_is_serving
-from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, teardown_closer
+from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, session_teardown_closer
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -1162,7 +1162,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
-            note_stream_close_intent(socket, teardown_closer(getattr(self.host.state, 'close_code', None)))
+            note_stream_close_intent(socket, session_teardown_closer(self.host))
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
@@ -2740,7 +2740,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
-                note_stream_close_intent(socket, teardown_closer(getattr(self.host.state, 'close_code', None)))
+                note_stream_close_intent(socket, session_teardown_closer(self.host))
                 try:
                     socket.finish()
                 except Exception:

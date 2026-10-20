@@ -103,6 +103,13 @@ def test_pod_restart_close_code_is_our_drain(monkeypatch):
     assert teardown_closer(1000) == US_DRAIN
 
 
+def test_session_teardown_closer_tolerates_stub_hosts():
+    assert pse.session_teardown_closer(SimpleNamespace(state=SimpleNamespace(close_code=1012))) == US_DRAIN
+    assert pse.session_teardown_closer(SimpleNamespace(state=SimpleNamespace())) == US_CLIENT_GONE
+    assert pse.session_teardown_closer(SimpleNamespace()) == US_CLIENT_GONE
+    assert pse.session_teardown_closer(None) == US_CLIENT_GONE
+
+
 def test_after_sigterm_a_dropped_leg_is_our_drain_but_a_vendor_frame_stays_vendor(monkeypatch):
     monkeypatch.setattr(pse, 'is_draining', lambda: True)
     dropped = ProviderStreamEnd('soniox', None)
