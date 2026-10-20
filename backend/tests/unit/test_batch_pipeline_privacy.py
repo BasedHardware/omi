@@ -116,3 +116,18 @@ def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities
     }
     with pytest.raises(ValueError):
         ttl_resources('foreign/path')
+
+
+def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch):
+    client, recursive = MagicMock(), MagicMock()
+    monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', lambda uid: None)
+    data_plane = MagicMock(name='data_plane_client')
+    monkeypatch.setattr('database.user_data_deletion.get_data_plane_firestore_client', lambda: data_plane)
+    client.collection.return_value.document.return_value.get.return_value.exists = False
+    assert purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
+    data_plane.collection.assert_any_call('rollout_cohorts')
+    data_plane.collection.return_value.document.return_value.delete.assert_called_once_with()
+    client.collection.assert_any_call('users')
+    data_plane.collection.return_value.document.return_value.delete.side_effect = RuntimeError('retry')
+    with pytest.raises(RuntimeError, match='retry'):
+        purge_user_subtree('synthetic', client, recursive)

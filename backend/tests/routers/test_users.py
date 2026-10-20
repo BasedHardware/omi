@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
+from config.plan_catalog import LADDER_V1_PRICE_BINDINGS, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
 from routers import users as users_router
 from services.users import data_export
 from utils import byok, subscription as subscription_utils
@@ -449,7 +450,15 @@ def _stub_transcription_allowance():
         yield
 
 
-def test_byok_llm_only_subscription_meters_the_resolved_transcription_budget():
+@pytest.fixture
+def real_subscription_authority(monkeypatch):
+    """Synthetic BYOK/reviewer display plans still resolve real account entitlements."""
+    authority = MagicMock(return_value=users_router.get_default_basic_subscription())
+    monkeypatch.setattr(users_router.users_db, 'get_user_valid_subscription', authority)
+    return authority
+
+
+def test_byok_llm_only_subscription_meters_the_resolved_transcription_budget(real_subscription_authority):
     # The LLM identity does not determine the resolved transcription budget.
     from utils.subscription import TranscriptionAllowance
 
@@ -483,9 +492,11 @@ def test_byok_llm_only_subscription_meters_the_resolved_transcription_budget():
     assert response.transcription_seconds_limit == 600
     assert response.words_transcribed_limit == 8000
     assert response.words_transcribed_used == 500
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
 
-def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
+def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan(real_subscription_authority):
     # With a validated x-byok-deepgram header the whole snapshot is unlimited,
     # including transcription (None in the catalog, wire 0).
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
@@ -504,9 +515,11 @@ def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
     assert response.transcription_seconds_used == 0
     assert response.transcription_seconds_limit == 0
     assert response.words_transcribed_limit == 0
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
 
-def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
+def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan(real_subscription_authority):
     # Same missing import on the reviewer branch (routers/users.py:1193).
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
@@ -517,6 +530,8 @@ def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.limits.words_transcribed is None
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('reviewer-uid', provision=False)
 
 
 def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
@@ -730,7 +745,7 @@ def test_usage_quota_endpoint_reports_catalog_exhaustion_policy(plan, expected_o
     assert quota.allowed is False
 
 
-def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
+def test_subscription_snapshot_carries_the_one_transcription_allowance_answer(real_subscription_authority):
     """The startup snapshot exposes exactly what the listen socket will enforce (free tier S16),
     resolved with the app platform standing in for the listen `source`."""
     from utils.subscription import TranscriptionAllowance
@@ -760,25 +775,75 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
         'reason': 'plan_allowance_exhausted',
     }
 
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
+
+@pytest.mark.parametrize('ladder_configured', [False, True])
 @pytest.mark.parametrize('identity_version', [None, '1'])
-def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(identity_version):
+@pytest.mark.parametrize('stored_price', [None, 'price_stale_firestore'])
+@pytest.mark.parametrize(
+    'real_plan,refreshed_price,expected_capability',
+    [
+        ('plus', 'price_ci_ladder_plus', False),
+        ('plus', None, None),  # Stripe outage retains the snapshot but omits unknown capability.
+        ('operator', 'price_ci_ladder_pro', True),
+        ('architect', 'price_ci_ladder_architect', True),
+        *[(plan.value, price, True) for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()],
+    ],
+)
+def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
+    monkeypatch, ladder_configured, identity_version, stored_price, real_plan, refreshed_price, expected_capability
+):
     """The ordinary branch reads the valid subscription and the monthly usage once; the resolver
     gets exactly those, so the snapshot and the allowance cannot come from different reads."""
     from utils.subscription import TranscriptionAllowance
 
+    for tier, price in [
+        ('PLUS', 'price_ci_ladder_plus'),
+        ('PRO', 'price_ci_ladder_pro'),
+        ('ARCHITECT', 'price_ci_ladder_architect'),
+    ]:
+        if ladder_configured:
+            monkeypatch.setenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', price)
+        else:
+            monkeypatch.delenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', raising=False)
+    if not ladder_configured:
+        for binding in LADDER_V1_PRICE_BINDINGS.values():
+            monkeypatch.delenv(binding['env_var'], raising=False)
+    if not ladder_configured and expected_capability is not None:
+        expected_capability = True  # Existing paid catalog mode stays legacy.
     seen: list[dict] = []
     subscription = users_router.Subscription(
-        plan=users_router.PlanType.plus, status=users_router.SubscriptionStatus.active
+        plan=users_router.PlanType(real_plan),
+        status=users_router.SubscriptionStatus.active,
+        current_price_id=stored_price,
+        stripe_subscription_id='sub_synthetic',
+        current_period_end=int(datetime.now(timezone.utc).timestamp()) + 3600,
     )
 
     def resolver(uid: str, source=None, **already_read) -> TranscriptionAllowance:
         seen.append(already_read)
         return TranscriptionAllowance('managed', 5, 'plan_within_allowance')
 
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
+    stripe_subscription = {'id': 'sub_synthetic', 'items': {'data': [{'price': {'id': refreshed_price}}]}}
+    with patch.object(
+        users_router.screen_vector_entitlements,
+        'read_stripe_subscription',
+        (
+            MagicMock(return_value=stripe_subscription)
+            if refreshed_price
+            else MagicMock(side_effect=RuntimeError('Stripe unavailable'))
+        ),
+    ) as billed_identity, patch.object(
+        users_router, 'should_show_new_plans', MagicMock(return_value=True)
+    ), patch.object(
+        users_router.users_db, 'is_byok_active', MagicMock(return_value=False)
+    ), patch.object(
         users_router, 'get_user_subscription', MagicMock(return_value=subscription)
-    ), patch.object(users_router, 'reconcile_basic_plan_with_stripe', MagicMock()), patch.object(
+    ), patch.object(
+        users_router, 'reconcile_basic_plan_with_stripe', MagicMock()
+    ), patch.object(
         users_router, 'get_user_valid_subscription', MagicMock(return_value=subscription)
     ), patch.object(
         users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={'transcription_seconds': 9})
@@ -813,15 +878,18 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(identity_v
             x_app_version='1.0.0',
         )
         users_router.wire_plan_for_client.assert_called_once_with(
-            users_router.PlanType.plus, 'ios', '1.0.0', identity_version
+            users_router.PlanType(real_plan), 'ios', '1.0.0', identity_version
         )
 
     assert [sorted(read) for read in seen] == [['byok_active', 'subscription', 'usage']]
     assert seen[0]['byok_active'] is False
     assert seen[0]['usage'] == {'transcription_seconds': 9}
-    assert seen[0]['subscription'].plan is users_router.PlanType.plus  # not the client-facing remap
+    assert seen[0]['subscription'].plan is users_router.PlanType(real_plan)  # not the client-facing remap
+    assert seen[0]['subscription'].current_price_id == (refreshed_price or stored_price)
+    assert response.cloud_screen_vectors is expected_capability
     assert response.subscription.plan is users_router.PlanType.unlimited  # the remap still ships to the client
     assert response.transcription_allowance.remaining_seconds == 5
+    billed_identity.assert_called_once_with('sub_synthetic')
 
 
 def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependencies():
@@ -837,12 +905,28 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     ), patch.object(
         subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
-    ):
+    ), patch.object(
+        users_router.users_db,
+        'get_user_valid_subscription',
+        MagicMock(side_effect=RuntimeError('subscription authority unavailable')),
+    ), patch.object(
+        users_router, 'record_fallback', MagicMock()
+    ) as fallback:
         response = users_router.get_user_subscription_endpoint(
             request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='desktop'
         )
 
     assert response.subscription.features == ['byok']  # the snapshot itself is intact
+    assert response.cloud_screen_vectors is None
+    assert 'cloud_screen_vectors' not in response.model_dump()
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='subscription_capability',
+        to_mode='unknown',
+        reason='unavailable',
+        outcome='degraded',
+        log=users_router.logger,
+    )
     assert response.transcription_allowance.model_dump() == {
         'mode': 'on_device',
         'remaining_seconds': 0,

@@ -72,6 +72,7 @@ def host():
 def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '5')
     results = []
     for index in range(1000):
@@ -89,7 +90,10 @@ def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rol
 def test_summary_kill_allowlist_legacy_global_and_invalid(monkeypatch):
     assert not summary_guarantee.enabled('synthetic')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    assert summary_guarantee.enabled('synthetic')  # legacy empty list at zero
+    assert not summary_guarantee.enabled('synthetic')  # fail-safe at zero percent with no allowlist
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    assert summary_guarantee.enabled('synthetic')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', ' synthetic-allowed ')
     assert summary_guarantee.enabled('synthetic-allowed')
     assert not summary_guarantee.enabled('synthetic')

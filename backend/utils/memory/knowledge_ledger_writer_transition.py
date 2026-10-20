@@ -25,7 +25,6 @@ from models.memory_apply import (
     WriterMode,
     require_writer_admitted,
 )
-from utils.metrics import record_jit_writer_mode_transition
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -174,14 +173,6 @@ def begin_writer_transition(
         owner,
         MemoryWriterFence.from_control(expected_control),
     )
-    if result.writer_epoch == expected_control.writer_epoch + 1:
-        try:
-            record_jit_writer_mode_transition(
-                from_mode=expected_control.writer_mode.value,
-                to_mode=result.writer_mode.value,
-            )
-        except Exception:
-            pass
     return result
 
 
@@ -266,14 +257,6 @@ def complete_writer_transition(
         MemoryWriterFence.from_control(expected_control),
         validated_receipt,
     )
-    if result.writer_mode != expected_control.writer_mode:
-        try:
-            record_jit_writer_mode_transition(
-                from_mode=expected_control.writer_mode.value,
-                to_mode=result.writer_mode.value,
-            )
-        except Exception:
-            pass
     return result
 
 

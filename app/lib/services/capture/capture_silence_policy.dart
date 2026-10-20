@@ -73,6 +73,7 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
   if (nextPhase != state.phase) {
     return CaptureTransition(state.copyWith(phase: nextPhase), const [
       PolicyWrite(true),
+      RunStage(RecordingMarkStage(RecordingState.pause)),
       RunStage(PauseDeviceTailStage()),
     ]);
   }

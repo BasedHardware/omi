@@ -21,10 +21,10 @@ import time
 from dataclasses import fields
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
-from config.batch_pipeline import speech_empty_multilingual_enabled, recovery_enabled_for
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_store import FirestoreStore
@@ -135,6 +135,7 @@ def main():
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
     require(len(secret) >= 32 and bool(bucket), 'secure_runtime_material_required')
     os.environ['OMI_ENV_STAGE'] = args.stage
+    configure_rollout_runtime()
 
     client = firestore.Client(project='based-hardware')
     store = FirestoreStore('batch_pipeline_prod', firestore_client=client)
@@ -211,7 +212,7 @@ def main():
     }
     if args.apply:
 
-        require(speech_empty_multilingual_enabled() and recovery_enabled_for(uid), 'redrive_or_owner_disabled')
+        # Per-unit mutation consumes its persisted recovery owner part.
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')
         outcomes = Counter()
         # Always the same sorted prefix. Increasing the limit includes receipts

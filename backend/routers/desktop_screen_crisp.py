@@ -14,11 +14,11 @@ from database.screen_activity import (
 from database.vector_db import upsert_screen_activity_vectors
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.executors import db_executor, run_blocking
-from utils.jit_rollout import JITDecisionStage
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
+from utils.screen_vector_entitlements import ScreenVectorAuthorityUnavailable
 from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
 
 logger = logging.getLogger(__name__)
@@ -155,11 +155,20 @@ async def sync_screen_activity(
         # semantic screen search, which is a paid desktop capability. Gate it here rather than on
         # the client: the client cannot be trusted to know its own entitlement, and the row is
         # still stored either way, so a later upgrade can backfill vectors from the stored text.
-        embedded_rows = (
-            [row for row in rows if row.get("embedding")]
-            if await _timed_phase(phase_ms, "entitlement", run_blocking(db_executor, grants_cloud_screen_vectors, uid))
-            else []
-        )
+        embedded_rows = [row for row in rows if row.get("embedding")]
+        if embedded_rows:
+            try:
+                entitled = await _timed_phase(phase_ms, "entitlement", grants_cloud_screen_vectors(uid))
+            except ScreenVectorAuthorityUnavailable as error:
+                # Raw upsert is idempotent. Do not acknowledge client-paid vector
+                # work that a temporary authority outage prevented us from storing.
+                raise HTTPException(
+                    status_code=503,
+                    detail="screen vector authorization is temporarily unavailable",
+                    headers={"Retry-After": "5"},
+                ) from error
+            if not entitled:
+                embedded_rows = []
         if embedded_rows:
             try:
                 await _timed_phase(
@@ -179,10 +188,7 @@ async def sync_screen_activity(
         # the per-uid coalescer and hammer the control plane once per device
         # per minute. Frame-request delivery is metadata-only; the paid
         # boundaries downstream re-resolve with force_refresh themselves.
-        decision = await resolve_frame_request_authority(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-        )
+        decision = await resolve_frame_request_authority(uid)
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
                 await _timed_phase(

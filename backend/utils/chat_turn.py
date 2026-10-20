@@ -522,13 +522,34 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
 
         return ai_message, ask_for_nps
 
-    journey_attempt = JourneyAttempt('chat_response')
+    # Client acceptance remains at the HTTP response boundary; chat_response below
+    # is lazy because it measures server work only once the body is consumed.
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(options.headers),
     )
 
     async def generate_stream():
+        journey_attempt = None
+        try:
+            # Accept only once the response body is consumed, and pair every
+            # accepted server journey even if stream setup fails before its body try.
+            journey_attempt = JourneyAttempt('chat_response')
+            async for chunk in generate_stream_body(journey_attempt):
+                yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('cancelled')
+            raise
+        except Exception:
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('failure')
+            raise
+        finally:
+            if journey_attempt is not None and not journey_attempt.finished:
+                journey_attempt.finish('failure')
+
+    async def generate_stream_body(journey_attempt):
         callback_data = {}
         app_context = None
         app_store = None

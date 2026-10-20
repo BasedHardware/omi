@@ -1,7 +1,7 @@
 """Dark empty-output repair: real recovery, privacy, assignment and upload completion."""
 
 from copy import deepcopy
-from dataclasses import fields
+from dataclasses import fields, replace
 import importlib.util
 import io
 from pathlib import Path
@@ -11,14 +11,23 @@ import wave
 import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork
 from utils.batch_pipeline.quarantine_recovery import transcribe
 from utils.batch_pipeline.recovery_disposition import inspect_audio, RecoveryFailure, silence_payload
 from database.batch_pipeline_quarantine_recovery import SilenceDispositionStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from tests.unit.test_batch_pipeline_worker import setup_worker, item
+from diarizer import batch_pipeline
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import owner_key
+
+
+@pytest.fixture(scope='module', autouse=True)
+def worker_dependencies():
+    # Importing the worker harness belongs to setup, outside the call CPU budget.
+    from tests.unit.test_batch_pipeline_worker import setup_worker, item
+    from diarizer import batch_pipeline
 
 
 def wav(seconds=5):
@@ -70,7 +79,7 @@ def test_strict_silence_is_success_without_provider_and_releases_siblings(setup,
     monkeypatch.setattr(llm_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
     monkeypatch.setattr(hourly_usage_updates, 'prepare_hourly_usage_updates', lambda *args, **kwargs: {})
     monkeypatch.setattr(fair_use, 'record_speech_ms', Mock())
-    monkeypatch.setattr('utils.batch_pipeline.retention.expire_completed_segment', lambda *args: True)
+    monkeypatch.setattr('utils.batch_pipeline.retention.expire_completed_segment', lambda *args, **kwargs: True)
     publish = Mock()
     projector = Projector(store, Mock(), publish=publish, clock=lambda: 102)
     assert projector.project('bad')['outcome'] == 'expected_silence'
@@ -213,8 +222,6 @@ def test_operator_fences_refuse_mutation(setup, monkeypatch, legacy_dependencies
 
 
 def test_no_owned_words_without_silence_evidence_is_not_silence(monkeypatch):
-    from tests.unit.test_batch_pipeline_worker import setup_worker, item
-    from utils.batch_pipeline.contracts import RecoveryWork
 
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
@@ -224,17 +231,14 @@ def test_no_owned_words_without_silence_evidence_is_not_silence(monkeypatch):
             return [[{'word': 'Synthetic', 'timestamp': [1, 1.1]}] for _ in samples]
 
     # Restrict window ownership without making a semantic no-speech claim.
-    from diarizer import batch_pipeline
-
     original = batch_pipeline.speech_windows
-    from dataclasses import replace
 
     monkeypatch.setattr(
         batch_pipeline, 'speech_windows', lambda *args: [replace(w, core_end=0.5) for w in original(*args)]
     )
     worker, _, saved, *_ = setup_worker(words_providers={'parakeet': OutsideCore()}, recover_words=lambda *_: [])
     result = worker.process_batch([item()])
-    assert result == [RecoveryWork('a', padded_retry_empty=True)] and not saved
+    assert result == [RecoveryWork('a', padded_retry_empty=True, reason='no_owned_words')] and not saved
 
 
 def test_operator_replay_after_durable_upload_completion_does_not_need_live_run(
@@ -317,7 +321,7 @@ def test_silence_does_not_require_paid_allowance(setup, monkeypatch, legacy_depe
     provider = enable(monkeypatch, legacy_dependencies)
     artifacts.fetch_audio.return_value = wav()
     recovery.stt = transcribe
-    monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *args: False)
+    monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *args, **kwargs: False)
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     provider.assert_not_called()
 

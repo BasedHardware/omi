@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
 
+from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, normalized_binding
 from database.sync_ledger import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -76,6 +77,7 @@ class RecoveryStore:
         return job, binding
 
     def prepare(self, segment_id, owner_id, now):
+        load_stage_policy(self.store, segment_id, 'recovery')
         # Generated outside the retryable transaction; a lost reply is reconciled
         # by rereading this same intent, never by issuing a second provider call.
         token = uuid4().hex
@@ -104,6 +106,87 @@ class RecoveryStore:
                 job['recovery_state'] = 'prepared'
                 tx.put('jobs', segment_id, job)
             return job if job.get('recovery_state') in {'prepared', 'running'} else None
+
+        return self.store.run(commit)
+
+    def claim_wake(self, segment_id, token, now, lease_seconds, *, queue='', expected_seq=0):
+        """Reserve the next delivery wake for a prepared intent.
+
+        Scheduling metadata only: it never authorizes a provider call (start()
+        remains the sole paid-intent fence). Returns the new wake sequence, or
+        None while a wake is still leased or another sweeper already advanced it
+        (``expected_seq`` is a compare-and-set on the wake the caller inspected).
+        """
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+            ):
+                return None
+            wake = job.get('recovery_wake') or {}
+            current = wake.get('seq', 0) if wake.get('token') == token else 0
+            if current != expected_seq or (wake.get('token') == token and wake.get('wake_until', 0) > now):
+                return None
+            job['recovery_wake'] = {
+                'token': token,
+                'seq': current + 1,
+                'wake_until': now + lease_seconds,
+                'queue': queue,
+            }
+            tx.put('jobs', segment_id, job)
+            return current + 1
+
+        return self.store.run(commit)
+
+    def extend_wake(self, segment_id, token, seq, now, lease_seconds, *, probe_error=False):
+        """Keep wake ``seq`` leased because its task still exists (or custody is unknown)."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            wake = job.get('recovery_wake') or {}
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or job.get('recovery', {}).get('token') != token
+                or wake.get('token') != token
+                or wake.get('seq') != seq
+                # A concurrent shorten (held delivery) or extend already stands.
+                or wake.get('wake_until', 0) > now
+            ):
+                return False
+            errors = wake.get('probe_errors', 0) + 1 if probe_error else 0
+            job['recovery_wake'] = {**wake, 'wake_until': now + lease_seconds, 'probe_errors': errors}
+            tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def shorten_wake(self, segment_id, seq, now, rewake_seconds):
+        """Re-arm sooner after wake ``seq`` was delivered (or failed to enqueue)
+        and left the intent prepared. Only that same wake is shortened, so a stale
+        delivery never cuts the lease of a newer outstanding wake."""
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            wake = job.get('recovery_wake')
+            if (
+                not wake
+                or job.get('state') != 'quarantined'
+                or job.get('recovery_state') != 'prepared'
+                or wake.get('token') != job.get('recovery', {}).get('token')
+                or wake.get('seq') != seq
+                # Already re-armed at least as soon. An expired lease is re-armed
+                # too, so a custody probe racing this delivery cannot restore
+                # the full lease (extend_wake skips a live wake_until).
+                or now < wake.get('wake_until', 0) <= now + rewake_seconds
+            ):
+                return False
+            job['recovery_wake'] = {**wake, 'wake_until': now + rewake_seconds}
+            tx.put('jobs', segment_id, job)
+            return True
 
         return self.store.run(commit)
 
@@ -185,7 +268,7 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
         query = query.order_by('__name__')
         if after_id is not None:
             query = query.start_after({'__name__': collection.document(after_id)})
-    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 10))).stream()]
+    return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
 def cancel_fenced_recovery(store, segment_id):
@@ -223,14 +306,19 @@ class SilenceDispositionStore(RecoveryStore):
     """Explicit operator-only no-provider intent. The spent STT intent stays intact."""
 
     def prepare_silence(self, segment_id, owner_id, plan_digest, now):
-        from config.batch_pipeline import empty_asr_disposition_enabled, recovery_enabled_for
+        from config.batch_pipeline import empty_asr_disposition_enabled
 
-        if not empty_asr_disposition_enabled() or not recovery_enabled_for(owner_id):
+        if not empty_asr_disposition_enabled():
             raise ProjectionBlocked('disposition disabled')
+        candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
+            observations.clear()
             job, binding = self.checked(tx, segment_id, allow_completed_silence=True)
+            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            if not policy.recovery_enabled:
+                raise ProjectionBlocked('disposition disabled')
             existing = tx.get('results', segment_id)
             marker = job.get('silence_disposition') or {}
             if binding.owner_id != owner_id:
@@ -267,7 +355,9 @@ class SilenceDispositionStore(RecoveryStore):
                 tx.put('jobs', segment_id, job)
             return job
 
-        return self.store.run(commit)
+        result = self.store.run(commit)
+        record_policy_observations(observations)
+        return result
 
     def complete_silence(self, segment_id, token, plan_digest, result_uri, now):
         from config.batch_pipeline import empty_asr_disposition_enabled

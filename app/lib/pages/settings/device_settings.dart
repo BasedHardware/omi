@@ -106,7 +106,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
-    if (deviceProvider.pairedDevice == null) return;
+    // BtDevice.empty() (id '') is the nothing-remembered sentinel, not a device to connect to.
+    if (deviceProvider.pairedDevice?.id.isEmpty ?? true) return;
     final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
     if (connection == null) return;
     final features = await connection.getFeatures();
@@ -270,7 +271,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       context,
       isOpenGlass
           ? OmiGlassOtaUpdate(
-              device: provider.pairedDevice, latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails)
+              device: provider.pairedDevice,
+              latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+            )
           : FirmwareUpdate(device: provider.pairedDevice),
     );
   }
@@ -457,7 +460,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final connected = provider.connectedDevice;
     final isRayBan = paired?.type == DeviceType.raybanMeta;
     final pendingSeconds = _maybeProvider<SyncProvider>(context)?.missingWalsInSeconds ?? 0;
-    final diagnosticsId = paired?.id ?? connected?.id;
+    // getDeviceInfo() leaves pairedDevice as BtDevice.empty() (id '') when nothing is remembered;
+    // native diagnostics are keyed by device id, so an empty id has no history to send.
+    final diagnosticsId = (paired?.id.isNotEmpty ?? false) ? paired!.id : connected?.id;
 
     return OmiSettingsGroup(
       header: l10n.device,
@@ -521,7 +526,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               SharedPreferencesUtil().autoSyncOfflineRecordings = value;
             },
           ),
-        if (provider.isConnected && diagnosticsId != null)
+        // Native diagnostics persist per device, so a disconnected pendant can still send its
+        // disconnect history and BLE log to support, which is when they matter most.
+        if (diagnosticsId != null)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.stethoscope),
             title: l10n.diagnostics,

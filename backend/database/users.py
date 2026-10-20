@@ -21,6 +21,7 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
 from database.person_aliases import (
     dismiss_person_soft,
@@ -251,7 +252,9 @@ def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[floa
     §6). Default true — off means the feature does nothing and existing
     frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
+    user_data = (
+        user_ref.get(**({'timeout': rpc_timeout, 'retry': FIRESTORE_NO_RETRY} if rpc_timeout else {})).to_dict() or {}
+    )
     return user_data.get('meeting_note_screenshots_enabled', True)
 
 
@@ -1567,9 +1570,12 @@ def get_default_payment_method(uid: str):
 
 
 def get_stripe_customer_id(uid: str) -> Optional[str]:
-    """Get the Stripe customer ID for a user."""
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
+    """Get the Stripe customer ID for a user.
+
+    Reads through the request-scoped entitlement projection, so a request that already read the
+    subscription or BYOK state does not pay for a second user-document read.
+    """
+    user_doc = user_snapshot(uid, db, ['stripe_customer_id'])
     if user_doc.exists:
         user_data = user_doc.to_dict()
         return user_data.get('stripe_customer_id')

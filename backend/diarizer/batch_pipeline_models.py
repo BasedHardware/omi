@@ -4,6 +4,7 @@ Do not import the existing Parakeet GPUWorker here: it owns a second GPU thread
 and loads unrelated embedding models. This chain is the sole model owner.
 """
 
+from collections import OrderedDict
 import io
 from copy import deepcopy
 from contextlib import nullcontext
@@ -22,8 +23,17 @@ except ImportError:
     open_dict = None
 
 from config.batch_pipeline_providers import provider_config
-from diarizer.batch_pipeline import PipelineWorker, SAMPLE_RATE, crop_model_vad_spans, validate_words
-from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from diarizer.batch_pipeline import (
+    PipelineWorker,
+    SAMPLE_RATE,
+    crop_model_vad_spans,
+    padded_retry_fits,
+    padded_retry_seconds,
+    validate_words,
+)
+from diarizer.batch_pipeline_context import capture_stream
+from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
+from utils.batch_pipeline.audio import read_context
 
 
 def pin_parakeet_decoding(model):
@@ -95,12 +105,11 @@ class ParakeetWords:
         duration = len(samples) / SAMPLE_RATE
         left = 2 * SAMPLE_RATE
         right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
-        padded_seconds = (len(samples) + left + right) / SAMPLE_RATE
-        if padded_seconds > min(120, max_padded_seconds):
-            # The callback identifies enforced dispatch. Main's unflagged
-            # adapter still returns an empty hypothesis; policy holds must not
-            # spend a provider-failure attempt for audio never submitted.
-            return None if before_dispatch is not None else []
+        padded_seconds = padded_retry_seconds(samples)
+        if not padded_retry_fits(samples, max_padded_seconds):
+            # Never return an empty hypothesis for audio that exceeded the
+            # padded recovery bound and was never submitted to the model.
+            return None
         padded = np.pad(samples, (left, right))
         if before_dispatch is not None and not before_dispatch():
             return None  # Retain raw work without spending a provider-failure attempt.
@@ -129,16 +138,7 @@ class PyannoteDiarizer:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
-        activity = [
-            {'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in output.speaker_diarization
-        ]
-        exclusive = getattr(output, 'exclusive_speaker_diarization', None)
-        turns = (
-            [{'start': float(t.start), 'end': float(t.end), 'speaker': str(s)} for t, s in exclusive]
-            if exclusive is not None
-            else exclusive_from_activity(activity)
-        )
-        return {'turns': turns, 'overlaps': overlap_regions(activity), 'backend': 'pyannote'}
+        return diarization_payload(output)
 
 
 class PyannoteVAD:
@@ -153,6 +153,49 @@ class PyannoteVAD:
         return crop_model_vad_spans(
             [(float(t.start), float(t.end)) for t in output.get_timeline().support()], len(samples) / 16000
         )
+
+
+class StagedAudio:
+    """Fetch+decode staged audio once, keeping each unit's capture-stream identity.
+
+    The authenticated intake context frozen in the staged WAV names the source,
+    device and lock the per-unit chunk identity was built from. Record-lane
+    audio carries no intake context; its conversation is its stream.
+    """
+
+    MAX_PENDING = 256
+
+    def __init__(self, fetch_audio):
+        self.fetch_audio = fetch_audio
+        self._streams: OrderedDict[str, str | None] = OrderedDict()
+        self._languages: OrderedDict[str, str | None] = OrderedDict()
+
+    def decode(self, item):
+        body = self.fetch_audio(item)
+        try:
+            context = read_context(body)
+        except Exception:
+            context = None
+        self._streams[item.segment_id] = capture_stream(item, context)
+        self._languages[item.segment_id] = stt_language(context)
+        for pending in (self._streams, self._languages):
+            while len(pending) > self.MAX_PENDING:
+                pending.popitem(last=False)
+        return decode_pcm16_wav(body)
+
+    def stream(self, item):
+        return self._streams.pop(item.segment_id, None)
+
+    def language(self, item):
+        """Intake's resolved STT language ('' unknown); None when intake did not record one."""
+        return self._languages.pop(item.segment_id, None)
+
+
+def stt_language(context):
+    if not isinstance(context, dict) or 'stt_language' not in context:
+        return None
+    value = context['stt_language']
+    return value if isinstance(value, str) else None
 
 
 def decode_pcm16_wav(body):
@@ -193,8 +236,14 @@ def create_local_worker(
         )
     pin_parakeet_decoding(parakeet_model)
     words = ParakeetWords(parakeet_model, enforce_eager=True)
+    flight = (
+        FlightPyannote.create(pyannote_model, vad_model, budget_seconds=config.flight_batch_seconds)
+        if config.flight_batching
+        else None
+    )
+    staged = StagedAudio(fetch_audio)
     return PipelineWorker(
-        decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
+        decode=staged.decode,
         vad=PyannoteVAD(vad_model),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
@@ -204,4 +253,7 @@ def create_local_worker(
         live_words=live_words,
         single_speaker=single_speaker,
         on_failure=on_failure,
+        flight_models=flight,
+        stream_of=staged.stream,
+        language_of=staged.language,
     )

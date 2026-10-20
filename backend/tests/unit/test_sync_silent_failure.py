@@ -767,6 +767,7 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.sync.content_id',
+    'utils.sync.empty_recovery_intent',
     'utils.sync.assignment',
     'utils.sync.merge_audio',
     'utils.sync.merge_dedupe',
@@ -823,6 +824,11 @@ class TestProcessSegmentReal:
         sys.modules['database._client'].get_firestore_client = MagicMock(
             side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
         )
+        # Held-result custody imports the real privacy fence. Both client views
+        # must remain the same no-IO fake, including the deletion marker plane.
+        sys.modules['database._client'].get_data_plane_firestore_client = sys.modules[
+            'database._client'
+        ].get_firestore_client
         # Segment error handling is isolated from enrollment/voiceprint loading.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -899,8 +905,20 @@ class TestProcessSegmentReal:
         sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
+        sys.modules['utils.encryption'].decrypt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not read held provider results')
+        )
+        sys.modules['utils.stt.pre_recorded'].held_single_attempt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not enter held provider dispatch')
+        )
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
+            side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
+        )
+        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
+            side_effect=AssertionError('flag-off processing must not claim recovery')
+        )
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
@@ -1028,6 +1046,7 @@ class TestProcessSegmentReal:
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
 
         sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
 
@@ -1042,6 +1061,7 @@ class TestProcessSegmentReal:
     @classmethod
     def teardown_class(cls):
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:

@@ -65,7 +65,6 @@ class _Recorder:
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_AUDIT_ENV, raising=False)
     return World(monkeypatch)
 
@@ -393,7 +392,6 @@ def test_audit_outcome_does_not_change_any_conversation_write(monkeypatch):
     for scenario in ('on', 'off', 'gate', 'deletion', 'invalid', 'read_error'):
         with monkeypatch.context() as patch:
             patch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-            patch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
             patch.setenv(config.SMART_MERGE_AUDIT_ENV, 'off' if scenario == 'off' else 'on')
             world = World(patch)
             if scenario == 'gate':

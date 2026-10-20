@@ -662,7 +662,7 @@ async def _attempt_provider(
             and attempt_trace is not None
             and len(attempt_trace.attempts) >= max_provider_attempts
         ):
-            return None, GatewayInvalidRequestError('JIT provider attempt budget exhausted')
+            return None, GatewayInvalidRequestError('provider attempt budget exhausted')
         provider_request = _provider_request(resolved_route, provider_ref, route=route)
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:

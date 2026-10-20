@@ -64,7 +64,10 @@ class HomePendingRow extends StatelessWidget {
           // Recordings say where they are; with none, what is left is conversations being processed.
           final subtitle = SyncPendingWork.shouldShow(p) ? SyncPendingWork.stageLabel(p, l) : l.processing;
           final now = DateTime.now();
-          void open() => routeToPage(context, OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync));
+          void open() => routeToPage(
+                context,
+                OnTheWayPage(syncProvider: syncProvider, multiFileSync: multiFileSync, pendingWork: pendingWork),
+              );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,

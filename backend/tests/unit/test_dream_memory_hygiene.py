@@ -148,7 +148,7 @@ def run(operation, *, caps=None, votes=(True, True), trigger='schedule'):
 def test_apply_undo_redo_exactness(hygiene, operation):
     db, records = hygiene
     db.rows[('users', UID, 'memory_items', 'old')]['future_metadata'] = {'synthetic': True}
-    db.rows[('users', UID, 'memory_items', 'old')].pop('belief_class')
+    db.rows[('users', UID, 'memory_items', 'old')].pop('belief_class', None)
     before = deepcopy(db.rows[('users', UID, 'memory_items', 'old')])
     newer = deepcopy(db.rows[('users', UID, 'memory_items', 'new')])
     report = run(operation)

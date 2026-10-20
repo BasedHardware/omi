@@ -1997,12 +1997,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
-  String get memoryAllowUse => 'Дозволи употреба';
-
-  @override
-  String get memoryDontUse => 'Не користи';
-
-  @override
   String get undo => 'Врати';
 
   @override
@@ -9367,6 +9361,14 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Околу 1 минута';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Оди на $duration';
+  }
+
+  @override
+  String get quoteShowSources => 'Прикажи извори';
+
+  @override
   String get jumpToLatestMessage => 'Оди до последната порака';
 
   @override
@@ -11117,7 +11119,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get openCall => 'Отвори го повикот';
 
   @override
-  String get captureRecoveryBanner => 'Omi не испраќа звук — допрете за повторно поврзување';
+  String get captureRecoveryBannerTitle => 'Omi не испраќа звук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11128,6 +11130,23 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудиото е зачувано, транскрипција подоцна';
+
+  @override
+  String get captureBannerTryReconnect => 'Обиди се да поврзеш повторно';
+
+  @override
+  String get captureBannerRetrySync => 'Повтори ја синхронизацијата';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-врската со вашиот Omi застана, така што звукот не стига до апликацијата. Omi продолжува да снима на уредот и ќе се синхронизира кога ќе се врати врската. Обидот повторно ја воспоставува врската; ако продолжува да не успева, проверете го уредот во Поставки > Уред.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Аудиото не стига до апликацијата — повторно поврзете го Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Апликацијата повеќе не може да прима аудио од уредот Omi и не успеа автоматски да ја обнови врската. Исклучете и повторно поврзете го уредот — од поставките за уред или со гаснење и палење. Аудиото зачувано на уредот ќе се синхронизира подоцна.';
 
   @override
   String get captureStillRecording => 'Снимањето продолжува';
@@ -13160,6 +13179,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewProposalSuggested => 'Предложено';
 
   @override
+  String get reviewQuestionOutOfDate => 'Ова прашање е застарено, па ништо не се промени.';
+
+  @override
   String get reviewProposalConflict => 'Ова се промени откако Dream го предложи, па ништо не е применето.';
 
   @override
@@ -13175,22 +13197,22 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Препорачано';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Погледнете ги сите планови';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Види планови';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Вашиот план';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Не сега';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13218,6 +13240,19 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureConnectTitle => 'Поврзете го вашиот Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Спарете го вашиот Omi и тој ќе ги снима вашите разговори без раце, цел ден.';
+
+  @override
+  String get firstCaptureConnect => 'Поврзи го мојот Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Сè уште немам Omi';
 
   @override
   String get firstCaptureSkip => 'Skip for Now';
@@ -13326,6 +13361,112 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Никогаш повеќе не пропуштајте ниту збор.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Еве како функционира вашиот бесплатен пробен период.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Неограничени резимеа, зачувани засекогаш';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Секој разговор станува чисто резиме со следни чекори, за ништо да не се пропушти.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Најдобра транскрипција во класата';
+
+  @override
+  String get paywallTrialChipDetails => 'Фаќа повеќе детали';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Разликува говорници';
+
+  @override
+  String get paywallTrialChipNoise => 'Работи во бучни простории';
+
+  @override
+  String get paywallTrialChipAccents => 'Се справува со акценти';
+
+  @override
+  String get paywallTrialChipJargon => 'Ги знае вашиот жаргон и имиња';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Имиња на говорници, автоматски детектирани';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Неограничени прашања, низ секој разговор';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Напишете follow-up е-пошта од овој состанок.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Има ли конфликти со она што Џон го кажа во вторник?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Најдете сè што може да нè забави.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Работи со вашите омилени апликации';
+
+  @override
+  String get paywallTrialTodayTitle => 'Денес';
+
+  @override
+  String get paywallTrialTodayBody => 'Сè во Pro е отклучено.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days дена бесплатно';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days дена Omi Pro, од нас.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'За $days дена';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Пробниот период завршува. Ќе ви биде наплатено освен ако не откажете.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Најновите AI модели';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Неограничен Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Се наплаќа месечно';
+
+  @override
+  String get paywallTrialBilledYearly => 'Се наплаќа годишно';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Заштедете $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Започнете за $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Продолжете со бесплатниот план';
+
+  @override
+  String get paywallTrialCancelNote => 'Откажете во секое време. Без надоместоци, без казни.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Вашиот $days-дневен бесплатен пробен период на Omi Pro започна.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Откажете во секое време.';
@@ -13541,6 +13682,43 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onTheWayAlmostReady => 'Речиси готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимки',
+      one: '1 снимка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals на пат';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Се прикачуваат: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Речиси готови: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count бараат внимание',
+      one: '1 бара внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Сè уште нема активност';
 
   @override
@@ -13559,7 +13737,30 @@ class AppLocalizationsMk extends AppLocalizations {
   String get activityRetryAll => 'Обиди ги сите повторно';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Складиштето не може да се провери';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Снимките се паузирани';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Преносот е запрен';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Чекаат $count снимки',
+      one: 'Чека 1 снимка',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
+
+  @override
+  String get activityAttentionSemantics => 'Активност, бара внимание';
 
   @override
   String get connectAgentHeadline => 'Користете ја вашата Omi меморија во ChatGPT и вашите AI агенти';
@@ -13837,4 +14038,415 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
+
+  @override
+  String get noContentToDisplay => 'Нема содржина за приказ';
+
+  @override
+  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Ја достигнавте границата за овој месец';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi сè уште снима. Изберете како ќе се транскрибира остатокот од месецов.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Вашето користење се ресетира на $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Транскрибирај на овој телефон';
+
+  @override
+  String get onDeviceIncluded => 'Вклучено';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Работи додека телефонот се полни.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Надградете на Pro за раздвојување на говорниците и поголема точност';
+
+  @override
+  String get onDeviceAtCapFooter => 'Ништо не се губи. Ова може да го промените во Поставки › Трансрипција.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Чекор $step од $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi еднаш го презема говорниот модел. Потоа вашите снимки се претвораат во текст токму тука, без да се бројат во користењето.';
+
+  @override
+  String get onDeviceSpeechModel => 'Говорен модел';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size МБ';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Се презема преку Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Се презема · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Уште околу $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Се чека Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Преземањето не заврши';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Не е преземен';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Инсталиран · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Сè уште не е достапен на овој телефон';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Продолжете да снимате додека се презема. Ништо не чека на ова.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Аудиото останува на телефонот додека не се транскрибира.';
+
+  @override
+  String get onDeviceWifiOnly => 'Преземај само преку Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Преземи говорен модел';
+
+  @override
+  String get onDeviceScheduleTitle => 'Кога да се транскрибира';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Кога Omi да транскрибира?';
+
+  @override
+  String get onDeviceScheduleBody => 'Ова можете да го промените во секое време.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Додека се полни';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Преписите се појавуваат откако ќе го приклучите телефонот на полнач, обично преку ноќ.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Батерија: речиси ништо';
+
+  @override
+  String get onDeviceScheduleHours => 'На секои неколку часа';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Го надоместува заостатокот во кратки интервали на батерија, па преписите ретко доцнат повеќе од неколку часа.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Батерија: околу $percent% дневно';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Додека зборувате';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Редовно транскрибира додека Omi е отворен.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Батерија: околу $percent% на час разговор';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration чека транскрипција';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Ќе бидат подготвени откако ќе го приклучите телефонот на полнач. Снимањето продолжува нормално.';
+
+  @override
+  String get onDeviceQueueHoursBody =>
+      'Omi го надоместува заостатокот на секои неколку часа. Снимањето продолжува нормално.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Се чека полнач бидејќи батеријата е слаба. Снимањето продолжува нормално.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Транскрибирај сега';
+
+  @override
+  String get onDeviceUsesBattery => 'Троши батерија';
+
+  @override
+  String get onDeviceTranscribing => 'Се транскрибира…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Се чека полнач';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Чека транскрипција';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Зачувано, се чека поставување';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Транскрибирано на овој iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Транскрибирано на овој телефон';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Транскрибирано и сумирано на овој iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Сумирано од Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Зошто ова е направено на вашиот телефон';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Ја достигнавте границата за овој месец, па Omi го транскрибираше ова на вашиот телефон.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Избравте да транскрибирате на овој телефон за да ја заштедите употребата.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'И резимето е напишано на овој iPhone.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Сè чувате на овој телефон, па нема резиме.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Зошто Omi Cloud го напиша ова резиме';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Овој iPhone не може сам да прави резиме (за тоа е потребен iPhone 15 Pro или понов). Преписот е направен на вашиот телефон, а до Omi е испратен само неговиот текст за резиме. Не се брои во вашето користење.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Овој телефон не може сам да прави резиме. Преписот е направен на вашиот телефон, а до Omi е испратен само неговиот текст за резиме. Не се брои во вашето користење.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Повтори со Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Надградете на Pro за раздвојување на говорниците и поголема точност';
+
+  @override
+  String get onDeviceKeepEverything => 'Чувај сè на овој телефон';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Само преписи, без резимеа';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Кога ќе ја достигнете границата';
+
+  @override
+  String get onDeviceWhen => 'Кога';
+
+  @override
+  String get onDeviceSummaries => 'Резимеа';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'На овој iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'Од Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Секогаш транскрибирај на овој телефон';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Ја штеди употребата. Без ознаки на говорници.';
+
+  @override
+  String get onDeviceOnThisPhone => 'На овој телефон';
+
+  @override
+  String get onDeviceAudioWaiting => 'Аудио што чека на телефонот';
+
+  @override
+  String get onDeviceRemoveModel => 'Отстрани говорен модел';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Да се отстрани говорниот модел?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Снимките ќе чекаат на овој телефон додека не го преземете повторно или додека користењето не се ресетира.';
+
+  @override
+  String get onDeviceRemove => 'Отстрани';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завршете го поставувањето за да ги видите преписите';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Ја достигнавте границата за овој месец. Omi сè уште снима и зачувува аудио на вашиот телефон. Преземете го говорниот модел и ќе стигне.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Преземање од $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Овој телефон сè уште не може да го пушти говорниот модел. Аудиото останува зачувано додека користењето не се ресетира или не надградите.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Кога ќе ја достигнете границата, транскрибирајте на овој телефон';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% искористено · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% искористено · преостануваат околу $hours часа снимање · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Добијте повеќе употреба';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Се подготвува говорот · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани откако границата ќе се ресетира на $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат ќе се транскрибираат откако границата ќе се ресетира на $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Снимка, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Чека транскрипција';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Транскрипцијата во облак е паузирана';
+
+  @override
+  String get heldAudioLiveBody => 'Ја достигнавте границата за овој месец. Omi продолжува да снима.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes мин снимени по границата';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Се транскрибира откако границата ќе се ресетира на $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration на чекање';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Се транскрибира откако границата ќе се ресетира на $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration чека транскрипција';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'и уште $count',
+      one: 'и уште 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Се транскрибираат вашите снимки на чекање';
+
+  @override
+  String get processingPaused => 'Обработката е паузирана. Го достигнавте лимитот за овој месец.';
+
+  @override
+  String get processingStored =>
+      'Вашите снимки и транскрипти се зачувани. Снимките на чекање ќе чекаат додека не изберете да ги обработите.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration на чекање · Обработката сега користи околу $percent% од месечниот лимит';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Околу $hours часа обработка · $percent% од лимитот за овој месец.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Прво ќе ги обработиме најновите снимки до достапниот лимит. Останатите ќе останат на чекање.';
+
+  @override
+  String get processingAction => 'Обработи снимки на чекање';
+
+  @override
+  String get processingProgress => 'Обработка на вашите снимки на чекање…';
+
+  @override
+  String get processingDeferred => 'Чека обработка';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговори на чекање',
+      one: '1 разговор на чекање',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Зачувано $saved од $total аудио';
+  }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi продолжува да снима';
 }

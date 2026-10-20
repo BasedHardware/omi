@@ -1,6 +1,7 @@
 """Summary success is a fenced durable outcome, never upload/model success."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,7 @@ from utils.conversations.deterministic_minimum import build_deterministic_minimu
 @pytest.fixture
 def enabled(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
 
 
@@ -66,6 +68,38 @@ def test_deadline_metadata_survives_appends(enabled):
     delivery.prepare(row, 'u', now=10000)
     assert row['summary_first_pending_at'] == 100
     assert row['summary_due_at'] == 220
+
+
+def test_current_finalizer_finishes_completed_minimum_but_background_repair_cannot(enabled, monkeypatch):
+    row = {**debt(), 'finalization_job_id': 'current-job', 'finalization_status': 'queued'}
+    assert delivery.refusal(row) == 'generation_owned'
+    assert delivery.finalization_pending(row, 'u', 'current-job')
+    for changes in (
+        {'structured': {'overview': 'Already delivered'}},
+        {'user_title': 'Manual title'},
+        {'deleted': True},
+        {'discarded': True},
+        {'terminal_no_derived_effects': True},
+        {'data_protection_level': 'e2ee'},
+        {'summary_title_provenance': None},
+        {'summary_blocked_reason': 'empty_output_exhausted'},
+        {'finalization_status': 'blocked_byok'},
+        {'finalization_job_id': 'replacement-job'},
+        {'finalization_job_id': None},
+    ):
+        assert not delivery.finalization_pending({**row, **changes}, 'u', 'current-job')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    assert not delivery.finalization_pending(row, 'u', 'current-job')
+
+
+@pytest.mark.parametrize('finish,expected', [(50, 1900), (1800, 200), (2100, None), (None, None)])
+def test_post_speech_latency_excludes_time_before_acceptance_and_open_speech(enabled, finish, expected):
+    row = debt()
+    if finish is not None:
+        row['finished_at'] = datetime.fromtimestamp(finish, timezone.utc)
+    receipt = delivery.merge_result(row, {'status': 'completed', 'summary_output_present': True}, 'u', now=2000)
+    assert receipt['latency'] == 1900
+    assert receipt['closed_latency'] == expected
 
 
 def test_intake_discard_never_indexes_debt_and_keep_gets_a_new_deadline(enabled):
@@ -145,6 +179,8 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
 
 
 def test_allowlist_and_invalid_deadline_fail_closed(enabled, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
+    assert not flags.enabled('canary') and not flags.enabled('other')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
     assert flags.enabled('canary') and not flags.enabled('other')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')

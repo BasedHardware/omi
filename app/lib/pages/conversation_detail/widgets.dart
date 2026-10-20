@@ -624,6 +624,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
     if (selection.sections.isNotEmpty && widget.searchQuery.isEmpty) {
       return NoteSectionsSliver(
         sections: selection.sections,
+        transcriptSegments: widget.conversation.transcriptSegments,
         onOpenSource: widget.onOpenSource,
         onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
             ? null

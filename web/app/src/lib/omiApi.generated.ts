@@ -1184,6 +1184,17 @@ export interface ChartDataset {
   label: string;
 }
 
+export interface ChatAtCap {
+  body: string;
+  reset_at: number;
+  reset_line: string;
+  state?: "paused";
+  title: string;
+  trigger?: "usage_budget";
+  upgrade_label?: string | null;
+  upgrade_plan?: string | null;
+}
+
 export interface ChatEvidenceEnvelope {
   references?: Array<ChatEvidenceReference>;
   request_id?: string | null;
@@ -1252,6 +1263,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  chat_at_cap?: ChatAtCap | null;
   is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
@@ -1260,6 +1272,7 @@ export interface ChatUsageQuota {
   reset_at?: number | null;
   unit: ChatQuotaUnit;
   used: number;
+  uses_shared_budget?: boolean;
 }
 
 export interface CheckVerificationRequest {
@@ -1391,6 +1404,7 @@ export interface Conversation {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
+  processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
@@ -1474,6 +1488,7 @@ export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
   meeting_treatment_eligible?: boolean;
+  processing_deferred?: boolean;
   status: string;
 }
 
@@ -1590,6 +1605,7 @@ export interface ConversationSearchItem {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
+  processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
@@ -1713,9 +1729,22 @@ export interface CreateChatSessionRequest {
 export interface CreateCheckoutRequest {
   price_id: string;
   promotion_code?: string | null;
+  trial_days?: number | null;
+}
+
+export interface CreateConversationCalendarMeeting {
+  calendar_event_id: string;
+  duration_minutes: number;
+  meeting_link?: string | null;
+  notes?: string | null;
+  participants?: Array<MeetingParticipant>;
+  platform?: string | null;
+  start_time: string;
+  title: string;
 }
 
 export interface CreateConversationFromTranscriptRequest {
+  calendar_meeting_context?: CreateConversationCalendarMeeting | null;
   capture_evidence?: CaptureEvidenceLineage | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -1724,6 +1753,7 @@ export interface CreateConversationFromTranscriptRequest {
   conversation_finalization_reason?: string | null;
   conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
+  folder_id?: string | null;
   geolocation?: GeolocationInput | null;
   language?: string | null;
   source?: ConversationSource | null;
@@ -1753,6 +1783,7 @@ export interface CreateConversationTranscriptSegment {
   speaker?: string | null;
   speaker_id?: number | null;
   start: number;
+  stt_provider?: string | null;
   text: string;
 }
 
@@ -2906,6 +2937,21 @@ export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
 
+export interface HeldAudioRecording {
+  id: string;
+  seconds: number;
+  started_at: number;
+}
+
+export interface HeldAudioSummary {
+  count?: number;
+  recordings?: Array<HeldAudioRecording>;
+  reset_at: number;
+  retain_live: boolean;
+  seconds: number;
+  state?: "paused" | "recovering";
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -2982,50 +3028,6 @@ export interface InterventionRecord {
 
 export type InterventionSurface = "suggested" | "what_matters_now";
 
-export type JITDecisionReason = "evaluated" | "rollout_enabled" | "rollout_disabled" | "kill_switch_enabled" | "provider_timeout" | "configuration_missing" | "malformed_response" | "provider_error" | "flag_absent";
-
-export type JITErrorClass = "none" | "timeout" | "configuration" | "malformed" | "provider" | "absent";
-
-export interface JITRolloutDecisionEnvelope {
-  budget_contract_version?: string | null;
-  cache_hit: boolean;
-  cache_ttl_seconds: number;
-  effective: TriState;
-  error_class: JITErrorClass;
-  kill_switch: TriState;
-  reason: JITDecisionReason;
-  rollout: TriState;
-}
-
-export interface JITTriggerActionEnvelope {
-  prompt: string;
-  type: string;
-}
-
-export interface JITTriggerSnapshotEnvelope {
-  account_generation: number;
-  budget_day?: string | null;
-  budget_timezone?: string | null;
-  commit_sequence: number;
-  complete: boolean;
-  failure_reason?: string | null;
-  head_commit_id: string;
-  owner_id: string;
-  policy?: TriggerRuntimePolicy;
-  rows: Array<JITTriggerSnapshotRowEnvelope>;
-  snapshot_revision: string;
-}
-
-export interface JITTriggerSnapshotRowEnvelope {
-  action: JITTriggerActionEnvelope;
-  item_revision: number;
-  memory_id: string;
-  snoozed_until?: string | null;
-  trigger_condition_json: string;
-  updated_at: string;
-  wakeup_budget_per_day: number;
-}
-
 export interface KnowledgeGraphResponse {
   edge_count?: number;
   edge_limit?: number | null;
@@ -3042,53 +3044,6 @@ export interface LearnedMemoryRef {
   content: string;
   memory_id: string;
 }
-
-export interface LedgerMirrorAliasEnvelope {
-  alias_memory_id: string;
-  canonical_memory_id: string;
-  reason: string;
-  source_memory_id: string;
-}
-
-export interface LedgerMirrorRowEnvelope {
-  canonical_memory_id?: string | null;
-  content_purged: boolean;
-  item_revision: number;
-  memory?: MemoryDB | null;
-  memory_id: string;
-  source_state: SourceState;
-  status: MemoryItemStatus;
-}
-
-export interface LedgerMirrorSnapshotEnvelope {
-  account_generation: number;
-  aliases?: Array<LedgerMirrorAliasEnvelope>;
-  chain_revision: string;
-  commit_sequence: number;
-  epoch_id: string;
-  failure_reason?: string | null;
-  final_page?: boolean;
-  head_commit_id: string;
-  next_cursor?: string | null;
-  owner_id: string;
-  page_revision: string;
-  projected_count: number;
-  rows?: Array<LedgerMirrorRowEnvelope>;
-  scanned_count: number;
-  schema_version?: string;
-  source_generation: number;
-  writer_epoch: number;
-}
-
-export interface LedgerPromptSnapshotEnvelope {
-  mode: LedgerPromptSnapshotMode;
-  reason: string;
-  rows?: Array<MemoryDB>;
-  schema_version?: string;
-  source_head_commit_id?: string | null;
-}
-
-export type LedgerPromptSnapshotMode = "enabled" | "compatibility" | "disabled" | "killed" | "unknown";
 
 export type LedgerWriteReason = "direct_user_statement" | "explicit_remember" | "agent_reusable_conclusion" | "recurring_workflow" | "standing_trigger" | "onboarding" | "daily_reconciliation" | "legacy_migration";
 
@@ -3331,13 +3286,11 @@ export interface MeetingParticipantSources {
 
 export interface Memory {
   arguments?: Record<string, unknown>;
-  belief_class?: string | null;
   capture_confidence?: number | null;
   capture_context?: MemoryCaptureContext | null;
   category?: MemoryCategory;
   content: string;
   durability?: string | null;
-  half_life_days?: number | null;
   headline?: string | null;
   object_entity_ids?: Array<string>;
   predicate?: string | null;
@@ -3378,9 +3331,6 @@ export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | 
 export interface MemoryDB {
   app_id?: string | null;
   arguments?: Record<string, unknown>;
-  as_of?: string | null;
-  belief_class?: string | null;
-  belief_computed_at?: string | null;
   body?: string | null;
   canonical_memory_id?: string | null;
   capture_confidence?: number | null;
@@ -3391,13 +3341,10 @@ export interface MemoryDB {
   conversation_id?: string | null;
   created_at: string;
   curation_weight?: number;
-  currency?: number | null;
-  currency_band?: string | null;
   data_protection_level?: string | null;
   durability?: string | null;
   edited?: boolean;
   evidence?: Array<Evidence>;
-  half_life_days?: number | null;
   headline?: string | null;
   id: string;
   intent_backed?: boolean;
@@ -3511,24 +3458,6 @@ export type MemorySubjectScope = "primary_user" | "user_owned_project" | "user_r
 export interface MemorySummaryRatingResponse {
   has_rating: boolean;
   rating?: number | null;
-}
-
-export type MemoryUseAction = "suppress" | "allow" | "useful";
-
-export interface MemoryUseRequest {
-  action: MemoryUseAction;
-  expected_item_revision?: number | null;
-  feedback_id: string;
-}
-
-export interface MemoryUseResponse {
-  action: MemoryUseAction;
-  curation_weight: number;
-  feedback_id: string;
-  item_revision: number;
-  memory_id: string;
-  status: string;
-  suppressed: boolean;
 }
 
 export interface MemoryValueRequest {
@@ -3963,15 +3892,19 @@ export interface PlanIdentityUserSubscriptionResponse {
   chat_quota_reset_at?: number | null;
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
+  cloud_screen_vectors?: boolean | null;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
+  processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: PlanIdentitySubscription;
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
+  trial_eligible?: boolean;
   words_transcribed_limit: number;
   words_transcribed_used: number;
 }
@@ -4080,6 +4013,20 @@ export interface ProactivityTarget {
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
   client_processing?: unknown | null;
+}
+
+export interface ProcessingBacklog {
+  budget_exhausted?: boolean;
+  deferred_conversations?: number;
+  deferred_seconds?: number;
+  estimated_hours?: number;
+  estimated_percent?: number;
+  estimated_units?: number;
+  exceeds_remaining?: boolean;
+  held_audio_count?: number;
+  held_audio_seconds?: number;
+  remaining_units?: number | null;
+  state: "capped" | "waiting_choice" | "processing" | "none";
 }
 
 export interface ProductMemorySearchItem {
@@ -4929,8 +4876,6 @@ export interface SnapshotReceipt {
   snapshot_id: string;
 }
 
-export type SourceState = "active" | "missing" | "tombstoned" | "purged";
-
 export interface SpeakerAnalytics {
   is_user?: boolean;
   person_id?: string | null;
@@ -5119,6 +5064,15 @@ export interface StoreRecordingPermissionResponse {
   store_recording_permission: boolean;
 }
 
+export interface StorefrontCapChoice {
+  body: string;
+  dont_ask_again_label: string;
+  on_device_label: string;
+  on_device_upgrade_line: string;
+  title: string;
+  upgrade_label: string;
+}
+
 export interface StorefrontCurrent {
   cancel_at_period_end?: boolean;
   interval?: "month" | "year" | null;
@@ -5132,6 +5086,7 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_lines?: Array<string> | null;
   cta_label?: string | null;
   currency: string;
   headline: string;
@@ -5143,7 +5098,9 @@ export interface StorefrontPrice {
 }
 
 export interface StorefrontResponse {
+  at_cap?: StorefrontCapChoice | null;
   catalog_revision: number;
+  chat_at_cap?: ChatAtCap | null;
   current?: StorefrontCurrent | null;
   header?: string | null;
   schema_version?: 2;
@@ -5169,8 +5126,11 @@ export interface StorefrontTier {
 }
 
 export interface StorefrontUsage {
+  hours_left?: number | null;
   kind?: "usage_budget" | "transcription" | "unavailable";
+  mcp_cap_reached?: boolean;
   meter_line?: string | null;
+  more_label?: string | null;
   nudge_line?: string | null;
   percent?: number | null;
   period_id?: string | null;
@@ -5673,8 +5633,6 @@ export interface Translation {
   text: string;
 }
 
-export type TriState = "enabled" | "disabled" | "unknown";
-
 export interface TrialMetadata {
   plan_after_trial?: string;
   trial_duration_seconds?: number;
@@ -5683,27 +5641,6 @@ export interface TrialMetadata {
   trial_features?: Array<string>;
   trial_remaining_seconds?: number;
   trial_started_at?: number | null;
-}
-
-export interface TriggerEmbeddingPolicy {
-  enabled?: boolean;
-  language?: string | null;
-  match_similarity?: number;
-  model_id?: string | null;
-  model_version?: string | null;
-  triage_similarity?: number;
-}
-
-export interface TriggerRuntimePolicy {
-  ambiguous_nano_triages_per_day?: number;
-  embedding?: TriggerEmbeddingPolicy;
-  full_agent_turns_per_candidate?: number;
-  max_calendar_events?: number;
-  paid_boundary_refresh_required?: boolean;
-  planned_notifications_per_trigger_per_day?: number;
-  schema_version?: string;
-  total_proactive_notifications_per_day?: number;
-  valid_for_seconds?: number;
 }
 
 export type TriggerType = "immediate" | "version_upgrade" | "firmware_upgrade";
@@ -5933,15 +5870,19 @@ export interface UserSubscriptionResponse {
   chat_quota_reset_at?: number | null;
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
+  cloud_screen_vectors?: boolean | null;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
+  processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
+  trial_eligible?: boolean;
   words_transcribed_limit: number;
   words_transcribed_used: number;
 }
@@ -6337,6 +6278,7 @@ export interface OmiApiSchemas {
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatAtCap": ChatAtCap;
   "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
   "ChatEvidenceReference": ChatEvidenceReference;
   "ChatFirstSubject": ChatFirstSubject;
@@ -6402,6 +6344,7 @@ export interface OmiApiSchemas {
   "CreateAnnouncementRequest": CreateAnnouncementRequest;
   "CreateChatSessionRequest": CreateChatSessionRequest;
   "CreateCheckoutRequest": CreateCheckoutRequest;
+  "CreateConversationCalendarMeeting": CreateConversationCalendarMeeting;
   "CreateConversationFromTranscriptRequest": CreateConversationFromTranscriptRequest;
   "CreateConversationRequest": CreateConversationRequest;
   "CreateConversationResponse": CreateConversationResponse;
@@ -6554,6 +6497,8 @@ export interface OmiApiSchemas {
   "HTTPValidationError": HTTPValidationError;
   "HarnessEdit": HarnessEdit;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "HeldAudioRecording": HeldAudioRecording;
+  "HeldAudioSummary": HeldAudioSummary;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -6567,19 +6512,8 @@ export interface OmiApiSchemas {
   "InterventionCreate": InterventionCreate;
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
-  "JITDecisionReason": JITDecisionReason;
-  "JITErrorClass": JITErrorClass;
-  "JITRolloutDecisionEnvelope": JITRolloutDecisionEnvelope;
-  "JITTriggerActionEnvelope": JITTriggerActionEnvelope;
-  "JITTriggerSnapshotEnvelope": JITTriggerSnapshotEnvelope;
-  "JITTriggerSnapshotRowEnvelope": JITTriggerSnapshotRowEnvelope;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
   "LearnedMemoryRef": LearnedMemoryRef;
-  "LedgerMirrorAliasEnvelope": LedgerMirrorAliasEnvelope;
-  "LedgerMirrorRowEnvelope": LedgerMirrorRowEnvelope;
-  "LedgerMirrorSnapshotEnvelope": LedgerMirrorSnapshotEnvelope;
-  "LedgerPromptSnapshotEnvelope": LedgerPromptSnapshotEnvelope;
-  "LedgerPromptSnapshotMode": LedgerPromptSnapshotMode;
   "LedgerWriteReason": LedgerWriteReason;
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
@@ -6634,9 +6568,6 @@ export interface OmiApiSchemas {
   "MemorySearchResponse": MemorySearchResponse;
   "MemorySubjectScope": MemorySubjectScope;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
-  "MemoryUseAction": MemoryUseAction;
-  "MemoryUseRequest": MemoryUseRequest;
-  "MemoryUseResponse": MemoryUseResponse;
   "MemoryValueRequest": MemoryValueRequest;
   "MentorNotificationSettingsResponse": MentorNotificationSettingsResponse;
   "MentorNotificationSettingsUpdate": MentorNotificationSettingsUpdate;
@@ -6716,6 +6647,7 @@ export interface OmiApiSchemas {
   "ProactivityOutcomeResponse": ProactivityOutcomeResponse;
   "ProactivityTarget": ProactivityTarget;
   "ProcessConversationRequest": ProcessConversationRequest;
+  "ProcessingBacklog": ProcessingBacklog;
   "ProductMemorySearchItem": ProductMemorySearchItem;
   "ProductMemorySearchResponse": ProductMemorySearchResponse;
   "ProductRolloutObservability": ProductRolloutObservability;
@@ -6829,7 +6761,6 @@ export interface OmiApiSchemas {
   "SimpleStructured": SimpleStructured;
   "SimpleTranscriptSegment": SimpleTranscriptSegment;
   "SnapshotReceipt": SnapshotReceipt;
-  "SourceState": SourceState;
   "SpeakerAnalytics": SpeakerAnalytics;
   "SpeakerAnswer": SpeakerAnswer;
   "SpeakerItem": SpeakerItem;
@@ -6858,6 +6789,7 @@ export interface OmiApiSchemas {
   "StoreMeetingRequest": StoreMeetingRequest;
   "StoreMeetingResponse": StoreMeetingResponse;
   "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
+  "StorefrontCapChoice": StorefrontCapChoice;
   "StorefrontCurrent": StorefrontCurrent;
   "StorefrontPrice": StorefrontPrice;
   "StorefrontResponse": StorefrontResponse;
@@ -6934,10 +6866,7 @@ export interface OmiApiSchemas {
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
   "Translation": Translation;
-  "TriState": TriState;
   "TrialMetadata": TrialMetadata;
-  "TriggerEmbeddingPolicy": TriggerEmbeddingPolicy;
-  "TriggerRuntimePolicy": TriggerRuntimePolicy;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
   "TtsVoice": TtsVoice;
@@ -9059,11 +8988,11 @@ export interface OmiApiPaths {
   };
   "/v1/frame-requests/temporary/{request_id}/image": {
     get: {
-      operationId: "consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get";
+      operationId: "retired_temporary_frame_image_v1_frame_requests_temporary__request_id__image_get";
       responses: {
-        "200": unknown;
         "401": void;
         "404": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
@@ -9428,112 +9357,60 @@ export interface OmiApiPaths {
   };
   "/v1/jit/knowledge-ledger/mirror-snapshot": {
     get: {
-      operationId: "get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get";
+      operationId: "retired_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get";
       responses: {
-        "200": LedgerMirrorSnapshotEnvelope;
         "401": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
   };
   "/v1/jit/knowledge-ledger/prompt-snapshot": {
     get: {
-      operationId: "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get";
+      operationId: "retired_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get";
       responses: {
-        "200": LedgerPromptSnapshotEnvelope;
         "401": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
   };
   "/v1/jit/proactivity/reservations": {
     post: {
-      operationId: "reserve_jit_proactivity_v1_jit_proactivity_reservations_post";
+      operationId: "retired_jit_proactivity_reservation_v1_jit_proactivity_reservations_post";
       responses: {
-        "200": {
-  receipt: {
-  account_generation: number;
-  budget_day: string;
-  budget_timezone?: string;
-  candidate_id: string;
-  created_at: string;
-  device_id: string;
-  event_id: string;
-  feedback_id?: string | null;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  request_hash: string;
-  schema_version?: "jit_proactivity_event.v1";
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-  uid: string;
-};
-  reserved: boolean;
-};
         "401": void;
         "410": unknown;
-        "422": {
-  detail?: Array<{
-  loc: Array<string | number>;
-  msg: string;
-  type: string;
-}>;
-};
+        "422": HTTPValidationError;
       };
     };
   };
   "/v1/jit/rollout-decision": {
     get: {
-      operationId: "get_jit_rollout_decision_v1_jit_rollout_decision_get";
+      operationId: "retired_jit_rollout_decision_v1_jit_rollout_decision_get";
       responses: {
-        "200": JITRolloutDecisionEnvelope;
         "401": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
   };
   "/v1/jit/trigger-feedback": {
     post: {
-      operationId: "post_jit_trigger_feedback_v1_jit_trigger_feedback_post";
+      operationId: "retired_jit_trigger_feedback_v1_jit_trigger_feedback_post";
       responses: {
-        "200": {
-  applied: boolean;
-  receipt: {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  applied_trigger_revision?: number | null;
-  event_id: string;
-  expected_trigger_revision: number;
-  feedback_id: string;
-  recorded_at: string;
-  request_hash: string;
-  schema_version?: "jit_trigger_feedback.v1";
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  uid: string;
-};
-  trigger_memory_id: string;
-  trigger_revision: number;
-  trigger_status: string;
-};
         "401": void;
         "410": unknown;
-        "422": {
-  detail?: Array<{
-  loc: Array<string | number>;
-  msg: string;
-  type: string;
-}>;
-};
+        "422": HTTPValidationError;
       };
     };
   };
   "/v1/jit/trigger-snapshot": {
     get: {
-      operationId: "get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get";
+      operationId: "retired_jit_trigger_snapshot_v1_jit_trigger_snapshot_get";
       responses: {
-        "200": JITTriggerSnapshotEnvelope;
         "401": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
@@ -11395,6 +11272,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/users/processing-backlog/process": {
+    post: {
+      operationId: "process_waiting_recordings_v1_users_processing_backlog_process_post";
+      responses: {
+        "200": ProcessingBacklog;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/users/profile": {
     get: {
       operationId: "get_user_profile_endpoint_v1_users_profile_get";
@@ -12144,10 +12031,10 @@ export interface OmiApiPaths {
   };
   "/v3/memories/{memory_id}/use": {
     post: {
-      operationId: "use_memory_v3_memories__memory_id__use_post";
+      operationId: "retired_memory_use_v3_memories__memory_id__use_post";
       responses: {
-        "200": MemoryUseResponse;
         "401": void;
+        "410": unknown;
         "422": HTTPValidationError;
       };
     };
@@ -16235,7 +16122,7 @@ export async function get_frame_request_status_v1_frame_requests_status__request
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get(path: { request_id: string }, query: { account_generation?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Blob> {
+export async function retired_temporary_frame_image_v1_frame_requests_temporary__request_id__image_get(path: { request_id: string }, query: { account_generation?: number | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/frame-requests/temporary/${path.request_id}/image`;
   const _params = query ? Object.entries(query)
@@ -16254,7 +16141,7 @@ export async function consume_temporary_frame_request_image_v1_frame_requests_te
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return await _res.blob();
+  return;
 }
 
 export async function promote_frame_request_v1_frame_requests__request_id__promote_post(path: { request_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FrameRequestPromotion, init?: OmiApiClientInit): Promise<FrameRequestEnvelope> {
@@ -17002,7 +16889,7 @@ export async function get_oauth_url_v1_integrations__app_key__oauth_url_get(path
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get(query: { cursor?: string | null, page_size?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LedgerMirrorSnapshotEnvelope> {
+export async function retired_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get(query: { cursor?: string | null, page_size?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/knowledge-ledger/mirror-snapshot`;
   const _params = query ? Object.entries(query)
@@ -17021,10 +16908,10 @@ export async function get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledg
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
-export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<LedgerPromptSnapshotEnvelope> {
+export async function retired_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/knowledge-ledger/prompt-snapshot`;
   const _search = "";
@@ -17040,38 +16927,10 @@ export async function get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledg
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
-export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
-  account_generation: number;
-  candidate_id: string;
-  device_id: string;
-  event_id: string;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-}, init?: OmiApiClientInit): Promise<{
-  receipt: {
-  account_generation: number;
-  budget_day: string;
-  budget_timezone?: string;
-  candidate_id: string;
-  created_at: string;
-  device_id: string;
-  event_id: string;
-  feedback_id?: string | null;
-  operation: "planned_notification" | "ambient_notification" | "nano_triage" | "full_turn";
-  parent_event_id?: string | null;
-  request_hash: string;
-  schema_version?: "jit_proactivity_event.v1";
-  trigger_memory_id?: string | null;
-  trigger_revision?: number | null;
-  uid: string;
-};
-  reserved: boolean;
-}> {
+export async function retired_jit_proactivity_reservation_v1_jit_proactivity_reservations_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Record<string, unknown>, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/proactivity/reservations`;
   const _search = "";
@@ -17089,10 +16948,10 @@ export async function reserve_jit_proactivity_v1_jit_proactivity_reservations_po
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
-export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<JITRolloutDecisionEnvelope> {
+export async function retired_jit_rollout_decision_v1_jit_rollout_decision_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/rollout-decision`;
   const _search = "";
@@ -17108,38 +16967,10 @@ export async function get_jit_rollout_decision_v1_jit_rollout_decision_get(heade
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
-export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  event_id: string;
-  feedback_id: string;
-  recorded_at: string;
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  trigger_revision: number;
-}, init?: OmiApiClientInit): Promise<{
-  applied: boolean;
-  receipt: {
-  account_generation: number;
-  action: "useful" | "false_positive" | "snooze" | "disable" | "missed_or_late";
-  applied_trigger_revision?: number | null;
-  event_id: string;
-  expected_trigger_revision: number;
-  feedback_id: string;
-  recorded_at: string;
-  request_hash: string;
-  schema_version?: "jit_trigger_feedback.v1";
-  snoozed_until?: string | null;
-  trigger_memory_id: string;
-  uid: string;
-};
-  trigger_memory_id: string;
-  trigger_revision: number;
-  trigger_status: string;
-}> {
+export async function retired_jit_trigger_feedback_v1_jit_trigger_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Record<string, unknown>, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/trigger-feedback`;
   const _search = "";
@@ -17157,10 +16988,10 @@ export async function post_jit_trigger_feedback_v1_jit_trigger_feedback_post(hea
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
-export async function get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<JITTriggerSnapshotEnvelope> {
+export async function retired_jit_trigger_snapshot_v1_jit_trigger_snapshot_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/jit/trigger-snapshot`;
   const _search = "";
@@ -17176,7 +17007,7 @@ export async function get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get(heade
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
 export async function get_knowledge_graph_v1_knowledge_graph_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<KnowledgeGraphResponse> {
@@ -20792,6 +20623,26 @@ export async function set_private_cloud_sync_v1_users_private_cloud_sync_post(qu
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function process_waiting_recordings_v1_users_processing_backlog_process_post(header: { Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProcessingBacklog> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/processing-backlog/process`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      "Idempotency-Key": String(header.Idempotency_Key),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_profile_endpoint_v1_users_profile_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserProfileResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/profile`;
@@ -22330,7 +22181,7 @@ export async function review_memory_v3_memories__memory_id__review_post(path: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function use_memory_v3_memories__memory_id__use_post(path: { memory_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryUseRequest, init?: OmiApiClientInit): Promise<MemoryUseResponse> {
+export async function retired_memory_use_v3_memories__memory_id__use_post(path: { memory_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Record<string, unknown>, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/${path.memory_id}/use`;
   const _search = "";
@@ -22348,7 +22199,7 @@ export async function use_memory_v3_memories__memory_id__use_post(path: { memory
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
 export async function update_memory_visibility_v3_memories__memory_id__visibility_patch(path: { memory_id: string }, query: { value?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MemoryValueRequest | null, init?: OmiApiClientInit): Promise<MemoryMutationResponse> {
@@ -22515,4 +22366,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 514 client methods generated.
+// Total: 515 client methods generated.

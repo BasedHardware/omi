@@ -1,6 +1,6 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The checked-in production binding holds stage E at 5% authoritative including sync/backfill, plus David, with stage E's existing budgets. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding holds stage E at 5% authoritative including sync/backfill, plus private cohort members, with stage E's existing budgets. Stage D (5%) was held clean for 3 hours 2 minutes on 2026-10-16, 02:45→05:47Z: queue depth 0, five replicas with 0 restarts, five T4 nodes, and `upstream_error` about 1%. For an E regression, roll back to complete D with the previous budgets.
 David's 2026-10-16 decision is to keep a 5% live quality sample: per-~8-second-clip pyannote runs at RTF 0.308 cost about $100/day at 15%, with $700–900/day estimated at 100%, and miss the cost goal.
 This per-clip path will be superseded by whole-unit diarization in the batch pipeline.
 Deployment and further long-audio qualification remain lead-owned.
@@ -8,6 +8,9 @@ The reserved prod Gateway is `172.16.160.20`; reservation is not serving readine
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
 before deploying callers. The pyannote adapter appends `/v2/diarization`, yielding
 `http://172.16.160.20/diarizer-batch/v2/diarization`.
+
+Membership is managed through [private rollout cohorts](runbooks/rollout-cohorts.md);
+stage data contains only public rollout switches and budgets.
 
 ## Stages (data only)
 
@@ -18,10 +21,8 @@ All stages retain these values on backend, backend-sync, backend-sync-backfill a
 HOSTED_DIARIZATION_API_URL=http://172.16.160.20/diarizer-batch
 TRANSCRIPTION_FINAL_PASS_DIARIZER=pyannote_shadow
 TRANSCRIPTION_FINAL_PASS_BACKEND=pyannote
-TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
 TRANSCRIPTION_SHADOW_ENABLED=true
 TRANSCRIPTION_SHADOW_KILL_SWITCH=false
-TRANSCRIPTION_SHADOW_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
 ```
 
 Combine those constants with the following exact values (all strings):
@@ -45,7 +46,7 @@ owning workflows. Verify the effective values agree on all four before starting
 the observation window. Integration, dev and backend-listen remain excluded.
 For an E regression, restore complete D on all four hosts, including backfill:
 both percentages 5, daily shadow budget 400 h, sync caps 50 audio-h/5,000 requests,
-authoritative=true and sync=true. Keep David's allowlists and every other value.
+authoritative=true and sync=true. Keep the private Firestore memberships and every other scalar value.
 For a D regression, restore complete C: both percentages 1, daily shadow budget
 80 h, sync caps 10 audio-h/1,000 requests, authoritative=true and sync=true.
 Complete B is the broader David-only rollback: both percentages 0, daily shadow

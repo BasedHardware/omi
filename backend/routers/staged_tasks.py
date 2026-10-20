@@ -19,6 +19,7 @@ import database.action_items as action_items_db
 import database.candidates as candidates_db
 from database.s5_candidates_cache import load_compatibility_candidates
 import database.staged_tasks as staged_tasks_db
+from database.staged_promote_cache import load_projection
 import database.task_intelligence_control as task_control_db
 from models.candidate import CandidateRecord, CandidateStatus
 from models.shared import StatusResponse
@@ -433,7 +434,11 @@ def batch_update_staged_scores(
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'], response_model=PromoteStagedTaskResponse)
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
     control = _control(uid)
-    items = _merged_staged_projection(uid, account_generation=control.account_generation)
+    items = load_projection(
+        uid,
+        control.account_generation,
+        lambda: _merged_staged_projection(uid, account_generation=control.account_generation),
+    )
     if not items:
         return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
     return promote_staged_task_by_id(items[0]['id'], uid=uid)

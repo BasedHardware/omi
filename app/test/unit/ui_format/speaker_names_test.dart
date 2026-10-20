@@ -34,6 +34,13 @@ Person person(String id, String name) =>
 void main() {
   final en = lookupAppLocalizations(const Locale('en'));
 
+  test('on-device engines carry no speaker label in UI or transcript exports', () {
+    final segment = seg(0, text: 'Synthetic speech.')..sttProvider = 'on_device:parakeet_v2';
+    expect(SpeakerNames.forSegments([segment], l10n: en).forSegment(segment), '');
+    expect(TranscriptSegment.segmentsAsString([segment], l10n: en, people: const [], ownerName: 'Test'),
+        'Synthetic speech.');
+  });
+
   test('anonymous speakers are numbered densely in order of first appearance', () {
     // Owner is SPEAKER_00; the others are 2 and 7 (a provider restart left a gap).
     final segments = [seg(0, isUser: true), seg(7), seg(2), seg(7), seg(0, isUser: true)];

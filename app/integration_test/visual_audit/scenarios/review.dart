@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -24,6 +25,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 
@@ -184,6 +186,13 @@ Future<void> _openSheet(AuditRun a, ReviewItem item) async {
     providers: [ChangeNotifierProvider<ReviewProvider>.value(value: review)],
   );
 }
+
+Person _auditPerson(String id, String name) => Person(
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+    );
 
 final _personPage = EntityPageData(
   entityId: 'person:p-bela',
@@ -574,8 +583,24 @@ final reviewScenarios = <AuditScenario>[
     page: _sheet,
     state: 'The speaker question; Béla preselected as the closest voice',
     run: (a) async {
-      await _openSheet(a, _speakerItem);
+      final people = PeopleProvider(
+        loadPeople: () async => PeopleListResponse(people: [
+          _auditPerson('p-priya', 'Priya Natarajan'),
+          _auditPerson('p-alex', 'Alex Rivera'),
+        ]),
+      );
+      await people.setPeople();
+      final review = await _loadedReview(a);
+      await a.pumpHost(
+        (context) => showReviewItemSheet(context, _speakerItem),
+        providers: [
+          ChangeNotifierProvider<ReviewProvider>.value(value: review),
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ],
+      );
       await a.shot('Tap the speaker card');
+      await a.tap(find.byKey(const Key('review_speaker_someone_else')));
+      await a.shot('Tap Someone Else…: search every existing person', step: 'picker');
     },
   ),
   AuditScenario(

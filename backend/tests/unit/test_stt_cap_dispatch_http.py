@@ -5,6 +5,8 @@ from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from routers import sync as router
@@ -150,3 +152,74 @@ def test_transient_policy_hold_does_not_claim_credits_exhausted(client, monkeypa
     assert response.json()['held_audio'] is True
     assert response.json()['credits_exhausted'] is False
     router.retrieve_vad_segments.assert_not_called()
+
+
+@pytest.mark.parametrize('version', ['v1', 'v2'])
+@pytest.mark.parametrize('unavailable', [False, True])
+def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, version, unavailable):
+    from utils import ladder_v1
+    from utils.sync import cap_hold
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+
+    def snapshot(*args, **kwargs):
+        if unavailable:
+            raise RuntimeError('synthetic ledger read failure')
+        return {'budget_percent': 100, 'used_units': 100, 'budget_units': 100}
+
+    monkeypatch.setattr(ladder_v1, 'usage_snapshot', snapshot)
+    reject = Mock(side_effect=AssertionError('upload must hold instead of raising 402'))
+    monkeypatch.setattr(ladder_v1, 'enforce_budget', reject)
+    monkeypatch.setattr(
+        router,
+        'resolve_transcription_allowance',
+        lambda _: SimpleNamespace(reason='allowance_unavailable' if unavailable else 'usage_budget_exhausted'),
+    )
+    if version == 'v1':
+        # Exercise the actual funded budget -> full capture hold decision.
+        monkeypatch.setattr(router, 'hold_capture_if_exhausted', cap_hold.hold_capture_if_exhausted)
+        retained = AsyncMock()
+        monkeypatch.setattr(cap_hold, '_hold_capture', retained)
+        response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+        assert response.status_code == 200, response.text
+        assert response.json()['held_audio'] is True
+        assert response.json()['credits_exhausted'] is (not unavailable)
+        retained.assert_awaited_once()
+    else:
+        # V2 acknowledges archived bytes/job custody; the real coordinator's
+        # full-WAV hold before VAD is tested in test_sync_cap_coordinator.
+        monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
+        monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
+        from config.policy import BatchUnitPolicy
+
+        monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
+        monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
+        monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
+        monkeypatch.setattr(router, 'create_sync_job', Mock())
+        monkeypatch.setattr(
+            router, 'claim_sync_content', lambda *a: {'outcome': 'held', 'result': {'held_audio': True}}
+        )
+        monkeypatch.setattr(router, 'mark_job_completed', Mock())
+        response = client.post('/v2/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+        assert response.status_code == 202, response.text
+        assert response.json()['status'] == 'completed'
+        assert router.mark_job_completed.call_args.args[1]['held_audio'] is True
+    reject.assert_not_called()
+
+
+@pytest.mark.parametrize('cohort,lanes', [('', 'sync'), ('uid:other', 'sync'), ('all', 'live')])
+def test_sync_v1_intake_outside_scope_retains_unheld_wire(client, monkeypatch, cohort, lanes):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(router, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(router, 'retrieve_vad_segments', Mock())
+    monkeypatch.setattr(router.users_db, 'get_user_transcription_preferences', Mock(return_value={}))
+    monkeypatch.setattr(router.users_db, 'get_user_private_cloud_sync_enabled', Mock(return_value=False))
+    monkeypatch.setattr(router, 'build_person_embeddings_cache', Mock(return_value={}))
+    monkeypatch.setattr(router, '_reprocess_merged_conversations', Mock())
+    monkeypatch.setattr(router, 'schedule_person_voice_learning_retries', Mock())
+    response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+    assert response.status_code == 200, response.text
+    assert 'held_audio' not in response.json()
+    router.hold_capture_if_exhausted.assert_not_called()

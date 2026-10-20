@@ -206,7 +206,9 @@ class TranscriptSegment {
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (final segment in segments) {
       final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      buffer.write('$timestampStr ${names.forSegment(segment)}: ${segment.text.trim()} ');
+      final name = names.forSegment(segment);
+      final label = name.isEmpty ? '' : '$name: ';
+      buffer.write('$timestampStr $label${segment.text.trim()} ');
       buffer.write('\n\n');
     }
     return buffer.toString().trim();

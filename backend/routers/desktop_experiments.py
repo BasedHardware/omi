@@ -47,14 +47,14 @@ from config.desktop_experiments import (
 from database._client import get_data_plane_firestore_client, get_firestore_client
 from utils.executors import db_executor, run_blocking
 from utils.experiments import enroll, existing_assignment
-from utils.jit_rollout import PostHogJITFlagProvider, TriState
+from utils.posthog_flags import PostHogPairedFlagProvider, TriState
 from utils.other.endpoints import get_current_user_uid
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_flag_provider = PostHogJITFlagProvider(
+_flag_provider = PostHogPairedFlagProvider(
     rollout_flag_key=EXP_002_FLAG_KEY,
     kill_switch_flag_key=EXP_002_KILL_SWITCH_FLAG_KEY,
 )
