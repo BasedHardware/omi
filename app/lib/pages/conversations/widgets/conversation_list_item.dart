@@ -78,6 +78,10 @@ class ConversationListItem extends StatefulWidget {
   /// swipe-to-delete, selection).
   final bool inLockedRun;
 
+  /// Seconds of audio offline sync is still adding to this conversation (episodes on). The row
+  /// says so with a small spinner instead of a separate "catching up" row.
+  final int? fillingSeconds;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
@@ -87,6 +91,7 @@ class ConversationListItem extends StatefulWidget {
     this.reprocess,
     this.allowSelection = true,
     this.inLockedRun = false,
+    this.fillingSeconds,
   });
 
   @override
@@ -116,6 +121,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.summaryRetryable,
         conversation.isLocked,
         conversation.processingDeferred,
+        widget.fillingSeconds,
       );
 
   @override
@@ -447,6 +453,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
           maxLines: 1,
         ),
         if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
+        if (widget.fillingSeconds case final seconds?) ...[
+          Text(' • ', style: _metaStyle),
+          const OmiSpinner(size: OmiSpinnerSize.small),
+          const SizedBox(width: OmiSpacing.xxs),
+          // Wins the free space over the Spacer below, so the line truncates only when it must.
+          Flexible(
+            flex: 1000,
+            child: Text(
+              context.l10n.episodeAddingFromOmi(
+                  OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n)),
+              key: const Key('conversation_row_filling'),
+              style: _metaStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
           Text(' • ', style: _metaStyle),

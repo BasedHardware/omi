@@ -3,7 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/episodes/episode_moments_section.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
@@ -50,6 +55,14 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   bool _isEditing = false;
   @override
   bool get wantKeepAlive => true;
+
+  /// A moment recorded in another conversation of the same episode opens that conversation.
+  Future<void> _openConversation(BuildContext context, String id) async {
+    final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
+    final conversation = known ?? await getConversationById(id);
+    if (conversation == null || !context.mounted) return;
+    routeToPage(context, ConversationDetailPage(conversation: conversation));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +172,15 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                       sliver: SliverMainAxisGroup(slivers: [
+                        // The episode this conversation belonged to, when it had several moments.
+                        if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                          SliverToBoxAdapter(
+                            child: EpisodeMomentsSection(
+                              key: ValueKey('episode-moments-${conversation.id}'),
+                              conversationId: conversation.id,
+                              onOpenConversation: (id) => _openConversation(context, id),
+                            ),
+                          ),
                         if (feedbackKind == FeedbackPromptKind.summary)
                           SummaryFeedbackPrompt(
                             key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),

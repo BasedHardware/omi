@@ -129,6 +129,7 @@ from routers import (
     task_recommendations,
     conversation_finalization,
     pending_work,
+    episodes,
     commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
@@ -283,6 +284,7 @@ app.include_router(device_diagnostics.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(pending_work.router)
+app.include_router(episodes.router)
 app.include_router(commitment_followup.router)
 app.include_router(trends.router)
 

@@ -673,6 +673,17 @@ neither path. The shared bounded flag cache, failure diagnostics and rollback
 latency are defined in the
 [proactivity v2 contract](proactivity_v2/CONTRACT.md#enablement-prerequisites).
 
+Live episodes (`utils/episodes/live.py`, kill switch `EPISODES_ENABLED`) see the
+same realtime batches after the paywall check and before mentor admission. They
+buffer final segments per user in process and, when a moment ends (a pause of
+45 seconds, 600 words, or a move to another conversation), schedule one tracked
+background update. That update makes one gpt-5-nano call over the compact episode
+state plus only that moment's text. It never blocks the fan-out, writes no
+conversation, task or memory, and is restarted from durable state by finalization
+(`finalize_persisted_conversation` calls `utils/episodes/service.on_conversation_finalized`
+after `complete_finalization_fanout`, bounded and fail-open). See
+`backend/utils/episodes/ARCHITECTURE.md`.
+
 Provider speaker labels are connection-local. Before a live segment enters a
 conversation, listen stamps the actual `stt_provider` and an opaque
 `speaker_id_scope`. The scope advances whenever the provider changes and is

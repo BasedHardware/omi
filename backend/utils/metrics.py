@@ -510,6 +510,7 @@ JEV_DECISION_LABELS = {
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
+            'episode_boundary',
         }
     ),
     'outcome': frozenset(

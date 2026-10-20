@@ -979,6 +979,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
+  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
+  /// Best-effort: no device or no history is an empty list.
+  Future<List<BleDisconnectEvent>> disconnectHistory() async {
+    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
+    if (id == null || id.isEmpty) return const [];
+    final diagnostics = await _bleDiagnosticsLoader(id);
+    return diagnostics.disconnectHistory;
+  }
+
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});

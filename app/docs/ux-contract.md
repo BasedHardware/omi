@@ -93,6 +93,7 @@ There are exactly two ways out, and they mean different things.
 | A removable **date** filter | `OmiDateFilterChip(start:, end:, onClear:)` — calendar glyph, localized date or `start – end`, ×; remove semantics `removeFilter` + the date | a raw `InputChip`, a filter with no way off |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
+| Something happening live (Omi listening, a device syncing quietly) | `OmiLiveDot(live:)` — a small success-green dot that pulses while live and holds still otherwise (reduced motion: still); `OmiActivityRing(active:, child:)` — a thin spinning ring around a glyph, no text, hidden when idle | a local `AnimationController` pulse per page, a "Syncing…" label in a header |
 | Locked card preview | `OmiLockedPreview(child:, label:, onPressed:)` — clips a child-only blur and a translucent surface beneath an `OmiButton.tertiary`; excludes the obscured content from touch and semantics | a dark strip with readable content overlapping its upgrade label |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label

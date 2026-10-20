@@ -14391,4 +14391,105 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi i dalje snima';
+
+  @override
+  String get episodeNow => 'Сада';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Уживо · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count тренутака',
+      one: '1 тренутак',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Тренуци';
+
+  @override
+  String get episodeSoFar => 'До сада';
+
+  @override
+  String get episodeUpdatedJustNow => 'Ажурирано управо · потпуне белешке на крају';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Ажурирано пре $minutes мин · потпуне белешке на крају';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Белешке се појављују после првих минута разговора.';
+
+  @override
+  String get episodeOpenAll => 'Отвори све';
+
+  @override
+  String get episodeWrapUpNow => 'Заврши сада';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi ово завршава када пређете на нешто друго';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Забележен задатак: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Забележен подсетник: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Задатак сачуван: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'додаје се $duration са вашег Omi-ja';
+  }
+
+  @override
+  String get episodeListeningNow => 'Слуша сада';
+
+  @override
+  String get deviceHeardToday => 'Чуто данас';
+
+  @override
+  String get deviceToSync => 'за синхронизацију';
+
+  @override
+  String get deviceRightNow => 'Тренутно';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Епизода уживо · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Сустиже';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done од $total мин';
+  }
+
+  @override
+  String get deviceRecently => 'Недавно';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Без везе $duration';
+  }
+
+  @override
+  String get deviceControls => 'Контроле';
 }

@@ -78,6 +78,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/csat',
     '/v1/dev',
     '/v1/dream/runs',
+    '/v1/episodes',
     '/v1/fair-use',
     '/v1/frame-requests',
     '/v1/folders',

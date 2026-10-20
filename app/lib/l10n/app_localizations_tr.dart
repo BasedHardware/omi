@@ -14397,4 +14397,105 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi kayda devam ediyor';
+
+  @override
+  String get episodeNow => 'Şimdi';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Canlı · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count an',
+      one: '1 an',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Anlar';
+
+  @override
+  String get episodeSoFar => 'Şu ana kadar';
+
+  @override
+  String get episodeUpdatedJustNow => 'Az önce güncellendi · bitince tam notlar';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes dk önce güncellendi · bitince tam notlar';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';
+
+  @override
+  String get episodeOpenAll => 'Tümünü Aç';
+
+  @override
+  String get episodeWrapUpNow => 'Şimdi Bitir';
+
+  @override
+  String get episodeWrapsUpHint => 'Başka bir şeye geçtiğinde Omi bunu bitirir';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Görev yakalandı: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Hatırlatıcı yakalandı: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Görev kaydedildi: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'Omi\'nizden $duration ekleniyor';
+  }
+
+  @override
+  String get episodeListeningNow => 'Şimdi dinliyor';
+
+  @override
+  String get deviceHeardToday => 'Bugün duyulan';
+
+  @override
+  String get deviceToSync => 'eşitlenecek';
+
+  @override
+  String get deviceRightNow => 'Şu anda';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Canlı bölüm · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Yetişiyor';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total dk';
+  }
+
+  @override
+  String get deviceRecently => 'Son zamanlarda';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration bağlantı kesildi';
+  }
+
+  @override
+  String get deviceControls => 'Kontroller';
 }

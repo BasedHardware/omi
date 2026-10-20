@@ -6,6 +6,7 @@ fallback.  Callers must first own a durable finalization job lease.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any
@@ -13,6 +14,7 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.episodes import episodes_enabled_for
 from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
@@ -26,6 +28,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
+from utils.episodes.service import on_conversation_finalized as record_episode_finalized
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
@@ -99,6 +102,54 @@ def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
             outcome='degraded',
             log=logger,
         )
+
+
+EPISODE_FINALIZE_TIMEOUT_SECONDS = 30.0
+
+
+async def _episode_after_finalization(
+    uid: str,
+    conversation_id: str,
+    row: Any,
+    trigger: ProcessingTrigger,
+    *,
+    absorbed_from: str | None = None,
+) -> None:
+    """Live episode bookkeeping after the job completed; never affects finalization.
+
+    Runs after ``complete_finalization_fanout``, so a slow or failing episode
+    update can neither delay nor fail the conversation (``utils/episodes``).
+    """
+    if not row:
+        return
+    try:
+        await asyncio.wait_for(
+            run_blocking(
+                postprocess_executor,
+                record_episode_finalized,
+                uid,
+                conversation_id,
+                row,
+                trigger=trigger.value,
+                absorbed_from=absorbed_from,
+            ),
+            timeout=EPISODE_FINALIZE_TIMEOUT_SECONDS,
+        )
+    except Exception as error:
+        logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
+
+
+async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrigger) -> None:
+    if not episodes_enabled_for(uid):
+        return
+    try:
+        donor = await run_blocking(db_executor, conversations_db.get_conversation, uid, donor_id)
+        survivor_id = ((donor or {}).get('smart_merge') or {}).get('survivor_id')
+        if not survivor_id:
+            return
+        await _episode_after_finalization(uid, str(survivor_id), donor, trigger, absorbed_from=donor_id)
+    except Exception as error:
+        logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
 
 
 class ConversationFinalizationError(RuntimeError):
@@ -198,6 +249,7 @@ async def finalize_persisted_conversation(
                     lease_epoch,
                 ):
                     raise ConversationFinalizationError('fanout_completion_conflict')
+                await _episode_after_absorb(uid, conversation_id, trigger)
                 return ConversationFinalizationDisposition.completed
             if fanout['status'] in {'completed', 'fenced'}:
                 return ConversationFinalizationDisposition(fanout['status'])
@@ -312,6 +364,7 @@ async def finalize_persisted_conversation(
                     lease_epoch,
                 ):
                     raise ConversationFinalizationError('fanout_completion_conflict')
+                await _episode_after_absorb(uid, conversation_id, trigger)
                 return ConversationFinalizationDisposition.completed
         stage = 'duplicate_capture'
         if fanout['status'] in {'claimed', 'completed'}:
@@ -377,8 +430,10 @@ async def finalize_persisted_conversation(
         # Await inside a fail-soft boundary rather than detach a provider pipeline:
         # the worker can exit after completion, so awaiting preserves write observability.
         # A summary-vector failure never fails finalization, including terminal rows.
+        episode_row = None
         try:
             latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+            episode_row = latest_data
             latest = deserialize_conversation(latest_data) if latest_data else None
             if (
                 latest
@@ -471,6 +526,7 @@ async def finalize_persisted_conversation(
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
         schedule_person_voice_learning_retry(uid, conversation_id)
+        await _episode_after_finalization(uid, conversation_id, episode_row, trigger)
         return ConversationFinalizationDisposition.completed
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
