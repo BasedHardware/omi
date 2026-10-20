@@ -18,7 +18,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:uuid/uuid.dart';
+import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -166,24 +166,11 @@ class CaptureController extends ChangeNotifier
   Timer? _calendarGapTimer;
   Timer? _captureHealthTimer;
 
-  String? _sourceCaptureRoot;
-  LocalWalSync? _captureEvidenceSync;
-  int? _captureEvidenceGeneration;
-  String? _captureEvidenceUid;
+  final _captureEvidenceIdentity = CaptureEvidenceIdentity();
 
-  String? get _captureEvidenceRoot {
-    final LocalWalSync sync = _wal.getSyncs().phone;
-    final generation = sync.captureEvidenceGeneration;
-    final uid = _preferences.uid;
-    if (!identical(sync, _captureEvidenceSync) ||
-        generation != _captureEvidenceGeneration ||
-        uid != _captureEvidenceUid) {
-      _sourceCaptureRoot = null;
-      _captureEvidenceSync = sync;
-      _captureEvidenceGeneration = generation;
-      _captureEvidenceUid = uid;
-    }
-    return _sourceCaptureRoot ??= const Uuid().v4();
+  String get _captureEvidenceRoot {
+    final sync = _wal.getSyncs().phone;
+    return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
   CaptureExternalActions externalActions;
@@ -1175,7 +1162,7 @@ class CaptureController extends ChangeNotifier
   void _rollCaptureSession(String identity) {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _sourceCaptureRoot = null;
+    _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -2655,7 +2642,7 @@ class CaptureController extends ChangeNotifier
   void clearUserData() {
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
-    _sourceCaptureRoot = null;
+    _captureEvidenceIdentity.reset();
     segments = [];
     photos = [];
     hasTranscripts = false;
