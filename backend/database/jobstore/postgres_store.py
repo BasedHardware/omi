@@ -23,8 +23,12 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+
 import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
+
+# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: that module pulls in Firestore).
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
 
 T = TypeVar('T')
 
@@ -216,7 +220,7 @@ class PostgresStore:
 
         def revoke(tx: PostgresTransaction) -> bool:
             job = tx.get('jobs', segment_id)
-            if job.get('state') not in {'leased', 'retry'}:
+            if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
                 return False
             try:
                 tx.check_privacy(
@@ -226,12 +230,16 @@ class PostgresStore:
                 )
             except BatchPrivacyBlocked:
                 # A shallow field update, not a put: flush must not re-run the (failing) fence.
-                tx.store.write_doc(
-                    tx.conn,
-                    'jobs',
-                    segment_id,
-                    {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now},
-                )
+                revoked = {
+                    **job,
+                    'state': 'privacy_blocked',
+                    'token': '',
+                    'lease_until': 0.0,
+                    'privacy_blocked_at': now,
+                }
+                if job['state'] in PROVIDER_STATES:
+                    revoked['merge_pending'] = False
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, revoked)
                 return True
             return False
 

@@ -134,12 +134,33 @@ def test_hashes_are_hex_digests_not_values():
         'based-hardware-audio-derived',
         'projects/based-hardware/secrets/X',
         'https://api.omi.me/v1',
+        'http://parakeet.omi.me',
+        'omi.me',
     ],
 )
 def test_prod_reference_anywhere_is_refused(value):
     env = _clean_env()
     env['SOME_URL'] = value
     assert 'prod_reference' in _reasons(env) or 'prod_hash' in _reasons(env)
+
+
+# M1 review L02-1: prod ILBs (Parakeet, diarizer) and prod external LB addresses.
+@pytest.mark.parametrize(
+    'value', ['http://172.16.160.20/diarizer', 'http://172.16.160.20/diarizer-batch', '172.16.128.250', '34.54.223.100']
+)
+def test_prod_network_address_anywhere_is_refused(value):
+    env = _clean_env()
+    env['HOSTED_SPEAKER_EMBEDDING_API_URL'] = value
+    assert _reasons(env) == {'prod_address'}
+
+
+@pytest.mark.parametrize(
+    'value', ['http://127.0.0.1:9', 'http://172.16.48.49/diarizer', '172.16.63.67', '172.20.207.3', 'nomi.mesh.dev']
+)
+def test_dev_and_blackhole_addresses_are_allowed(value):
+    env = _clean_env()
+    env['HOSTED_PARAKEET_API_URL'] = value
+    assert staging_violations(env) == []
 
 
 def test_dev_references_are_allowed():

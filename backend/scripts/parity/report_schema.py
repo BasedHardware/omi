@@ -72,8 +72,9 @@ DATA_LOSS_REASONS = frozenset({ParityReason.LOST_RECORDINGS, ParityReason.PRIVAC
 # Contract (j) surfaces per row. 'both' rows must pass on each listed surface.
 ROW_SURFACES: Mapping[str, frozenset[Surface]] = {
     '1': frozenset({Surface.STAGING}),
-    '1b': frozenset({Surface.STAGING}),  # plus David's own recordings via mirror on prod-shadow days
-    '2': frozenset({Surface.STAGING}),
+    # Prod shadow: David's own recordings via the mirror (replay half only); reported, never gating.
+    '1b': frozenset({Surface.STAGING, Surface.PROD_SHADOW}),
+    '2': frozenset({Surface.STAGING, Surface.PROD_SHADOW}),
     '3': frozenset({Surface.STAGING, Surface.PROD_SHADOW}),
     '4': frozenset({Surface.STAGING, Surface.PROD_SHADOW}),
     '5': frozenset({Surface.STAGING, Surface.PROD_SHADOW}),
@@ -157,6 +158,14 @@ class ParityReport:
     data_loss: bool
     # Ramp percent the measured throughput carries (contract (j) throughput precondition).
     max_supported_percent: float | None = None
+    # The row a FAIL is named after on the terminal line (contract (j) "FAIL reason").
+    failing_row: str | None = None
+
+    def terminal_reason(self) -> str:
+        """``row_<n>`` for a FAIL (the controller keys ROLLBACK_ZERO on rows 5 and 7); else the reason."""
+        if self.status is Status.FAIL and self.failing_row is not None:
+            return f'row_{self.failing_row}'
+        return self.reason.value
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -164,6 +173,7 @@ class ParityReport:
             'surface': self.surface.value,
             'status': self.status.value,
             'reason': self.reason.value,
+            'failing_row': self.failing_row,
             'data_loss': self.data_loss,
             'max_supported_percent': self.max_supported_percent,
             'generated_at': self.generated_at,
@@ -191,8 +201,9 @@ def verdict_line(prefix: str, status: Status, reason: ParityReason | str) -> str
 def combine(rows: list[RowResult], surface: Surface, gating_rows: tuple[str, ...] | None = None):
     """Report-level status: any FAIL fails; else any PENDING pends; else PASS.
 
-    Returns ``(status, reason, data_loss)``. A data-loss FAIL (rows 5 and 7)
-    takes precedence over every other FAIL so the controller rolls back to zero.
+    Returns ``(status, reason, data_loss, failing_row)``. A data-loss FAIL (row 5,
+    then row 7) takes precedence over every other FAIL so the controller rolls
+    back to zero; otherwise the lowest failing row (``rows`` is in row order).
     """
     considered = [r for r in rows if r.status is not Status.NOT_APPLICABLE]
     if gating_rows is not None:
@@ -201,10 +212,10 @@ def combine(rows: list[RowResult], surface: Surface, gating_rows: tuple[str, ...
     if failed:
         loss = [r for r in failed if r.row in DATA_LOSS_ROWS or r.reason in DATA_LOSS_REASONS]
         first = loss[0] if loss else failed[0]
-        return Status.FAIL, first.reason, bool(loss)
+        return Status.FAIL, first.reason, bool(loss), first.row
     pending = [r for r in considered if r.status is Status.PENDING]
     if pending:
-        return Status.PENDING, pending[0].reason, False
+        return Status.PENDING, pending[0].reason, False, None
     if not considered:
-        return Status.PENDING, ParityReason.INPUT_MISSING, False
-    return Status.PASS, ParityReason.PASS, False
+        return Status.PENDING, ParityReason.INPUT_MISSING, False, None
+    return Status.PASS, ParityReason.PASS, False, None

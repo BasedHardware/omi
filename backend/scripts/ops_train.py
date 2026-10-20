@@ -324,9 +324,17 @@ def _digest(value: Any) -> str:
 
 
 def template_drift(template: Mapping[str, Any], serving: Mapping[str, Any], ops_keys: set[str]) -> list[str]:
-    """Container fields where the template differs from the serving revision, ignoring ops keys."""
+    """Where the template differs from the serving revision, ignoring only ops-owned env keys.
+
+    The whole revision spec counts (service account, concurrency, timeout, volumes, probes,
+    mounts, ports), not just image and env: an env apply builds its revision from the template
+    and then routes 100% to it, so any other difference would ship unqualified (M1 L07-2).
+    """
 
     drift: list[str] = []
+    for key in sorted((set(template) | set(serving)) - {'containers'}):
+        if _digest(template.get(key)) != _digest(serving.get(key)):
+            drift.append(key)
     left, right = _containers(template), _containers(serving)
     if set(left) != set(right):
         # Cloud Run names an unnamed template container on the revision it creates
@@ -335,12 +343,12 @@ def template_drift(template: Mapping[str, Any], serving: Mapping[str, Any], ops_
         if len(lc) != len(rc) or any(
             a.get('name') and b.get('name') and a['name'] != b['name'] for a, b in zip(lc, rc)
         ):
-            return [f'containers:{sorted(left)}!={sorted(right)}']
+            return drift + [f'containers:{sorted(left)}!={sorted(right)}']
         left = {f'#{i}': c for i, c in enumerate(lc)}
         right = {f'#{i}': c for i, c in enumerate(rc)}
     for name in sorted(left):
         a, b = left[name], right[name]
-        for key in ('image', 'command', 'args', 'resources'):
+        for key in sorted((set(a) | set(b)) - {'name', 'env'}):
             if _digest(a.get(key)) != _digest(b.get(key)):
                 drift.append(f'{name}.{key}')
         env_a = {k: v for k, v in _env_map(a).items() if k not in ops_keys}

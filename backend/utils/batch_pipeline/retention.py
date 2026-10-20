@@ -128,6 +128,15 @@ def register_batch_artifact(
             and bool(terminal.get('token'))
             and uri.endswith(f"/{terminal['token']}.enc")
         )
+        # C8: the provider stage persists its one paid result under the intent minted by the
+        # provider_pending -> provider_running CAS (utils/batch_pipeline/provider_stt.py).
+        intent = job.get('provider_intent') or {}
+        provider_write = (
+            job.get('state') == 'provider_running'
+            and intent.get('privacy_generation') == expected_generation
+            and bool(intent.get('token'))
+            and uri.endswith(f"/{intent['token']}.enc")
+        )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
             policy.speech_empty_multilingual
@@ -143,6 +152,7 @@ def register_batch_artifact(
             kind != 'audio'
             and job.get('state') != 'leased'
             and not recovery_write
+            and not provider_write
             and not disposition_write
             and not redrive_write
             and not terminal_write
