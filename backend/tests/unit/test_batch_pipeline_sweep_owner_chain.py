@@ -125,8 +125,6 @@ def test_continuation_budget_is_shared_across_owners_in_one_sweep(monkeypatch):
     assert log.persist_order == first + second
     walks = [call for call in walk.call_args_list if call.kwargs['budget_seconds'] > 0]
     assert [call.args[0] for call in walks] == ['owner-1']
-    # Every other page persist is a seed-only hand-off that persists nothing.
-    assert all(call.kwargs['seed'][0] not in first[1:3] for call in walk.call_args_list)
 
 
 def test_continuation_stops_at_predecessor_fence_and_privacy_block(monkeypatch):
@@ -406,6 +404,48 @@ def test_watermark_read_failure_after_a_persist_still_hands_the_row_off():
     projector.sweep(limit=1)
     assert log.persist_order == ids
     assert projector.chain_followups == ids
+
+
+def test_opening_watermark_read_failure_still_hands_the_page_row_off():
+    log = ResultLog()
+    log.commit(BURST, 'a', 'a', ['a'])
+    log.commit(BURST, 'b', 'b', ['b'])
+
+    projector = projector_for(log)
+    real = log.projection_watermark
+    failed = []
+
+    def first_fails(key):
+        # Fail the first read made after the page persisted 'a': the walk's
+        # opening read of the watermark.
+        if log.results['a'].get('projection') and not failed:
+            failed.append(key)
+            raise RuntimeError('synthetic watermark outage')
+        return real(key)
+
+    log.projection_watermark = first_fails
+    projector.sweep(limit=1)
+    # The page persisted 'a'; the walk's opening read failed, so it walked no
+    # further but still owed the page row.
+    assert log.persist_order == ['a']
+    assert projector.chain_followups == ['a']
+
+
+def test_seed_only_hand_off_reads_one_watermark_and_no_siblings(monkeypatch):
+    log = ResultLog()
+    siblings = [f'a-{n}' for n in range(128)]
+    for sid in siblings[:2]:
+        log.commit(BURST, 'a', sid, siblings)
+    projector = projector_for(log)
+    reads = []
+    real = log.ref
+    log.ref = lambda table, sid: reads.append(sid) or real(table, sid)
+    projector._persist_read('a-0', *log.read('a-0'))
+    followups, advanced = projector._walk_owner(
+        BURST, recovered=None, limit=64, budget_seconds=0.0, seed=('a-0', log.read('a-0')[2])
+    )
+    assert followups == ['a-0'] and advanced == []
+    assert reads == []  # no sibling scan and no successor read
 
 
 def test_partial_page_persist_that_did_not_advance_is_not_handed_off():

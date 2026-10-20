@@ -594,7 +594,9 @@ transactional predecessor, privacy and receipt fences one at a time, so no
 owner gains concurrency. Every async row the sweep persists is owed a follow-up, the page's own rows as
 well as the walk's. The page row seeds its owner's walk. Later page rows of
 an owner already walked, and rows reached once the shared budget is spent, get
-a seed-only hand-off: one watermark read, nothing persisted. A seed is owed only
+a seed-only hand-off: one watermark read, no sibling scan, nothing persisted.
+A walk's scan for a content's persisted, not-ready siblings stops at the walk
+deadline; unscanned siblings stay durable and are rediscovered. A seed is owed only
 if the watermark shows it advanced (a partial multipart did not), or if the
 watermark cannot be read. Owed rows do not use the wake's priority
 queue. They are held (at most 256, durable either way) until the next

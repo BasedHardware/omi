@@ -666,12 +666,19 @@ class Projector:
             )
 
         def owe(segment_id: str, binding: ProjectionBinding) -> bool:
-            """Queue this row and its content's persisted, not-ready siblings."""
+            """Queue this row and its content's persisted, not-ready siblings.
+
+            The sibling scan stops at the walk deadline, and a seed-only walk
+            (no budget) skips it: unscanned siblings stay durable and are
+            rediscovered.
+            """
             group = groups.get(binding.content_id)
             if group is None:
                 group = groups[binding.content_id] = {}
                 try:
                     for sibling in binding.segment_ids:
+                        if time.monotonic() >= deadline:
+                            break
                         receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
                         if receipt and receipt.get('state') != 'ready':
                             group[sibling] = None
