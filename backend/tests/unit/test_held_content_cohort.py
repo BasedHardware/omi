@@ -205,20 +205,88 @@ async def test_poller_refreshes_off_the_request_path(rig, monkeypatch):
     rig.reader.assert_not_called()
 
 
-def test_metrics_are_bounded_and_samples_skip_empty_pages():
+def test_fleet_snapshot_clears_when_empty_and_publishes_authoritative_totals():
     before = metrics.CAPTURE.labels(kind='lost')._value.get()
     metrics.record_capture('lost')
     metrics.record_capture('not-a-kind')
     assert metrics.CAPTURE.labels(kind='lost')._value.get() == before + 1
     metrics.OLDEST_AGE.set(4)
-    metrics.publish_held_sample([])
-    assert metrics.OLDEST_AGE._value.get() == 4
-    metrics.publish_held_sample([{'state': 'held', 'seconds': 3, 'listed_at': 1_700_000_000}], now=1_700_000_010)
-    assert metrics.PENDING_COUNT._value.get() == 1
-    assert metrics.PENDING_SECONDS._value.get() == 3
+    metrics.PENDING_COUNT.set(4)
+    metrics.PENDING_SECONDS.set(4)
+    metrics.BACKLOG.set(4)
+    metrics.publish_fleet(
+        {'pending_count': 0, 'pending_seconds': 0, 'oldest_listed_at': None, 'backlog_items': 0}, now=1_700_000_000
+    )
+    assert metrics.OLDEST_AGE._value.get() == 0
+    assert metrics.PENDING_COUNT._value.get() == 0
+    assert metrics.PENDING_SECONDS._value.get() == 0
+    assert metrics.BACKLOG._value.get() == 0
+    assert metrics.FLEET_SNAPSHOT_TIMESTAMP._value.get() == 1_700_000_000
+    metrics.publish_fleet(
+        {'pending_count': 2, 'pending_seconds': 3.5, 'oldest_listed_at': 1_700_000_000, 'backlog_items': 7},
+        now=1_700_000_010,
+    )
+    assert metrics.PENDING_COUNT._value.get() == 2
+    assert metrics.PENDING_SECONDS._value.get() == 3.5
     assert metrics.OLDEST_AGE._value.get() == 10
-    metrics.publish_backlog([{'state': 'processing', 'count': 2}])
-    assert metrics.BACKLOG._value.get() == 2
+    assert metrics.BACKLOG._value.get() == 7
+    assert metrics.FLEET_SNAPSHOT_TIMESTAMP._value.get() == 1_700_000_010
     metrics.record_erasure('failure')
     metrics.record_erasure('post_delete_publication')
     assert metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() >= 1
+
+
+def test_fleet_snapshot_is_one_count_sum_one_oldest_row_and_one_backlog_sum():
+    from database import cap_hold_redrive as store
+
+    class Aggregate:
+        def __init__(self, values):
+            self.values = values
+
+        def count(self, alias=None):
+            return self
+
+        def sum(self, field, alias=None):
+            return self
+
+        def get(self, timeout=None):
+            return [[SimpleNamespace(alias=key, value=value) for key, value in self.values.items()]]
+
+    class Query:
+        def __init__(self, name):
+            self.name = name
+
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, count):
+            return self
+
+        def count(self, alias=None):
+            return Aggregate({'count': 4, 'seconds': 8.5})
+
+        def sum(self, field, alias=None):
+            return Aggregate({'items': 3})
+
+        def stream(self, timeout=None):
+            return iter([SimpleNamespace(to_dict=lambda: {'listed_at': 50, 'state': 'held'})])
+
+    class Client:
+        def __init__(self):
+            self.groups = []
+
+        def collection_group(self, name):
+            self.groups.append(name)
+            return Query(name)
+
+    client = Client()
+    assert store.fleet_snapshot(client) == {
+        'pending_count': 4,
+        'pending_seconds': 8.5,
+        'oldest_listed_at': 50.0,
+        'backlog_items': 3,
+    }
+    assert client.groups == ['stt_cap_holds', 'stt_cap_holds', 'processing_backlog']

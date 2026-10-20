@@ -3264,3 +3264,4 @@ _add(
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
+_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))

@@ -34,9 +34,10 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             existing = ref.get(transaction=tx)
             prior = existing.to_dict() if existing.exists else None
             if prior and prior.get('state') == 'purged':
+                record_erasure('post_delete_publication')
                 return  # Tombstone wins. A commit over it is post_delete_publication.
             if attempted and existing.exists:
-                return  # Includes purged receipts; never recreate recovered audio.
+                return  # Never recreate recovered audio over an existing receipt.
             attempted = True
             source.put_started = True
             source.fields = {}  # A later failed put must not inherit a deleted generation.
@@ -44,8 +45,6 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             source.fields = dict(fields)
             body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
             tx.create(ref, {**body, 'live_custody_version': 4})  # Already sealed; no mutable stream lease.
-            if prior and prior.get('state') == 'purged':
-                record_erasure('post_delete_publication')
             tx.set(total, {'seconds': firestore.Increment(seconds), 'count': firestore.Increment(1)}, merge=True)
 
     try:

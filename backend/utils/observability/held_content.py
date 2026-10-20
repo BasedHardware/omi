@@ -1,7 +1,9 @@
 """Held-content ramp signals. Labels are closed sets and never identify a person.
 
-Counters are armed at import so a quiet process still exports zero. Gauges stay
-absent until a bounded sample is published; aggregate those with max().
+Counters are armed at import so a quiet process still exports zero. Fleet gauges
+stay absent until the redrive scheduler publishes one snapshot. Read each gauge
+from the replica whose snapshot timestamp is newest. Do not sum() them, and do
+not max() the gauge itself: a previous replica can still export an older value.
 """
 
 import logging
@@ -32,20 +34,29 @@ CHOICE_LATENCY = Histogram(
 )
 OLDEST_AGE = Gauge(
     'omi_held_content_oldest_age_seconds',
-    'Oldest age in the latest bounded held sample; aggregate with max()',
+    'Age of the oldest pending hold in the redrive fleet snapshot. Read the replica '
+    'whose omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 PENDING_COUNT = Gauge(
     'omi_held_content_pending_count',
-    'Pending held items in the latest bounded sample; aggregate with max()',
+    'Pending held items in the redrive fleet snapshot. Read the replica whose '
+    'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 PENDING_SECONDS = Gauge(
     'omi_held_content_pending_seconds',
-    'Pending held seconds in the latest bounded sample; aggregate with max()',
+    'Pending held seconds in the redrive fleet snapshot. Read the replica whose '
+    'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 RECOVERY = Counter('omi_held_content_recovery', 'Held recovery attempts and completions', ['result'])
 BACKLOG = Gauge(
     'omi_held_content_backlog_items',
-    'Backlog items on the latest bounded choice page; aggregate with max()',
+    'Processing-backlog items in the redrive fleet snapshot. Read the replica whose '
+    'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
+)
+FLEET_SNAPSHOT_TIMESTAMP = Gauge(
+    'omi_held_content_fleet_snapshot_timestamp_seconds',
+    'Unix time of the latest held-content fleet snapshot on this process. '
+    'Select sibling gauges from the replica where this equals the max',
 )
 ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-delete publication', ['outcome'])
 COHORT_SOURCE = Gauge('omi_held_content_cohort_source', 'Active held-content cohort source', ['source'])
@@ -113,38 +124,28 @@ def record_erasure(outcome: str) -> None:
         _inc(ERASURE, outcome=outcome)
 
 
-def _age(row: dict, now: float) -> float | None:
-    listed = row.get('listed_at', row.get('started_at', row.get('created_at')))
-    if isinstance(listed, bool) or not isinstance(listed, (int, float)) or listed <= 0:
-        return None
-    return max(0.0, now - float(listed))
+def _gauge_number(value, *, whole: bool) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return 0
+    return int(value) if whole else float(value)
 
 
-def publish_held_sample(rows: list, *, now: float | None = None) -> None:
-    """Publish one already-loaded page. An empty page leaves the previous sample."""
-    pending = []
-    for row in rows:
-        data = row if isinstance(row, dict) else {}
-        if data.get('state') in {'held', 'staging', 'sealing', 'retained'}:
-            pending.append(data)
-    if not pending:
-        return
+def publish_fleet(snapshot: dict, *, now: float | None = None) -> None:
+    """Publish one scheduler snapshot. An empty population clears the previous value."""
     moment = time.time() if now is None else now
-    ages = [age for row in pending if (age := _age(row, moment)) is not None]
+    pending_count = _gauge_number((snapshot or {}).get('pending_count'), whole=True)
+    pending_seconds = _gauge_number((snapshot or {}).get('pending_seconds'), whole=False)
+    backlog = _gauge_number((snapshot or {}).get('backlog_items'), whole=True)
+    listed = (snapshot or {}).get('oldest_listed_at')
+    if pending_count <= 0 or isinstance(listed, bool) or not isinstance(listed, (int, float)) or listed <= 0:
+        age = 0.0
+    else:
+        age = max(0.0, moment - float(listed))
     try:
-        OLDEST_AGE.set(max(ages) if ages else 0.0)
-        PENDING_COUNT.set(len(pending))
-        PENDING_SECONDS.set(sum(max(0.0, float(row.get('seconds') or 0)) for row in pending))
-    except Exception:
-        logger.warning('event=held_content_metric outcome=dropped')
-
-
-def publish_backlog(rows: list) -> None:
-    """Sum count fields on an already-loaded choice page. Empty leaves the previous sample."""
-    summaries = [row for row in rows if isinstance(row, dict)]
-    if not summaries:
-        return
-    try:
-        BACKLOG.set(sum(max(0, int(row.get('count') or 0)) for row in summaries))
+        OLDEST_AGE.set(age)
+        PENDING_COUNT.set(pending_count)
+        PENDING_SECONDS.set(pending_seconds)
+        BACKLOG.set(backlog)
+        FLEET_SNAPSHOT_TIMESTAMP.set(moment)
     except Exception:
         logger.warning('event=held_content_metric outcome=dropped')

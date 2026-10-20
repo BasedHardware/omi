@@ -20,7 +20,7 @@ from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
 from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
-from utils.observability.held_content import publish_held_sample, record_erasure, record_recovery
+from utils.observability.held_content import record_erasure, record_recovery
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -159,7 +159,6 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         receipts.update(updated)
         return True
 
-    publish_held_sample([row])
     record_recovery('attempt')
     try:
         try:
