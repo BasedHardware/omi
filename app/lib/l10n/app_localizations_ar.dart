@@ -9262,9 +9262,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count أخرى';
-  }
+  String get quoteShowSources => 'عرض المصادر';
 
   @override
   String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';
@@ -10999,7 +10997,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openCall => 'فتح المكالمة';
 
   @override
-  String get captureRecoveryBanner => 'أومي لا يرسل الصوت — انقر لإعادة الاتصال';
+  String get captureRecoveryBannerTitle => 'أومي لا يرسل الصوت';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';
@@ -11009,6 +11007,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
+
+  @override
+  String get captureBannerTryReconnect => 'حاول إعادة الاتصال';
+
+  @override
+  String get captureBannerRetrySync => 'أعد محاولة المزامنة';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'الصوت لا يصل إلى التطبيق — أعد توصيل Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'لم يعد التطبيق يستقبل الصوت من جهاز Omi ولم يتمكن من استعادة الاتصال تلقائياً. افصل الجهاز وأعد توصيله — من إعدادات الجهاز أو بإيقاف تشغيله وتشغيله. أي صوت يُحفظ على الجهاز سيُزامَن لاحقاً.';
 
   @override
   String get captureStillRecording => 'لا يزال التسجيل جاريًا';
@@ -13030,6 +13045,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reviewProposalSuggested => 'مقترح';
 
   @override
+  String get reviewQuestionOutOfDate => 'هذا السؤال لم يعد محدثًا، لذا لم يتغير شيء.';
+
+  @override
   String get reviewProposalConflict => 'تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.';
 
   @override
@@ -13584,7 +13602,30 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityRetryAll => 'إعادة محاولة الكل';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'تعذّر التحقق من مساحة التخزين';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'تم إيقاف التسجيلات مؤقتًا';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'توقف الرفع';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلًا في الانتظار',
+      one: 'تسجيل واحد في الانتظار',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
+
+  @override
+  String get activityAttentionSemantics => 'النشاط، يتطلب انتباهًا';
 
   @override
   String get connectAgentHeadline => 'استخدم ذاكرة Omi في ChatGPT ووكلاء الذكاء الاصطناعي لديك';
@@ -14260,4 +14301,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'تم حفظ $saved من $total من الصوت';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'لا يزال التسجيل جاريًا على Omi';
 }

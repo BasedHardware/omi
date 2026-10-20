@@ -95,12 +95,18 @@ class NotificationUtil {
   static const String captureRecoveryPushType = 'capture_recovery';
   static const String captureRecoveryRepairAction = 'repair_device';
   static const String captureRecoveryRoute = '/settings/device';
+  static const String chatAnswerPushType = 'chat_answer';
 
   static String? routeFromFcmData(Map<String, dynamic> data) {
     final pushType = data['push_type'];
     if (pushType is String && pushType.isNotEmpty) {
       if (pushType == captureRecoveryPushType && data['action'] == captureRecoveryRepairAction) {
         return captureRecoveryRoute;
+      }
+      // A chat answer opens the chat that sent it (#5126); its navigate_to may only name a chat.
+      if (pushType == chatAnswerPushType) {
+        final route = navigateToFromFcmData(data);
+        return route != null && route.startsWith('/chat/') ? route : null;
       }
       return null;
     }

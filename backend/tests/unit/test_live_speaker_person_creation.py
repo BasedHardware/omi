@@ -125,6 +125,30 @@ def test_copula_still_resolves_a_person_the_user_already_has():
     assert processor.host.speakers.segment_assignments == {'s1': 'person-robin'}
 
 
+def test_mixed_case_introduction_resolves_the_existing_person():
+    """People are looked up by exact name, so the detected name must keep its casing.
+
+    ``str.capitalize()`` turned "McDonald" into "Mcdonald": the lookup missed the person
+    the user already had, and the explicit introduction minted a misspelled duplicate.
+    """
+    recorder = _Recorder(existing_people={'McDonald': {'id': 'person-mcdonald', 'name': 'McDonald'}})
+    events = []
+    processor = _processor(recorder)
+    processor.host.send_event = events.append
+    _run(processor, "My name is McDonald, nice to meet you.")
+
+    assert recorder.lookups == ['McDonald']
+    assert recorder.created == []
+    assert processor.host.speakers.segment_assignments == {'s1': 'person-mcdonald'}
+    assert [event.person_name for event in events] == ['McDonald']
+
+
+def test_new_person_keeps_the_introduced_spelling():
+    recorder = _Recorder()
+    _run(_processor(recorder), "My name is DeShawn.")
+    assert [p['name'] for p in recorder.created] == ["DeShawn"]
+
+
 def test_owner_name_is_never_minted_as_a_separate_person():
     """Hearing the owner's own name produced a "David" beside "David (You)"."""
     recorder = _Recorder()

@@ -1,0 +1,3 @@
+{
+  "change": "Fix infinite loading state and unfreezed timer when pausing recording in Transcribe Later mode."
+}

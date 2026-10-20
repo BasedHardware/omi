@@ -9330,9 +9330,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count daha';
-  }
+  String get quoteShowSources => 'Kaynakları göster';
 
   @override
   String get jumpToLatestMessage => 'En son mesaja git';
@@ -11075,7 +11073,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openCall => 'Aramayı aç';
 
   @override
-  String get captureRecoveryBanner => 'Omi ses göndermiyor — yeniden bağlanmak için dokunun';
+  String get captureRecoveryBannerTitle => 'Omi ses göndermiyor';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11086,6 +11084,23 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
+
+  @override
+  String get captureBannerTryReconnect => 'Yeniden bağlanmayı dene';
+
+  @override
+  String get captureBannerRetrySync => 'Senkronizasyonu yeniden dene';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Ses uygulamaya ulaşmıyor — Omi\'nizi yeniden bağlayın';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Uygulama artık Omi cihazından ses alamıyor ve bağlantıyı otomatik olarak kurtaramadı. Cihazın bağlantısını kesip yeniden bağlayın — cihaz ayarlarından veya cihazı kapatıp açarak. Cihazda kayıtlı ses daha sonra eşitlenecek.';
 
   @override
   String get captureStillRecording => 'Kayıt sürüyor';
@@ -13116,6 +13131,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reviewProposalSuggested => 'Önerilen';
 
   @override
+  String get reviewQuestionOutOfDate => 'Bu soru güncelliğini yitirdiği için hiçbir şey değişmedi.';
+
+  @override
   String get reviewProposalConflict => 'Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.';
 
   @override
@@ -13671,7 +13689,30 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityRetryAll => 'Tümünü yeniden dene';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Depolama alanı kontrol edilemedi';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Kayıtlar duraklatıldı';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Yükleme durdu';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt bekliyor',
+      one: '1 kayıt bekliyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
+
+  @override
+  String get activityAttentionSemantics => 'Etkinlik, ilgilenilmesi gerekiyor';
 
   @override
   String get connectAgentHeadline => 'Omi hafızanı ChatGPT\'de ve yapay zeka ajanlarında kullan';
@@ -14353,4 +14394,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Sesin $saved kadarı kaydedildi (toplam $total)';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi kayda devam ediyor';
 }

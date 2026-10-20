@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import contextmanager
 from dataclasses import asdict
+from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -41,7 +42,13 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
     binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'))
-    projector.store.read = Mock(return_value=({}, {}, binding))
+    projector.store.read = Mock(
+        return_value=(
+            {'policy_parts': {'projection': resolve_stage_policy('owner', 'projection').to_dict()}},
+            {},
+            binding,
+        )
+    )
     projector._assign = Mock(side_effect=lambda *a, **k: assert_claim())
 
     def assert_claim():
@@ -68,7 +75,10 @@ def followup(monkeypatch, owner_claim):
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
     binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), native_record=True)
     jobs = {
-        sid: asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP))
+        sid: {
+            **asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP)),
+            'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()},
+        }
         for i, sid in enumerate(binding.segment_ids)
     }
     receipts = {
@@ -81,6 +91,7 @@ def followup(monkeypatch, owner_claim):
         }
         for sid in jobs
     }
+    projector.store.policy = Mock(return_value=ProjectionPolicy(async_projection=True))
     projector.store.mark_enrichment = Mock()
     projector.store.ready = Mock()
     projector.store.read = Mock(side_effect=lambda sid: (jobs[sid], {'projection': receipts[sid]}, binding))
@@ -191,7 +202,7 @@ async def test_followups_are_bounded_and_duplicate_sweeps_coalesce(followup, mon
 @pytest.mark.asyncio
 async def test_async_flag_off_preserves_synchronous_serving_without_followup_task(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', raising=False)
-    projector = Mock()
+    projector = Mock(has_async_followups=False)
     projector.start_followups = AsyncMock(side_effect=AssertionError('dark async task launched'))
     await Serving(MemoryStore(), projector=projector).reconcile_async()
     projector.sweep.assert_called_once()
@@ -215,7 +226,12 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
     monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
     f.projector.playback = lambda _, cid: calls.append(('playback', cid))
     f.projector.store.mark_enrichment.side_effect = lambda *args, **kwargs: calls.append(('enrichment', args[3]))
-    await f.runner.finish_part(WorkItem(**f.jobs['head']), binding, receipt, None)
+    await f.runner.finish_part(
+        WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+        binding,
+        receipt,
+        None,
+    )
     assert calls == [
         ('bridge', 'head', {}),
         ('playback', 'head'),
@@ -396,7 +412,12 @@ async def test_deleted_bridge_keeps_existing_supersession_contract(followup, mon
     monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
     f.projector.playback = Mock()
     with pytest.raises(SyncAssignmentSuperseded):
-        await f.runner.finish_part(WorkItem(**f.jobs['head']), binding, receipt, None)
+        await f.runner.finish_part(
+            WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+            binding,
+            receipt,
+            None,
+        )
     assert f.projector.playback.call_count == int(after_playback)
     f.projector.store.mark_enrichment.assert_not_called()
     f.projector.store.ready.assert_not_called()

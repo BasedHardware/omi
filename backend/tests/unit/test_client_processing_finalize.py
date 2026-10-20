@@ -434,7 +434,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch: pytest.MonkeyPatch, pc: Any) -> None:
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
 
 
 def _authorize(monkeypatch: pytest.MonkeyPatch, pc: Any, decision: Decision) -> None:

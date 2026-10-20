@@ -18,6 +18,7 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -113,6 +114,7 @@ Future<void> _pumpCapturingPage(
   required ConnectivityProvider connectivity,
   ConversationCapturingPage page = const ConversationCapturingPage(),
   List<Person> people = const [],
+  UsageProvider? usage,
 }) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
@@ -120,9 +122,10 @@ Future<void> _pumpCapturingPage(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final device = _StubDeviceProvider();
-  final usage = UsageProvider();
+  final ownsUsage = usage == null;
+  final effectiveUsage = usage ?? UsageProvider();
   addTearDown(device.dispose);
-  addTearDown(usage.dispose);
+  if (ownsUsage) addTearDown(effectiveUsage.dispose);
 
   await tester.pumpWidget(
     MultiProvider(
@@ -132,7 +135,7 @@ Future<void> _pumpCapturingPage(
             create: (_) => PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people),
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
-        ChangeNotifierProvider<UsageProvider>.value(value: usage),
+        ChangeNotifierProvider<UsageProvider>.value(value: effectiveUsage),
       ],
       child: MaterialApp(
         theme: ThemeData.dark(),
@@ -278,7 +281,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a terminal outage replaces the Listening placeholder, online or not', (tester) async {
+  testWidgets('a terminal outage states itself once: short app bar, truthful placeholder', (tester) async {
     final capture = _hermeticCapture();
     addTearDown(capture.dispose);
     capture.updateRecordingState(RecordingState.record);
@@ -294,13 +297,49 @@ void main() {
     expect(capture.terminalTranscriptionFailure, isNotNull);
 
     // Online: without the terminal failure the empty state promises a
-    // transcript; with it, the same page must say why none will appear yet.
+    // transcript; with it, the placeholder must not promise one — the banner
+    // owns the full statement, and no wedge is declared here.
     await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
 
-    // Twice by design: the app bar names the outage, and the empty state
-    // repeats the same sentence instead of the stale Listening placeholder.
-    expect(find.textContaining('recording continues on device and will process later'), findsNWidgets(2));
-    expect(find.textContaining('a transcript will appear here'), findsNothing);
+    expect(find.textContaining('recording continues on device and will process later'), findsOneWidget,
+        reason: 'the empty state keeps the one truthful unavailable line');
+    expect(find.textContaining('Not transcribing'), findsOneWidget, reason: 'the app bar keeps the short state name');
+    expect(find.textContaining('a transcript will appear here'), findsNothing,
+        reason: 'no transcript can appear while the outage is known');
+  });
+
+  testWidgets('an out-of-credits session never promises a transcript', (tester) async {
+    final capture = _hermeticCapture();
+    addTearDown(capture.dispose);
+    capture.updateRecordingState(RecordingState.record);
+
+    // A metered plan with its transcription minutes spent: the provider itself
+    // computes isOutOfCredits from the seeded subscription, no network.
+    final usage = UsageProvider(
+        subscriptionRequest: () async => UserSubscriptionResponse(
+              subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+              transcriptionSecondsUsed: 300,
+              transcriptionSecondsLimit: 300,
+              wordsTranscribedUsed: 0,
+              wordsTranscribedLimit: 0,
+              insightsGainedUsed: 0,
+              insightsGainedLimit: 0,
+            ));
+    addTearDown(usage.dispose);
+    await usage.fetchSubscription();
+    expect(usage.isOutOfCredits, isTrue);
+
+    await _pumpCapturingPage(
+      tester,
+      capture: capture,
+      connectivity: _StubConnectivityProvider(true),
+      usage: usage,
+    );
+
+    expect(find.textContaining('a transcript will appear here'), findsNothing,
+        reason: 'an exhausted plan cannot produce the promised transcript');
+    expect(find.textContaining('Transcription is unavailable'), findsOneWidget,
+        reason: 'the empty state says why, truthfully');
   });
 
   testWidgets('quiet unverified pendant retains live page transcript and Pause with a neutral header', (tester) async {

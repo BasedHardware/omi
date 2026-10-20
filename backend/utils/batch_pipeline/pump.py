@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 # jobs blocked behind an ordered predecessor would otherwise cost one read
 # per sweep. Bounded well above the 100-row sweep page.
 SEGMENT_OWNER_MEMO = 4096
+# Bound on one lease-renewal round trip; a timeout marks the lease lost but the
+# blocking DB leaf may still land later, fenced by its token.
+HEARTBEAT_TIMEOUT_SECONDS = 8
 
 
 class Pump:
@@ -52,6 +55,7 @@ class Pump:
         publish_concurrency: int | None = None,
         leader: LeaderLease | None = None,
         inline_metrics: bool = True,
+        flights: int = 1,
     ):
         if publish_concurrency is None:
             publish_concurrency = configured_publish_concurrency()
@@ -59,6 +63,7 @@ class Pump:
             not 1 <= batch_size <= 32
             or not 0 < poll_seconds <= 30
             or not 1 <= publish_concurrency <= MAX_PUBLISH_CONCURRENCY
+            or not 1 <= flights <= 4
         ):
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
@@ -82,12 +87,62 @@ class Pump:
         self.publish_concurrency = publish_concurrency
         self._owner_locks: dict[str, list] = {}
         self._segment_owners: OrderedDict[str, str] = OrderedDict()
+        # ``flights`` pump lanes overlap claim/admission and result publication
+        # with another lane's GPU chain. The chain itself (decode through
+        # persist and CUDA quiescence) stays exclusive under ``_gpu``, so device
+        # and host memory remain those of one flight.
+        self.flights = flights
+        self._gpu = asyncio.Lock()
+        self._maintenance = asyncio.Lock()
 
     async def run(self, stop_event: asyncio.Event) -> None:
-        """SIGTERM sets stop_event; the current chain drains with heartbeats intact."""
+        """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
+        if self.flights == 1:
+            await self._lane(stop_event)
+            return
+        halt = asyncio.Event()
+
+        async def relay():
+            await stop_event.wait()
+            halt.set()
+
+        relaying = asyncio.create_task(relay())
+        # Periodic recovery and queue sampling get their own cadence so no
+        # lane spends a claim/publication window on them between flights.
+        maintaining = asyncio.create_task(self._maintain_loop(halt))
+        lanes = [asyncio.create_task(self._lane(halt, maintain=False)) for _ in range(self.flights)]
+        try:
+            await asyncio.wait(lanes, return_when=asyncio.FIRST_EXCEPTION)
+        finally:
+            # One lane's fatal GPU error stops every sibling from pulling; a
+            # sibling already holding leases refunds them instead of computing.
+            halt.set()
+            outcomes = await asyncio.gather(*lanes, return_exceptions=True)
+            relaying.cancel()
+            await asyncio.gather(maintaining, relaying, return_exceptions=True)
+        errors = [v for v in outcomes if isinstance(v, BaseException)]
+        for error in errors:
+            if isinstance(error, FatalGpuError):
+                raise error
+        if errors:
+            raise errors[0]
+
+    async def _maintain_loop(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             try:
-                count = await self.run_once(stop_event=stop_event)
+                async with self._maintenance:
+                    await self._maintain()
+            except Exception as error:
+                logger.error('event=batch_maintenance outcome=retry exception_type=%s', type(error).__name__)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                pass
+
+    async def _lane(self, stop_event: asyncio.Event, *, maintain: bool = True) -> None:
+        while not stop_event.is_set():
+            try:
+                count = await self.run_once(stop_event=stop_event, maintain=maintain)
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
@@ -113,7 +168,7 @@ class Pump:
                         run_blocking(
                             db_executor, self.scheduler.heartbeat, lease.item.segment_id, lease.token, time.time()
                         ),
-                        timeout=8,
+                        timeout=HEARTBEAT_TIMEOUT_SECONDS,
                     )
                 except Exception:
                     # Ambiguous renewal cannot authorize publication. A late
@@ -126,13 +181,22 @@ class Pump:
 
             await asyncio.gather(*(renew_one(lease) for lease in leases))
 
-    async def run_once(self, *, stop_event: asyncio.Event | None = None) -> int:
+    async def run_once(self, *, stop_event: asyncio.Event | None = None, maintain: bool = True) -> int:
+        if maintain and not self._maintenance.locked():
+            async with self._maintenance:
+                await self._maintain()
+        if stop_event is not None and stop_event.is_set():
+            return 0
+        return await self._flight(stop_event)
+
+    async def _maintain(self) -> None:
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
             # Expired-lease recovery and the global result_ready drain are
             # idempotent and transaction-fenced; with several replicas one
             # leader runs them per tick. Each pump still drains the owners of
-            # its own completions below. The lease fails open on store errors.
+            # its own completions after each flight. The lease fails open on
+            # store errors.
             if self.leader is None or await run_blocking(db_executor, self.leader.acquire):
                 if self.project_pending:
                     await run_blocking(sync_executor, self.project_pending)
@@ -143,8 +207,8 @@ class Pump:
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()
             self._last_metrics = sampled_at
-        if stop_event is not None and stop_event.is_set():
-            return 0
+
+    async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
         snapshot = (
             self.capacity()
@@ -164,7 +228,9 @@ class Pump:
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
-            required = [v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled()]
+            required = [
+                v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled(v.item.owner_id, 'batch')
+            ]
             if required:
                 receipt = {}
                 try:
@@ -196,7 +262,7 @@ class Pump:
                 if not leases:
                     return 0
             dispatch_kwargs = {}
-            if cap_dispatch_enabled():
+            if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
                     selected = [v for v in leases if v.item.segment_id in segments]
@@ -204,16 +270,43 @@ class Pump:
                     return set(receipt.get('allowed') or [])
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
-            compute = asyncio.create_task(
-                run_blocking(sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs)
-            )
-            # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal and
-            # wait for the bounded model operation before leaving this process.
             try:
-                results = await asyncio.shield(compute)
-            except asyncio.CancelledError:
-                results = await compute
-                raise
+                async with self._gpu:
+                    if stop_event is not None and stop_event.is_set() and self.flights > 1:
+                        # Claimed behind a sibling's chain when SIGTERM or a
+                        # fatal GPU error arrived: refund without an attempt
+                        # charge rather than start another chain. Leases marked
+                        # lost by a timed-out renewal are refunded too: the
+                        # token may still be ours, and defer is fenced by
+                        # owns_lease, so another owner's job is never touched.
+                        for lease in leases:
+                            try:
+                                await run_blocking(
+                                    db_executor,
+                                    self.scheduler.defer,
+                                    lease.item.segment_id,
+                                    lease.token,
+                                    time.time(),
+                                    1,
+                                )
+                            except Exception as error:
+                                logger.error(
+                                    'event=batch_flight outcome=lease_recovery exception_type=%s',
+                                    type(error).__name__,
+                                )
+                        return 0
+                    compute = asyncio.create_task(
+                        run_blocking(
+                            sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs
+                        )
+                    )
+                    # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal
+                    # and the GPU slot until the bounded model operation finishes.
+                    try:
+                        results = await asyncio.shield(compute)
+                    except asyncio.CancelledError:
+                        results = await compute
+                        raise
             except FatalGpuError:
                 # The whole GPU flight is uncertain. Return every owned lease
                 # without charging an attempt; preserve its ordered position.
@@ -310,7 +403,7 @@ class Pump:
             try:
                 current = await asyncio.wait_for(
                     run_blocking(db_executor, self.scheduler.heartbeat, segment, lease.token, time.time()),
-                    timeout=8,
+                    timeout=HEARTBEAT_TIMEOUT_SECONDS,
                 )
             except Exception:
                 current = False

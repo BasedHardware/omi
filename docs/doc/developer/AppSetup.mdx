@@ -101,9 +101,10 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
     make dev-up     # starts the Firestore + Auth emulators and the Python API
     ```
 
-    `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
-    and the backend requires **Python 3.11** — make sure that's what you get, or
-    the harness fails later with import errors.
+    `make dev-init` resolves a pinned **Python 3.11** on its own — `python3.11`
+    on `PATH`, then Homebrew's `python@3.11`, then a `uv`-managed install — so
+    your default `python3` doesn't need to be 3.11. If none can be provisioned,
+    it stops up front with install instructions instead of failing later.
 
     No provider API keys? Use fake providers instead:
 
