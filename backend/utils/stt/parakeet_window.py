@@ -1352,8 +1352,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 def connect_window(
     callback: Callable[[list[dict[str, Any]]], None],
     sample_rate: int,
-    *,
-    last_emitted_end: float = 0.0,
 ) -> WindowedParakeetSocket:
     try:
         min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
@@ -1372,7 +1370,6 @@ def connect_window(
             os.environ['HOSTED_PARAKEET_API_URL'],
             sample_rate,
             release,
-            last_emitted_end=last_emitted_end,
         )
         socket.start()
         # Count only a socket whose pump started successfully. Keeping this at the

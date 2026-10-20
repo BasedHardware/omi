@@ -351,7 +351,9 @@ class LiveChainSession:
                     from utils.stt.parakeet_window import connect_window
 
                     def new_window():
-                        window_raw = connect_window(callback, sample_rate, last_emitted_end=self.last_end)
+                        window_raw = connect_window(callback, sample_rate)
+                        if hasattr(window_raw, '_last_emitted_end') and self.last_end > 0:
+                            window_raw._last_emitted_end = float(self.last_end)
                         if self.no_text_rescue.enabled:
                             window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
                             window_raw.progress_deadline_enabled = True
