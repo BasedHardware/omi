@@ -641,14 +641,35 @@ export function useActionItems(): UseActionItemsReturn {
       // Optimistic update
       setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
 
-      try {
-        await Promise.all(ids.map((id) => deleteActionItem(id)));
-      } catch (err) {
-        console.error('Failed to bulk delete:', err);
-        // Revert on error
-        setItems((prev) => [...prev, ...deletedItems]);
-        setError(err instanceof Error ? err.message : 'Failed to delete tasks');
-      }
+      // Delete what we can, then restore only the rows the server did not delete. A
+      // Promise.all reject used to re-add every selected task, resurrecting the ones
+      // that were already gone (the successful deletes invalidate the list cache, so
+      // a reload may have removed them again).
+      const results = await Promise.allSettled(ids.map((id) => deleteActionItem(id)));
+      const failedIds = new Set<string>();
+      let firstFailure: unknown;
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          failedIds.add(ids[index]);
+          firstFailure ??= result.reason;
+        }
+      });
+      if (failedIds.size === 0) return;
+
+      console.error('Failed to bulk delete:', firstFailure);
+      setItems((prev) => {
+        const next = prev.slice();
+        for (const item of deletedItems) {
+          if (!failedIds.has(item.id)) continue;
+          const index = next.findIndex((existing) => existing.id === item.id);
+          if (index === -1) next.push(item);
+          else next[index] = item;
+        }
+        return next;
+      });
+      setError(
+        firstFailure instanceof Error ? firstFailure.message : 'Failed to delete tasks',
+      );
     },
     [items],
   );
