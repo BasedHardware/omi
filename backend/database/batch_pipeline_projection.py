@@ -60,10 +60,19 @@ class ProjectionStore:
     def ref(self, table: str, key: str):
         return self.client.collection(f'{self.store.namespace}_{table}').document(key)
 
-    def _mirror(self, binding: ProjectionBinding) -> None:
+    def _mirror(self, binding: ProjectionBinding, extra: list[tuple[str, str]] | tuple = ()) -> None:
         # A2 shadow: these transactions write batch docs outside Store.run; no-op unless shadow mode.
+        # The owner row too: assignment advances its projection_watermark (staging 10-20: 59 owners rows
+        # diverged at rest because no refresh named them).
         namespace = getattr(self.store, 'namespace', '')
-        mirror_refresh(namespace, [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')])
+        keys = [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')]
+        mirror_refresh(namespace, [*keys, ('owners', owner_key(binding.owner_id)), *extra])
+
+    def mirror_assignment(self, session: Any) -> None:
+        """After an assignment transaction (``assign_sync_conversation``): re-copy the binding's rows, the
+        owner's watermark and the erased predecessors whose ``expires_at`` it stamped. Never raises."""
+        erased = [('results', reference.id) for reference in getattr(session, 'erased_predecessors', ())]
+        self._mirror(session.binding, erased)
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
