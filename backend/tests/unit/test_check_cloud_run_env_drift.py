@@ -1052,6 +1052,235 @@ def test_gke_live_explicit_env_shadowing_envfrom_is_compared(checker) -> None:
     assert 'GOOGLE_CLIENT_ID' not in result.missing_from_live
 
 
+def test_gke_live_envfrom_only_keys_added_after_pod_start_are_not_live_only_drift(checker) -> None:
+    # Thread 1: a key kubectl-added to the live ConfigMap after the ready pods
+    # started merges into env_map but is in neither declared nor the expected
+    # envFrom keys; it must not be reported as unallowlisted live-only drift,
+    # and --strict must stay 0 for the envFrom part.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    cm_doc = {'data': {'GOOGLE_CLIENT_ID': 'id', 'ADDED_AFTER_POD_START': 'late'}}
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(cm_doc), stderr='')
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert 'ADDED_AFTER_POD_START' not in result.unallowlisted_live_only
+    assert 'ADDED_AFTER_POD_START' not in result.allowlisted_live_only
+    assert result.unallowlisted_live_only == ()
+    # An explicit env entry (out-of-band kubectl-set-env) is still live-only drift.
+    rs_env_with_extra = [*serving_env, {'name': 'OUT_OF_BAND', 'value': 'y'}]
+
+    def runner_extra(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                rs_env_with_extra,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(cm_doc), stderr='')
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': rs_env_with_extra}]}}}}
+            ),
+            stderr='',
+        )
+
+    (extra,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner_extra, expected_overrides=overrides
+    )
+    assert extra.error is None, extra.error
+    assert extra.unallowlisted_live_only == ('OUT_OF_BAND',)
+
+
+def test_gke_envfrom_reference_drift_on_one_serving_target_is_flagged(checker) -> None:
+    # Thread 3: during a mixed rollout, the new ReplicaSet carries the expected
+    # envFrom reference while an older still-serving ReplicaSet has none. The
+    # union of references equals the expected set, but the old target's absence
+    # is real drift (or at least must not be excused by the new target's unproven
+    # ref); per-target comparison flags it instead of INVENTORY.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            items = [
+                _replicaset(
+                    f'{deployment}-new',
+                    deployment,
+                    3,
+                    serving_env,
+                    'pusher',
+                    envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                ),
+                _replicaset(f'{deployment}-old', deployment, 17, serving_env, 'pusher', envfrom=[]),
+            ]
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps({'items': items}), stderr='')
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'GOOGLE_CLIENT_ID': 'id'}}), stderr=''
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert len(result.serving) == 2
+    # Per-target: the old ReplicaSet without the reference is reference drift.
+    assert result.envfrom_mismatched_refs == ('prod-omi-backend-config',)
+    assert result.status == 'DRIFT'
+    assert result.has_drift
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_expected_configmap_keys_expand_with_envfrom_prefix(checker) -> None:
+    # Thread 2: when the expected side declares a prefixed envFrom source
+    # (helm render here), the expected ConfigMap keys must expand with the
+    # prefix (CFG_<key>). Before the fix the `name#prefix` identity never
+    # matched the bare manifest ConfigMap name, so the reference was reported
+    # unresolved and the same prefixed keys from a matching serving ReplicaSet
+    # became phantom unallowlisted live-only drift.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    deployment = 'prod-omi-pusher'
+    prefixed = [{'prefix': 'CFG_', 'configMapRef': {'name': cm_name}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {'name': 'pusher', 'env': [{'name': 'X', 'value': 'x'}], 'envFrom': prefixed}
+                            ]
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [
+                _replicaset(f'{deployment}-a', deployment, 2, [{'name': 'X', 'value': 'x'}], 'pusher', envfrom=prefixed)
+            ],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_refs == (f'{cm_name}#CFG_',)
+    assert result.envfrom_mismatched_refs == ()
+    assert result.envfrom_unresolved == ()
+    assert result.unallowlisted_live_only == ()
+    assert result.status == 'OK', result
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_envfrom_ref_identity_includes_optionality(checker) -> None:
+    # Thread 4: omitted optional and explicit optional:false are identical;
+    # optional:true on the serving side is reference drift even with the same
+    # name and prefix.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+
+    def run(envfrom: list[dict]):
+        gke_state = {
+            'configmaps': {cm_name: {'data': cm_data}},
+            'pusher': {
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                },
+                'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+        )
+        return result
+
+    # Explicit optional:false matches the chart's omitted optional.
+    assert run([{'configMapRef': {'name': cm_name, 'optional': False}}]).status == 'OK'
+    # optional:true changes the reference's meaning: a missing ConfigMap stops
+    # blocking the pod, so it is drift, not the same reference.
+    optional_true = run([{'configMapRef': {'name': cm_name, 'optional': True}}])
+    assert optional_true.envfrom_mismatched_refs == (cm_name, f'{cm_name}?optional')
+    assert optional_true.status == 'DRIFT'
+
+
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
     cm_name, cm_data = _prod_configmap_fixture(checker)
     envfrom = [{'configMapRef': {'name': cm_name}}]
