@@ -13,6 +13,7 @@ deleted (or surviving) conversation ID is ever echoed.
 
 import logging
 import os
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from google.cloud import firestore
@@ -31,6 +32,22 @@ CONVERSATION_DELETED_REASON_CODE = 'conversation_deleted'
 
 def is_conversation_deleted(error: BatchPrivacyBlocked) -> bool:
     return error.reason is BatchPrivacyReason.CONVERSATION_DELETED
+
+
+def confirm_only_user_deletions(check: Callable[[list[str]], Any], conversation_ids: Iterable[str]) -> None:
+    """Re-raise unless every denied conversation ID is a user deletion.
+
+    The privacy walk stops at the first denied ID of an unordered set, so a
+    receipt mixing a user deletion with, say, a missing server redirect could
+    surface either reason. Re-check each ID alone, in a fixed order, within the
+    caller's transaction; any other denial wins and is never acknowledged.
+    """
+    for conversation_id in sorted(set(conversation_ids)):
+        try:
+            check([conversation_id])
+        except BatchPrivacyBlocked as error:
+            if not is_conversation_deleted(error):
+                raise
 
 
 def deleted_conversation_result(total_segments: int) -> dict[str, Any]:
@@ -130,7 +147,10 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
             if not is_conversation_deleted(error):
                 raise
             # Account, protection and generation fences all passed before the
-            # conversation walk; only the user's own deletion reaches here.
+            # conversation walk. Every other denied ID must also be a deletion.
+            confirm_only_user_deletions(
+                lambda one: assert_batch_write_allowed(client, transaction, uid, conversation_ids=one), ids
+            )
             logger.info('event=sync_status_reconciliation outcome=conversation_deleted_terminal')
             return {
                 **status,

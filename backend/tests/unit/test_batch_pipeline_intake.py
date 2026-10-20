@@ -351,6 +351,24 @@ def test_in_flight_sibling_waits_beside_held_unit(cohort, sibling_state):
     assert status['status'] == 'processing' and status['poll_after_ms'] == 3000
 
 
+@pytest.mark.parametrize('recovery_state', ['held', 'prepared', 'running'])
+def test_recoverable_quarantined_sibling_waits_beside_held_unit(cohort, recovery_state):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'sibling'].update(state='quarantined', recovery_state=recovery_state)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'processing' and status['poll_after_ms'] == 3000
+    assert 'reason_code' not in status
+
+
+def test_operator_call_that_settled_failed_held_is_closed(cohort):
+    store = MemoryStore()
+    held_upload(store)
+    store.rows['jobs', 'segment']['speech_redrive'] = {'state': 'failed_held'}
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+
+
 def test_mixed_held_and_other_failure_keeps_failed(cohort):
     store = MemoryStore()
     held_upload(store)
@@ -373,8 +391,13 @@ def deleting_privacy(monkeypatch, reason='conversation_deleted'):
     from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
 
     def check(tx, uid, conversation_ids=(), expected_generation=None):
-        if 'deleted' in set(conversation_ids):
+        # Models the real walk's first-hit behaviour: a deletion may surface
+        # before another denied ID in the same receipt.
+        ids = set(conversation_ids)
+        if 'deleted' in ids:
             raise BatchPrivacyBlocked(reason)
+        if 'redirect-missing' in ids:
+            raise BatchPrivacyBlocked('conversation_redirect_missing')
         return expected_generation or 0
 
     monkeypatch.setattr(MemoryTransaction, 'check_privacy', check)
@@ -431,6 +454,39 @@ def test_other_privacy_denials_still_raise(cohort, monkeypatch, reason):
     deleting_privacy(monkeypatch, reason)
     with pytest.raises(BatchPrivacyBlocked):
         durable_status(store, 'synthetic-owner', 'bp_cached')
+
+
+def test_deletion_beside_another_denial_never_acks(cohort, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['content', 'synthetic-owner/content']['result']['updated_memories'] = ['redirect-missing']
+    store.rows['intakes', 'bp_cached'] = {
+        'owner_id': 'synthetic-owner',
+        'content_id': 'content',
+        'segment_ids': [],
+        'total_files': 1,
+        'lane': 'backfill',
+    }
+    deleting_privacy(monkeypatch)
+    with pytest.raises(BatchPrivacyBlocked) as raised:
+        durable_status(store, 'synthetic-owner', 'bp_cached')
+    assert raised.value.reason.value == 'conversation_redirect_missing'
+
+
+@pytest.mark.asyncio
+async def test_reupload_with_deletion_beside_another_denial_keeps_409(cohort, monkeypatch):
+    from utils.batch_pipeline import intake
+
+    store = MemoryStore()
+    completed_receipt(store)
+    store.rows['content', 'synthetic-owner/content']['result']['updated_memories'] = ['redirect-missing']
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    deleting_privacy(monkeypatch)
+    response = await intake.accept_upload(**upload_arguments())
+    assert response is not None and response.status_code == 409
 
 
 def test_deleted_conversation_on_unfinished_upload_still_raises(cohort, monkeypatch):

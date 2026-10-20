@@ -233,6 +233,18 @@ def test_user_deletion_never_completes_unproven_work(poll, status):
     assert client.get('/v2/sync-local-files/original').status_code == 404
 
 
+@pytest.mark.parametrize('order', [['target', 'donor'], ['donor', 'target']])
+def test_user_deletion_beside_redirect_failure_never_acks(poll, order):
+    # The fence walk stops at the first denied ID of an unordered set; the
+    # answer must not depend on which one it reaches first.
+    client, database = poll
+    result = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'new_memories': order}
+    receipt(database, result=result)
+    apply_fence(database, 'conversation_tombstone')
+    database.rows['users', 'owner', 'conversations', 'donor'] = {'deleted': True, 'sync_merged_into': 'missing'}
+    assert client.get('/v2/sync-local-files/original').status_code == 404
+
+
 def test_account_denial_dominates_user_deletion(poll):
     client, database = poll
     result = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'new_memories': ['target']}
