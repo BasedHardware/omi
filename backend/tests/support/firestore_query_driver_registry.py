@@ -3308,37 +3308,55 @@ _add(
 # WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as
 # __name__ IN document-reference queries (<=30 per batch) over the two owner
 # collections: memory_items first, then memory_historical_overrides for IDs still
-# missing. Queue order per trial matches that read order.
+# missing. Queue order per trial matches that read order for the combo's ID list
+# (the queue is FIFO across both collections, so every queued row must be consumed).
 from utils.memory.memory_service import MemoryService as _WQ7MemoryService
+
+_WQ7_IDS = [f'mem-{i}' for i in range(31)]
 
 
 def _seed_canonical_status_pairs(client, combo, trial):
     items = f'users/{UID}/memory_items'
     overrides = f'users/{UID}/memory_historical_overrides'
+    ids = combo.get('memory_ids') or []
+    # Every trial below consumes its whole queue for either combo size.
     if trial == 0:
-        combo['memory_ids'] = []
+        return  # both queries stream empty
+    if len(ids) < 31:
+        # small combos: trial 1 items answers everything; trial 2 overrides answer everything.
+        if trial == 1:
+            client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids])
+        else:
+            client.queue_results([])
+            client.queue_results(
+                [client.snapshot(f'{overrides}/{i}', {'id': i, 'suppression': 'tombstoned'}) for i in ids]
+            )
         return
     if trial == 1:
-        client.queue_results([client.snapshot(f'{items}/mem-1', {'id': 'mem-1', 'status': 'active'})])
+        # 31 IDs, batch 1 (ids[0:30]) fully answered by items; batch 2 misses, overrides answer.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:30]])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
         return
     if trial == 2:
+        # 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
         client.queue_results([])
-        client.queue_results([client.snapshot(f'{overrides}/mem-1', {'id': 'mem-1', 'suppression': 'deleted'})])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'tombstoned'})])
         return
-    ids = [f'mem-{i}' for i in range(31)]
-    combo['memory_ids'] = ids
-    first = [client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]]
-    client.queue_results(first)
+    # trial 3 + 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+    client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
     client.queue_results([])
     client.queue_results([])
-    client.queue_results([client.snapshot(f'{overrides}/mem-30', {'id': 'mem-30', 'suppression': 'hidden'})])
+    client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
 
 
 _add(
     DriverEntry(
         'utils.memory.memory_service.MemoryService._canonical_statuses_by_query',
         base={'self': _WQ7MemoryService(), 'uid': UID},
-        domains={'memory_ids': [['mem-1'], ['mem-1', 'mem-2', 'mem-3']]},
+        domains={'memory_ids': [['mem-1'], _WQ7_IDS]},
         neutrals={'budget': _BUDGET},
         setup=_seed_canonical_status_pairs,
         trials=4,
