@@ -69,7 +69,7 @@ class Serving:
     def drain_owner(self, owner_id: str, *, recovered: str | None = None):
         """Commit the owner's ready rows. ``recovered`` (a recovery wake) also
         releases that unit and its content's ready siblings past the head wait
-        and the catch-up depth hold."""
+        (the unit itself also past the catch-up depth hold)."""
         release = (
             self.merge.release_set(recovered) if recovered is not None and recovered_merge_release_enabled() else None
         )

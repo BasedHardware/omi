@@ -173,9 +173,9 @@ class OrderedMerge:
         ``release`` (a recovery wake's ``release_set``, consumed in place):
         when strict order, fresh-first and the head wait commit nothing, the
         first still-pending ready row in it commits at once. Recovered units
-        already waited out quarantine and recovery, so they skip the head wait
-        and the catch-up depth hold; the body, late marking and chain are the
-        same as every other commit."""
+        already waited out quarantine and recovery, so the set skips the head
+        wait; only the recovered unit also passes the catch-up depth hold. The
+        body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
         wait = self._head_wait()
         depth = self._catch_up_depth()
@@ -221,6 +221,11 @@ class OrderedMerge:
                     released['head_state'] = candidate['state']
                 else:
                     released['head_state'] = 'held' if over_cap else 'ready'
+                # Only the recovered unit itself (it already waited out
+                # quarantine and recovery) passes the catch-up depth hold;
+                # its content siblings keep it, so a wake cannot pile up to
+                # 33 rows past the cap ahead of a later fresh row.
+                released['recovered'] = current.get('recovery_state') == 'recovered'
                 candidate = current
             elif over_cap and waiter is None and fresh is None:
                 # At the depth cap with rows pending, whatever the head's state:
@@ -275,7 +280,7 @@ class OrderedMerge:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
                 return None
-            if over_cap and not fresh_first and not released and _catch_up(candidate):
+            if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
                 held['catch_up'] = True
@@ -362,7 +367,7 @@ class OrderedMerge:
                     log=logger,
                 )
                 self.held_owners.discard(owner_id)
-                return self.commit_next(owner_id, now)
+                return self.commit_next(owner_id, now, release=release)
             except GoogleAPICallError as error:
                 # A transient probe read keeps the strict result; the next drain probes again.
                 logger.warning(
@@ -392,6 +397,8 @@ class OrderedMerge:
             if segment is not None:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, exact=segment))
+                    if entry is not None and entry['segment_id'] == segment:
+                        release.pop(0)  # Committed: the next call need not re-read it.
                 except BatchPrivacyBlocked:
                     # A fence refuses only this row; strict order commits nothing here.
                     release.pop(0)

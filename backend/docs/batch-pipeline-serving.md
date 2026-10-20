@@ -715,8 +715,10 @@ and held recovered units took 65–86 s from settle to commit; projection then
 waited for the next 20 s sweep. The wake passes a release set: the recovered
 unit, then up to 32 of its content's other units. When strict order,
 fresh-first and the head wait commit nothing, the first row in the set that is
-still the owner's pending, ready job commits. It skips the head wait and the
-catch-up depth hold, and the commit transaction re-verifies the row. The
+still the owner's pending, ready job commits past the head wait; the commit
+transaction re-verifies the row. Only the recovered unit itself also passes
+the catch-up depth hold; its siblings keep it, so a wake cannot push a burst
+of catch-up rows past the cap ahead of a later fresh row. The
 commit body, late marking, log chain and projection order are unchanged, and
 an unready or fenced row is dropped from the set. Release commits carry
 `recovered_release: true` and log `event=batch_merge outcome=recovered_release

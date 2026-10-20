@@ -4,10 +4,11 @@ import logging
 import time
 from unittest.mock import Mock
 
-import pytest
+from google.api_core.exceptions import FailedPrecondition
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_merge_head_wait import admitted, complete, drain
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline.merge import RELEASE_SIBLINGS_MAX, OrderedMerge
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.serving import Serving
@@ -76,6 +77,41 @@ def test_release_passes_the_catch_up_depth_hold():
     assert merge.commit_next('heavy', 21) is None  # Two committed rows await projection: held.
     entry = merge.commit_next('heavy', 21, release=merge.release_set('r'))
     assert entry['segment_id'] == 'r' and entry['recovered_release'] is True and entry['log_sequence'] == 3
+
+
+def test_only_the_recovered_unit_passes_the_depth_hold_not_its_siblings():
+    store, queue, leases = admitted({'c0': 1, 'c1': 2, 'r': 3, 's': 4})
+    for segment in ('c0', 'c1', 'r', 's'):
+        store.rows['jobs', segment]['fresh_capture'] = False
+    for segment in ('c0', 'c1', 's'):
+        complete(queue, leases, segment, 10)
+    merge = OrderedMerge(store, head_wait_seconds=W, catch_up_depth=2)
+    assert [e['segment_id'] for e in drain(merge, 11)] == ['c0', 'c1']
+    recovered(store, 'r', 20, siblings=('s',))
+    release = merge.release_set('r')
+    entries = []
+    while entry := merge.commit_next('heavy', 21, release=release):
+        entries.append(entry)
+    # The ready catch-up sibling s keeps the depth hold.
+    assert [e['segment_id'] for e in entries] == ['r']
+    assert store.rows['jobs', 's']['merge_pending'] is True
+
+
+class _NoFreshIndexStore(MemoryStore):
+    def fresh_pending(self, owner_key, limit):
+        raise FailedPrecondition('The query requires an index.')
+
+
+def test_missing_fresh_index_fallback_keeps_the_release_set():
+
+    store, _, _ = admitted({'a': 1, 'b': 2})
+    store.__class__ = _NoFreshIndexStore
+    for segment in ('a', 'b'):
+        store.rows['jobs', segment]['fresh_capture'] = False
+    recovered(store, 'b', 500)
+    merge = OrderedMerge(store, head_wait_seconds=W, catch_up_depth=4)
+    entry = merge.commit_next('heavy', 501, release=merge.release_set('b'))
+    assert entry['segment_id'] == 'b' and entry['recovered_release'] is True
 
 
 def test_strict_order_still_wins_when_the_head_is_ready():

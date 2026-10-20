@@ -138,22 +138,33 @@ def replay(
             sweep()
             return []
 
-        handler = simulation._recover_handler
-
-        async def recover_handler(segment_id, task_id=None):
-            # Production: the handler's reconcile also wakes the recovered
-            # unit's owner (drain_owner, then the owner chain walk).
-            job = simulation.store.get('jobs', segment_id)
-            outcome = await handler(segment_id, task_id)
-            if job and outcome in {'recovered', 'reconciled'}:
-                simulation.serving.reconcile(owner_id=job['owner_id'], recovered=segment_id)
-            return outcome
-
-        simulation._recover_handler = recover_handler
         start = simulation._start_supervisor
 
         def start_supervisor():
-            simulation.serving.projector = SimpleNamespace(sweep=sweep, project_owner=project_owner)
+            serving, recovery = simulation.serving, simulation.recovery
+            serving.projector = SimpleNamespace(sweep=sweep, project_owner=project_owner)
+            # Production's /recover-quarantine makes ONE reconcile call carrying
+            # the owner wake. The sim handler calls reconcile() with no
+            # arguments right after recover() returns (no await between them),
+            # so that call becomes the single owner wake; the supervisor's
+            # periodic calls pass keywords and are unchanged.
+            last: dict = {}
+            recover, reconcile = recovery.recover, serving.reconcile
+
+            def recover_and_note(segment_id, owner_id):
+                outcome = recover(segment_id, owner_id)
+                last.update(segment=segment_id, owner=owner_id)
+                return outcome
+
+            def reconcile_as_wake(**kwargs):
+                if not kwargs and last:
+                    wake = dict(last)
+                    last.clear()
+                    return reconcile(owner_id=wake['owner'], recovered=wake['segment'])
+                return reconcile(**kwargs)
+
+            recovery.recover = recover_and_note
+            serving.reconcile = reconcile_as_wake
             start()
 
         simulation._start_supervisor = start_supervisor
