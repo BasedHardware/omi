@@ -2,6 +2,8 @@
 
 import json
 import math
+from pathlib import Path
+import re
 
 import pytest
 
@@ -198,6 +200,27 @@ def test_parity_composition():
     assert rc.compose_with_parity(v, ('FAIL', 'row_3')).reason == 'parity_row_3'
     assert rc.compose_with_parity(v, ('FAIL', 'other')).reason == 'parity_fail'
     assert rc.classify_fail('parity_row_3')[0] is rc.Action.ROLLBACK_ONE
+
+
+@pytest.mark.parametrize(
+    ('token', 'action'),
+    [
+        ('first_summary_deadline', rc.Action.ROLLBACK_ONE),
+        ('failed_held_over_budget', rc.Action.ROLLBACK_ZERO),
+    ],
+)
+def test_gate_verdict_tokens_roll_back(token, action):
+    # M1 review L06-2: a verdict token missing from the closed lists HOLDs as "gate unavailable".
+    assert rc.classify_fail(token)[0] is action
+
+
+def test_every_scorer_fail_token_is_a_classified_verdict():
+    # testing/pipeline_sim/scorer.py is the in-repo fleet_gate stand-in; each verdict it emits must act.
+    source = (Path(__file__).resolve().parents[2] / 'testing' / 'pipeline_sim' / 'scorer.py').read_text()
+    tokens = set(re.findall(r'GATE_FAIL ([a-z0-9_]+)', source))
+    assert tokens
+    unclassified = {t for t in tokens - rc.INCOMPLETE_SAMPLE_TOKENS if rc.classify_fail(t)[0] is None}
+    assert unclassified == set()
 
 
 def test_prod_arguments_are_guarded(monkeypatch):

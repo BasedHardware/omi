@@ -61,7 +61,14 @@ ANX_CARD_DEFAULT = 'two-lane-transcription-local-bench-quality-to-all-users'
 # Fleet-gate data-loss and privacy tokens (contract (g)): ROLLBACK_ZERO.
 DATA_LOSS_PREFIXES = ('terminal_unrecovered_speech_',)
 DATA_LOSS_TOKENS = frozenset(
-    {'stuck_job_over_30m', 'obligation_over_15m', 'projection_error', 'projection_stalled', 'parity_row_5'}
+    {
+        'stuck_job_over_30m',
+        'obligation_over_15m',
+        'projection_error',
+        'projection_stalled',
+        'failed_held_over_budget',  # settled failed_held quarantines are terminal recovery loss
+        'parity_row_5',
+    }
 )
 PRIVACY_TOKENS = frozenset({'parity_row_7'})
 # Ordinary cohort verdicts (fleet_gate.sh verdict(), plus composed parity): ROLLBACK_ONE. This is a closed
@@ -79,6 +86,7 @@ COHORT_FAIL_TOKENS = frozenset(
         'quarantine_projection_p95_over_5m',
         'first_summary_dispatch_contract',
         'first_summary_completion_outlier',
+        'first_summary_deadline',  # testing/pipeline_sim/scorer.py, the in-repo fleet_gate stand-in
         'http_5xx_regression',
         'parity_fail',
     }
