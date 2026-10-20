@@ -101,6 +101,15 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+PUSHER_CLOSE_EVENTS_TOTAL = Counter(
+    'pusher_close_events_total',
+    'Pusher socket close observations by class (restart, no_frame, abnormal, clean) '
+    'and whether a reconnect was already armed (deduped=true means a sibling task '
+    'logged this close). Counted per observation, not per close — the burst shape '
+    'is the signal that a single socket death is re-observed by multiple tasks.',
+    ['close_class', 'deduped'],
+)
+
 OMI_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_journey_accepted_total',
     'Accepted real-traffic product journeys by closed journey name',

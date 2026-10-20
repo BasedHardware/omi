@@ -2162,9 +2162,20 @@ Close-code severity: a close the pusher sends for its own rolling update
 audio and pending conversations replay on the replacement socket — and logs
 at INFO (`Pusher * Connection closed` lines; FC-lifecycle-close-classified-by-transport-phase).
 Every other close (abnormal 1006, internal 1011, TLS 1015, no close frame)
-keeps the ERROR meaning of those lines. Independently of the close code, a
-close raised by a socket that a reconnect already replaced is informational
-on the flush and receive paths and never tears down the freshly installed
+keeps the ERROR meaning of those lines on the first observation. One socket
+death is re-observed by every session task touching the socket — receive
+loop, audio-run flush, transcript flush, heartbeat, speaker-sample request —
+so the later observations of an already-armed reconnect log at INFO and the
+dedupe window closes again when a reconnect completes
+(`has_armed_reconnect`; FC-one-socket-close-logged-per-observing-task): one
+dead socket is one fault line, not one per observing task (backend-listen
+2026-10-20: `Pusher audio_bytes Connection closed: no close frame received
+or sent` x55/30m). Every observation — first or deduped — increments
+`pusher_close_events_total{close_class,deduped}` so the burst shape stays
+measurable. Independently of the close code, a close raised by a socket that
+a reconnect already replaced is informational on every send path (the
+heartbeat and speaker-sample request follow the same identity rule as the
+flush and receive paths) and never tears down the freshly installed
 connection.
 
 ## 4. Speaker ID Lifecycle (2-Session Flow)

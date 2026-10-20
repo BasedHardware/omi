@@ -20,6 +20,7 @@ from utils.executors import run_blocking, storage_executor
 from utils.metrics import (
     OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL,
     PUSHER_CIRCUIT_BREAKER_REJECTIONS,
+    PUSHER_CLOSE_EVENTS_TOTAL,
     PUSHER_SESSION_DEGRADED,
 )
 from utils.other.storage import reconcile_audio_chunk_prefix
@@ -66,6 +67,29 @@ class PusherReconnectState(str, Enum):
 # existing ERROR line.
 PUSHER_EXPECTED_RESTART_CLOSE_CODES = frozenset({1012})
 
+# Close classes for ``PUSHER_CLOSE_EVENTS_TOTAL`` and log classification. A
+# close whose code is absent (websockets synthesizes 1006 from an abrupt TCP
+# end or a protocol run-in) is its own class: in production it is the
+# dominant member of the remaining ``Pusher audio_bytes Connection closed``
+# ERROR volume (x55/30m, 2026-10-20 sensor) and it carries no receiver
+# statement at all.
+PUSHER_CLOSE_CLASS_RESTART = 'restart'
+PUSHER_CLOSE_CLASS_NO_FRAME = 'no_frame'
+PUSHER_CLOSE_CLASS_ABNORMAL = 'abnormal'
+PUSHER_CLOSE_CLASS_CLEAN = 'clean'
+
+
+def classify_pusher_close(e: ConnectionClosed) -> str:
+    """Bucket one pusher WebSocket close by the statement its code carries."""
+    code = e.rcvd.code if e.rcvd is not None else None
+    if code is None:
+        return PUSHER_CLOSE_CLASS_NO_FRAME
+    if code in PUSHER_EXPECTED_RESTART_CLOSE_CODES:
+        return PUSHER_CLOSE_CLASS_RESTART
+    if code == 1000:
+        return PUSHER_CLOSE_CLASS_CLEAN
+    return PUSHER_CLOSE_CLASS_ABNORMAL
+
 
 def log_pusher_connection_closed(
     logger: Any,
@@ -74,6 +98,7 @@ def log_pusher_connection_closed(
     *,
     uid: str,
     session_id: str,
+    session: Optional['ListenPusherSession'] = None,
 ) -> None:
     """Log one pusher WebSocket close at the severity its close code carries.
 
@@ -83,11 +108,28 @@ def log_pusher_connection_closed(
     it fired once per live session per restart wave (~x342/30m for the
     audio-bytes line alone during the 2026-10-09 wave) and buried the genuine
     abnormal closes that share the message shape.
+
+    A close whose code is absent ("no close frame received or sent" — the
+    websockets-synthesized 1006 shape, an abrupt TCP end or a protocol
+    run-in) keeps ERROR on the first observation but is not per-task noise:
+    the session (when supplied) arms its reconnect on the first observation,
+    and every later observation while that reconnect is armed logs the same
+    line at INFO with the event counted as deduped. One socket death is one
+    fault; the receive loop, the audio flush and the transcript flush are
+    three tasks that can all observe it within the same drain step, and each
+    used to raise its own ERROR for it (backend-listen: the x55/30m
+    "no close frame received or sent" line). Recovery is unchanged —
+    ``_mark_disconnected`` stays idempotent and the reconnect loop is the
+    single owner of the replacement socket.
     """
-    if e.rcvd is not None and e.rcvd.code in PUSHER_EXPECTED_RESTART_CLOSE_CODES:
-        logger.info(f'{message}: {e} {uid} {session_id}')
-        return
-    logger.error(f'{message}: {e} {uid} {session_id}')
+    close_class = classify_pusher_close(e)
+    dedupe = session is not None and session.has_armed_reconnect()
+    if close_class == PUSHER_CLOSE_CLASS_RESTART or dedupe:
+        level = logging.INFO
+    else:
+        level = logging.ERROR
+    PUSHER_CLOSE_EVENTS_TOTAL.labels(close_class=close_class, deduped=str(dedupe).lower()).inc()
+    logger.log(level, f'{message}: {e} {uid} {session_id}')
 
 
 PUSHER_MAX_RECONNECT_ATTEMPTS = 6
@@ -416,6 +458,7 @@ class ListenPusherSession:
                                 'Pusher transcripts Connection closed',
                                 uid=self.uid,
                                 session_id=self.session_id,
+                                session=self,
                             )
                             self._mark_disconnected()
                     else:
@@ -636,7 +679,12 @@ class ListenPusherSession:
                         logger.info(f"Pusher audio_bytes closed on a replaced socket: {e} {self.uid} {self.session_id}")
                     else:
                         log_pusher_connection_closed(
-                            logger, e, 'Pusher audio_bytes Connection closed', uid=self.uid, session_id=self.session_id
+                            logger,
+                            e,
+                            'Pusher audio_bytes Connection closed',
+                            uid=self.uid,
+                            session_id=self.session_id,
+                            session=self,
                         )
                         self._mark_disconnected()
                 else:
@@ -842,7 +890,12 @@ class ListenPusherSession:
             except ConnectionClosed as e:
                 if self.pusher_ws is sock:
                     log_pusher_connection_closed(
-                        logger, e, 'Pusher receive connection closed', uid=self.uid, session_id=self.session_id
+                        logger,
+                        e,
+                        'Pusher receive connection closed',
+                        uid=self.uid,
+                        session_id=self.session_id,
+                        session=self,
                     )
                     self._mark_disconnected()
                 else:
@@ -1186,6 +1239,18 @@ class ListenPusherSession:
     def is_degraded(self):
         return self.reconnect_state in (PusherReconnectState.DEGRADED, PusherReconnectState.HALF_OPEN_PROBE)
 
+    def has_armed_reconnect(self) -> bool:
+        """True when a socket close has already been observed and recovery is armed.
+
+        ``_mark_disconnected`` flips the reconnect state off CONNECTED on the
+        first close observation and a successful reconnect flips it back, so
+        this is exactly "a sibling task already logged this close and the
+        reconnect loop owns the replacement socket". Used by
+        ``log_pusher_connection_closed`` to demote the second and later
+        observations of one socket death to INFO.
+        """
+        return self.reconnect_state != PusherReconnectState.CONNECTED
+
     async def send_speaker_sample_request(
         self,
         person_id: str,
@@ -1201,6 +1266,7 @@ class ListenPusherSession:
                 f"{len(segment_ids)} segments ({len(self.pending_speaker_sample_requests)} pending) {self.uid} {self.session_id}"
             )
             return False
+        sock = self.pusher_ws
         try:
             data = bytearray()
             data.extend(struct.pack("I", 105))
@@ -1216,7 +1282,7 @@ class ListenPusherSession:
                     "utf-8",
                 )
             )
-            await self._bounded_protocol_send(self.pusher_ws, cast(bytes, data))
+            await self._bounded_protocol_send(sock, cast(bytes, data))
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )
@@ -1224,8 +1290,24 @@ class ListenPusherSession:
         except Exception as e:
             self.pending_speaker_sample_requests.append(request)
             if isinstance(e, ConnectionClosed):
-                self._mark_disconnected()
-            logger.error(f"Failed to send speaker sample request: {e} {self.uid} {self.session_id}")
+                # Same identity rule as the flush and receive paths: a close
+                # raised by a socket a reconnect already replaced must not be
+                # classified as this session's disconnect, and the request
+                # stays buffered for the replacement either way.
+                if self.pusher_ws is not sock:
+                    logger.info(f"Speaker sample request closed on a replaced socket: {e} {self.uid} {self.session_id}")
+                else:
+                    log_pusher_connection_closed(
+                        logger,
+                        e,
+                        'Speaker sample request connection closed',
+                        uid=self.uid,
+                        session_id=self.session_id,
+                        session=self,
+                    )
+                    self._mark_disconnected()
+            else:
+                logger.error(f"Failed to send speaker sample request: {e} {self.uid} {self.session_id}")
             return False
 
     def is_connected(self):
@@ -1244,10 +1326,25 @@ class ListenPusherSession:
             if await self.deps.wait_for_event(self.deps.shutdown_event, 20):
                 break
             if self.pusher_connected and self.pusher_ws:
+                sock = self.pusher_ws
                 try:
-                    await self._bounded_protocol_send(self.pusher_ws, struct.pack("I", 100))
-                except ConnectionClosed:
-                    self._mark_disconnected()
+                    await self._bounded_protocol_send(sock, struct.pack("I", 100))
+                except ConnectionClosed as e:
+                    # Same identity rule as the receive loop: a close raised by
+                    # a socket a reconnect already replaced must not be
+                    # classified as this session's disconnect.
+                    if self.pusher_ws is not sock:
+                        logger.info(f"Pusher heartbeat closed on a replaced socket: {e} {self.uid} {self.session_id}")
+                    else:
+                        log_pusher_connection_closed(
+                            logger,
+                            e,
+                            'Pusher heartbeat connection closed',
+                            uid=self.uid,
+                            session_id=self.session_id,
+                            session=self,
+                        )
+                        self._mark_disconnected()
                 except Exception as e:
                     logger.error(f"Pusher heartbeat send failed: {e} {self.uid} {self.session_id}")
 
