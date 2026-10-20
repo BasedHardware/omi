@@ -1327,6 +1327,7 @@ def search_transcript_chunks(
     return results
 
 
+@_account_external_data_write
 def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
     """Delete all chunk vectors for one conversation (id-prefix listing on serverless)."""
     if index is None:
