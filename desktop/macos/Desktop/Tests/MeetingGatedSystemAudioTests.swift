@@ -8,9 +8,9 @@ import XCTest
 
   private func meetingProbeSnapshot(detected: Bool) -> CallAudioSnapshot {
     CallAudioSnapshot(
-      processes: [],
+      processes: detected ? [.init(bundleID: "us.zoom.xos", pid: 1, isRunningInput: true, isRunningOutput: false)] : [],
       defaultInputDeviceID: 0,
-      browserWindowTitles: detected ? ["Meet - abc-defg-hij"] : [])
+      browserWindows: [])
   }
 
   private final class Box<T>: @unchecked Sendable {
@@ -214,7 +214,7 @@ import XCTest
       )
     }
 
-    func testTurnsOnImmediatelyWhenMeetingDetected() {
+    func testProvisionalCaptureTurnsOnImmediatelyWhenMeetingDetected() {
       var changes = [Bool]()
       let detector = makeDetector(onChange: { changes.append($0) })
 
@@ -223,6 +223,7 @@ import XCTest
 
       XCTAssertTrue(detector.hasObservedState)
       XCTAssertTrue(detector.isMeetingActive)
+      XCTAssertFalse(detector.isMeetingConfirmed)
       XCTAssertEqual(changes, [true])
     }
 

@@ -28,7 +28,7 @@ extension AppState {
       mode: mode,
       onInitialStateObserved: { [weak self] in
         Task { @MainActor in
-          guard let self, let active = self.meetingDetector?.isMeetingActive else { return }
+          guard let self, let active = self.meetingDetector?.isMeetingConfirmed else { return }
           await self.handleMeetingObservation(active: active)
           await self.reconcileCapture()
         }
@@ -38,12 +38,18 @@ extension AppState {
         Self.noteMeetingContext(active: true)
         Task { @MainActor in await self?.handleMeetingObservation(active: true) }
       },
-      onChange: { [weak self] active in
+      onChange: { [weak self] _ in
+        Task { @MainActor in await self?.reconcileCapture() }
+      },
+      onConfirmedChange: { [weak self] active in
         Self.noteMeetingContext(active: active)
         Task { @MainActor in
           await self?.handleMeetingObservation(active: active)
-          await self?.reconcileCapture()
         }
+      },
+      onNoteTakingNoticeReady: { [weak self] in
+        guard let self, self.isTranscribing, self.currentConversationRole == .meeting else { return }
+        MeetingNoteTakingNotice.present()
       }
     )
     meetingDetector = detector
@@ -141,7 +147,7 @@ extension AppState {
     if MeetingConversationBoundaryPolicy.shouldAnnounceNoteTaking(
       committedRole: currentConversationRole, rotationSucceeded: rotationSucceeded)
     {
-      MeetingNoteTakingNotice.present()
+      meetingDetector?.requestNoteTakingNotice()
     }
 
     if let pending = pendingMeetingState {
