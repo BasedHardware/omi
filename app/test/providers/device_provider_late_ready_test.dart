@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,6 +38,28 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
+class _CrashlyticsCapableFirebaseCore implements TestFirebaseCoreHostApi {
+  @override
+  Future<PigeonInitializeResponse> initializeApp(
+    String appName,
+    PigeonFirebaseOptions initializeAppRequest,
+  ) async {
+    return PigeonInitializeResponse(
+      name: appName,
+      options: initializeAppRequest,
+      pluginConstants: {
+        'plugins.flutter.io/firebase_crashlytics': {'isCrashlyticsCollectionEnabled': true},
+      },
+    );
+  }
+
+  @override
+  Future<List<PigeonInitializeResponse?>> initializeCore() async => [];
+
+  @override
+  Future<PigeonFirebaseOptions> optionsFromResource() async => throw UnimplementedError();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -67,6 +91,21 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    TestFirebaseCoreHostApi.setup(_CrashlyticsCapableFirebaseCore());
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/firebase_crashlytics'),
+      (call) async => null,
+    );
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: 'fake',
+          appId: '1:1:ios:fake',
+          messagingSenderId: '1',
+          projectId: 'demo-omi-local',
+        ),
+      );
+    }
     try {
       await ServiceManager.init();
     } catch (_) {}
@@ -562,6 +601,127 @@ void main() {
       provider.nativeLink.reconcile();
       async.elapse(const Duration(seconds: 5));
 
+      expect(provider.isConnected, isTrue);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('finishing a firmware update re-initiates connection after prepareDFU disconnected the pendant', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1, reason: 'prepareDFU disconnects the pendant before starting DFU');
+      expect(provider.isConnected, isFalse);
+
+      // Simulate tapping Done after firmware update finishes: resetFirmwareUpdateState
+      // followed by FirmwareUpdateDone initiateConnection must call manageDevice once
+      // so native clears manuallyDisconnected and reconnects the pendant.
+      provider.resetFirmwareUpdateState();
+      provider.initiateConnection('FirmwareUpdateDone', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+
+      expect(manageCalls, 2);
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('a failed DFU arms native reconnect and adopts the pendant once it exits DFU', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1);
+      expect(provider.isConnected, isFalse);
+      expect(provider.isFirmwareUpdateInProgress, isTrue);
+
+      // Update fails while the pendant is still in DFU mode (not yet answering normal BLE).
+      linkUp = false;
+      nativeReplaysReady = false;
+      provider.resetFirmwareUpdateState();
+      expect(provider.isFirmwareUpdateInProgress, isFalse);
+
+      // Even if the initial reconnect attempt times out while the pendant remains in DFU,
+      // manageDevice was called once to clear manuallyDisconnected and _dfuReconnectFuture
+      // clears on completion so subsequent connection attempts are not short-circuited.
+      async.elapse(const Duration(seconds: 61));
+      expect(manageCalls, 2, reason: 'failure-path resetFirmwareUpdateState arms native auto-reconnect');
+      expect(provider.isConnected, isFalse, reason: 'pendant is still in DFU mode');
+
+      // Once the pendant reboots out of DFU and native reports device-ready, the provider adopts it.
+      linkUp = true;
+      BleBridge.instance.onDeviceReady(_deviceId, _services);
+      async.elapse(const Duration(seconds: 5));
+
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('dispose-path resetFirmwareUpdateState reconnects mid-DFU and no-ops after Done', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      // 1) Leaving the FirmwareUpdate page without tapping Done: dispose() schedules a
+      // post-frame callback that clears onFirmwareUpdatePage and calls resetFirmwareUpdateState().
+      provider.setOnFirmwareUpdatePage(true);
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1);
+      expect(provider.isConnected, isFalse);
+
+      provider.setOnFirmwareUpdatePage(false);
+      provider.resetFirmwareUpdateState();
+      async.elapse(const Duration(seconds: 5));
+
+      expect(manageCalls, 2, reason: 'dispose-path reset after prepareDFU must reconnect the pendant');
+      expect(provider.isConnected, isTrue);
+
+      // 2) Tapping Done already consumed _dfuDisconnectedDevice, so when dispose()'s
+      // post-frame callback later calls resetFirmwareUpdateState() after the page pops,
+      // it must not start a duplicate reconnect.
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 2);
+      expect(provider.isConnected, isFalse);
+
+      provider.resetFirmwareUpdateState();
+      provider.initiateConnection('FirmwareUpdateDone', boundDeviceOnly: true);
+      // Post-frame dispose callback fires while/after navigation pops the page:
+      provider.setOnFirmwareUpdatePage(false);
+      provider.resetFirmwareUpdateState();
+      async.elapse(const Duration(seconds: 5));
+
+      expect(manageCalls, 3, reason: 'post-Done dispose reset must not issue a second manageDevice call');
       expect(provider.isConnected, isTrue);
       provider.dispose();
       async.flushTimers();
