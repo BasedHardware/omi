@@ -6,7 +6,9 @@ Writes are CAS on --expected-revision (read it with --show). Authority (contract
   unless the env is unseeded (seed) or the operator holds locked_by (set it first with --lock);
 - legacy_sync (on|draining|dark) and locked_by are the lead's writes;
 - --clear-lock writes locked_by=null with reason `lock_cleared`, which also acknowledges the
-  controller's two-rollbacks stop.
+  controller's two-rollbacks stop;
+- a quality-floor percent (first-summary) below its floor needs --allow-quality-decrease. Seed
+  `_ramp` with first-summary=100, or leave it out so serving keeps the env value.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from google.cloud import firestore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
-from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS  # noqa: E402
+from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS, QUALITY_FLOOR  # noqa: E402
 from utils.rollout.runtime_percent import write_ramp  # noqa: E402
 
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
@@ -61,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar='ID',
         help='Confirm a draining precondition (repeat for each): ' + ', '.join(sorted(DRAINING_PRECONDITIONS)),
     )
+    parser.add_argument(
+        '--allow-quality-decrease',
+        action='store_true',
+        help='Permit writing a quality-floor percent (' + ', '.join(sorted(QUALITY_FLOOR)) + ') below its floor',
+    )
     parser.add_argument('--apply', action='store_true', help='Perform the write (default is a dry run)')
     return parser
 
@@ -70,7 +77,12 @@ def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple
     if args.percent:
         if entry is not None and entry['locked_by'] is None and entry['percents']:
             return 'percent_write_requires_operator_lock'
-        return {'percents': dict(args.percent)}, args.reason or 'unknown'
+        percents = dict(args.percent)
+        # A seed equal to the batch percent would cut prod's live first-summary guarantee (100) to the cohort.
+        lowered = sorted(n for n, floor in QUALITY_FLOOR.items() if n in percents and percents[n] < floor)
+        if lowered and not args.allow_quality_decrease:
+            return 'quality_floor:' + ','.join(lowered)
+        return {'percents': percents}, args.reason or 'unknown'
     if args.legacy_sync:
         leaving_on = args.legacy_sync != 'on' and (entry is None or entry['legacy_sync'] == 'on')
         missing = sorted(set(DRAINING_PRECONDITIONS) - set(args.precondition_met or ()))

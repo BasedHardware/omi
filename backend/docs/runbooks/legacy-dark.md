@@ -14,7 +14,7 @@ Any failure to read the mode serves `on`. During the soak the legacy image, queu
 
 ## Preconditions
 
-- **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
+- **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it)., **and onthway's operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path** (lead ruling 10-20 05:17Z: `draining` stops new sequencer registration, which minimal redrive needs, and C11 deletes it). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
 - **`draining` → `dark`:** the drain census reads zero twice, at least 10 minutes apart:
 
   ```bash
@@ -33,7 +33,7 @@ source ~/.local/bin/gcp-agent-env.sh prod-operator
 cd backend
 .venv/bin/python scripts/rollout/ramp_set.py --env prod --show          # note "revision"
 .venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync draining \
-  --precondition-met cap_hold_ladder_debit --actor lead --reason draining --expected-revision <rev> --apply
+  --precondition-met cap_hold_ladder_debit --precondition-met minimal_redrive_finished --actor lead --reason draining --expected-revision <rev> --apply
 .venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync dark \
   --actor lead --reason dark --expected-revision <rev> --apply
 .venv/bin/python scripts/rollout/ramp_set.py --env prod --legacy-sync on \

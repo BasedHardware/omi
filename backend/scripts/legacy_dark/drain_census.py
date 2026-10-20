@@ -73,14 +73,15 @@ def _queue_depths(session: Any, project: str, env: str, errors: dict[str, str]) 
         'view': 'FULL',
     }
     depths: dict[str, Optional[int]] = {queue: None for queue in LEGACY_QUEUES}
+    # Staging shares based-hardware-dev with dev, whose queues carry no prefix:
+    # only the env's own queue ids count (dev's ``sync-jobs`` is not staging's).
+    queue_ids = {(queue if env == 'prod' else f'staging-{queue}'): queue for queue in LEGACY_QUEUES}
     try:
         response = session.get(f'{MONITORING}/v3/projects/{project}/timeSeries', params=params, timeout=30)
         response.raise_for_status()
         for series in response.json().get('timeSeries', []):
-            queue = series.get('resource', {}).get('labels', {}).get('queue_id')
-            if env != 'prod' and isinstance(queue, str):
-                queue = queue.removeprefix('staging-')
-            if queue in depths and series.get('points'):
+            queue = queue_ids.get(series.get('resource', {}).get('labels', {}).get('queue_id'))
+            if queue is not None and series.get('points'):
                 value = series['points'][0].get('value', {})
                 depths[queue] = int(value.get('int64Value', value.get('doubleValue', 0)))
     except Exception as error:
