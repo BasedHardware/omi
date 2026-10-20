@@ -13,7 +13,11 @@ allowance or failed persistence yields retryable 503, rather than a purchase
 denial or a false successful unlock.
 
 Detail, list, exact-reference, speaker browsing and keyword search use that same
-boundary. The slim list projection remains enabled. Keyword search retains owner-scoped locked
+boundary. Speaker browsing admits recoverable matches before lock filtering,
+using one request-scoped authority check; only the selected page is persisted,
+not skipped pages or lookahead. Me and named-person HTTP regressions cover this
+ordering without requiring a prior list/detail read. The slim list projection
+remains enabled. Keyword search retains owner-scoped locked
 index candidates internally; it rehydrates their own Firestore records and
 verifies paid access before restoring and returning any locked match. Unlocked
 search results do not gain an entitlement dependency. Remaining locks cannot
@@ -39,6 +43,8 @@ owner's historical access without that flag or an Android binary change.
 Implementation and rollout checklist:
 
 - [x] Real HTTP list/detail/new-client lifetime and keyword search regressions.
+- [x] Browse-first Me/named-person recovery, denial, retry, deferred backlog,
+  page-only writes and truncation coverage from the separate speaker fix.
 - [x] Free/inactive/exhausted/BYOK denial, unresolved allowance retry, write
   failure/retry, redirect identity, and explicit backlog choice coverage.
 - [x] Original stored content preserved; no automatic processing or charge.

@@ -3,7 +3,7 @@ import os
 import re
 from datetime import datetime, timezone
 from itertools import islice
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -277,6 +277,7 @@ def browse_conversations_by_speaker(
     batch: int = SPEAKER_BROWSE_BATCH,
     include_discarded: bool = False,
     budget: Optional[ListReadBudget] = None,
+    can_recover_locked: Optional[Callable[[Dict[str, Any]], bool]] = None,
 ) -> Dict[str, Any]:
     """Return one page of the newest conversations that contain ``speaker_id``.
 
@@ -290,8 +291,9 @@ def browse_conversations_by_speaker(
     budget truncates the stream.
 
     The iterator ends the scan when it runs out — a short pull is real
-    exhaustion. Locked and discarded rows the reader still yields are dropped
-    here unless the caller asked for them.
+    exhaustion. Locked matches are dropped unless a caller-owned recovery
+    policy admits them. That caller must persist recovery on the selected page
+    before returning content; skipped pages and lookahead need no writes.
     """
     wanted = page * per_page
     matches: List[Dict[str, Any]] = []
@@ -304,12 +306,13 @@ def browse_conversations_by_speaker(
             rows = list(islice(iterator, request_size))
             scanned += len(rows)
             for row in rows:
-                if row.get('is_locked'):
-                    continue
                 if row.get('discarded') and not include_discarded:
                     continue
-                if conversation_matches_speaker(row, speaker_id):
-                    matches.append(row)
+                if not conversation_matches_speaker(row, speaker_id):
+                    continue
+                if row.get('is_locked') and not (can_recover_locked and can_recover_locked(row)):
+                    continue
+                matches.append(row)
             if len(rows) < request_size:
                 exhausted = True
                 break

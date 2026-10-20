@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from itertools import permutations
 from types import SimpleNamespace
 from uuid import uuid4
 import os
@@ -1517,3 +1518,50 @@ def test_recovery_batch_dispatch_duplicate_start_and_ordered_merge(lane, monkeyp
         response = client.get(f'/v2/sync-local-files/{public_id}')
     assert response.status_code == 409
     assert response.json()['code'] == 'sync_batch_privacy_blocked'
+
+
+@pytest.mark.parametrize('order', list(permutations(range(3))))
+def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch, order):
+    """Fix C permutation proof through real batch projection.
+
+    Three separately uploaded contiguous units, 100 s apart: units 0 and 2 join
+    only through unit 1. Each completes in ``order``; the merge drains W=60 s
+    later and committed rows project in log order. Every order, including
+    newest-first catch-up and a late bridge, ends as the forward-order state.
+    """
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS', '60')
+    units = [lane.seed((f'u{index}',), capture_at=1000.0 + index * 100) for index in range(3)]
+    sids = [unit.ids[0] for unit in units]
+    log = []
+    for step, index in enumerate(order):
+        unit = units[index]
+        assert lane.queue.complete(
+            lane.WorkResult(sids[index], f'gs://synthetic/results/{sids[index]}#1'),
+            unit.leases[sids[index]].token,
+            step,
+        )
+        while entry := lane.merge.commit_next(lane.uid, step + 60):
+            log.append(entry)
+            lane.projector.project(entry['segment_id'])
+    # Model: every ready row has waited W at each drain, so an unready head
+    # releases the ready rows in capture order and appends late itself.
+    expected, pending, ready = [], set(range(3)), set()
+    for index in order:
+        ready.add(index)
+        while ready:
+            head = min(pending)
+            pick = head if head in ready else min(ready)
+            expected.append((sids[pick], pick != head))
+            pending.discard(pick)
+            ready.discard(pick)
+    assert [(entry['segment_id'], bool(entry.get('head_wait_bypass'))) for entry in log] == expected
+    rows = active_rows(lane)
+    assert len(rows) == 1
+    assert [s['speaker_id_scope'] for s in rows[0]['transcript_segments']] == [f'sync:{sid}' for sid in sids]
+    for snapshot in lane.user.collection('conversations').stream():
+        row = snapshot.to_dict()
+        if row.get('deleted'):
+            # A bridged donor redirects to the surviving conversation; none is orphaned.
+            assert row.get('sync_merged_into') == rows[0]['id']
+    for unit in units:
+        assert unit.ledger.get().to_dict()['status'] == 'completed'

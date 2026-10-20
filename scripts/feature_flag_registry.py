@@ -18,9 +18,10 @@ KINDS = {"env", "posthog", "bundle", "server_capability", "build_define", "fires
 LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
 SURFACES = {"backend", "macos", "windows", "web-app", "web-admin", "web-frontend", "mobile", "llm-gateway"}
 FAILS = {"open", "closed", "inverted"}
-DECISIONS = {"pending", "graduate", "ship", "kill", "keep"}
+DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep"}
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
+RAMP_REQUIRED_FROM = date(2026, 10, 21)
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
 SWIFT_FLAG = re.compile(
@@ -59,6 +60,55 @@ class Read:
 
 def load_registry(path: Path) -> dict[str, list[dict[str, Any]]]:
     return _parse_yaml_subset(path)
+
+
+def _ramp_applies_to(entry: dict[str, Any]) -> bool:
+    return entry.get("lifecycle") == "rollout" and (
+        entry.get("decision") in {"pending", "undecided"} or entry.get("terminal") == "undecided"
+    )
+
+
+def _single_user_cohort_step(step: str) -> bool:
+    normalized = step.strip().casefold().replace("_", " ")
+    return bool(
+        re.search(r"\b(?:single|one|1)[ -]?(?:user|person|uid)\b", normalized)
+        or re.search(r"\buid\s*[:=]\s*[a-z0-9_-]+\b", normalized)
+        or re.search(r"(?:^|\s)@[a-z0-9_.-]+$", normalized)
+        or re.search(r"\b[a-z][a-z0-9.'-]*[- ]only$", normalized)
+        or re.fullmatch(r"[a-z0-9.+-]+@[a-z0-9.-]+", normalized)
+    )
+
+
+def _validate_ramp(entry: dict[str, Any], label: str, errors: list[str]) -> None:
+    if "ramp" not in entry:
+        return
+    ramp = entry["ramp"]
+    if not isinstance(ramp, dict):
+        errors.append(f"{label}: ramp must be an object")
+        return
+    cohorts = ramp.get("cohorts")
+    if (
+        not isinstance(cohorts, list)
+        or not cohorts
+        or any(not isinstance(step, str) or not step.strip() for step in cohorts)
+    ):
+        errors.append(f"{label}: ramp.cohorts must be a nonempty list of nonempty strings")
+    elif _single_user_cohort_step(cohorts[-1]):
+        errors.append(f"{label}: ramp.cohorts terminal step must not be single-user (David-only is never terminal)")
+    for field in ("clean_metric", "expander"):
+        if not isinstance(ramp.get(field), str) or not ramp[field].strip():
+            errors.append(f"{label}: ramp.{field} is required")
+    try:
+        done_by = date.fromisoformat(ramp["done_by"])
+    except (KeyError, TypeError, ValueError):
+        errors.append(f"{label}: ramp.done_by must be an ISO date")
+    else:
+        try:
+            review_by = date.fromisoformat(entry["review_by"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if done_by > review_by:
+            errors.append(f"{label}: ramp.done_by must be on or before review_by")
 
 
 def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path = ROOT) -> list[str]:
@@ -103,6 +153,8 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 terminal_for_decision = {"graduate": "on", "ship": "on", "kill": "off", "keep": "keep"}
                 if decision in terminal_for_decision and terminal != terminal_for_decision[decision]:
                     errors.append(f"{label}: decision {decision} requires terminal {terminal_for_decision[decision]}")
+                if decision == "kill_after_readout" and (lifecycle != "experiment" or terminal != "undecided"):
+                    errors.append(f"{label}: kill_after_readout requires experiment lifecycle and undecided terminal")
                 surfaces = entry.get("surfaces")
                 if not isinstance(surfaces, list) or not surfaces or any(s not in SURFACES for s in surfaces):
                     errors.append(f"{label}: invalid surfaces")
@@ -115,6 +167,18 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                             date.fromisoformat(entry[field])
                         except (TypeError, ValueError):
                             errors.append(f"{label}: {field} must be an ISO date")
+                _validate_ramp(entry, label, errors)
+                if _ramp_applies_to(entry) and "ramp" not in entry:
+                    try:
+                        created = date.fromisoformat(entry["created"])
+                    except (KeyError, TypeError, ValueError):
+                        pass
+                    else:
+                        if created >= RAMP_REQUIRED_FROM:
+                            errors.append(
+                                f"{label}: ramp is required for pending/undecided rollout rows created on or after "
+                                f"{RAMP_REQUIRED_FROM.isoformat()}"
+                            )
                 if entry.get("lifecycle") in {"experiment", "rollout"} and "review_by" not in entry:
                     errors.append(f"{label}: review_by is required for experiment/rollout")
                 if entry.get("lifecycle") in {"ops_kill", "config_switch"} and "review_by" in entry:

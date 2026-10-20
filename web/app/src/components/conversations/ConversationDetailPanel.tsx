@@ -62,6 +62,7 @@ import type {
   StructuredActionItem,
 } from '@/types/conversation';
 import { isFirstPartyNoteSelection, meetingTypeLabel } from '@/lib/meetingNotes';
+import { conversationDisplayTitle } from '@/lib/conversationTitle';
 import {
   selectConversationSummary,
   type SummarySection,
@@ -330,7 +331,7 @@ export function SummaryTab({
       )}
 
       {isStructuredNote && actionItems && actionItems.length > 0 && (
-        <NextStepsList items={actionItems} />
+        <NextStepsList items={actionItems} transcriptIDs={transcriptIDs} />
       )}
 
       {/* App Summaries Section */}
@@ -891,6 +892,7 @@ export function ConversationDetailPanel({
             <EditableTitle
               conversationId={conversationId}
               title={structured.title || 'Untitled Conversation'}
+              displayTitle={conversationDisplayTitle(conversation)}
               onTitleChange={handleTitleChange}
               className="mb-2 line-clamp-2 font-display text-xl font-semibold text-text-primary"
             />
@@ -949,7 +951,7 @@ export function ConversationDetailPanel({
         <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
           <ConversationScreenFrameBanner
             frame={screenFrames.frameSet.banner}
-            title={structured.title || 'Untitled Conversation'}
+            title={conversationDisplayTitle(conversation) || 'Untitled Conversation'}
             dateLabel={
               conversation.started_at ? formatDate(conversation.started_at) : undefined
             }
@@ -1036,7 +1038,12 @@ export function ConversationDetailPanel({
             )}
 
             {activeTab === 'actions' && hasActionItems && (
-              <ActionItemsTab items={actionItems} />
+              <ActionItemsTab
+                items={actionItems}
+                transcriptIDs={(transcript_segments ?? []).flatMap((segment) =>
+                  segment.id ? [segment.id] : [],
+                )}
+              />
             )}
 
             {activeTab === 'transcript' && hasTranscript && (

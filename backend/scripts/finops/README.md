@@ -249,9 +249,20 @@ published response examples, not live account captures.
 
 `raw/stt_vendor_cost_daily.json` records daily decimal USD amounts and skipped
 providers. It is overwritten on every pull, so a missing key cannot reuse an older
-invoice from the same run directory. Missing/unreadable/empty secrets and usage API
-401/403 responses warn and skip only that provider; they do not publish zero cost.
-Other API/shape failures fail the pull to avoid publishing a false invoice.
+invoice from the same run directory. Missing/unreadable/empty secrets (including a
+non-UTF-8 mount) and usage API 401/403 responses warn and skip only that provider;
+they do not publish zero cost. Other API/shape failures fail the pull to avoid
+publishing a false invoice.
+
+Deepgram measured dollars are streaming/sync `nova`, `base`, `enhanced`, and
+`whisper` only. Any other positive line item on that UTC day is `unclassified`.
+The day is stored under `incomplete` with `usd` (known STT) and `unclassified_usd`,
+and that provider is omitted from `providers`, so it is not published as
+`method=measured`. TTS such as `aura` stays out of the STT total; a new or unknown
+positive line item must not disappear inside a measured row. A published measured
+row does not claim `delta_pct`: the dollars are the accepted invoice, and there
+is no separate allocation to compare. Incomplete days are omitted, so they do
+not publish a zero delta either.
 
 The existing assembler and `load_bigquery.py` publish the measured lines to:
 

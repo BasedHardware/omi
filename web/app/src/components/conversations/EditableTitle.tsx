@@ -7,6 +7,8 @@ import { updateConversationTitle } from '@/lib/api';
 interface EditableTitleProps {
   conversationId: string;
   title: string;
+  /** Shown at rest; editing starts from `title`, the stored value. Defaults to `title`. */
+  displayTitle?: string;
   onTitleChange?: (newTitle: string) => void;
   className?: string;
 }
@@ -14,6 +16,7 @@ interface EditableTitleProps {
 export function EditableTitle({
   conversationId,
   title,
+  displayTitle,
   onTitleChange,
   className,
 }: EditableTitleProps) {
@@ -91,8 +94,8 @@ export function EditableTitle({
         onBlur={handleBlur}
         disabled={isSaving}
         className={cn(
-          'w-full bg-transparent border-b-2 border-white/25',
-          'outline-none text-text-primary',
+          'w-full border-b-2 border-white/25 bg-transparent',
+          'text-text-primary outline-none',
           'disabled:opacity-50',
           className,
         )}
@@ -107,12 +110,12 @@ export function EditableTitle({
       title="Double-click to edit"
       className={cn(
         'cursor-text select-none',
-        'hover:bg-bg-tertiary/50 rounded-lg transition-colors',
+        'rounded-lg transition-colors hover:bg-bg-tertiary/50',
         '-mx-2 px-2 py-1',
         className,
       )}
     >
-      {title || 'Untitled Conversation'}
+      {(displayTitle ?? title) || 'Untitled Conversation'}
     </h1>
   );
 }

@@ -34,6 +34,13 @@ RECENT_SECONDS = 7 * 86400
 # Reserve one minute for processing before the hard completion ceiling.
 CEILING_HEADROOM_SECONDS = 3540
 CEILING_SECONDS = 3600
+# A lower tier blocked by ready higher-tier work re-checks on this cadence (one
+# Cloud Task per wait), clamped to its ceiling escape (at most 5 s past it,
+# inside the one-minute headroom).
+BLOCKED_WAIT_SECONDS = 30
+# Opening a surface wakes at most this many of the newest indexed obligations;
+# older debt keeps its tier and its ceiling, as the process-recent tool does.
+OPEN_PROMOTE_LIMIT = 20
 
 
 def surface_reporting_enabled() -> bool:

@@ -114,6 +114,62 @@ extension APIClient {
     return try await performRequest(request)
   }
 
+  /// Upload a video as frames sampled on device (plus its audio track) to `/v2/files/video`.
+  /// The backend tiles the most distinct frames into one numbered image and transcribes the
+  /// audio; the response has the same shape as `/v2/files`.
+  func uploadChatVideo(
+    _ video: SampledChatVideo,
+    fileName: String,
+    appId: String? = nil
+  ) async throws -> [ChatFileResponse] {
+    var endpoint = "v2/files/video"
+    if let appId = appId, !appId.isEmpty, appId != "no_selected" {
+      endpoint += "?app_id=\(appId)"
+    }
+    guard let url = URL(string: baseURL + endpoint),
+      let timesJSON = try? JSONSerialization.data(withJSONObject: video.times)
+    else {
+      throw APIError.invalidResponse
+    }
+
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    func field(_ name: String, _ value: String) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\(lineBreak)\(lineBreak)".utf8))
+      body.append(Data(value.utf8))
+      body.append(Data(lineBreak.utf8))
+    }
+    func file(_ name: String, _ fileName: String, _ mimeType: String, _ data: Data) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(
+        Data(
+          "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fileName)\"\(lineBreak)".utf8))
+      body.append(Data("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)".utf8))
+      body.append(data)
+      body.append(Data(lineBreak.utf8))
+    }
+    field("frame_times", String(decoding: timesJSON, as: UTF8.self))
+    field("duration_seconds", String(video.duration))
+    field("name", fileName)
+    for (index, frame) in video.frames.enumerated() {
+      file("frames", "frame-\(index).jpg", "image/jpeg", frame)
+    }
+    if let audio = video.audio {
+      file("audio", audio.fileName, audio.mimeType, audio.data)
+    }
+    body.append(Data("--\(boundary)--\(lineBreak)".utf8))
+    request.httpBody = body
+
+    return try await performRequest(request)
+  }
+
   // MARK: - Sync local files (WAL upload)
 
   /// Upload-only POST to `/v2/sync-local-files`. Mirrors Flutter `uploadLocalFilesV2`.

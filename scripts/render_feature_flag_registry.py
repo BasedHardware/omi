@@ -283,6 +283,34 @@ def _preamble() -> list[str]:
         "kills it, `keep` retains an ops kill or config switch, and `undecided` means",
         "no terminal ruling is recorded yet.",
         "",
+        "## Contributing registry rows",
+        "",
+        "Edit `config/feature-flags.yaml`, then regenerate this document with",
+        "`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional",
+        "for existing rows. It is required for `lifecycle: rollout` rows that are",
+        "pending (`decision: pending` or `terminal: undecided`) and created on or after",
+        "2026-10-21. Include every field below; `done_by` must be on or before",
+        "`review_by`.",
+        "",
+        "- `cohorts`: ordered rollout steps, ending in the full intended cohort;",
+        "  a single-user step such as `David-only` cannot be terminal.",
+        "- `clean_metric`: the metric that must stay clean before expansion.",
+        "- `expander`: the session, role, or person responsible for each expansion.",
+        "- `done_by`: the date the ramp reaches its final cohort.",
+        "",
+        "Example:",
+        "",
+        "```yaml",
+        "ramp:",
+        '  cohorts: ["release-probe", "1%", "5% 3h", "25%", "100%"]',
+        '  clean_metric: "checkout_error_rate"',
+        '  expander: "release-owner session"',
+        '  done_by: "2026-11-15"',
+        "```",
+        "",
+        "Rows created before the cutoff stay grandfathered when `ramp` is absent;",
+        "the checker warns and reports their count. Do not backfill plans into them.",
+        "",
         "This is **not** a second classification of deployment wiring. Secret vs config",
         "vs `public_build` still lives only in",
         "[`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)",
@@ -368,6 +396,27 @@ def _not_feature_flags(ignore: list[dict[str, Any]]) -> list[str]:
             f"| `{entry['key']}` | {entry['reason']} | {entry.get('owner', '—')} | "
             f"{entry.get('decision', '—')} | {entry.get('review_by', '—')} | {_md(entry.get('notes', '—'))} |"
         )
+    lines.append("")
+    return lines
+
+
+def _render_ramp_plans(flags: list[dict[str, Any]]) -> list[str]:
+    lines = ["## Rollout ramp plans", ""]
+    ramped = [entry for entry in flags if isinstance(entry.get("ramp"), dict)]
+    if ramped:
+        lines += [
+            "| key | cohorts | clean metric | expander | done_by |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for entry in ramped:
+            ramp = entry["ramp"]
+            cohorts = " → ".join(str(step) for step in ramp.get("cohorts", []))
+            lines.append(
+                f"| `{entry['key']}` | {_md(cohorts)} | {_md(ramp.get('clean_metric', '—'))} | "
+                f"{_md(ramp.get('expander', '—'))} | {ramp.get('done_by', '—')} |"
+            )
+    else:
+        lines.append("(none)")
     lines.append("")
     return lines
 
@@ -474,6 +523,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                 + " |"
             )
         lines.append("")
+
+    lines += _render_ramp_plans(flags)
 
     lines += ["## Undeclared env flags", ""]
     undeclared = [

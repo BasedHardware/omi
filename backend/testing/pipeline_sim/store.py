@@ -121,6 +121,9 @@ class SimTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
 
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return self.store.first_pending(owner_key, ready_only=True)
+
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier(priority)
 
@@ -241,14 +244,45 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str) -> dict | None:
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
+            if ready_only and row.get('state') != 'result_ready':
+                continue
             candidate = (row['capture_at'], segment_id)
             if best is None or candidate < best:
                 best = candidate
         return deepcopy(self.rows[('jobs', best[1])]) if best else None
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        # Firestore excludes rows without the ordered field, and orders ties by document name.
+        rows = [
+            (row['ready_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('state') == 'result_ready' and 'ready_at' in row
+        ]
+        return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
+
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        rows = sorted(
+            (row['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
+        )
+        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
+
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        keys = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'merge_holds' and row.get('held') and (after is None or key > after)
+        )
+        owners = []
+        for key in keys[:limit]:
+            job = self.first_pending(key)
+            owners.append((key, job['owner_id'] if job else None))
+        return owners
 
     def service_frontier(self, priority: int) -> float:
         name = f'p{priority}_service'

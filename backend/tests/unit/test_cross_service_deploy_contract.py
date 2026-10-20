@@ -105,12 +105,12 @@ def _unparseable_boolean(manifest: dict) -> None:
 
 
 def _unparseable_named_set_boolean(manifest: dict) -> None:
-    # LIVE_SPEAKER_SPAN_RESOLUTION is compared against a named module-level frozenset (_TRUTHY), not a
+    # AUDIO_TIMELINE_SPANS is compared against a named module-level frozenset (_TRUTHY), not a
     # literal tuple; a scanner that skips named sets never sees its tokens.
     for services in (_prod(manifest)['cloud_run']['services'],):
         for svc in services.values():
-            if 'LIVE_SPEAKER_SPAN_RESOLUTION' in svc.get('env', {}):
-                svc['env']['LIVE_SPEAKER_SPAN_RESOLUTION']['value'] = 'enabled'
+            if 'AUDIO_TIMELINE_SPANS' in svc.get('env', {}):
+                svc['env']['AUDIO_TIMELINE_SPANS']['value'] = 'enabled'
 
 
 def _sync_handler_wrong_route(manifest: dict) -> None:
@@ -285,10 +285,10 @@ def test_unparseable_boolean_value_fails(results: Results) -> None:
 
 
 def test_unparseable_named_set_boolean_fails(results: Results) -> None:
-    # LIVE_SPEAKER_SPAN_RESOLUTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
+    # AUDIO_TIMELINE_SPANS is read via ``in _TRUTHY`` (a named frozenset); the scanner must
     # resolve named collections or this deployed flag is invisible to boolean-token.
     assert any(
-        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_SPEAKER_SPAN_RESOLUTION')
+        v.invariant == 'boolean-token' and v.scope.endswith('/AUDIO_TIMELINE_SPANS')
         for v in results.mutations['unparseable_named_set_boolean']
     ), results.mutations['unparseable_named_set_boolean']
 

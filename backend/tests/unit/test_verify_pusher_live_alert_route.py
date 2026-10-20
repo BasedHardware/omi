@@ -497,15 +497,14 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
     assert set(gated) <= set(committed)
 
 
-def test_live_stt_import_allowlist_excludes_pending_runway_rules(verifier: SimpleNamespace) -> None:
+def test_live_stt_import_allowlist_matches_committed_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
     gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
     assert set(rules) == set(gated) | set(verifier.DATASOURCE_CANARY_UIDS)
     assert set(verifier.RULE_UIDS) <= set(rules)
     assert "omi-datasource-gmp" not in rules
-    assert set(rules).isdisjoint(verifier.LIVE_STT_PENDING_UIDS)
     non_live_stt = set(gated) - set(verifier.LIVE_STT_IMPORT_UIDS)
-    assert (set(rules) - set(verifier.DATASOURCE_CANARY_UIDS) - non_live_stt) | set(verifier.LIVE_STT_PENDING_UIDS) == {
+    assert (set(rules) - set(verifier.DATASOURCE_CANARY_UIDS) - non_live_stt) == {
         rule["uid"] for rule in json.loads((verifier.ALERT_SOURCES / "live-stt.json").read_text())
     }
     assert set(verifier.LIVE_STT_IMPORT_UIDS) | set(verifier.REDIS_CACHE_IMPORT_UIDS) | set(verifier.RULE_UIDS) <= set(
@@ -548,7 +547,6 @@ def test_live_stt_import_upserts_only_allowlisted_rules_and_checks_telegram_rout
     assert {uid for uid, _exists in calls} == set(rules)
     assert (existing_uid, True) in calls
     assert all(exists for uid, exists in calls if uid == existing_uid)
-    assert not any(uid in verifier.LIVE_STT_PENDING_UIDS for uid, _exists in calls)
 
 
 def test_import_rejects_missing_verified_telegram_receiver(

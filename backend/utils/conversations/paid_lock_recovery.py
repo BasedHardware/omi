@@ -1,9 +1,4 @@
-"""Restore a paid owner's historical access at the existing read boundary.
-
-This performs no processing, billing, audio mutation or account-wide sweep.
-The monthly reset worker remains separately gated; funded backlogs still need
-their explicit processing choice.
-"""
+"""Restore historical paid access without processing, billing or account sweeps."""
 
 import logging
 from typing import Any
@@ -26,8 +21,6 @@ class RecoveryUnavailable(RuntimeError):
 
 def eligible(uid: str) -> bool:
     try:
-        # Stats/checkout already reads fresh. A locked read must use the same
-        # authority rather than a stale cached Free plan or a synthetic BYOK plan.
         with fresh_cache_reads(uid, 'subscription_cache'):
             subscription = users_db.get_user_valid_subscription(uid, provision=False)
         if not subscription or subscription.status != SubscriptionStatus.active or not is_paid_plan(subscription.plan):
@@ -43,36 +36,53 @@ def eligible(uid: str) -> bool:
         raise RecoveryUnavailable('Entitlement unavailable') from error
 
 
+class PaidLockRecovery:
+    """One request's fresh authority, shared by candidate selection and page writes.
+
+    Selection may admit eligible locked matches without mutating the scan. Only
+    ``heal`` persists the selected response page, never skipped pages or lookahead.
+    """
+
+    def __init__(self, uid: str):
+        self.uid = uid
+        self._eligible: bool | None = None
+
+    def can_recover(self, row: dict[str, Any]) -> bool:
+        if not row.get('is_locked') or row.get('processing_deferred'):
+            return False
+        if self._eligible is None:
+            self._eligible = eligible(self.uid)
+        return self._eligible
+
+    def heal(self, rows: list[dict[str, Any]]) -> None:
+        locked = [row for row in rows if self.can_recover(row)]
+        if not locked:
+            return
+        try:
+            with external_write_fence(self.uid):
+                for row in locked:
+                    cid = row['id']
+                    if not isinstance(cid, str) or not cid:
+                        raise RecoveryUnavailable('Conversation identity unavailable')
+                    saved = conversations_db.update_conversation(self.uid, cid, {'is_locked': False})
+                    if saved is not True:
+                        raise RecoveryUnavailable('Conversation unavailable')
+                    row['is_locked'] = False
+        except Exception as error:
+            logger.warning('paid_lock_recovery write deferred error_type=%s', type(error).__name__)
+            raise RecoveryUnavailable('Access recovery unavailable') from error
+        try:
+            redis_db.set_credits_invalidation_signal(self.uid)
+        except Exception:
+            record_fallback(
+                component='other',
+                from_mode='paid_lock_recovery',
+                to_mode='cache_expiry',
+                reason='dependency_unavailable',
+                outcome='degraded',
+                log=logger,
+            )
+
+
 def heal_conversations(uid: str, rows: list[dict[str, Any]]) -> None:
-    locked = [row for row in rows if row.get('is_locked') and not row.get('processing_deferred')]
-    if not locked or not eligible(uid):
-        return
-    try:
-        # Fence this bounded response page once, matching the upgrade batch
-        # owner, rather than adding two authority reads per historical row.
-        with external_write_fence(uid):
-            for row in locked:
-                # Never use the URL's old ID when a sync redirect resolved a survivor.
-                cid = row['id']
-                if not isinstance(cid, str) or not cid:
-                    raise RecoveryUnavailable('Conversation identity unavailable')
-                saved = conversations_db.update_conversation(uid, cid, {'is_locked': False})
-                if saved is not True:
-                    raise RecoveryUnavailable('Conversation unavailable')
-                row['is_locked'] = False
-    except Exception as error:
-        logger.warning('paid_lock_recovery write deferred error_type=%s', type(error).__name__)
-        raise RecoveryUnavailable('Access recovery unavailable') from error
-    # Each update preserves the database owner's people/search invalidations.
-    # The signal also makes older mobile clients refresh their allowance state.
-    try:
-        redis_db.set_credits_invalidation_signal(uid)
-    except Exception:
-        record_fallback(
-            component='other',
-            from_mode='paid_lock_recovery',
-            to_mode='cache_expiry',
-            reason='dependency_unavailable',
-            outcome='degraded',
-            log=logger,
-        )
+    PaidLockRecovery(uid).heal(rows)
