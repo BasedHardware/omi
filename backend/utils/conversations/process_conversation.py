@@ -209,7 +209,7 @@ from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.action_item_refresh import preserve as preserve_refresh_tasks
 from utils.conversations.action_item_extraction import action_items_for_write, filter_extracted_items
-from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
+from utils.conversations.action_item_identity import plan_replacement
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
@@ -1919,7 +1919,7 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
     if not action_items_data:
         return
 
-    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
     # A task that survives re-extraction keeps its id and export marker (no re-send).
     identity = plan_replacement(conversation.id, action_items_data, old_items, trigger)
     old_ids = [item['id'] for item in old_items]

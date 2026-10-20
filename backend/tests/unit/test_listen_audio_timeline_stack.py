@@ -1454,7 +1454,7 @@ async def test_overlapping_spans_from_two_sockets_refuse_ambiguous_windows(monke
     _patch_stage_io(monkeypatch, stage_module, store, diarizer, uploads)
     if old_stage is not None:
         _patch_stage_io(monkeypatch, old_stage, store, diarizer, uploads)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
     epoch = datetime.fromtimestamp(0.0, tz=timezone.utc)

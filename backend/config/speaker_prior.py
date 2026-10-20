@@ -1,4 +1,4 @@
-"""Pinned-speaker prior switch (default off). Read at the call boundary, never at import."""
+"""Pinned-speaker prior switch (default on). Read at the call boundary, never at import."""
 
 import os
 from typing import Mapping, Optional
@@ -11,5 +11,5 @@ def pinned_speaker_prior_enabled(environ: Optional[Mapping[str, str]] = None) ->
 
     It never loosens the automatic-label threshold or margin.
     """
-    value = (environ if environ is not None else os.environ).get(PINNED_SPEAKER_PRIOR_ENV, 'false')
-    return value.strip().lower() == 'true'
+    value = (environ if environ is not None else os.environ).get(PINNED_SPEAKER_PRIOR_ENV, '')
+    return value.strip().lower() not in {'false', 'off', '0'}

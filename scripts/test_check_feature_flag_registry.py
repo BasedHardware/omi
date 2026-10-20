@@ -86,6 +86,15 @@ class RegistryFixture(unittest.TestCase):
     def errors(self) -> list[str]:
         return check(self.root, check_render=False)[0]
 
+    def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
+        self.write("backend/docs/experiment.md", "Pre-registered readout")
+        row = flag(lifecycle="experiment", decision="kill_after_readout", terminal="undecided",
+                   review_by="2026-10-30", prereg="backend/docs/experiment.md")
+        self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
+        for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
+            errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
+            self.assertTrue(any("kill_after_readout requires" in error for error in errors))
+
     def test_finds_literal_and_module_constant_env_reads_with_locations(self) -> None:
         self.write(
             "backend/service.py",

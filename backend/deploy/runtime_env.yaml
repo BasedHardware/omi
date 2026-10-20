@@ -74,7 +74,6 @@ environments:
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -389,7 +388,6 @@ environments:
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -834,7 +832,6 @@ environments:
               value: based-hardware-dev
               category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1102,7 +1099,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1383,7 +1379,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1651,7 +1646,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2207,7 +2201,6 @@ environments:
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2601,7 +2594,6 @@ environments:
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3018,7 +3010,6 @@ environments:
               value: based-hardware
               category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3375,7 +3366,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3738,7 +3728,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -4083,7 +4072,6 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}

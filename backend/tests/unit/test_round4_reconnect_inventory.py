@@ -178,7 +178,7 @@ async def _uncertain_send_run(mp, *, spans, protection, session_module=None, pee
             ),
         )
     stack = f._Stack(mp, v2=False, spans=spans, conversation_id=f.CONV1)
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     peer = peer or f.pusher
     if storage_peer is not None:
         mp.setattr(storage_peer, '_get_storage_client', lambda: storage_module._get_storage_client())
@@ -336,7 +336,7 @@ async def _interior_prefix_run(mp, *, protection, session_module=None, peer=None
             ),
         )
     stack = f._Stack(mp, v2=False, spans=False, conversation_id=f.CONV1)
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     peer = peer or f.pusher
     if storage_peer is not None:
         mp.setattr(storage_peer, '_get_storage_client', lambda: storage_module._get_storage_client())
@@ -811,7 +811,7 @@ async def test_late_ack_same_socket_resumes_through_real_pusher(monkeypatch, pro
     f.pusher_env.__wrapped__(monkeypatch)
     monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     stack = f._Stack(monkeypatch, v2=False, spans=True, conversation_id=f.CONV1)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     receiver_task = None
 
     class DelayedRecv:
@@ -957,7 +957,7 @@ def _segment_snapshot(conv):
 def _inventory_base(mp):
     store, diarizer = stagemod.env.__wrapped__(mp)
     mp.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     mp.setenv('AUDIO_TIMELINE_V2', 'false')
     client = f.FakeStorageClient()
     mp.setattr(storage_module, '_get_storage_client', lambda: client)
@@ -1297,7 +1297,7 @@ async def test_unbound_runs_freeze_to_acceptance_conversation(monkeypatch):
 def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
     store, diarizer = env
     monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     target = round4_stage if round4_stage else stagemod.stage
     conv = stagemod._conversation([0, 1] * 4)
@@ -1330,7 +1330,7 @@ def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, c
 def test_off_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
     store, diarizer = env
     monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     conv = stagemod._conversation([0, 1] * 4)
     audio = stagemod.FakeAudio([0, 1] * 4)
@@ -1376,7 +1376,7 @@ def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_st
         store, diarizer = stagemod.env.__wrapped__(mp)
         stagemod._patch_stage_deps(mp, module, store, diarizer)
         mp.setenv('AUDIO_TIMELINE_SPANS', 'false')
-        mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
         mp.setenv('AUDIO_TIMELINE_V2', 'false')
         audio = stagemod.FakeAudio([0, 1] * 4)
         mp.setattr(module, 'iter_audio_chunk_pcm', audio)
