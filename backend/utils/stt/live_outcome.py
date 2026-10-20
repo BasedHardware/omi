@@ -59,6 +59,8 @@ class LiveLegOutcome:
         self.transport_released = False
         # Content-free transport cause of an untyped (connection_lost) death.
         self.connection_cause: str | None = None
+        # False for a same-target retry dial: one blip is one health vote.
+        self.evidence = True
 
     @staticmethod
     def _pod_draining() -> bool:
@@ -126,7 +128,7 @@ class LiveLegOutcome:
         try:
             if emit_fallback is not None and not self.excluded_death:
                 emit_fallback()
-            if not self.uid or routing_mode_raw() == 'off':
+            if not self.evidence or not self.uid or routing_mode_raw() == 'off':
                 return True
             if not any(entry.id == self.target for entry in registry()):
                 return True

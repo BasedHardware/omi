@@ -27,7 +27,13 @@ def is_draining() -> bool:
 
 
 def install_drain_signal_marker() -> None:
-    """Chain the server's SIGTERM handler; set the marker first, change nothing else."""
+    """Chain the server's SIGTERM handler; set the marker first, change nothing else.
+
+    Called while importing ``main``. uvicorn (0.30, ``Server.capture_signals``)
+    installs its exit handler with ``signal.signal`` *before* ``config.load()``
+    imports the app, so ``previous`` is uvicorn's handler and graceful
+    shutdown is unchanged; the FSR loop-lease handler relies on the same order.
+    """
     global _installed
     if _installed or threading.current_thread() is not threading.main_thread():
         return

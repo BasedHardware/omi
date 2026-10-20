@@ -46,6 +46,7 @@ from utils.stt.connect_backoff import ConnectLease, connect_backoff
 from utils.stt.live_metrics import CONNECT_BACKOFF, COST_DECISION, COST_FAIL_OPEN, COST_NO_PERMITTED_TARGET
 from utils.stt.live_metrics import SAME_TARGET_RETRIES
 from utils.stt.live_retry import RETRY_JITTER_SECONDS, retry_jitter_seconds, same_target_retry_allowed
+from utils.stt.pod_drain import is_draining
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -1021,13 +1022,11 @@ async def connect_configured_chain(
             family=service.value,
         ):
             return None
+        if is_draining():
+            return None  # our own restart: let the client reconnect elsewhere
         retried.add(identity)
         episode = current_recovery.get() if recovery_on else None
         dial_identity = attempt_identity(service, target)
-        if episode is not None and not episode.can_attempt(dial_identity):
-            if not episode.grant_soniox_reentry(dial_identity):
-                SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
-                return None
         delay = retry_jitter_seconds()
         if episode is not None:
             remaining = episode.remaining()
@@ -1037,9 +1036,24 @@ async def connect_configured_chain(
         if not circuit.allow_request(max_probes=probes):
             SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
             return None
+        # The redial is admitted; only now take this identity's own retry slot
+        # (never the Soniox rescue re-entry).
+        if (
+            episode is not None
+            and not episode.can_attempt(dial_identity)
+            and not episode.grant_transient_retry(dial_identity)
+        ):
+            _, release = circuit.deferred_result_callbacks()
+            release()
+            SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
+            return None
         failed_targets.discard(identity)
         failed.discard(provider_for_service(service) or service.value)
+        before = prior_outcome
         result = await attempt(service, connect, target)
+        if result is None and prior_outcome is not None and prior_outcome is not before:
+            # The first failure already voted; one blip is one health vote.
+            prior_outcome.evidence = False
         SAME_TARGET_RETRIES.labels(
             provider=service.value, path='connect', outcome='served' if result is not None else 'failed'
         ).inc()

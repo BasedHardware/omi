@@ -326,7 +326,7 @@ def _dead_managed_receiver(reason='connection_lost', text_seen=False):
         normalized_death_reason=reason,
     )
     recovery = SimpleNamespace(granted=[], jitter={})
-    recovery.grant_soniox_reentry = lambda identity: recovery.granted.append(identity) or True
+    recovery.grant_transient_retry = lambda identity: recovery.granted.append(identity) or True
     recovery.note_retry_jitter = lambda identity, seconds: recovery.jitter.__setitem__(identity, seconds)
     return SimpleNamespace(
         stt_socket=socket,
@@ -352,6 +352,69 @@ def test_mid_session_retry_respects_switch_and_text(monkeypatch, switch, text_se
     receiver = _dead_managed_receiver(text_seen=text_seen)
     assert not live_recovery.allow_same_target_retry(receiver, 'soniox', 'connection_lost', managed=True)
     assert 'soniox' in receiver._stt_failed_providers
+
+
+@pytest.mark.asyncio
+async def test_a_failed_same_target_retry_is_one_health_vote_not_two(monkeypatch):
+    monkeypatch.setattr(live_chain, 'retry_jitter_seconds', lambda: 0.0)
+    monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
+    votes = []
+    monkeypatch.setattr(live_chain.health, 'record_session', lambda *args, **_kwargs: votes.append(args[2:]) or True)
+
+    dials = []
+
+    async def blip():
+        dials.append(1)
+        return SimpleNamespace(is_connection_dead=True, finish=lambda: None, death_reason=None, typed_death_reason=None)
+
+    with pytest.raises((live_chain.LiveChainExhausted, RuntimeError)):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.soniox,
+            connect_primary=blip,
+            callbacks={},
+            failed=set(),
+            models=['soniox'],
+            routing_uid=_uid(7),
+            routing_language='ja',
+        )
+    failures = [vote for vote in votes if provider_observation(vote[0], vote[3]) is True]
+    assert len(dials) == 2 and len(failures) == 1  # retried, but one vote
+
+
+@pytest.mark.asyncio
+async def test_no_same_target_retry_while_the_pod_drains(monkeypatch, draining):
+    monkeypatch.setattr(live_chain, 'retry_jitter_seconds', lambda: 0.0)
+    monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
+    draining.mark_draining()
+    connect = AsyncMock(
+        return_value=SimpleNamespace(
+            is_connection_dead=True, finish=lambda: None, death_reason=None, typed_death_reason=None
+        )
+    )
+    with pytest.raises((live_chain.LiveChainExhausted, RuntimeError)):
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.soniox,
+            connect_primary=connect,
+            callbacks={},
+            failed=set(),
+            models=['soniox'],
+        )
+    assert connect.await_count == 1
+    assert not live_recovery.allow_same_target_retry(
+        _dead_managed_receiver(), 'soniox', 'connection_lost', managed=True
+    )
+
+
+def test_retry_slot_is_separate_from_the_soniox_rescue_reentry():
+    from utils.stt.recovery_state import LiveRecoveryController
+
+    controller = LiveRecoveryController(SimpleNamespace())
+    controller.attempted_targets = {'modulate-velma-2', 'soniox'}
+    assert controller.grant_transient_retry('modulate-velma-2')
+    assert controller.reserve('modulate-velma-2')
+    assert not controller.reserve('modulate-velma-2')  # one retry per identity
+    assert controller.grant_soniox_reentry('soniox')  # the rescue slot is untouched
+    assert controller.reserve('soniox')
 
 
 def test_jitter_is_consumed_once_by_the_dial():

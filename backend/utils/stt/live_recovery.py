@@ -12,6 +12,7 @@ from utils.stt import live_health
 from utils.stt.live_health import bounded_language
 from utils.stt.live_metrics import SAME_TARGET_RETRIES, SESSION_LOCAL_EXCLUSION_RELEASES
 from utils.stt.live_retry import retry_jitter_seconds, same_target_retry_allowed
+from utils.stt.pod_drain import is_draining
 from utils.stt.live_router import note_failed_route
 from utils.stt.recovery_state import RecoveryState
 from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
@@ -101,10 +102,11 @@ def allow_same_target_retry(receiver: Any, dead_provider: str | None, reason: st
     """Re-admit the leg that just died once, when it died at the transport
     before its first text and its target is neither benched nor circuit-open.
 
-    The retry is one per family per session, takes the controller's single
-    re-entry grant, and is dialed after a short jitter (see _attempt_dial).
+    The retry is one per family per session (shared with the Soniox rescue),
+    takes the controller's per-identity retry slot (never the rescue
+    re-entry), and is dialed after a short jitter (see _attempt_dial).
     """
-    if not managed or not dead_provider:
+    if not managed or not dead_provider or is_draining():
         return False
     if getattr(receiver, '_pending_live_failover', None) is not None:
         # An unproven successor died: the recovery walk owns it; the retry
@@ -142,7 +144,7 @@ def allow_same_target_retry(receiver: Any, dead_provider: str | None, reason: st
     ):
         return False
     recovery = getattr(receiver, 'recovery', None)
-    if recovery is not None and not recovery.grant_soniox_reentry(identity):
+    if recovery is not None and not recovery.grant_transient_retry(identity):
         SAME_TARGET_RETRIES.labels(provider=dead_provider, path='death', outcome='refused').inc()
         return False
     retries.add(dead_provider)
