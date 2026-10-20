@@ -15,7 +15,9 @@ What is compared
     instead of a silent ``OK``. Unresolvable references report ``INVENTORY``.
     Live reads cannot prove the current ConfigMap data matches what already
     running pods resolved at container start, so live envFrom keys compare as
-    ``INVENTORY`` (offline fixtures are snapshots and compare exactly).
+    ``INVENTORY`` (offline fixtures are snapshots and compare exactly) — but a
+    key the serving ReplicaSet sets through an explicit ``env`` entry shadows
+    ``envFrom`` and is always compared, proven or not.
 
 Each serving target's application-container env is compared with the
 expected env (``runtime_env.yaml`` / rendered deploy state for Cloud Run,
@@ -155,6 +157,10 @@ class ServingTarget:
     key_count: int
     fingerprint: str
     display_fingerprint: str = ''  # redacted form; the only one safe to publish
+    # Keys this target sets through explicit ``env`` entries. Explicit entries
+    # shadow ``envFrom`` (K8s precedence) and the serving spec is immutable, so
+    # their values stay knowable even when live ConfigMap data is unproven.
+    explicit_keys: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -775,6 +781,7 @@ def read_gke_workload(
         pod_spec = ((rs.get('spec') or {}).get('template') or {}).get('spec') or {}
         container = _application_container(pod_spec.get('containers'), scope=rs_name, name=spec.container)
         env_map = _env_list_to_live(container.get('env', []), scope=rs_name)
+        explicit_keys = frozenset(env_map)
         for ref in _envfrom_ref_identities(_envfrom_sources(container)):
             refs_seen.add(ref)
             source_name = ref.split('#', 1)[0]
@@ -792,6 +799,7 @@ def read_gke_workload(
                     key_count=len(env_map),
                     fingerprint=env_fingerprint(env_map),
                     display_fingerprint=env_fingerprint(env_map, redacted=True),
+                    explicit_keys=explicit_keys,
                 ),
                 env_map,
             )
@@ -851,7 +859,12 @@ def compare_service(
         # Key presence is checked even when the expected value is unknown (deploy-time
         # binding): a None hash skips only the value comparison, never the key check.
         missing |= declared - set(env_map) - skip_missing
-        for key in sorted((declared & set(env_map)) - skip_compare):
+        # Unproven live ConfigMap data only degrades keys whose effective value
+        # comes from envFrom. A key this target sets through an explicit env
+        # entry shadows envFrom (K8s precedence) and its spec is immutable, so
+        # the value stays knowable and must not be excused.
+        target_skip = skip_compare - target.explicit_keys
+        for key in sorted((declared & set(env_map)) - target_skip):
             want = expected_env[key]
             if want is not None and env_map[key] != want:
                 mismatches.append(

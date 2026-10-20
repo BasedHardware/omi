@@ -980,6 +980,78 @@ def test_gke_live_envfrom_data_is_unproven_and_reports_inventory(checker) -> Non
     assert checker.exit_code((result,), strict=True) == 0
 
 
+def test_gke_live_explicit_env_shadowing_envfrom_is_compared(checker) -> None:
+    # An explicit env entry on the serving ReplicaSet shadows envFrom (K8s
+    # precedence) and its spec is immutable, so its value is knowable even when
+    # the live ConfigMap data is unproven: a stale serving literal must fail
+    # --strict, not hide behind the envFrom INVENTORY downgrade. Keys whose
+    # effective value comes only from envFrom stay unasserted.
+    deployment = 'prod-omi-pusher'
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        # Stale explicit literal; the chart (and manifest ConfigMap contract) say otherwise.
+        {'name': 'STT_SERVICE_MODELS', 'value': 'dg-nova-3'},
+    ]
+    cm_doc = {
+        'data': {
+            'STT_SERVICE_MODELS': 'someone-updated-the-configmap-after-pod-start',
+            'GOOGLE_CLIENT_ID': 'id',
+        }
+    }
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(cm_doc), stderr='')
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    overrides = {
+        'pusher': {
+            'X': checker.value_hash('value', 'x'),
+            'STT_SERVICE_MODELS': checker.value_hash('value', 'modulate-velma-2,soniox,parakeet'),
+        }
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unproven == ('prod-omi-backend-config',)
+    assert [m.key for m in result.value_mismatches] == ['STT_SERVICE_MODELS']
+    assert result.value_mismatches[0].target == f'{deployment}-a'
+    assert result.status == 'DRIFT'
+    assert result.has_drift
+    assert checker.exit_code((result,), strict=True) == 1
+    # The envFrom-only key keeps the unproven downgrade: never asserted either way.
+    assert 'GOOGLE_CLIENT_ID' not in {m.key for m in result.value_mismatches}
+    assert 'GOOGLE_CLIENT_ID' not in result.missing_from_live
+
+
 def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
     cm_name, cm_data = _prod_configmap_fixture(checker)
     envfrom = [{'configMapRef': {'name': cm_name}}]
