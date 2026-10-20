@@ -161,6 +161,7 @@ extension _CaptureLiveRecovery on CaptureController {
       for (final frame in source.processBytes(List<int>.from(packet))) {
         phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
       }
+      CaptureContinuityMonitor.instance.onFrameInCustody();
     } else {
       state.orphanDropped++;
     }
