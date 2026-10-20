@@ -894,21 +894,6 @@ class ListenSessionRuntime:
                 except Exception as error:
                     logger.error('Silent-user notification refresh failed type=%s', type(error).__name__)
 
-    def _exclude_cap_held_seconds(self, seconds: int) -> int:
-        """Drop STT cap held (untranscribed) audio from elapsed transcription seconds.
-
-        Held audio is metered once, by recovery, when it is actually transcribed.
-        Sessions without a cap admission, or that never hold, meter unchanged.
-        """
-        receiver = getattr(self, 'receiver', None)
-        admission = getattr(receiver, 'cap_admission', None)
-        if admission is None:
-            return seconds
-        channels = (
-            len(getattr(receiver, 'channel_configs', None) or ()) if getattr(self, 'is_multi_channel', False) else 1
-        )
-        return max(0, seconds - admission.consume_held_seconds(channels))
-
     async def _flush_usage(self, *, final: bool) -> int:
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
@@ -956,13 +941,16 @@ class ListenSessionRuntime:
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
+        # STT cap held (untranscribed) receipt spans are metered once, by recovery.
+        # Without a cap admission, or with no held spans, billing is unchanged.
+        admission = getattr(self.receiver, 'cap_admission', None)
         seconds = billable_transcription_seconds(
             self.state.last_usage_record_timestamp,
             self.state.last_audio_received_time,
             now,
             getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
         )
-        seconds = self._exclude_cap_held_seconds(seconds)
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
         usage_metadata: Dict[str, Any] = live_usage_metadata(self)

@@ -139,11 +139,15 @@ that state, including direct registry endpoints and fallback/recovery legs.
 The state debits accepted PCM seconds across channels, replay and successors.
 The existing 60-second usage flush refreshes legacy funded allowance; ladder
 units use the bounded cadence below.
-Root counters retain their received-audio semantics, except that the usage flush
-subtracts suppressed (held) PCM seconds, summed across channels and divided by the
-channel count, from elapsed `transcription_seconds`, and so from the shadow
-units derived from it. Held audio is metered once, when recovery transcribes it.
-Sessions without an admission, or that never suppress, meter unchanged. Timestamp adapters suppress
+Root counters retain their received-audio semantics, except for held audio. The
+receiver records the wall-clock receipt span of every frame it denies at receipt
+(merged, so channels and bursts count arrival time once). The usage flush
+subtracts the overlap of those spans with its billable window from
+`transcription_seconds`, and so from the shadow units derived from it. Held audio
+is metered once, when recovery transcribes it. Provider-pump suppression of audio
+the receiver already admitted is not subtracted: its receipt window may already be
+billed, so that bounded race bills as before rather than undercounting a later
+window. Sessions without an admission, or that never hold, meter unchanged. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
 continue. Accepted provider queues drain. When dispatch enforcement pauses managed live audio, the server retains that

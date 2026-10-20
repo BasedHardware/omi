@@ -1,4 +1,4 @@
-"""Funded-provider admission; legacy root counters exclude only suppressed (held) live audio."""
+"""Funded-provider admission; legacy root counters exclude only receiver-held live audio."""
 
 import logging
 import os
@@ -83,6 +83,10 @@ def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown', *, lan
     return allowance.managed
 
 
+HELD_SPAN_MERGE_GAP_SECONDS = 0.5
+MAX_HELD_SPANS = 256
+
+
 @lru_cache(maxsize=16)
 def _units_per_second(provider='deepgram'):
     from config.rate_card import price_transcription
@@ -112,10 +116,10 @@ class LiveAdmission:
         self.usage_cache = None
         self.capture_observer: Callable[[bytes, int, int, bool], None] | None = None
         self.active_capture: tuple[bytes, int, list[tuple[int, int]]] | None = None
-        # Suppressed PCM seconds summed across channels. The usage flush excludes
-        # them from elapsed transcription seconds: held audio is metered once,
-        # by recovery, when it is actually transcribed.
-        self.held_audio_seconds = 0.0
+        # Merged wall-clock receipt spans of receiver-denied audio. The usage flush
+        # excludes their overlap with its billable window: held audio is metered
+        # once, by recovery, when it is actually transcribed.
+        self.held_spans: list[list[float]] = []
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 
@@ -193,16 +197,31 @@ class LiveAdmission:
                 return False
         return True
 
+    def note_held(self, received_at, seconds):
+        """Record the receipt span of audio the receiver denied before any provider.
+
+        Spans are wall clock, so channels overlap and bursts collapse to their
+        arrival time. Socket-level suppression of already-admitted queued audio is
+        not recorded: its receipt window may already be billed.
+        """
+        start, end = received_at - seconds, received_at
+        spans = self.held_spans
+        if spans and start <= spans[-1][1] + HELD_SPAN_MERGE_GAP_SECONDS:
+            spans[-1][0] = min(spans[-1][0], start)
+            spans[-1][1] = max(spans[-1][1], end)
+            return
+        spans.append([start, end])
+        if len(spans) > MAX_HELD_SPANS:
+            del spans[0]  # Dropping a span bills it as before; never subtracts more.
+
+    def held_seconds_between(self, start, end):
+        """Held wall-clock seconds in [start, end]; spans ending by `end` are released."""
+        held = sum(max(0.0, min(end, b) - max(start, a)) for a, b in self.held_spans)
+        self.held_spans = [[max(a, end), b] for a, b in self.held_spans if b > end]
+        return held
+
     def record_suppressed(self, provider, seconds):
         record_audio('live', 'suppressed', provider, seconds, self.reason == 'plan_allowance_exhausted')
-        self.held_audio_seconds += seconds
-
-    def consume_held_seconds(self, channels=1):
-        """Whole wall-clock held seconds since the last call; the fraction carries."""
-        channels = max(1, channels)
-        whole = int(self.held_audio_seconds / channels)
-        self.held_audio_seconds = max(0.0, self.held_audio_seconds - whole * channels)
-        return whole
 
     def send(self, raw, data, provider, rate, *args, **kwargs):
         if not self.packet_allowed(data, provider, rate):
