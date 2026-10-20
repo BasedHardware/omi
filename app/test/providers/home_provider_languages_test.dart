@@ -18,6 +18,32 @@ void main() {
   });
 
   group('source of the picker list', () {
+    test('offers Gujarati on first run and after an offline fetch', () async {
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      expect(provider.availableLanguages['Gujarati'], 'gu');
+      expect(provider.getLanguageName('gu'), 'Gujarati');
+
+      await provider.loadAvailableLanguages(fetch: () async => throw Exception('offline'));
+
+      expect(provider.availableLanguages['Gujarati'], 'gu');
+      expect(provider.getLanguageName('gu'), 'Gujarati');
+    });
+
+    test('reopens a cached Gujarati catalog without a network response', () async {
+      final provider = HomeProvider();
+      final reopened = HomeProvider();
+      addTearDown(provider.dispose);
+      addTearDown(reopened.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => {'English': 'en', 'Gujarati': 'gu'});
+      await reopened.loadAvailableLanguages(fetch: () async => null);
+
+      expect(reopened.availableLanguages['Gujarati'], 'gu');
+      expect(reopened.getLanguageName('gu'), 'Gujarati');
+    });
+
     test('falls back to the bundled list before anything is fetched', () {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
@@ -139,6 +165,17 @@ void main() {
   });
 
   group('getLanguageName', () {
+    test('keeps the Gujarati label when a cached catalog no longer offers it', () async {
+      SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode({'English': 'en'});
+      final provider = HomeProvider();
+      addTearDown(provider.dispose);
+
+      await provider.loadAvailableLanguages(fetch: () async => null);
+
+      expect(provider.availableLanguages.containsKey('Gujarati'), isFalse);
+      expect(provider.getLanguageName('gu'), 'Gujarati');
+    });
+
     test('resolves a code the current list carries', () {
       final provider = HomeProvider();
       addTearDown(provider.dispose);
@@ -200,6 +237,19 @@ void main() {
       await start(tester);
 
       expect(find.text('Tell us your primary language'), findsOneWidget);
+    });
+
+    testWidgets('can search for and select Gujarati in the real primary-language sheet', (tester) async {
+      SharedPreferencesUtil().onboardingCompleted = true;
+      await start(tester);
+
+      await tester.enterText(find.byType(TextField), 'gujarati');
+      await tester.pump();
+      expect(find.text('Gujarati'), findsOneWidget);
+
+      await tester.tap(find.text('Gujarati'));
+      await tester.pump();
+      expect(find.byIcon(Icons.check_circle), findsOneWidget);
     });
   });
 }

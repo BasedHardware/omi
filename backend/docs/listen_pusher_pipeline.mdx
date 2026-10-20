@@ -597,6 +597,16 @@ multichannel, custom STT, and BYOK routing retain their existing behavior.
 The Soniox adapter carries the agreed language of final
 tokens as private metadata; the listen receiver removes it before persistence.
 
+`utils/user_language.py` owns the served `PRIMARY_LANGUAGE_OPTIONS` and stored
+code normalization. The mobile `HomeProvider` uses that catalog, caches a
+successful response, and retains its bundled list for first-run/offline fallback
+and saved-language display names. Gujarati (`gu`) is exposed in both catalogs;
+this does not change provider routing, BYOK catalogs, or the app's UI locale.
+Backend catalog/normalization tests and `home_provider_languages_test.dart`
+pin Gujarati availability, offline behavior, and cached name resolution.
+For #20630, release staging must still verify select/save/reopen and a short
+Gujarati CV1 recording through the intended backend path before closing the issue.
+
 Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
 queue, new text enters the legacy transaction as unplaced, retaining its ID

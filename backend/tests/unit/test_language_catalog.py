@@ -13,6 +13,12 @@ from utils.user_language import (
 )
 
 
+def test_gujarati_is_offered_and_normalizes_from_code_and_name():
+    assert ('gu', 'Gujarati') in PRIMARY_LANGUAGE_OPTIONS
+    assert normalize_user_language('gu') == 'gu'
+    assert normalize_user_language('Gujarati') == 'gu'
+
+
 def test_every_offered_code_is_storable():
     # The picker POSTs the code straight to PATCH /v1/users/language, which
     # rejects anything normalize_user_language cannot resolve.
@@ -24,7 +30,9 @@ def test_offered_codes_round_trip_unchanged():
     # A code that normalizes to something else would leave the picker showing one
     # language while the account stores another.
     drifted = [
-        (code, normalize_user_language(code)) for code, _ in PRIMARY_LANGUAGE_OPTIONS if normalize_user_language(code) != code
+        (code, normalize_user_language(code))
+        for code, _ in PRIMARY_LANGUAGE_OPTIONS
+        if normalize_user_language(code) != code
     ]
     assert drifted == [], f"code changes on save: {drifted}"
 
