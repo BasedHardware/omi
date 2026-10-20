@@ -194,7 +194,68 @@ def test_mirror_is_bounded(stores):
     finally:
         FakeConn.execute = real
     assert shadow.pool.waits == [0.2]
-    assert conn_statements == ['SET LOCAL statement_timeout = 200']
+    assert conn_statements == [
+        'SET LOCAL statement_timeout = 200',
+        'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))',  # per-key, inside the bounded transaction
+    ]
+
+
+def _held(store):
+    """Hold this store's mirrors (as if its worker were busy) and return the captured commit views."""
+    views = []
+    store._after_commit = views.append
+    return views
+
+
+def test_a_late_mirror_of_an_older_commit_cannot_overwrite_a_newer_one():
+    # M1 L12-1: two committers can queue in the reverse of the commit order (or run on two instances).
+    primary, shadow = SimStore(CustomerData()), FakeShadow()
+    store = DualStore(primary, shadow, inline=True)
+    views = _held(store)
+    store.run(lambda tx: tx.put('owners', 'o', {'v': 1}))
+    store.run(lambda tx: tx.put('owners', 'o', {'v': 2}))
+    del store._after_commit
+    for view in reversed(views):  # the newer commit's mirror lands first, the older one last
+        store._after_commit(view)
+    assert shadow.rows[('owners', 'o')] == {'v': 2}
+
+
+def test_a_late_mirror_cannot_resurrect_a_purged_document():
+    primary, shadow = SimStore(CustomerData()), FakeShadow()
+    store = DualStore(primary, shadow, inline=True)
+    views = _held(store)
+    store.run(lambda tx: tx.put('control', 'c', {'v': 1}))
+    del store._after_commit
+    primary.rows.pop(('control', 'c'))  # a purge outside Store.run, then its refresh
+    store.refresh([('control', 'c')])
+    store._after_commit(views[0])  # the pre-purge commit's mirror arrives late
+    assert ('control', 'c') not in shadow.rows
+
+
+def test_mirror_locks_every_key_in_one_sorted_order():
+    primary, shadow = SimStore(CustomerData()), FakeShadow()
+    store = DualStore(primary, shadow, inline=True)
+    locked = []
+    real = FakeConn.execute
+
+    def spy(self, sql, *args):
+        if 'advisory' in sql:
+            locked.append(args[0][0])
+        return real(self, sql, *args)
+
+    FakeConn.execute = spy
+    try:
+        store.run(
+            lambda tx: (
+                tx.put('queues', 'b', {'a': 1}),
+                tx.put('owners', 'z', {'a': 1}),
+                tx.put('queues', 'a', {'a': 1}),
+            )
+        )
+    finally:
+        FakeConn.execute = real
+    ns = shadow.namespace
+    assert locked == [f'{ns}/owners/z', f'{ns}/queues/a', f'{ns}/queues/b']
 
 
 def test_full_queue_drops_without_blocking_the_caller():

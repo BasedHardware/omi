@@ -47,6 +47,7 @@ def take(ob, key='k', *, at=T0, now=T0, lease=LEASE):
     queued = put(ob, key, at=at, now=now)
     claim = ob.outbox.claim_key(queued.row_id, queued.wake_token, lease, now=now)
     assert isinstance(claim, Claim)
+    ob.wakes.clear()  # the enqueue's own wake; callers assert on the wakes that follow
     return queued, claim
 
 
@@ -118,6 +119,7 @@ def test_release_keeps_the_wake_token_so_the_same_delivery_can_retry(ob):
 
 def test_a_not_due_delivery_is_deferred_and_rearmed_by_the_outbox(ob):
     queued = put(ob, at=T0 + 300)
+    assert ob.wakes == [(queued.row_id, queued.wake_token, T0 + 300)]  # the enqueue's own wake
     ob.wakes.clear()
     assert ob.outbox.claim_key(queued.row_id, queued.wake_token, LEASE, now=T0) is Outcome.DEFERRED
     ((row_id, fresh, at),) = ob.wakes
@@ -214,9 +216,45 @@ def test_tx_enqueue_rolls_back_with_the_store_transaction(ob):
     assert ob.store_harness.store.run(lambda tx: tx.get('owners', 'x')) == {}
 
 
-def test_a_failed_wake_leaves_the_row_pending_and_sweep_retries_it(ob):
+def test_enqueue_without_tx_commits_then_creates_its_own_wake(ob):
+    # M1 L12-3, invariant 4: the caller follows the protocol and never calls wake() after a non-tx enqueue.
+    queued = put(ob, at=T0 + 10)
+    assert ob.wakes == [(queued.row_id, queued.wake_token, T0 + 10)]
+    assert ob.outbox.sweep(now=T0 + 1).rewoken == 0  # nothing left pending for the sweep
+    moved = put(ob, at=T0 + 20)  # 'max' coalescing moves the row: a new token, woken by the outbox again
+    assert moved.coalesced and ob.wakes[-1] == (queued.row_id, moved.wake_token, T0 + 20)
+    still = put(ob, at=T0 + 15)  # does not move: no token, no wake
+    assert still.wake_token is None and len(ob.wakes) == 2
+
+
+def test_wake_holds_no_pooled_connection_across_the_task_create(ob):
+    # M1 L12-5: the pool (<= 4) is shared with PostgresStore; four slow task creates must not pin it.
+    if ob.name != 'postgres':
+        pytest.skip('connection-pool behaviour of the Postgres outbox')
+    slots = ob.outbox.store.pool._slots
+    free_during_create = []
+    inner = ob.outbox.create_wake
+    ob.outbox.create_wake = lambda *args: (free_during_create.append(slots._value), inner(*args))
+    put(ob)
+    assert free_during_create == [slots._initial_value] and len(ob.wakes) == 1
+
+
+def test_a_failed_caller_wake_after_a_tx_enqueue_is_retried_by_sweep(ob):
     queued = ob.run_tx(lambda tx: put(ob, tx=tx))  # durable first; the caller's wake() after commit then fails
+    assert ob.wakes == []  # with tx the caller owns the wake
     ob.fail_wakes[0] = True
+    with pytest.raises(RuntimeError):
+        ob.outbox.wake(queued.row_id, queued.wake_token)
+    assert ob.outbox.sweep(now=T0 + 1).errors == 1
+    ob.fail_wakes[0] = False
+    assert ob.outbox.sweep(now=T0 + 2).rewoken == 1
+    assert ob.wakes == [(queued.row_id, queued.wake_token, T0)]
+
+
+def test_a_failed_wake_leaves_the_row_pending_and_sweep_retries_it(ob):
+    ob.fail_wakes[0] = True
+    queued = put(ob)  # durable first; the outbox's own wake after commit fails and is not raised
+    assert ob.wakes == []
     with pytest.raises(RuntimeError):
         ob.outbox.wake(queued.row_id, queued.wake_token)
     counts = ob.outbox.sweep(now=T0 + 1)
@@ -255,6 +293,22 @@ def test_sweep_rewakes_an_expired_lease_under_a_new_token(ob):
     assert isinstance(new, Claim) and not ob.outbox.ack(claim, 'done', now=T0 + LEASE + 3)
 
 
+def test_sweep_pages_only_actionable_rows(ob):
+    # M1 L12-2: earlier-due, already-woken rows (the normal push backlog) must not fill the page and hide a
+    # failed wake or an expired lease.
+    if ob.name == 'emulator':
+        pytest.skip('the Firestore sweep pages through utils.enrichment.outbox.sweep, not this predicate')
+    for i in range(4):
+        put(ob, f'healthy-{i}', at=T0 - 100 + i)
+    ob.fail_wakes[0] = True
+    pending = put(ob, 'pending', at=T0)
+    ob.fail_wakes[0] = False
+    _, leased = take(ob, 'leased', at=T0)
+    counts = ob.outbox.sweep(now=T0 + LEASE + 1, limit=2)
+    assert (counts.rewoken, counts.expired_leases, counts.discarded, counts.errors) == (2, 1, 0, 0)
+    assert {w[0] for w in ob.wakes} == {pending.row_id, leased.row_id}
+
+
 # 6. Privacy ------------------------------------------------------------------------------------------------------------
 def test_blocked_owner_rows_are_discarded_by_claim(ob):
     put(ob)
@@ -266,7 +320,9 @@ def test_blocked_owner_rows_are_discarded_by_claim(ob):
 
 def test_blocked_owner_is_discarded_on_delivery_and_by_sweep(ob):
     queued = put(ob, 'by-key')
+    ob.fail_wakes[0] = True  # the sweep acts on rows whose wake is still pending
     other = put(ob, 'by-sweep', at=T0 + 1)
+    ob.fail_wakes[0] = False
     ob.store_harness.customer.block_privacy(uid(ob))
     assert ob.outbox.claim_key(queued.row_id, queued.wake_token, LEASE, now=T0) is Outcome.DISCARDED
     assert ob.outbox.sweep(now=T0 + 5).discarded == 1
