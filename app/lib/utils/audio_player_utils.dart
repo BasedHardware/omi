@@ -29,7 +29,9 @@ List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
 
   while (offset < data.length - 4) {
     final lengthBytes = data.sublist(offset, offset + 4);
-    final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
+    final length = ByteData.sublistView(
+      Uint8List.fromList(lengthBytes),
+    ).getUint32(0, Endian.little);
     offset += 4;
 
     if (offset + length > data.length) break;
@@ -75,7 +77,9 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   double get playbackProgress {
     if (_totalDuration.inMilliseconds <= 0) return 0.0;
-    final progress = _currentPosition.inMilliseconds.toDouble() / _totalDuration.inMilliseconds.toDouble();
+    final progress =
+        _currentPosition.inMilliseconds.toDouble() /
+        _totalDuration.inMilliseconds.toDouble();
     return progress.clamp(0.0, 1.0);
   }
 
@@ -88,7 +92,9 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (_audioPlayer != null && !_audioPlayer!.isOpen()) {
       await _audioPlayer!.openPlayer();
       // onProgress emits nothing unless a subscription interval is set (default 0ms).
-      await _audioPlayer!.setSubscriptionDuration(const Duration(milliseconds: 100));
+      await _audioPlayer!.setSubscriptionDuration(
+        const Duration(milliseconds: 100),
+      );
     }
   }
 
@@ -105,9 +111,12 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   Future<void> togglePlayback(Wal wal) async {
     if (!canPlayOrShare(wal)) {
-      Logger.error('AudioPlayerUtils: Audio file not available for playback, WAL ${wal.id}');
+      Logger.error(
+        'AudioPlayerUtils: Audio file not available for playback, WAL ${wal.id}',
+      );
       AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.audioPlaybackUnavailable ?? 'Audio file is not available for playback',
+        globalNavigatorKey.currentContext?.l10n.audioPlaybackUnavailable ??
+            'Audio file is not available for playback',
       );
       return;
     }
@@ -143,7 +152,9 @@ class AudioPlayerUtils extends ChangeNotifier {
     final audioFilePath = await _getOrCreateAudioFile(wal);
     if (audioFilePath == null) {
       _resetPlaybackState();
-      Logger.error('AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}');
+      Logger.error(
+        'AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}',
+      );
       AppSnackbar.showSnackbarError(
         globalNavigatorKey.currentContext?.l10n.audioPlaybackFailed ??
             'Unable to play audio. The file may be corrupted or missing.',
@@ -154,7 +165,10 @@ class AudioPlayerUtils extends ChangeNotifier {
     _currentPlayingId = wal.id;
     _isProcessingAudio = false;
 
-    await _audioPlayer?.startPlayer(fromURI: audioFilePath, whenFinished: () => _onPlaybackFinished());
+    await _audioPlayer?.startPlayer(
+      fromURI: audioFilePath,
+      whenFinished: () => _onPlaybackFinished(),
+    );
 
     _setupPositionTracking(wal);
   }
@@ -190,7 +204,8 @@ class AudioPlayerUtils extends ChangeNotifier {
       }
 
       if (_totalDuration.inMilliseconds > 0) {
-        final estimatedPosition = _currentPosition + const Duration(milliseconds: 100);
+        final estimatedPosition =
+            _currentPosition + const Duration(milliseconds: 100);
         if (estimatedPosition <= _totalDuration) {
           _currentPosition = estimatedPosition;
           notifyListeners();
@@ -225,7 +240,10 @@ class AudioPlayerUtils extends ChangeNotifier {
     }
   }
 
-  Future<String?> _getOrCreateAudioFile(Wal wal, {bool forSharing = false}) async {
+  Future<String?> _getOrCreateAudioFile(
+    Wal wal, {
+    bool forSharing = false,
+  }) async {
     final cacheKey = forSharing ? '${wal.id}_share' : wal.id;
 
     if (!forSharing && _audioFileCache.containsKey(cacheKey)) {
@@ -245,7 +263,11 @@ class AudioPlayerUtils extends ChangeNotifier {
     }
 
     final tempDir = await getTemporaryDirectory();
-    final job = await _prepareDecodeJob(wal, tempDirPath: tempDir.path, forSharing: forSharing);
+    final job = await _prepareDecodeJob(
+      wal,
+      tempDirPath: tempDir.path,
+      forSharing: forSharing,
+    );
     if (job == null) return null;
 
     final decoderOverride = opusFrameDecoder;
@@ -305,18 +327,26 @@ class AudioPlayerUtils extends ChangeNotifier {
     }
   }
 
-  Future<void> skipForward({Duration duration = const Duration(seconds: 10)}) async {
+  Future<void> skipForward({
+    Duration duration = const Duration(seconds: 10),
+  }) async {
     if (_audioPlayer != null && _currentPlayingId != null) {
       final newPosition = _currentPosition + duration;
-      final clampedPosition = newPosition > _totalDuration ? _totalDuration : newPosition;
+      final clampedPosition = newPosition > _totalDuration
+          ? _totalDuration
+          : newPosition;
       await seekToPosition(clampedPosition);
     }
   }
 
-  Future<void> skipBackward({Duration duration = const Duration(seconds: 10)}) async {
+  Future<void> skipBackward({
+    Duration duration = const Duration(seconds: 10),
+  }) async {
     if (_audioPlayer != null && _currentPlayingId != null) {
       final newPosition = _currentPosition - duration;
-      final clampedPosition = newPosition < Duration.zero ? Duration.zero : newPosition;
+      final clampedPosition = newPosition < Duration.zero
+          ? Duration.zero
+          : newPosition;
       await seekToPosition(clampedPosition);
     }
   }
@@ -344,7 +374,8 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 }
 
-typedef OpusFrameDecoder = Uint8List Function(int sampleRate, int channels, Uint8List opusFrame);
+typedef OpusFrameDecoder =
+    Uint8List Function(int sampleRate, int channels, Uint8List opusFrame);
 
 class _AudioDecodeJob {
   const _AudioDecodeJob({
@@ -400,7 +431,11 @@ Future<_AudioDecodeResult> _decodeWalAudioInIsolate(
   if (job.inputFilePath != null) {
     final file = File(job.inputFilePath!);
     if (!await file.exists()) {
-      return _AudioDecodeResult(wavPath: null, isolateName: Isolate.current.debugName, warnings: warnings);
+      return _AudioDecodeResult(
+        wavPath: null,
+        isolateName: Isolate.current.debugName,
+        warnings: warnings,
+      );
     }
     final fileBytes = await file.readAsBytes();
     frames = parseLengthPrefixedFrames(fileBytes);
@@ -409,7 +444,11 @@ Future<_AudioDecodeResult> _decodeWalAudioInIsolate(
   }
 
   if (frames.isEmpty) {
-    return _AudioDecodeResult(wavPath: null, isolateName: Isolate.current.debugName, warnings: warnings);
+    return _AudioDecodeResult(
+      wavPath: null,
+      isolateName: Isolate.current.debugName,
+      warnings: warnings,
+    );
   }
 
   final pcmFrames = <Uint8List>[];
@@ -417,21 +456,30 @@ Future<_AudioDecodeResult> _decodeWalAudioInIsolate(
     if (opusFrameDecoder != null) {
       for (final opusFrame in frames) {
         try {
-          pcmFrames.add(opusFrameDecoder(job.sampleRate, job.channels, opusFrame));
+          pcmFrames.add(
+            opusFrameDecoder(job.sampleRate, job.channels, opusFrame),
+          );
         } catch (e) {
-          warnings.add('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${job.walId}: $e');
+          warnings.add(
+            'AudioPlayerUtils: skipping corrupted Opus frame for WAL ${job.walId}: $e',
+          );
         }
       }
     } else {
       await _ensureOpusInitializedInIsolate();
-      final decoder = SimpleOpusDecoder(sampleRate: job.sampleRate, channels: job.channels);
+      final decoder = SimpleOpusDecoder(
+        sampleRate: job.sampleRate,
+        channels: job.channels,
+      );
       try {
         for (final opusFrame in frames) {
           try {
             final pcmFrame = decoder.decode(input: opusFrame);
             pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
           } catch (e) {
-            warnings.add('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${job.walId}: $e');
+            warnings.add(
+              'AudioPlayerUtils: skipping corrupted Opus frame for WAL ${job.walId}: $e',
+            );
           }
         }
       } finally {
@@ -443,10 +491,17 @@ Future<_AudioDecodeResult> _decodeWalAudioInIsolate(
   }
 
   if (pcmFrames.isEmpty) {
-    return _AudioDecodeResult(wavPath: null, isolateName: Isolate.current.debugName, warnings: warnings);
+    return _AudioDecodeResult(
+      wavPath: null,
+      isolateName: Isolate.current.debugName,
+      warnings: warnings,
+    );
   }
 
-  final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
+  final totalLength = pcmFrames.fold<int>(
+    0,
+    (sum, frame) => sum + frame.length,
+  );
   final combinedPcm = Uint8List(totalLength);
   int writeOffset = 0;
   for (final frame in pcmFrames) {
