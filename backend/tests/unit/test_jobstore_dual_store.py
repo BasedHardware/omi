@@ -521,3 +521,111 @@ class TestLightHook:
         assert calls == [('batch_pipeline_dev', [('jobs', 'j')])]
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: (_ for _ in ()).throw(RuntimeError('x')))
         hook.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
+
+
+class TestParityDiagnostics:
+    """Non-matching reads are logged with a hashed key and field names only; failures name their phase."""
+
+    @pytest.fixture(autouse=True)
+    def fresh_window(self, monkeypatch):
+        monkeypatch.setattr(dual_store, '_diag_window', [0.0, 0])
+
+    @staticmethod
+    def lines(caplog) -> list[str]:
+        return [r.getMessage() for r in caplog.records if 'event=jobstore_shadow_parity' in r.getMessage()]
+
+    def test_a_drifted_read_logs_hash_and_field_names_never_the_key_or_values(self, stores, caplog):
+        primary, shadow, store = stores
+        put(store, 'owners', 'uid-SECRET-1', {'lease_until': 5.0, 'token': 'tok-SECRET'})
+        shadow.rows[('owners', 'uid-SECRET-1')] = {'lease_until': 6.0, 'token': 'tok-SECRET'}
+        caplog.set_level('WARNING', logger='database.jobstore.dual_store')
+        store.run(lambda tx: tx.get('owners', 'uid-SECRET-1'))
+        assert store.drain(5)
+        (line,) = self.lines(caplog)
+        expected_hash = dual_store.key_hash('batch_pipeline_dev', 'owners', 'uid-SECRET-1')
+        assert line == (
+            'event=jobstore_shadow_parity outcome=mismatch namespace=batch_pipeline_dev table=owners '
+            f'key={expected_hash} fields=lease_until current=shadow_differs'
+        )
+        assert 'SECRET' not in ' '.join(r.getMessage() for r in caplog.records)
+
+    def test_mirror_lag_reproduces_a_mismatch_marked_shadow_current(self, caplog):
+        """Hypothesis: a hot key written again before the earlier commit's mirror runs. That mirror copies the
+        primary's CURRENT state (L12-1), so the next commit's pre-image is older than Postgres: a mismatch even
+        though Postgres equals Firestore. One process, one mirror thread: no second replica needed."""
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        views = _held(store)
+        store.run(lambda tx: tx.put('control', 'c', {'p0_service': 1.0}))
+        store.run(lambda tx: tx.put('control', 'c', {'p0_service': tx.get('control', 'c')['p0_service'] + 1}))
+        del store._after_commit
+        before = count('control', 'read', 'mismatch')
+        caplog.set_level('WARNING', logger='database.jobstore.dual_store')
+        for view in views:  # in commit order
+            store._after_commit(view)
+        assert count('control', 'read', 'mismatch') == before + 1
+        assert shadow.rows[('control', 'c')] == primary.rows[('control', 'c')]
+        (line,) = self.lines(caplog)
+        assert 'table=control' in line and 'fields=p0_service' in line and line.endswith('current=shadow_current')
+
+    def test_missing_is_logged_and_rate_limited(self, stores, caplog, monkeypatch):
+        primary, _, store = stores
+        monkeypatch.setattr(dual_store, 'DIAG_LINES_PER_MINUTE', 2)
+        for i in range(4):
+            primary.rows[('jobs', f'j{i}')] = {'state': 'ready'}
+        caplog.set_level('WARNING', logger='database.jobstore.dual_store')
+        store.run(lambda tx: [tx.get('jobs', f'j{i}') for i in range(4)])
+        assert store.drain(5)
+        lines = self.lines(caplog)
+        assert len(lines) == 2 and all('outcome=missing' in x and 'fields=state' in x for x in lines)
+
+    def test_differing_fields_hide_dynamic_names_and_cap_the_list(self):
+        assert dual_store.differing_fields({'a': 1, 'b': 2}, {'a': 1, 'b': 3}) == 'b'
+        assert dual_store.differing_fields({'uid-ABC/x': 1}, {}) == 'other'
+        many = {f'f{i:02d}': i for i in range(10)}
+        assert dual_store.differing_fields(many, {}) == ','.join(f'f{i:02d}' for i in range(8)) + ',+2'
+        assert dual_store.differing_fields({'a': {1}}, {'a': 1}) == 'a'
+
+    def test_refresh_failure_names_phase_and_error_class(self, stores, caplog, monkeypatch):
+        primary, _, store = stores
+        aborted = type('Aborted', (Exception,), {})('409 Aborted due to cross-transaction contention')
+        monkeypatch.setattr(primary, 'run', lambda body: (_ for _ in ()).throw(aborted))
+        caplog.set_level('WARNING', logger='database.jobstore.dual_store')
+        store.refresh([('jobs', 'j'), ('results', 'j')])
+        assert store.drain(5)
+        assert any(
+            r.getMessage() == 'event=jobstore_shadow op=refresh outcome=error error=Aborted error_class=contention '
+            'phase=primary_read namespace=batch_pipeline_dev tables=jobs,results'
+            for r in caplog.records
+        )
+
+    def test_read_current_on_firestore_is_one_get_all_outside_any_transaction(self):
+        class Snap:
+            def __init__(self, path, doc):
+                self.reference, self.exists, self._doc = type('R', (), {'path': path})(), doc is not None, doc
+
+            def to_dict(self):
+                return self._doc
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def collection(self, name):
+                return type('C', (), {'document': lambda _, key: type('R', (), {'path': f'{name}/{key}'})()})()
+
+            def get_all(self, refs):
+                self.calls.append([r.path for r in refs])
+                return [Snap('batch_pipeline_dev_jobs/a', {'s': 1}), Snap('batch_pipeline_dev_jobs/b', None)]
+
+            def transaction(self):
+                pytest.fail('read_current must not open a transaction')
+
+        client = Client()
+        primary = object.__new__(batch_store.FirestoreStore)
+        primary.namespace, primary._client = 'batch_pipeline_dev', client
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv('OMI_ENV_STAGE', 'dev')
+            got = dual_store.read_current(primary, [('jobs', 'a'), ('jobs', 'b')])
+        assert got == {('jobs', 'a'): {'s': 1}, ('jobs', 'b'): {}}
+        assert client.calls == [['batch_pipeline_dev_jobs/a', 'batch_pipeline_dev_jobs/b']]

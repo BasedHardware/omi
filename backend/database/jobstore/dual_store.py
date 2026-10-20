@@ -35,11 +35,14 @@ except in staging on the staging Firestore database, which keeps that worker nam
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import importlib.util
 import logging
 import os
 import queue
+import re
 import threading
+import time
 from copy import deepcopy
 from enum import StrEnum
 from typing import Any, Callable, TypeVar
@@ -108,6 +111,76 @@ def compare(primary_doc: dict, shadow_doc: dict) -> ShadowParityOutcome:
     return ShadowParityOutcome.MATCH if same else ShadowParityOutcome.MISMATCH
 
 
+# -- parity diagnostics ---------------------------------------------------------------------------
+# A non-matching read is logged (rate-limited) with the namespace, table, a hashed key and the NAMES of the
+# top-level fields that differ: never a raw key, id or value. ``current`` says whether the Postgres copy
+# equals the primary's state now: ``shadow_current`` means the mirror already holds a newer state than the
+# pre-image the transaction read (lag between the read and its comparison), ``shadow_differs`` means
+# Postgres disagrees with the primary's current state as well.
+DIAG_LINES_PER_MINUTE = 120
+DIAG_MAX_FIELDS = 8
+_FIELD_NAME = re.compile(r'[a-z][a-z0-9_]{0,47}')
+_diag_window = [0.0, 0]
+_diag_lock = threading.Lock()
+
+
+def key_hash(namespace: str, table: str, key: str) -> str:
+    return hashlib.sha256(f'{namespace}/{table}/{key}'.encode()).hexdigest()[:12]
+
+
+def differing_fields(primary_doc: dict, shadow_doc: dict) -> str:
+    """Comma-separated schema names of the top-level fields that differ; dynamic names collapse to ``other``."""
+    names: set[str] = set()
+    for name in set(primary_doc or {}) | set(shadow_doc or {}):
+        try:
+            same = codec.canonical((primary_doc or {}).get(name)) == codec.canonical((shadow_doc or {}).get(name))
+        except (TypeError, ValueError):
+            same = False
+        if not same:
+            names.add(name if isinstance(name, str) and _FIELD_NAME.fullmatch(name) else 'other')
+    ordered = sorted(names)
+    extra = len(ordered) - DIAG_MAX_FIELDS
+    return ','.join(ordered[:DIAG_MAX_FIELDS]) + (f',+{extra}' if extra > 0 else '') if ordered else '-'
+
+
+def _diag_allowed() -> bool:
+    now = time.monotonic()
+    with _diag_lock:
+        if now - _diag_window[0] >= 60:
+            _diag_window[0], _diag_window[1] = now, 0
+        if _diag_window[1] >= DIAG_LINES_PER_MINUTE:
+            return False
+        _diag_window[1] += 1
+        return True
+
+
+def _error_class(exc: BaseException) -> str:
+    text = str(exc).lower()
+    if 'contention' in text:
+        return 'contention'
+    if 'expired' in text:
+        return 'expired'
+    if 'deadline' in text or _is_timeout(exc):
+        return 'deadline'
+    return 'other'
+
+
+def read_current(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    """The primary's current state of ``keys`` (``{}`` when absent).
+
+    On Firestore this is one strongly consistent ``get_all`` outside any transaction, so it takes no locks
+    and cannot abort a writer's transaction. Other primaries (the simulator) read through ``run``.
+    """
+    from database.batch_pipeline_store import FirestoreStore
+
+    if not isinstance(primary, FirestoreStore):
+        return primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+    client = primary.client
+    refs = [client.collection(f'{primary.namespace}_{table}').document(key) for table, key in keys]
+    found = {snap.reference.path: (snap.to_dict() or {}) for snap in client.get_all(refs) if snap.exists}
+    return {address: found.get(ref.path, {}) for address, ref in zip(keys, refs)}
+
+
 def _is_timeout(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or getattr(exc, 'sqlstate', None) == _QUERY_CANCELED
 
@@ -174,7 +247,7 @@ class DualStore:
     # -- mirror -----------------------------------------------------------------------------------
     def _after_commit(self, view: _Recorder) -> None:
         # Only the written addresses travel: the mirror copies the primary's current state, never this
-        # commit's snapshot (see ``_copy_current``).
+        # commit's snapshot (see ``copy_current``).
         writes = sorted({address for address in view.writes if address[0] in MIRRORED_TABLES})
         if not writes and not view.reads:
             return
@@ -233,7 +306,13 @@ class DualStore:
             return
         self._ensure_worker()
 
-    def _copy_current(self, conn: Any, keys: list[tuple[str, str]]) -> None:
+    def copy_current(
+        self,
+        conn: Any,
+        keys: list[tuple[str, str]],
+        phase: list[str] | None = None,
+        reader: Callable[[Any, list[tuple[str, str]]], dict] | None = None,
+    ) -> None:
         """Copy the primary's CURRENT state of ``keys`` into Postgres (upsert, or delete when gone).
 
         Commits reach the mirror out of order: two threads can queue in the reverse of Firestore's commit
@@ -247,7 +326,13 @@ class DualStore:
             conn.execute(
                 'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (f'{self.shadow.namespace}/{table}/{key}',)
             )
-        docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+        phase = phase if phase is not None else ['']
+        phase[0] = 'primary_read'
+        if reader is not None:
+            docs = reader(self.primary, keys)
+        else:
+            docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+        phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
             if doc:
                 self.shadow.write_doc(conn, table, key, doc)
@@ -256,38 +341,92 @@ class DualStore:
 
     def refresh_now(self, keys: list[tuple[str, str]]) -> None:
         """Re-copy ``keys`` from the primary into Postgres (upsert, or delete when gone). Never raises."""
+        phase = ['postgres_connect']
         try:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
-                    self._copy_current(conn, keys)
+                    self.copy_current(conn, keys, phase)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in keys:
                 _count(table, 'refresh', outcome)
-            logger.warning('event=jobstore_shadow op=refresh outcome=%s error=%s', outcome.value, type(exc).__name__)
+            self._log_failure('refresh', outcome, exc, phase[0], keys)
             return
         for table, _ in keys:
             _count(table, 'refresh', ShadowParityOutcome.MIRRORED)
 
     def mirror(self, reads: dict[tuple[str, str], dict], writes: list[tuple[str, str]]) -> None:
         """One Postgres transaction: compare the read pre-images, then copy the written keys. Never raises."""
+        phase = ['postgres_connect']
+        differing: list[tuple[str, str, ShadowParityOutcome, dict, dict]] = []
         try:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                    phase[0] = 'postgres_read'
                     for (table, key), primary_doc in reads.items():
-                        _count(table, 'read', compare(primary_doc, self.shadow.read_doc(conn, table, key)))
+                        shadow_doc = self.shadow.read_doc(conn, table, key)
+                        outcome = compare(primary_doc, shadow_doc)
+                        _count(table, 'read', outcome)
+                        if outcome is not ShadowParityOutcome.MATCH:
+                            differing.append((table, key, outcome, primary_doc, shadow_doc))
                     if writes:
-                        self._copy_current(conn, writes)
+                        self.copy_current(conn, writes, phase)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in writes:
                 _count(table, 'write', outcome)
-            logger.warning('event=jobstore_shadow outcome=%s error=%s', outcome.value, type(exc).__name__)
+            self._log_failure('write', outcome, exc, phase[0], writes)
             return
+        finally:
+            self._log_differing(differing)
         for table, _ in writes:
             _count(table, 'write', ShadowParityOutcome.MIRRORED)
+
+    def _log_failure(
+        self, op: str, outcome: ShadowParityOutcome, exc: BaseException, phase: str, keys: list[tuple[str, str]]
+    ) -> None:
+        logger.warning(
+            'event=jobstore_shadow op=%s outcome=%s error=%s error_class=%s phase=%s namespace=%s tables=%s',
+            op,
+            outcome.value,
+            type(exc).__name__,
+            _error_class(exc),
+            phase,
+            getattr(self.shadow, 'namespace', '?'),
+            ','.join(sorted({table for table, _ in keys})) or '-',
+        )
+
+    def _log_differing(self, differing: list[tuple[str, str, ShadowParityOutcome, dict, dict]]) -> None:
+        """Rate-limited diagnostics for non-matching reads. Never raises; never logs a raw key or value."""
+        try:
+            allowed = [entry for entry in differing if _diag_allowed()]
+            if not allowed:
+                return
+            try:
+                now = read_current(self.primary, sorted({(table, key) for table, key, *_ in allowed}))
+            except Exception:
+                now = None
+            namespace = getattr(self.shadow, 'namespace', '?')
+            for table, key, outcome, primary_doc, shadow_doc in allowed:
+                if now is None:
+                    current = 'unread'
+                elif compare(now.get((table, key), {}), shadow_doc) is ShadowParityOutcome.MATCH:
+                    current = 'shadow_current'
+                else:
+                    current = 'shadow_differs'
+                logger.warning(
+                    'event=jobstore_shadow_parity outcome=%s namespace=%s table=%s key=%s fields=%s current=%s',
+                    outcome.value,
+                    namespace,
+                    table,
+                    key_hash(namespace, table, key),
+                    differing_fields(primary_doc, shadow_doc),
+                    current,
+                )
+        except Exception:
+            logger.warning('event=jobstore_shadow_parity outcome=diag_error', exc_info=True)
 
     def drain(self, timeout: float = 10.0) -> bool:
         """Wait until every queued mirror has been applied (tests and shutdown). True when drained."""
