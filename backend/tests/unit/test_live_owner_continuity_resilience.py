@@ -9,7 +9,13 @@ Verifies:
 - Store failures fail closed: reads return ``None`` and writes never raise.
 """
 
+import os
+
 import pytest
+
+# ``utils.encryption`` refuses to import without a key; the doubles below replace the
+# framing helpers, so the value only has to satisfy the length check.
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi-unit-test-key-0123456789abcdef')
 
 import database.live_owner_continuity as continuity
 
@@ -99,7 +105,7 @@ class _Client:
 
     def transaction(self):
         self.transactions += 1
-        return object()
+        return _Tx()
 
 
 class _Redis:
@@ -113,6 +119,39 @@ class _Redis:
         if self.raises:
             raise RuntimeError('redis down')
         return self.result
+
+
+PREFIX = b'enc:'
+
+
+class _Tx:
+    """The only attribute ``@firestore.transactional`` inspects before dispatch."""
+
+    _read_only = False
+
+
+def _fake_decrypt(blob, uid):
+    if not isinstance(blob, (bytes, bytearray)) or not bytes(blob).startswith(PREFIX):
+        raise ValueError('owner_reconnect_undecryptable')
+    return bytes(blob)[len(PREFIX):]
+
+
+def _fake_decode(uid, assignments, compressed):
+    if not isinstance(assignments, (dict, str)):
+        raise ValueError('owner_reconnect_undecodable')
+    return {'uid': uid, 'assignments': assignments, 'compressed': bool(compressed)}
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_framing(monkeypatch):
+    """Keep framing and decoding local so the tests target this module only."""
+    monkeypatch.setattr(continuity, 'encrypt_audio_chunk', lambda data, uid: PREFIX + data)
+    monkeypatch.setattr(continuity, 'decrypt_audio_file', _fake_decrypt)
+    monkeypatch.setattr(continuity, 'decode_manual_speaker_assignments', _fake_decode)
+    # ``authority_snapshot`` applies ``@firestore.transactional`` to its inner reader at
+    # call time; the fake transaction below cannot satisfy the wrapper's retry contract,
+    # so the decorator becomes the identity for these tests.
+    monkeypatch.setattr(continuity.firestore, 'transactional', lambda fn: fn)
 
 
 @pytest.fixture
@@ -302,7 +341,7 @@ def test_donor_authority_returns_none_when_decoding_raises(monkeypatch):
         raise ValueError('undecodable')
 
     monkeypatch.setattr(continuity, 'decode_manual_speaker_assignments', explode)
-    client = _Client({'conv-1': _Snap({'manual_speaker_assignments': None})})
+    client = _Client({'conv-1': _Snap({'manual_speaker_assignments': {'a': 1}})})
     assert continuity.donor_authority('u1', 'conv-1', firestore_client=client) is None
 
 
