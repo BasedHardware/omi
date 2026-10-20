@@ -92,6 +92,11 @@ NONWINDOW_REPLAY_SETTLES = Counter(
     'Non-window replacement legs that settled horizon-aged quiet replay capture instead of failing over',
     ['provider'],
 )
+SESSION_LOCAL_EXCLUSION_RELEASES = Counter(
+    'omi_stt_session_local_exclusion_releases_total',
+    'Providers re-admitted to a session after a successor was adopted; they had left only for replay overflow',
+    ['provider'],
+)
 WINDOW_REPLAY_CUT_REQUESTS = Counter(
     'omi_stt_window_replay_cut_requests_total', 'Coalesced requests to cut a held TDT tail under capture-ring pressure'
 )
