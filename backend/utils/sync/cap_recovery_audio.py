@@ -13,6 +13,21 @@ from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
 
 
 async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dict]:
+    if meta.get('origin') == 'live':
+        segments, errors, offsets = set(), [], {}
+        await run_blocking(
+            sync_executor,
+            retrieve_vad_segments,
+            path,
+            segments,
+            errors,
+            keep_short=True,
+            source_frame_map={'live_source_slice': True} if meta.get('live_custody_version') == 4 else None,
+            segment_source_maps=offsets,
+        )
+        if errors:
+            raise RuntimeError('held live VAD failed')
+        return segments, offsets, {}, {}
     if not meta.get('full_capture'):
         position = meta.get('source_position_map')
         return {path}, {path: tuple(position) if position else None}, {}, {}

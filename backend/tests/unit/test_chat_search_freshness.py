@@ -1,4 +1,4 @@
-"""Execute chat search through hybrid success, failure, empty and JIT result paths."""
+"""Execute chat search through hybrid success, failure, and empty result paths."""
 
 import contextvars
 from datetime import datetime, timezone
@@ -25,7 +25,6 @@ def tools():
             'database.vector_db',
             'utils.conversations.factory',
             'utils.conversations.render',
-            'utils.retrieval.tools.conversation_jit',
         )
     }
     agentic = ModuleType('utils.retrieval.agentic')
@@ -39,7 +38,6 @@ def tools():
             'utils.retrieval.tools.conversation_tools',
             Path(__file__).resolve().parents[2] / 'utils/retrieval/tools/conversation_tools.py',
         )
-        module.is_jit_conversation_retrieval_enabled = MagicMock(return_value=False)
         module.keyword_search_conversation_ids = MagicMock(return_value=['keyword'])
         module.vector_db.index = object()
         module.vector_db.embeddings.embed_query.return_value = [0.1]
@@ -83,22 +81,16 @@ def test_happy_path_unchanged_and_keyword_semantic_both_used(tools):
 
 
 @pytest.mark.parametrize('error_type', [ConversationSearchUnavailableError, RuntimeError])
-@pytest.mark.parametrize('empty,jit', [(False, False), (True, False), (False, True)])
-def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, jit, error_type):
+@pytest.mark.parametrize('empty', [False, True])
+def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, error_type):
     tools.keyword_search_conversation_ids.side_effect = error_type('offline')
-    tools.is_jit_conversation_retrieval_enabled.return_value = jit
-    tools.format_active_jit_conversations.return_value = 'jit results'
-    if jit:
-        tools._consume_jit_summary_search_budget = lambda config: None
     if empty:
         tools.vector_db.query_vectors.return_value = []
     before = value('keyword', 'degraded')
     result = invoke(tools)
     assert result.endswith('[Keyword index temporarily unavailable; results are semantic-only]')
     assert value('keyword', 'degraded') == before + 1
-    if jit:
-        assert result.startswith('jit results')
-    elif empty:
+    if empty:
         assert result.startswith('No conversations found')
 
 

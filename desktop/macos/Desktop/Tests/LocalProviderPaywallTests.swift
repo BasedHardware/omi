@@ -91,7 +91,6 @@ private final class DispatchCounter: @unchecked Sendable {
     APIKeyService.persistEnrolledFingerprints([:])
     FloatingBarUsageLimiter.shared.reset()
     ManagedProactivityDecisionSource.setOverride(nil)
-    NegativeFeedbackRemediationFeature.testOverride = nil
     NetworkReachability.shared.testingOverrideIsOnline = nil
   }
 
@@ -426,8 +425,10 @@ private final class DispatchCounter: @unchecked Sendable {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    let auth = EmbeddingTestAuthorization()
+    let service = EmbeddingService(ownerIsCurrent: auth.source.isCurrent)
     do {
-      _ = try await EmbeddingService.shared.embed(text: "a screenshot's OCR text")
+      _ = try await service.embed(text: "a screenshot's OCR text", authorization: auth.snapshot)
       XCTFail("expected localProviderCloudOff")
     } catch let error as EmbeddingService.EmbeddingError {
       guard case .localProviderCloudOff = error else {
@@ -445,8 +446,10 @@ private final class DispatchCounter: @unchecked Sendable {
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)
+    let auth = EmbeddingTestAuthorization()
+    let service = EmbeddingService(ownerIsCurrent: auth.source.isCurrent)
     do {
-      _ = try await EmbeddingService.shared.embedBatch(texts: ["one", "two"])
+      _ = try await service.embedBatch(texts: ["one", "two"], authorization: auth.snapshot)
       XCTFail("expected localProviderCloudOff")
     } catch let error as EmbeddingService.EmbeddingError {
       guard case .localProviderCloudOff = error else {
@@ -467,15 +470,17 @@ private final class DispatchCounter: @unchecked Sendable {
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.cloud.rawValue, forKey: AIProvider.cloudAssistModeKey)
     let dispatchCount = DispatchCounter()
+    let auth = EmbeddingTestAuthorization()
     let service = EmbeddingService(
+      cloudEmbeddingAllowed: { _ in true },
       acquireAuth: { _ in "Bearer test" },
       dispatch: { _ in
         dispatchCount.increment()
         throw URLError(.notConnectedToInternet)
-      })
+      }, ownerIsCurrent: auth.source.isCurrent)
 
     do {
-      _ = try await service.embed(text: "test")
+      _ = try await service.embed(text: "test", authorization: auth.snapshot)
       XCTFail("the stubbed dispatch always throws, so embed cannot succeed")
     } catch let error as EmbeddingService.EmbeddingError {
       if case .localProviderCloudOff = error {
@@ -493,7 +498,6 @@ private final class DispatchCounter: @unchecked Sendable {
   /// must fail closed with a clear, quiet tool result rather than throwing or
   /// silently doing nothing under Local with cloud-assist off.
   func testWebSearchToolReturnsOffMessageWhenLocalAndCloudAssistOff() async {
-    NegativeFeedbackRemediationFeature.testOverride = true
     UserDefaults.standard.set("local", forKey: bridgeModeKey)
     UserDefaults.standard.set(
       AIProvider.CloudAssistMode.off.rawValue, forKey: AIProvider.cloudAssistModeKey)

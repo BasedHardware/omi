@@ -252,12 +252,6 @@
     "Brain Map Rebuilt": [
       "observed"
     ],
-    "jit_proactivity_admission": [
-      "observed",
-      "success",
-      "failure",
-      "skipped"
-    ],
     "Notification Delivery Skipped": [
       "observed"
     ]

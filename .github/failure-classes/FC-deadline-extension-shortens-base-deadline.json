@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-deadline-extension-shortens-base-deadline",
+  "violated_contract": "A rule that lengthens a deadline from optional context must only ever lengthen it: the result is never shorter than the caller's ordinary or user-configured deadline. continuation_timeout returned the time left in a calendar meeting's scheduled window plus grace as the live silence threshold even when that was shorter than the ordinary 120 seconds or the user's silence setting. A calendar-backed conversation still talking just after its scheduled end was split at the end plus two minutes, and a 10-minute or 4-hour silence setting was cut down to the meeting window.",
+  "canonical_prevention": "Combine the extension with the caller's deadline as a floor (max of the two) inside the one shared helper that the lifecycle loop, reconnect admission and continuation-pointer lookup all call, so no caller can apply the window as a cap. Tests pin speech after the scheduled end and longer user settings at the helper and through the live lifecycle loop.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_calendar_continuity_window.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversation_continuity.py",
+    "backend/database/listen_continuations.py",
+    "backend/routers/listen/conversations.py"
+  ],
+  "status": "open"
+}

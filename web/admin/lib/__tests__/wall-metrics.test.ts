@@ -13,6 +13,7 @@ const sources = (): WallSources => ({
   shopify: fail,
   stripe: fail,
   billing: fail,
+  planCost: fail,
 });
 
 describe("wall source and payload contracts", () => {
@@ -242,4 +243,33 @@ it("does not turn unsupported or failed Stripe coverage into a zero MRR", async 
   });
   const wall = await computeWall(s, now);
   expect(wall.metrics.find((m) => m.id === "revenue.mrr")?.value).toBeNull();
+});
+
+it("uses a measured Mercury zero in the all-in stat and names the source", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true, anthropic: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(metric.reason).toContain("measured SaaS (Mercury): $0.00/day");
 });

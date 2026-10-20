@@ -10,7 +10,6 @@ from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFir
 from tests.unit.test_process_conversation_free_tier_branch import (
     pc,  # noqa: F401 - real process_conversation with isolated external dependencies
     _existing_desktop,
-    _disable_flag,
     _spy_managed_effects,
     _drive_reprocess,
 )
@@ -19,6 +18,7 @@ from tests.unit.test_process_conversation_free_tier_branch import (
 @pytest.fixture
 def writer(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     old = {
         'id': 'c',
         'status': 'completed',
@@ -115,7 +115,8 @@ def test_manual_edit_after_repair_admission_fences_write(writer, monkeypatch, re
 def test_same_owners_lease_expires_during_long_process_conversation_but_summary_commits(writer, pc, monkeypatch):
     from models.structured import Structured
 
-    _disable_flag(monkeypatch, pc)
+    # This lease test exercises funded processing, independently of cap admission.
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     _spy_managed_effects(monkeypatch, pc)
     conversation = _existing_desktop('c')
     conversation.sync_content_revision = 3

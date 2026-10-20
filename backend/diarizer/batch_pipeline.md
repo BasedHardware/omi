@@ -33,6 +33,94 @@ speaker labels never pool across owners. Payloads retain words and turns as
 separate evidence for the downstream projection/assignment layer; this worker
 does not name speakers or write user conversation records.
 
+Capture units are cut at upload boundaries, so a unit whose VAD speech starts at
+sample 0 usually starts mid-utterance, and Parakeet TDT v3 then decodes nothing
+(decoder start-state blank; KB `projects/parakeet-primary/evidence/2026-09-21-tdt-empty-output-root-cause.md`).
+With `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` set (default 0, off until an L4
+community-1 replay qualifies it; 8 is the evaluated value), such a unit's first
+ASR window is prefixed with the contiguous predecessor of the same capture
+stream (same owner and privacy generation, and the same source, client device
+and lock read from the staged unit's authenticated intake context; record units
+use their conversation. Intake's per-unit `conversation_id` is a chunk identity
+that hashes each unit's own `capture_at`, so it never links two capture spans.
+A unit with no readable intake context gets no context. Gap within 1s; an
+overlap is trimmed so audio is never replayed), starting 0.5s before the onset
+of the speech run that crosses the seam. Predecessors come from the same flight
+or a bounded process-local tail cache (`BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS`,
+default 64, 10-minute TTL; other-generation tails of the owner are dropped on
+sight). Window core ownership still starts at the unit's first sample, so
+prefix words are never emitted, double-counted, or counted as the unit's ASR
+output (an empty unit stays `empty_asr`); a seam-straddling word is clipped to
+the capture. The padded empty-ASR retry keeps its synthetic silence. Ordering,
+owner, merge and paid-recovery semantics are unchanged; only the ASR input of
+the first window changes.
+
+Flight packing (`BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED`, **default off**; only
+the exact value `true` enables it; `BATCH_PIPELINE_FLIGHT_BATCH_SECONDS`, default
+1800) removes duplicated pyannote work inside one locked flight. Community-1
+segmentation runs once per unit and feeds both VAD (CPU aggregation and
+binarization) and diarization, and the WeSpeaker trunk runs once per 10s chunk
+instead of once per (chunk, local speaker), pooled with the same masks. Forwards
+pack chunks across the flight's units at the pinned model batch size, so a
+forward is never larger than the serial one. Clustering, labels and turns stay
+pyannote's own per-unit `apply`. With speech-only diarization
+(`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`, #22358) the diarizer sees a
+compacted waveform, so cross-unit packed embeddings and the cached full-unit
+segmentation are not used for it; that call keeps its serial pyannote `apply`,
+and only the per-file shared trunk applies inside it. Packed segmentation then
+serves VAD alone. Units above the budget, unsupported model
+layouts, non-fatal packed failures, cached-feature shape mismatches and CUDA
+out-of-memory inside the packed path take the unchanged serial calls; other
+fatal CUDA errors still quarantine the chain. `tests/unit/test_batch_pipeline_flight.py`
+compares both paths on CPU with random weights (exact VAD spans and turns;
+segmentation within 1e-5, embeddings within 1e-4) whenever torch and pyannote
+are installed.
+
+**Enablement gate.** CPU equality does not cover the L4: packing moves a unit's
+last chunk out of its own batch-of-one forward into a shared batch, so cuDNN may
+pick a different kernel, and a ~1e-5 embedding move or a powerset frame near 0.5
+can change a VBx assignment. Before setting the flag on anywhere, run the paired
+qualification on one isolated dev L4 with community-1 revision
+`3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` and batch pin 8, on public or consented
+multi-speaker audio (for example AMI far-field meetings, or a pendant clip with two
+voices):
+
+```bash
+PYTHONPATH=. BATCH_PIPELINE_MODEL_BATCH_SIZE=8 python diarizer/batch_pipeline_flight_qualify.py \
+  --audio /public/ami/ES2004a.Array1-01.wav /public/ami/IS1009a.Array1-01.wav \
+  --unit-seconds 23,41,67,95,128,30.5,212 --output /receipts/flight-qualify.json
+```
+
+It cuts the inputs into one flight of mixed-length units (ragged tails share
+packed forwards) and scores two configurations, serial against flag-on, on the
+same waveforms. Every serial reference is taken on the unpatched pipeline,
+before `FlightPyannote` installs its hooks.
+
+- `speech_only` (the Helm default, `diarizeSpeechOnlyEnabled=true`): packed
+  segmentation feeds VAD, then the worker's own `_diarize_unit` diarizes the
+  compacted waveform through the per-file shared-trunk hook. Evidence is
+  VAD-only, since the harness runs no ASR.
+- `full_unit` (speech-only off): full-unit `diarize_many`, plus raw
+  segmentation and embeddings against the unpatched pipeline.
+
+Exit status comes from the configuration the deployment runs (`--speech-only`,
+default from the env, else on). A `full_unit` pass never authorizes the flag
+while speech-only stays on. The gate fails closed. It passes (exit 0) only when:
+
+- every unit was actually packed;
+- VAD spans are equal;
+- speaker counts are equal;
+- units where serial finds two or more speakers agree on at least 99% of
+  speech time after optimal label mapping;
+- at least five such units exist;
+- the packed CUDA working-set peak stays within 1.10x serial.
+
+A non-positive serial CUDA baseline, or too few multi-speaker units, exits 2
+(insufficient evidence). The packed flight must also stay inside the chart's
+host envelope (9.795 GiB receipt, 12 GiB request, 14 GiB limit). Attach the receipt to the enabling change. #22324's `vad` and
+`diarize` stage timers measure GPU time for this path only once they wrap
+`_flight_segment`/`vad_spans` and `_flight_diarize`.
+
 Pre-STT live reuse additionally defaults off. It requires existing lineage gates
 plus an injected resolver's immutable-audio-bound full-source-coverage and
 words-of-record-quality receipt. Current lexical dedupe runs after STT and cannot

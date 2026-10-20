@@ -1,0 +1,37 @@
+# Only backend-sync, backend-sync-backfill and backend-integration use this
+# revision-local config env. Backend/listen retain their existing scrape profile.
+apiVersion: monitoring.googleapis.com/v1beta
+kind: RunMonitoring
+metadata:
+  # The name becomes GMP job: preserve existing direct-query selectors.
+  name: omi-cloud-run-application-metrics
+spec:
+  endpoints:
+    - port: 9090
+      path: /metrics
+      interval: 60s
+      timeout: 10s
+      metricRelabeling:
+        # Sync exporter: sync/resilience, journey SLO, owner recognition,
+        # Core Features, Firestore amplification and queue-age consumers.
+        # Sentinel: batch_metrics.py and completion_telemetry.py also query GMP
+        # directly (batch, accept-to-summary, summary debt/terminal, live outcome).
+        - action: keep
+          sourceLabels:
+            - __name__
+          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total)'
+        # These eagerly initialized live-STT combinations dominate empty series
+        # on sync workers. Keep fallbacks from sync/summary/storage components.
+        - action: drop
+          sourceLabels:
+            - __name__
+            - component
+          regex: 'omi_fallback_total;(stt_live_session|stt_selection)'
+  targetLabels:
+    metadata:
+      - service
+  limits:
+    samples: 10000
+    labels: 30
+    labelNameLength: 100
+    labelValueLength: 256

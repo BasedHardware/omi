@@ -13,6 +13,7 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -38,9 +39,9 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
-from utils.jit_rollout import JITDecisionStage
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
@@ -73,6 +74,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if getattr(conversation, 'processing_deferred', False) is True:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+        return
     try:
         if save_structured_vector(uid, conversation) is False:
             # The writer counts a missing index as error. Keep that bounded outcome.
@@ -230,11 +234,14 @@ async def finalize_persisted_conversation(
         # STT or metric persistence and cannot alter this processing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
+            await warm_rollout_cohorts(uid)
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
-        if conversation.status != ConversationStatus.completed:
+        if conversation.status != ConversationStatus.completed or finalization_pending(
+            conversation_data, uid, finalization_job_id
+        ):
             conversation = await run_blocking(
                 postprocess_executor,
                 process_with_episode_budget,
@@ -251,7 +258,7 @@ async def finalize_persisted_conversation(
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
             )
         elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
-            # The coordinator already persisted a free-tier terminal minimum.
+            # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
             # completed replay skips process_conversation, so restore the
             # disposition from the unmodeled marker before the empty-bundle
@@ -365,7 +372,7 @@ async def finalize_persisted_conversation(
 
             await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
         # Completed-row replays have no coordinator bundle. Summary indexing is
-        # independent of JIT folder/apps receipts and terminal intelligence
+        # independent of folder/apps receipts and terminal intelligence
         # suppression, but must share the same winning fanout claim.
         # Await inside a fail-soft boundary rather than detach a provider pipeline:
         # the worker can exit after completion, so awaiting preserves write observability.
@@ -436,11 +443,7 @@ async def finalize_persisted_conversation(
         # an offline desktop can satisfy it on a later screen-sync recovery.
         stage = 'keyframes'
         if not getattr(conversation, 'discarded', False):
-            decision = await resolve_frame_request_authority(
-                uid,
-                stage=JITDecisionStage.INGRESS,
-                force_refresh=True,
-            )
+            decision = await resolve_frame_request_authority(uid)
             if decision.enabled and decision.account_generation is not None:
                 keyframe_eligible = await run_blocking(
                     db_executor,

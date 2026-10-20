@@ -1,3 +1,5 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute
+
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
@@ -140,6 +142,7 @@ def generate_daily_summary_on_demand(
     this day" apart from "another writer is mid-generation" — the first is the answer, the
     second is a retry.
     """
+    require_generated_compute(uid, 'daily_summary')
     record, _created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
     return record, declined
 
@@ -160,6 +163,8 @@ def _generate_and_store_daily_summary(
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
     """
+    if not generated_compute_allowed(uid, 'daily_summary'):
+        return None, False, 'usage_budget_exhausted'
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
 
@@ -848,6 +853,8 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
 
 
 def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+    if not generated_compute_allowed(user_data[0], 'daily_summary'):
+        return
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 

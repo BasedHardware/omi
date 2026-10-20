@@ -16,6 +16,7 @@ import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'storefront_plans_content_test.dart' as renders;
 
 StorefrontTier _plan(PlanStorefront data, String planId) => data.tiers.firstWhere((tier) => tier.planId == planId);
 
@@ -33,7 +34,8 @@ class _Usage extends UsageProvider {
   @override
   Future<void> loadAvailablePlans() async {}
   @override
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession(
+      {required String priceId, String? promotionCode, int? trialDays}) async {
     sessionPrice = priceId;
     checkedOutPrice = priceId;
     return null; // No browser or real payment in hermetic tests.
@@ -268,7 +270,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('tapping Switch to yearly reaches upgrade with the yearly price', (tester) async {
-    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -276,6 +278,7 @@ void main() {
     addTearDown(usage.dispose);
     final data = PlanStorefront.fromJson(
         jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
+    await renders.pumpSheet(tester, data: data);
     final price = _plan(data, 'plus').priceFor('year')!;
     expect(price.ctaLabel, r'Switch to yearly · save $39.98');
     expect(price.id, 'price_plus_year');
@@ -307,24 +310,32 @@ void main() {
         }
       ]
     });
-    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
-        value: usage,
-        child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(body: _Host(data)))));
+    await tester.pumpWidget(RepaintBoundary(
+        key: renders.boundaryKey,
+        child: ChangeNotifierProvider<UsageProvider>.value(
+            value: usage,
+            child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: buildOmiTheme(brightness: Brightness.dark),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(body: _Host(data))))));
     await tester.pumpAndSettle();
     final button = find.text(r'Switch to yearly · save $39.98');
     await tester.ensureVisible(button);
     await tester.tap(button.hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Confirm Upgrade').hitTestable());
+    for (final line in price.confirmLines) {
+      expect(find.text(line), findsOneWidget);
+    }
+    expect(usage.upgradedPrice, isNull);
+    await renders.capture(tester, '019-mobile-yearly-confirmation.png');
+    await tester
+        .tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text(price.ctaLabel!)).last.hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Change Plan').hitTestable());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Change Plan'), findsNothing);
     expect(usage.upgradedPrice, price.id);
     expect(usage.sessionPrice, isNull);
     expect(tester.takeException(), isNull);

@@ -227,13 +227,15 @@ void main() {
     expect(host.conversations, contains(row.id));
   });
 
-  test('complete unfiltered memory fetch removes remotely deleted ids', () async {
+  test('complete current and history fetch removes remotely deleted ids', () async {
     final host = hostForTest();
     host.memories['remote-deleted'] =
         SiriMemory(id: 'remote-deleted', content: 'private', createdAtMs: DateTime.now().millisecondsSinceEpoch);
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
           const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
     );
     addTearDown(provider.dispose);
 
@@ -259,19 +261,15 @@ void main() {
         updatedAt: now,
         visibility: MemoryVisibility.private);
     await SiriIntegration.current.upsertMemories([row('outside-useful-now')]);
-    final requestedViews = <MemoryReadView?>[];
     final provider = MemoriesProvider(
-      fetchMemoriesCursorRequest: ({limit = 100, offset = 0, thisDeviceOnly = false, cursor, view}) async {
-        requestedViews.add(view);
-        return GetMemoriesResult([row('useful-now')], true, beliefEnabled: true);
-      },
+      fetchMemoriesCursorRequest: ({limit = 100, offset = 0, thisDeviceOnly = false, cursor}) async =>
+          GetMemoriesResult([row('useful-now')], true),
       fetchLedgerHistoryRequest: ({limit = 500, offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: false),
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
     await SiriIntegration.current.drainIndexForTest();
-    expect(requestedViews, contains(MemoryReadView.usefulNow));
     expect(host.memories.keys, contains('outside-useful-now'));
   });
 

@@ -1,9 +1,10 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
 from enum import IntEnum
-import hashlib
 import math
 import os
+
+from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
@@ -22,17 +23,19 @@ class RecordOwnerContention(RuntimeError):
 
 
 def enabled_for(owner_id: str) -> bool:
-    if os.getenv('BATCH_PIPELINE_ENABLED', 'false').lower() != 'true':
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy(owner_id).batch_enabled
+
+
+def in_percent_cohort(owner_id: str, percent: float) -> bool:
+    """Shared unsalted admission bucket; invalid percentages never admit."""
+    if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
-    try:
-        percent = float(os.getenv('BATCH_PIPELINE_PERCENT', '0'))
-    except ValueError:
-        return False
-    if not math.isfinite(percent) or not 0 <= percent <= 100:
-        return False
-    owners = {value.strip() for value in os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', '').split(',') if value.strip()}
-    bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
-    return owner_id in owners or bucket < percent
+    from config.policy import cohort_bucket
+
+    bucket = cohort_bucket(owner_id, '')
+    return bucket < percent
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -55,16 +58,23 @@ def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[...
 
 
 def live_record_admission_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy('').live_admission_enabled
 
 
 def live_record_enabled_for(owner_id: str) -> bool:
-    return live_record_admission_enabled() and enabled_for(owner_id)
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy(owner_id).live_record_enabled
 
 
-def record_capture_eligible(owner_id: str, capture: dict) -> bool:
+def record_capture_eligible(owner_id: str, capture: dict, *, policy=None) -> bool:
+    from config.policy import resolve_batch_policy
+
+    policy = policy or resolve_batch_policy(owner_id)
     return bool(
-        live_record_enabled_for(owner_id)
+        policy.live_record_enabled
         and capture.get('private_cloud_sync_enabled')
         and not capture.get('uses_custom_stt')
         and not capture.get('deleted')
@@ -76,7 +86,9 @@ def record_capture_eligible(owner_id: str, capture: dict) -> bool:
 
 
 def shared_live_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').shared_live
 
 
 SCHEDULER_SHARDS = 64
@@ -88,31 +100,23 @@ def scheduler_control_key(hashed_owner: str) -> str:
 
 
 def max_worker_attempts() -> int:
-    """Bound charged worker failures; malformed configuration keeps the safe default."""
-    try:
-        value = int(os.getenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5'))
-    except ValueError:
-        return 5
-    return value if 1 <= value <= 20 else 5
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').max_attempts
 
 
 def recovery_owners() -> tuple[str, ...]:
-    """Recovery is independent of admission; empty allowlist always denies."""
-    if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+    from config.policy import resolve_stage_policy
+
+    if resolve_stage_policy('', 'recovery').recovery_mode != 'on':
         return ()
-    return tuple(
-        sorted(
-            {
-                value.strip()
-                for value in os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '').split(',')
-                if value.strip() and '/' not in value.strip() and len(value.strip().encode()) <= 256
-            }
-        )
-    )
+    return rollout_cohort_members('batch-pipeline-recovery')
 
 
 def authoritative_labels_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').authoritative_labels
 
 
 def empty_asr_recovery_enabled() -> bool:
@@ -120,19 +124,21 @@ def empty_asr_recovery_enabled() -> bool:
 
 
 def require_live_target_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').require_live_target
 
 
 def recover_all_admitted() -> bool:
-    # These are already batch-owned obligations; rollback must still drain them.
-    return (
-        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').lower() == 'on'
-        and os.getenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'false').lower() == 'true'
-    )
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').recovery_all_admitted
 
 
 def recovery_enabled_for(owner_id: str) -> bool:
-    return recover_all_admitted() or owner_id in recovery_owners()
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy(owner_id, 'recovery').recovery_enabled
 
 
 def empty_asr_disposition_enabled() -> bool:
@@ -141,14 +147,183 @@ def empty_asr_disposition_enabled() -> bool:
 
 
 def projection_contention_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').projection_contention
 
 
 def speech_empty_multilingual_enabled() -> bool:
-    """Dark alternate-provider recovery; one call per durable paid intent."""
-    return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').speech_empty_multilingual
 
 
 def terminal_empty_disposition_enabled() -> bool:
-    """Dark, evidenced terminal empty result; never grants another paid intent."""
-    return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').terminal_empty_disposition
+
+
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').projection_timing
+
+
+def worker_silence_disposition_enabled() -> bool:
+    """Dark worker-side use of integration's strict local silence evidence."""
+    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+LONG_SPEECH_HANDOFF_SECONDS = 5.0
+
+
+def long_speech_handoff_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    A unit whose intake language Parakeet cannot transcribe, with an empty first
+    pass and at least LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, skips the
+    padded Parakeet retry and goes straight to quarantine recovery.
+    """
+    return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
+
+
+def worker_validation_disposition_enabled() -> bool:
+    """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
+    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+
+
+def head_priority_enabled() -> bool:
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').head_priority
+
+
+def async_projection_enabled() -> bool:
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').async_projection
+
+
+def recovery_tasks_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED')
+
+
+def recovery_dispatch_batch_size() -> int:
+    """Bound each serving pass; 1 restores the former all-admitted dispatch rate."""
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '16'))
+    except ValueError:
+        return 16
+    return value if 1 <= value <= 64 else 16
+
+
+def projection_pagination_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+def owner_chain_projection_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
+
+
+def sweep_owner_chain_enabled() -> bool:
+    """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED')
+
+
+def projection_pending_page_enabled() -> bool:
+    """Kill switch: the assignment page holds only pending rows; finishing pages separately."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
+WORKER_PIPELINE_DEPTH_DEFAULT = 2
+WORKER_PIPELINE_DEPTH_MAX = 4
+
+
+def worker_pipeline_depth() -> int:
+    """Ship-on pump flights per GPU process; ``1`` restores the serial pump.
+
+    Only claim/admission and publication overlap: the GPU chain itself stays
+    exclusive, so device and host memory remain one flight. Malformed values
+    keep the default rather than silently serializing.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', str(WORKER_PIPELINE_DEPTH_DEFAULT)))
+    except ValueError:
+        return WORKER_PIPELINE_DEPTH_DEFAULT
+    return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
+
+
+WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_IO_CONCURRENCY_MAX = 8
+
+
+def worker_io_concurrency() -> int:
+    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+
+    1 restores the fully serial chain. Malformed or out-of-range values keep the
+    conservative default; GPU work and the chain lock are unaffected either way.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))
+    except ValueError:
+        return WORKER_IO_CONCURRENCY_DEFAULT
+    return value if 1 <= value <= WORKER_IO_CONCURRENCY_MAX else WORKER_IO_CONCURRENCY_DEFAULT
+
+
+DEFAULT_PUBLISH_CONCURRENCY = 4
+MAX_PUBLISH_CONCURRENCY = 16
+
+
+def publish_concurrency() -> int:
+    """Ship-on bounded post-flight publication; 1 is the kill switch.
+
+    Bounds concurrent fenced transitions and cross-owner ordered drains after
+    one GPU flight. ``1`` restores serial transitions with one drain after each
+    accepted transition. Malformed values fall back to that serial path.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PUBLISH_CONCURRENCY', str(DEFAULT_PUBLISH_CONCURRENCY)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 1
+    return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+RECOVERY_WAKE_LEASE_DEFAULT = 600
+RECOVERY_WAKE_LEASE_MAX = 3600
+
+
+def recovery_wake_lease_seconds() -> int:
+    """Ship-on: one outstanding recovery delivery task per prepared intent.
+
+    The lease bounds how long an undelivered wake is trusted before the sweep
+    repairs it with a new one. ``0`` is the kill switch: the legacy 120s
+    time-bucketed wake on every sweep. Malformed or out-of-range values keep the
+    default.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', str(RECOVERY_WAKE_LEASE_DEFAULT)))
+    except ValueError:
+        return RECOVERY_WAKE_LEASE_DEFAULT
+    if value == 0:
+        return 0
+    return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT

@@ -1162,3 +1162,75 @@ def test_pusher_gate_selects_development_expectations_by_grafana_host(verifier, 
     production_failures = verifier._run_pusher_gate('https://monitor.omi.me', 'dummy-secret', 'postrollout', 1)
     assert production_failures
     assert all('execErrState does not match' in failure for failure in production_failures)
+
+
+def _gate_requests(verifier: SimpleNamespace, up_responses: dict[str, list[object]], queries: list[str]):
+    rules, datasource, _up, metric_query, contact_points = _inputs(verifier)
+
+    def fake_request(_url: str, path: str, _token: str, **_kwargs: object) -> object:
+        if path.startswith("/api/datasources/proxy/uid/prometheus/api/v1/query?"):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)["query"][0]
+            queries.append(query)
+            if query == verifier.POD_DELETION_TIMESTAMP_QUERY:
+                return _series_query([])
+            if query == verifier.KSM_POD_INFO_COUNT_QUERY:
+                return _ksm_present()
+            if query in up_responses:
+                response = up_responses[query].pop(0)
+                if isinstance(response, Exception):
+                    raise response
+                return response
+            return metric_query
+        if path.startswith("/api/v1/provisioning/alert-rules/"):
+            return rules[path.rsplit("/", 1)[-1]]
+        if path == "/api/datasources/uid/prometheus/health":
+            return datasource
+        if path == "/api/v1/provisioning/contact-points":
+            return contact_points
+        raise AssertionError(path)
+
+    return fake_request
+
+
+def test_prepublish_reads_windowed_up_and_postrollout_keeps_instant_up(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    healthy = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l")])
+    assert verifier.PREPUBLISH_UP_QUERY == ('max_over_time(up{job=~"pusher-metrics|backend-listen-metrics"}[2m])')
+    for phase, expected in (("prepublish", verifier.PREPUBLISH_UP_QUERY), ("postrollout", verifier.SERVING_UP_QUERY)):
+        queries: list[str] = []
+        fake = _gate_requests(verifier, {expected: [healthy]}, queries)
+        monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+        assert verifier._run_pusher_gate("https://monitor.omi.me", "secret", phase, 1) == []
+        up_queries = {q for q in queries if q in (verifier.PREPUBLISH_UP_QUERY, verifier.SERVING_UP_QUERY)}
+        assert up_queries == {expected}
+
+
+def test_prepublish_retries_a_brief_miss_and_a_transient_query_error(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missed = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l", "0")])
+    healthy = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l")])
+    responses = {verifier.PREPUBLISH_UP_QUERY: [verifier.AlertRouteError("HTTP 502"), missed, healthy]}
+    fake = _gate_requests(verifier, responses, [])
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+    monkeypatch.setattr(verifier._run_pusher_gate.__globals__["time"], "sleep", lambda _s: None)
+    assert verifier._run_pusher_gate("https://monitor.omi.me", "secret", "prepublish", 3) == []
+
+
+def test_prepublish_still_fails_a_target_down_for_the_whole_window(
+    verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    down = _series_query([_target("pusher-metrics", "p"), _target("backend-listen-metrics", "l", "0")])
+    fake = _gate_requests(verifier, {verifier.PREPUBLISH_UP_QUERY: [down, down]}, [])
+    monkeypatch.setitem(verifier._run_pusher_gate.__globals__, "_request_json", fake)
+    monkeypatch.setattr(verifier._run_pusher_gate.__globals__["time"], "sleep", lambda _s: None)
+    failures = verifier._run_pusher_gate("https://monitor.omi.me", "secret", "prepublish", 2)
+    assert any("backend-listen-metrics=0" in failure for failure in failures)
+
+
+def test_attempts_default_to_six_only_for_prepublish(verifier: SimpleNamespace) -> None:
+    assert verifier.resolve_attempts(None, mode="pusher", phase="prepublish") == 6
+    assert verifier.resolve_attempts(None, mode="pusher", phase="postrollout") == 1
+    assert verifier.resolve_attempts(None, mode="fleet", phase=None) == 1
+    assert verifier.resolve_attempts(12, mode="pusher", phase="prepublish") == 12

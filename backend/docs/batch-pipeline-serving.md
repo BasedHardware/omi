@@ -14,6 +14,16 @@ secret and `BUCKET_BATCH_PIPELINE` durable artifact bucket. This bucket must not
 inherit the legacy syncing bucket's one-day lifecycle for pending objects.
 D's completion/deletion outboxes own removal; pending audio must survive backlog.
 
+With several serving instances, the periodic ticks (the supervisor and metrics
+scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
+quarantine discovery, lease recovery and the result-ready drain) on one instance
+per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
+gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+post-recovery drain always run. Every guarded step is already idempotent and
+transaction-fenced, so the lease saves reads and enqueues only. A lease-store
+error fails open to every instance running, and
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` restores that unconditionally.
+
 The GPU worker also needs explicit `BATCH_PIPELINE_API_URL` (HTTPS backend service base)
 and `BATCH_PIPELINE_WORKER_AUDIENCE`. A's Pump composes the Google service-OIDC
 client automatically for production-marked items; missing/unavailable policy
@@ -192,7 +202,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, one replica, autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
@@ -383,11 +393,23 @@ by a flag rollback; correct them only through the normal reviewed content path.
 `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED=false` is the CPU recovery
 kill switch. Deploy the worker from the same change first: its exhausted
 `RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
-lease CAS. Recovery pins/persists its provider before dispatch. With the flag on,
-positive strict local VAD, affirmative GPU padded-empty evidence, and a validated
-empty **multilingual** response produce `no_recoverable_speech`. Timeouts, malformed
-responses, uncertain calls, missing evidence, and provider failures stay held.
-There are no additional calls after exhaustion and no paid-intent resets.
+lease CAS only when the GPU padded retry actually ran and returned empty; units
+whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. A
+zero-word unit with at least 5 s of worker VAD speech whose intake-recorded STT
+language (`stt_language` in the staged context) is unknown, `multi`, or outside
+Parakeet TDT v3's set skips the retry too and persists
+`worker_empty_evidence.padded_retry=skipped_long_speech`: repadding cannot make
+Parakeet transcribe a language it lacks, so the unit goes straight to recovery
+(`BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED`, kill switch, unset is on). Recovery
+pins/persists its provider before dispatch. With the flag on, positive strict
+local VAD, affirmative GPU padded-empty evidence, and a validated empty
+**multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
+skipped the GPU padded retry still run strict VAD and multilingual recovery, but
+an empty multilingual response stays `failed_held` rather than terminal-empty.
+Timeouts, malformed responses, uncertain calls, missing evidence, and provider
+failures stay held. There are no additional calls after exhaustion and no
+paid-intent resets.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.
@@ -442,3 +464,202 @@ flag and stops operator invocation; committed projections are not undone and
 spent intents never become retryable. Inspect completion and terminal-empty
 captured-duration rates before any ramp: terminal completion does not prove ASR
 quality or make the unresolved duration disappear from correctness metrics.
+
+
+## Dark projection tail controls
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED=false` and
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED=false` are independent accepted-work
+controls, declared on the backend services and listen Helm values. They do not
+admit new work or change recovery spend policy. Enable only on the qualified
+5% cohort's serving/worker RPC host after release approval; neither is enabled
+by this change. Rollback each to false; ordinary queue links and existing
+persisted/ready receipts remain compatible with the synchronous path.
+
+Head priority splices the owner's earliest `merge_pending` job to the front of
+its existing priority queue when it is ready and found within a shared budget
+of 64 head-query/link reads per shard transaction. Duration, eligible unit kind
+and privacy must pass before any link changes; a head this pool cannot lease
+leaves FIFO intact. The selected job still pays its actual DRR cost, passes privacy checks, and respects
+fresh reservations, duration and shared-GPU capacity. It never steals a live
+lease, changes priority class, invents silence, or resolves an uncertain paid
+intent. Outside the bounded search it retains FIFO. Quarantine already removes
+`merge_pending`, so a held quarantine unit is not an ordered-merge blocker;
+settled recovery re-enters the pending set. A slow leased head must finish or
+follow the existing fenced lease/recovery protocol.
+
+Async projection keeps capture-ordered commit and the transactional predecessor
+check unchanged. Only assignment (including all multipart receipts) holds the
+owner claim. Its atomic persist advances the projection watermark; a later
+unit can become visible only after every committed predecessor has persisted
+(or its privacy erasure receipt permits progress). Captures admitted after a
+later commit retain the existing explicit `late_capture` behavior. No disjoint
+segment independence or change to transcript visibility order is assumed.
+
+The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
+use the same async coordinator. Their pass persists the bounded pending page,
+then schedules at most four tracked follow-ups per process without awaiting
+slow effects. A finished task immediately refills its slot from the bounded
+page, without an additional 20-second serving sleep. Each follow-up coordinator
+has a 120-second deadline, plus at most two seconds for advisory-claim cleanup.
+Timeout cancels its remaining steps and frees the slot without closing the drain;
+the unchanged persisted/ready receipt is retried on a later sweep. Already-running
+executor calls cannot be forcibly stopped by asyncio cancellation and may finish
+late; receipt/enrichment and ledger transactions retain their replay fences.
+Shutdown cancellation stops refill. Persisted result receipts are the durable outbox. Partial
+assignment rows do not consume follow-up slots; a rotating cursor prevents
+repeated failures at the front of the page from monopolizing those slots.
+A separate advisory segment claim coalesces replicas; it never owns the
+assignment watermark. Each bridge, playback and enrichment step is offloaded
+separately. After playback a second bridge check copies any late donor audio
+if a concurrent assignment redirected the target. Native records retain their
+fixed target behavior. Privacy checks and the original retained-audio policy
+remain in effect. Enrichment and the ready receipt still commit together;
+usage/client/content completion still requires every sibling ready and commits
+atomically in the content ledger. Completion is retryable after a lost reply,
+process restart, or rollback, without retranscription.
+
+Qualification target: quarantine to **completed content ledger** p95 <=300s
+for all units in the fixed fleet 5% admission cohort, including pending ages.
+This removes queue inversion and owner-wide external-work serialization; it
+is not a numerical production latency guarantee. A live head can renew its
+lease, external effects can exceed the budget, a crashed advisory claim can
+last 300s, and the existing 100-row sweep page can be saturated. Do not add
+stage p95s or exclude held units. Measure the full cohort for at least one hour
+with phase timings before claiming the target or increasing admission.
+
+### Projection discovery progress
+
+`BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
+`false` restores oldest-100 discovery). Assignment and async follow-ups each
+advance their own bounded 100-row keyset scan across pending, persisted and
+ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
+restart begins at the head without dropping any durable obligations. Follow-ups
+launch the whole bounded page before fetching the next one. Discovery order is
+only a hint: existing transactional predecessor, privacy, all-sibling readiness,
+receipt replay and paid-intent fences remain authoritative.
+
+The query reuses the declared prod/dev results composite index:
+`projection_state ASC, committed_at ASC, __name__ ASC` in
+`database/sync_pipeline_indexes.py` and the generated `firestore.indexes.json`.
+No new index or production index mutation is needed.
+
+With accepted-work serving enabled, committed pending/persisted/ready debt is
+rediscovered automatically after deployment; no one-time kick is needed for the
+page deadlock. `quarantine_held` obligations still require their ordinary fenced
+recovery to succeed; pagination neither retries uncertain paid intents nor
+resolves genuine held quarantines. Monitor falling pending age/count and durable
+content/client completion on the deployed release before expanding admission.
+
+### Owner-chain wake after recovery
+
+`BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED` defaults to `true` (kill
+switch: `false` restores the generic sweep after recovery). A settled recovery
+re-enters the ordered merge and commits at its owner's log tail, behind that
+owner's unprojected rows, which the per-instance cursors may already have
+passed. Waiting for the assignment and follow-up cursors to come back around
+took 5–12 minutes for one backlog owner during the 5% ramp. After
+`/recover-quarantine` returns `recovered` or `reconciled`, the handler's
+reconcile now drains that owner's merge and walks the owner's result log from
+its `projection_watermark`, following `previous_segment_id` links (and erased
+receipts) in chain order. It stops at the first row whose assignment does not
+advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
+afterwards as before, and any error in the wake falls back to it.
+
+The walk is only a wakeup. Each row still passes the transactional predecessor,
+privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
+async projection, the persisted rows and their contents' persisted, not-ready
+siblings go to the front of the follow-up queue. The recovered unit's content
+goes first. The four-slot bound, segment claims and all-sibling completion
+fence are unchanged. The successor lookup is two equality filters ordered by
+`__name__` on `{namespace}_results`, which automatic single-field indexes serve.
+Two matches fail closed.
+
+### Sweep owner-chain continuation and pending-only assignment page
+
+`BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
+`false` restores one attempt per page row). Rows from one owner's ordered chain
+used to advance only while a sweep page held that owner's head. During the
+2026-10-20 run 10, one owner's 190-segment burst sat idle about 60% of the time
+between pages (3.2 rows/min). When the sweep now persists a row that was
+`pending` when read, it calls the same walk the recovery wake uses, from that
+owner's `projection_watermark`. Bounds: one walk per owner per sweep, 64 rows
+and 30 seconds per walk, and 30 seconds of walking per sweep across all owners, starting with the
+first walk. Page rows the walk persisted are skipped without a read and are
+left out of the sweep's counts; the chain summary reports them. Every other page row,
+including rows past a walk that stopped at its bound, is attempted in page
+order as before. Each walked row still takes the Redis owner claim and the
+transactional predecessor, privacy and receipt fences one at a time, so no
+owner gains concurrency. Every async row the sweep persists is owed a follow-up, the page's own rows as
+well as the walk's. The page row seeds its owner's walk. Later page rows of
+an owner already walked, and rows reached once the shared budget is spent, get
+a seed-only hand-off: one watermark read, no sibling scan, nothing persisted.
+A walk's scan for a content's persisted, not-ready siblings stops at the walk
+deadline; unscanned siblings stay durable and are rediscovered. A seed is owed only
+if the watermark shows it advanced (a partial multipart did not), or if the
+watermark cannot be read. Owed rows do not use the wake's priority
+queue. They are held (at most 256, durable either way) until the next
+follow-up discovery pass and queued behind its page, without moving its
+rotation. Serving keeps scheduling follow-ups while any are owed, and a pass whose
+queue drains on launch runs discovery at once. An overflow past the bound
+restarts follow-up discovery at the head. So owed rows are never stranded
+behind the discovery cursor, and they never jump discovered work or keep
+discovery from running. A read failure inside a walk ends it with the rows it
+already persisted still handed off. The finish page skips rows
+this sweep already assigned or finished. The log line is `event=batch_projection action=sweep_chain
+outcome=summary owners=N advanced=N`.
+
+`BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` defaults to `true` (kill
+switch: `false` restores the single mixed assignment page). The assignment page
+asks only for `pending` results, so persisted and ready receipts no longer fill
+its 100 rows with replays (1,640 `ProjectionReplay` during run 10). A second
+bounded page with its own cursor over `persisted`/`ready` results replaces
+what the mixed page did for those rows:
+- synchronous-policy rows replay assignment and finish exactly as before;
+- async-policy rows are not touched there, but seeing any of them keeps
+  follow-ups scheduled.
+
+Async follow-up discovery keeps its own mixed page and cursor unchanged. All
+three pages use the same `in` filter on the declared results composite index
+(`projection_state, committed_at, __name__`), so no index changes are needed.
+
+### Assignment sub-phase timing
+
+With `BATCH_PIPELINE_PROJECTION_TIMING_ENABLED`, projection also times
+`load_result`, `manifest`, `context`, `build` and `candidate` (the
+`get_closest_conversation_to_timestamps` query) as `batch_projection_phase`
+phases. `assign_sync_conversation(timing=True)` emits one line per call:
+
+`event=sync_assignment_timing outcome=completed|error attempts= live_overlap_ms=
+fence_ms= plan_ms= encode_ms= persist_ms= body_ms= commit_ms= retry_ms=
+index_ms= donors= total_ms= [exception_type=]`
+
+- `attempts` counts transaction bodies, including SDK commit retries, the
+  outer contention retry and size-limit retries.
+- `plan_ms` is the in-transaction planner excluding `encode_ms`. Lock waits on
+  transactional reads show up in `fence_ms` or `plan_ms`.
+- `commit_ms` is the final commit after the last body. `retry_ms` is the rest
+  of the transaction time: failed commits, rollbacks and backoff.
+- `index_ms` covers the post-commit people-stats invalidation and the Typesense
+  upsert plus one delete per `sync_merged_from` donor. `donors` counts those
+  donors.
+
+Fields hold durations, counts and static tokens only, never IDs. Legacy sync
+callers do not pass `timing` and log nothing new.
+
+## Per-unit policy snapshots
+
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

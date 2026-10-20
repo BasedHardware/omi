@@ -524,13 +524,16 @@ def _zone(tz: Optional[str]) -> ZoneInfo:
 
 
 def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Optional[datetime]:
-    """Recording start from a date-time in the file name, read in the user's timezone."""
-    match = _filename_datetime_match(PurePosixPath(filename).stem)
+    """Recording start from a date-time in the file name, read in the user's timezone unless marked GMT."""
+    stem = PurePosixPath(filename).stem
+    match = _filename_datetime_match(stem)
     if not match:
         return None
     parts = match.groupdict()
     if int(parts['y']) < MIN_FILENAME_YEAR:
         return None
+    # Zoom names a cloud recording by its start in GMT ("GMT20240508-213012_Recording..."), not the user's time.
+    zone = _zone('UTC' if stem[: match.start()].endswith('GMT') else tz)
     try:
         local = datetime(
             int(parts['y']),
@@ -539,7 +542,7 @@ def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Option
             int(parts['h']),
             int(parts['mi']),
             int(parts['s'] or 0),
-            tzinfo=_zone(tz),
+            tzinfo=zone,
         )
         # A date in the future is a wrong device clock; it would sort above every real conversation.
         return min(local.astimezone(timezone.utc), datetime.now(timezone.utc))

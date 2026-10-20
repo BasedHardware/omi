@@ -116,5 +116,9 @@ class Store:
     def collection(self, name):
         return Collection(self, name)
 
+    def get_all(self, references, field_paths=None):
+        self.batch_reads = getattr(self, "batch_reads", 0) + 1
+        return [ref.get(field_paths) for ref in references]
+
     def transaction(self):
         return object()

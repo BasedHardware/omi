@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 from datetime import datetime, timezone
 import logging
+from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
 import pytest
@@ -35,10 +36,10 @@ def test_crisp_unread_route_is_removed():
 def _entitle(monkeypatch, entitled: bool = True) -> None:
     """Pin the screen-vector entitlement.
 
-    Without this the gate performs a real subscription lookup: it fails open, so assertions
-    still hold, but each test pays a live Firestore timeout.
+    Keep unrelated sync fixtures hermetic. Authority behavior has explicit router
+    tests below with fake database and provider seams.
     """
-    monkeypatch.setattr(desktop_screen_crisp, "grants_cloud_screen_vectors", lambda uid: entitled)
+    monkeypatch.setattr(desktop_screen_crisp, "grants_cloud_screen_vectors", AsyncMock(return_value=entitled))
 
 
 def _enable_frame_requests(monkeypatch, generation: int = 7) -> None:
@@ -329,16 +330,141 @@ def test_an_entitled_user_still_gets_vectors(monkeypatch):
     assert [row["id"] for row in vectors] == [1]
 
 
-def test_the_entitlement_gate_fails_open(monkeypatch):
-    """A subscription-lookup blip must overspend slightly, never silently strip paid search."""
+@pytest.mark.asyncio
+async def test_unavailable_authority_retains_rows_without_vector_spend(monkeypatch):
+    """Unknown authority never becomes a cloud grant; retained rows allow later backfill."""
     import utils.subscription as subscription
 
     subscription.clear_cloud_screen_vector_entitlement_cache("uid-under-test")
-    monkeypatch.setattr(subscription, "get_customer_firestore_client", lambda: object())
+    monkeypatch.setattr(subscription.screen_vector_entitlements, "get_customer_firestore_client", lambda: object())
     monkeypatch.setattr(
         subscription.users_db,
         "get_user_valid_subscription",
         lambda uid, **_kwargs: (_ for _ in ()).throw(RuntimeError("firestore unavailable")),
     )
 
-    assert subscription.grants_cloud_screen_vectors("uid-under-test") is True
+    with pytest.raises(subscription.screen_vector_entitlements.ScreenVectorAuthorityUnavailable):
+        await subscription.grants_cloud_screen_vectors("uid-under-test")
+
+
+def test_vector_batch_unknown_authority_is_not_acknowledged_and_recovers_on_retry(monkeypatch):
+    from collections import OrderedDict
+    from unittest.mock import Mock
+    from utils import screen_vector_entitlements as authority
+    from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+
+    price = next(iter(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES))
+    monkeypatch.setenv('LADDER_V1_PLUS_MONTH_PRICE_ID', 'price_router_ladder_plus')
+    clock = [100.0]
+    monkeypatch.setattr(authority, '_identity_cache', OrderedDict())
+    monkeypatch.setattr(authority, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(authority, 'get_customer_firestore_client', lambda: object())
+    period_end = datetime.now(timezone.utc).timestamp() + 3600
+    monkeypatch.setattr(
+        authority.users_db,
+        'get_user_valid_subscription',
+        lambda *a, **kw: {
+            'plan': RECOGNIZED_STRIPE_PRICE_PLAN_TYPES[price].value,
+            'current_price_id': price,
+            'stripe_subscription_id': 'sub_retry',
+            'current_period_end': period_end,
+        },
+    )
+    provider = Mock(side_effect=RuntimeError('temporary authority outage'))
+    monkeypatch.setattr(authority, 'read_stripe_subscription', provider)
+    stored = {}
+
+    def upsert(_uid, rows):
+        for row in rows:
+            stored[row['id']] = row
+        return len(rows)
+
+    vectors = Mock(return_value=1)
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity', upsert)
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity_vectors', vectors)
+    payload = {'rows': [{'id': 1, 'timestamp': '2026-07-26T00:00:00.000Z', 'ocrText': 'text', 'embedding': [0.1]}]}
+    with make_client() as client:
+        response = client.post('/v1/screen-activity/sync', json=payload)
+        assert response.status_code == 503
+        assert response.headers['Retry-After'] == '5'
+        assert 'synced' not in response.json() and 'last_id' not in response.json()
+        assert 'plan_gated' not in response.text
+        assert len(stored) == 1, 'raw write is retained and idempotent'
+        vectors.assert_not_called()
+        provider.side_effect = None
+        provider.return_value = {'id': 'sub_retry', 'items': {'data': [{'price': {'id': price}}]}}
+        # A negative hit still cannot acknowledge or spend. Recover at bounded expiry.
+        assert client.post('/v1/screen-activity/sync', json=payload).status_code == 503
+        assert provider.call_count == 1
+        clock[0] += 6
+        response = client.post('/v1/screen-activity/sync', json=payload)
+    assert response.status_code == 200
+    assert response.json()['synced'] == 1 and response.json()['last_id'] == 1
+    assert len(stored) == 1
+    vectors.assert_called_once()
+    assert vectors.call_args.args[1][0]['embedding'] == [0.1]
+
+
+def test_ocr_only_sync_needs_no_vector_authority(monkeypatch):
+    authority = AsyncMock(side_effect=AssertionError('OCR-only batch requested vector authority'))
+    vectors = AsyncMock(side_effect=AssertionError('OCR-only batch wrote vector'))
+    monkeypatch.setattr(desktop_screen_crisp, 'grants_cloud_screen_vectors', authority)
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity', lambda uid, rows: len(rows))
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity_vectors', vectors)
+    response = make_client().post(
+        '/v1/screen-activity/sync',
+        json={
+            'rows': [{'id': 2, 'timestamp': '2026-07-26T00:00:00.000Z', 'ocrText': 'text'}],
+        },
+    )
+    assert response.status_code == 200 and response.json()['last_id'] == 2
+    authority.assert_not_called()
+    vectors.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'plan,stored_price,billed_price,entitled',
+    [
+        ('basic', None, None, False),
+        ('plus', 'legacy', 'price_router_ladder_plus', False),
+        ('plus', None, 'legacy', True),
+    ],
+)
+def test_known_vector_authority_controls_real_batch_without_false_retry(
+    monkeypatch, plan, stored_price, billed_price, entitled
+):
+    from collections import OrderedDict
+    from unittest.mock import Mock
+    from utils import screen_vector_entitlements as authority
+    from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+
+    legacy = next(price for price, tier in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if tier.value == 'plus')
+    monkeypatch.setattr(authority, '_identity_cache', OrderedDict())
+    monkeypatch.setenv('LADDER_V1_PLUS_MONTH_PRICE_ID', 'price_router_ladder_plus')
+    monkeypatch.setattr(authority, 'get_customer_firestore_client', lambda: object())
+    record = {
+        'plan': plan,
+        'current_price_id': legacy if stored_price == 'legacy' else stored_price,
+        'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+        'stripe_subscription_id': 'sub_router' if billed_price else None,
+    }
+    monkeypatch.setattr(authority.users_db, 'get_user_valid_subscription', lambda *a, **kw: record)
+    provider = Mock(
+        return_value={
+            'id': 'sub_router',
+            'items': {'data': [{'price': {'id': legacy if billed_price == 'legacy' else billed_price}}]},
+        }
+    )
+    monkeypatch.setattr(authority, 'read_stripe_subscription', provider)
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity', lambda uid, rows: len(rows))
+    vectors = Mock(return_value=1)
+    monkeypatch.setattr(desktop_screen_crisp, 'upsert_screen_activity_vectors', vectors)
+    response = make_client().post(
+        '/v1/screen-activity/sync',
+        json={
+            'rows': [{'id': 3, 'timestamp': '2026-07-26T00:00:00.000Z', 'ocrText': 'text', 'embedding': [0.1]}],
+        },
+    )
+    assert response.status_code == 200 and response.json()['last_id'] == 3
+    assert vectors.call_count == int(entitled)
+    assert provider.call_count == int(billed_price is not None)

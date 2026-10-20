@@ -1,23 +1,15 @@
 # LIFECYCLE: permanent
 """Dark-by-default controls for managed, single-channel live STT."""
 
-import hashlib
-import os
 from typing import TypedDict
+
+from config.policy.listen import window_allocation as window_allocation
 
 from config.stt_provider_policy import STTServingSurface, normalized_stt_language, parakeet_supports_language
 
 
 def configured_chain_enabled() -> bool:
     return True
-
-
-def window_allocation(uid: str | None) -> bool:
-    if not uid:
-        return False
-    percent = min(100.0, max(0.0, float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))))
-    bucket = int.from_bytes(hashlib.sha256(('parakeet-window:' + uid).encode()).digest()[:8], 'big')
-    return bucket / 2**64 * 100 < percent
 
 
 def window_language_supported(requested: str | None, resolved: str) -> bool:

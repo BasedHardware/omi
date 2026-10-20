@@ -42,6 +42,18 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def ready_predecessor(self, owner_key, priority, segment_id):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['priority'] == priority
+            and v['state'] == 'ready'
+            and v.get('next') == segment_id
+        ]
+        return deepcopy(jobs[0]) if len(jobs) == 1 else None
+
 
 class MemoryStore:
     def __init__(self):
@@ -343,6 +355,9 @@ def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeyp
     monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
     assert queue.pull(10, capacity=capacity) == []
     monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    assert queue.pull(10, capacity=capacity) == []  # admitted policy remains off
+    queue = Scheduler(MemoryStore(), pool='live')
+    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
     assert [v.item.segment_id for v in queue.pull(10, 32, capacity=capacity)] == ['short']
     assert queue.pull(10, capacity=capacity) == []
     from dataclasses import replace
@@ -471,3 +486,222 @@ def test_idle_shards_rejoin_at_frontier_without_history_penalty_or_credit_reset(
     frontier = max(v.get('p2_service', 0) for (table, _), v in store.rows.items() if table == 'control')
     queue.enqueue(item('heavy-rejoin'), 3)
     assert store.rows['control', heavy_key]['p2_service'] == frontier
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_capture_head_priority_resolves_ready_head_before_later_compute(monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', str(enabled).lower())
+    store = MemoryStore()
+    queue = Scheduler(store)
+    # Upload order differs from capture order, as in the incident. The later
+    # recovered unit cannot commit until the older ready unit is computed.
+    for sid, capture in [('later', 20), ('head', 10), ('tail', 30)]:
+        queue.enqueue(item(sid, capture=capture), 0)
+    first = queue.pull(1)[0]
+    assert first.item.segment_id == ('head' if enabled else 'later')
+    assert queue.complete(WorkResult(first.item.segment_id, 'gs://synthetic/result'), first.token, 2)
+    entry = OrderedMerge(store).commit_next('heavy', 3)
+    assert (entry is not None) == enabled
+    if enabled:
+        assert entry['segment_id'] == 'head'
+        # The splice left an ordinary FIFO, including its original tail. A
+        # rollback neither duplicates nor loses a lease.
+        monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false')
+        assert [v.item.segment_id for v in queue.pull(4, 2)] == ['later', 'tail']
+
+
+def test_slow_leased_head_is_never_stolen_or_overtaken(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('head', capture=10), 0)
+    slow = queue.pull(1)[0]
+    queue.enqueue(item('recovered', capture=20), 2)
+    later = queue.pull(3)[0]
+    assert queue.complete(WorkResult('recovered', 'gs://synthetic/recovered'), later.token, 4)
+    merge = OrderedMerge(store)
+    assert merge.commit_next('heavy', 5) is None
+    assert queue.heartbeat('head', slow.token, 60)
+    assert store.rows['jobs', 'head']['token'] == slow.token
+    assert queue.complete(WorkResult('head', 'gs://synthetic/head'), slow.token, 61)
+    assert merge.commit_next('heavy', 62)['segment_id'] == 'head'
+    later_entry = merge.commit_next('heavy', 63)
+    assert later_entry['segment_id'] == 'recovered'
+    assert later_entry['previous_segment_id'] == 'head'
+
+
+def test_head_priority_splices_tail_and_leaves_priority_capacity_and_fairness_intact(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('newer', capture=20), 0)
+    queue.enqueue(item('head', capture=10), 0)
+    queue.enqueue(item('fresh', owner='fresh', priority=Priority.FRESH), 0)
+    assert queue.pull(1)[0].item.segment_id == 'fresh'
+    assert queue.pull(2)[0].item.segment_id == 'head'
+    queue.enqueue(item('after', capture=30), 3)
+    assert [v.item.segment_id for v in queue.pull(4, 2)] == ['newer', 'after']
+
+
+def test_head_owner_budget_is_bounded_and_default_off_adds_no_pending_query(monkeypatch):
+    from utils.batch_pipeline import scheduler
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    for sid, capture in [('new', 20), ('middle', 30), ('head', 10)]:
+        queue.enqueue(item(sid, capture=capture), 0)
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 0)
+    assert queue.pull(1)[0].item.segment_id == 'new'
+    monkeypatch.delenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED')
+    monkeypatch.setattr(MemoryTransaction, 'first_pending', lambda *_: pytest.fail('dark priority queried head'))
+    assert queue.pull(2)[0].item.segment_id == 'middle'
+
+
+def test_head_promotion_never_buffers_link_writes_for_privacy_fenced_job(monkeypatch):
+    from dataclasses import replace
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('newer', capture=20), 0)
+    queue.enqueue(replace(item('head', capture=10), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(1)[0].item.segment_id == 'newer'
+    assert store.rows['jobs', 'head']['state'] == 'ready'
+    assert store.rows['jobs', 'head']['next'] == ''
+    assert queue.pull(2) == []
+
+
+def test_head_lookup_budget_is_shared_by_all_visited_owners(monkeypatch):
+    from utils.batch_pipeline import scheduler
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 1)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    other = colliding_owner('heavy')
+    for owner in ('heavy', other):
+        queue.enqueue(item('new-' + owner, owner=owner, capture=20, duration=100), 0)
+        queue.enqueue(item('head-' + owner, owner=owner, capture=10), 0)
+    calls = []
+    first = MemoryTransaction.first_pending
+
+    def count(tx, key):
+        calls.append(key)
+        return first(tx, key)
+
+    monkeypatch.setattr(MemoryTransaction, 'first_pending', count)
+    assert queue.pull(1)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    'pool,kind,duration', [('batch', 'capture_span', 121), ('live', 'capture_span', 121), ('live', 'conversation', 10)]
+)
+def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch, pool, kind, duration):
+    from dataclasses import replace
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store, pool=pool)
+    queue.enqueue(replace(item('fifo', capture=20, duration=10), unit_kind='capture_span'), 0)
+    queue.enqueue(replace(item('head', capture=10, duration=duration), unit_kind=kind), 0)
+    queue.enqueue(replace(item('tail', capture=30, duration=10), unit_kind='capture_span'), 0)
+    capacity = PoolCapacity(
+        1,
+        1,
+        max_item_seconds=120,
+        shared_with_live=pool == 'live',
+        memory_headroom_bytes=8 * 1024**3,
+        gpu_id='head-priority-gpu',
+    )
+    lease = queue.pull(1, capacity=capacity)[0]
+    assert lease.item.segment_id == 'fifo'
+    key = f'{int(Priority.DEEP)}_{owner_key("heavy")}'
+    assert store.rows['queues', key]['head'] == 'head'
+    assert store.rows['queues', key]['tail'] == 'tail'
+    assert store.rows['jobs', 'head']['next'] == 'tail'
+    assert store.rows['jobs', 'head']['state'] == 'ready'
+    assert queue.complete(WorkResult('fifo', 'gs://synthetic/result'), lease.token, 2)
+    assert OrderedMerge(store).commit_next('heavy', 3) is None
+    # The ordinary batch pool can still lease the skipped ordered head.
+    assert Scheduler(store).pull(3)[0].item.segment_id == 'head'
+
+
+@pytest.fixture
+def reverse_capture_run(monkeypatch):
+    # Execute the snapshot-store workload in setup, as the virtual-clock suite
+    # does; the fast-unit call-phase budget measures the ordering assertions.
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    for n in reversed(range(160)):
+        queue.enqueue(item(f's{n:03}', capture=n), 0)
+    merge = OrderedMerge(store)
+    receipts = []
+    for n in range(160):
+        lease = queue.pull(10 + n)[0]
+        accepted = queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 10 + n)
+        entry = merge.commit_next('heavy', 10 + n)
+        receipts.append((lease.item.segment_id, accepted, entry))
+    return receipts, queue.pull(1000)
+
+
+def test_indexed_head_beyond_64_preserves_all_links_and_order(reverse_capture_run):
+    receipts, remaining = reverse_capture_run
+    assert len(receipts) == 160
+    for n, (segment_id, accepted, entry) in enumerate(receipts):
+        assert segment_id == f's{n:03}'
+        assert accepted
+        assert entry['segment_id'] == segment_id
+        assert entry['previous_segment_id'] == (f's{n-1:03}' if n else None)
+    assert remaining == []
+
+
+def test_head_metrics_and_missing_predecessor_fail_closed(monkeypatch):
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+    from utils.batch_pipeline import scheduler
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    queue.enqueue(item('later', capture=20), 0)
+    queue.enqueue(item('head', capture=10), 0)
+    monkeypatch.setattr(MemoryTransaction, 'ready_predecessor', lambda *_: None)
+    assert queue.pull(20)[0].item.segment_id == 'later'
+    labels = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert registry.get_sample_value('omi_batch_pipeline_head_not_found_total', labels) == 1
+    assert registry.get_sample_value('omi_batch_pipeline_predecessor_ready_age_seconds_sum', labels) == 20
+    monkeypatch.setattr(scheduler, 'HEAD_OWNER_BUDGET', 0)
+    assert queue.pull(21)[0].item.segment_id == 'head'
+    assert registry.get_sample_value('omi_batch_pipeline_head_budget_exhausted_total', labels) == 1
+
+
+def test_ready_predecessor_ignores_stale_leased_links(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('leased', capture=0), 0)
+    queue.enqueue(item('fifo', capture=20), 0)
+    slow = queue.pull(1)[0]
+    queue.enqueue(item('head', capture=10), 2)
+    # A prior lease can retain the same next link; it must never be rewritten.
+    store.rows['jobs', 'leased']['next'] = 'head'
+    assert queue.complete(WorkResult('leased', 'gs://synthetic/result'), slow.token, 3)
+    assert OrderedMerge(store).commit_next('heavy', 3)
+    assert queue.pull(4)[0].item.segment_id == 'head'
+    assert store.rows['jobs', 'leased']['next'] == 'head'
+    assert queue.pull(4)[0].item.segment_id == 'fifo'

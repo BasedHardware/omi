@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -48,4 +50,25 @@ void main() {
       expect(world.deviceConnection!.openAudioSubscriptions, 1);
     });
   }
+
+  test('pendant batch mode pause sets recordingState to pause, freezes elapsed timer, and resume restores deviceRecord',
+      () async {
+    SharedPreferencesUtil().batchModeEnabled = true;
+    world.controller.updateRecordingState(RecordingState.deviceRecord);
+    expect(world.controller.offlineMuted, false);
+
+    await world.controller.toggleOfflineMute();
+    await world.settle();
+
+    expect(world.controller.offlineMuted, true);
+    expect(world.controller.recordingState, RecordingState.pause);
+    expect(world.controller.isPaused, true);
+
+    await world.controller.toggleOfflineMute();
+    await world.settle();
+
+    expect(world.controller.offlineMuted, false);
+    expect(world.controller.recordingState, RecordingState.deviceRecord);
+    expect(world.controller.isPaused, false);
+  });
 }

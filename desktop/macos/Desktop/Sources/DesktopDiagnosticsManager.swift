@@ -1455,6 +1455,11 @@ final class DesktopDiagnosticsManager {
     "account_cutover",
     "voice_typing",
     "rewind_database", "meeting_screen_evidence",
+    // The memories cache reconcile degrading to its bounded in-launch retry
+    // (and, when that exhausts, to next launch). Named so a release-health
+    // query can watch the truncated-list rate without reading it out of
+    // `other`.
+    "memories-cache",
     "other",
   ]
 
@@ -1496,6 +1501,10 @@ final class DesktopDiagnosticsManager {
     "state_divergence",
     "status_inferred",
     "engine_failed",
+    // The server returned a truncated memories list, so absence proved nothing
+    // about that pull — the signal behind the memories-cache reconcile's
+    // in-launch retry and next-launch deferral.
+    "list_truncated",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
