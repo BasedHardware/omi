@@ -270,6 +270,11 @@ struct SettingsContentView: View {
 
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
+  /// The Daily Summary switch the account last confirmed, or `nil` until Settings has read it.
+  /// A failed save puts it back; see `BooleanSettingSaver`.
+  @State var savedDailySummaryEnabled: Bool?
+  @State var dailySummaryEnabledRevision = 0
+  @State var dailySummaryEnabledError: String?
   @State var dailySummaryHour: Int = 22
   @State var dailySummaryDepth: DailySummaryDepth = .brief
   @State var savedDailySummaryDepth: DailySummaryDepth = .brief
@@ -290,7 +295,15 @@ struct SettingsContentView: View {
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
+  /// The Store Recordings switch the account last confirmed, or `nil` until Settings has read it.
+  @State var savedRecordingPermissionEnabled: Bool?
+  @State var recordingPermissionRevision = 0
+  @State var recordingPermissionError: String?
   @State var privateCloudSyncEnabled: Bool = true
+  /// The Private Cloud Sync switch the account last confirmed, or `nil` until Settings has read it.
+  @State var savedPrivateCloudSyncEnabled: Bool?
+  @State var privateCloudSyncRevision = 0
+  @State var privateCloudSyncError: String?
   @State var isTrackingExpanded: Bool = false
 
   // Transcription settings (from backend)
