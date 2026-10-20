@@ -4,11 +4,9 @@ import copy
 import hashlib
 import json
 import logging
-import time
 import uuid
 import zlib
 from collections.abc import Mapping
-from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
@@ -47,7 +45,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment, timed
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -4206,13 +4204,13 @@ def assign_sync_conversation(
     """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
-    clock = _SyncAssignmentClock() if timing else None
+    clock = SyncAssignmentClock(logger) if timing else None
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
     if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        with _timed(clock, 'live_overlap'):
+        with timed(clock, 'live_overlap'):
             live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
 
     score_snapshots: dict = {}
@@ -4244,18 +4242,18 @@ def assign_sync_conversation(
         # Optional batch projection hooks share the exact legacy transaction.
         # Guards/plan validation may only read; after_assign may only write.
         if before_assign is not None:
-            with _timed(clock, 'fence'):
+            with timed(clock, 'fence'):
                 before_assign(transaction)
 
         def encode(payload):
-            with _timed(clock, 'encode'):
+            with timed(clock, 'encode'):
                 if validate_plan is not None:
                     validate_plan(transaction, payload)
                 return encode_sync_assignment_plan(
                     uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
                 )
 
-        with _timed(clock, 'plan'):
+        with timed(clock, 'plan'):
             planned = assign_in_transaction(
                 transaction,
                 user_ref,
@@ -4271,19 +4269,19 @@ def assign_sync_conversation(
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
-            with _timed(clock, 'persist'):
+            with timed(clock, 'persist'):
                 after_assign(transaction, planned)
         if clock is not None:
             clock.body_done()
         return planned
 
     try:
-        with _timed(clock, 'transaction'):
+        with timed(clock, 'transaction'):
             result = run_with_size_limit_backstop(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
                 lambda: attempted.get('canonical'),
             )
-        with _timed(clock, 'index'):
+        with timed(clock, 'index'):
             invalidate_people_stats_cache(uid)
             conversation = result[0]
             donors = conversation.get('sync_merged_from') or []
@@ -4298,80 +4296,6 @@ def assign_sync_conversation(
         clock.donors = len(donors)
         clock.log('completed', None)
     return result
-
-
-class _SyncAssignmentClock:
-    """Accumulates assign_sync_conversation sub-phases for one bounded log line.
-
-    ``plan`` excludes the nested ``encode`` time. ``commit`` is the final
-    commit after the last transaction body; ``retry`` is the remaining
-    transaction time (failed commits, rollbacks, backoff and size retries).
-    """
-
-    PHASES = ('live_overlap', 'fence', 'plan', 'encode', 'persist', 'transaction', 'index')
-
-    def __init__(self):
-        self.started = time.monotonic()
-        self.ms = dict.fromkeys(self.PHASES, 0.0)
-        self.attempts = 0
-        self.body_ms = 0.0
-        self.attempt_started = None
-        self.last_body_end = None
-        self.transaction_end = None
-        self.donors = 0
-
-    def attempt(self):
-        self.attempts += 1
-        self.attempt_started = time.monotonic()
-
-    def body_done(self):
-        now = time.monotonic()
-        if self.attempt_started is not None:
-            self.body_ms += (now - self.attempt_started) * 1000
-        self.last_body_end = now
-
-    def add(self, phase: str, elapsed_ms: float):
-        self.ms[phase] += elapsed_ms
-        if phase == 'encode':
-            self.ms['plan'] -= elapsed_ms
-        if phase == 'transaction':
-            self.transaction_end = time.monotonic()
-
-    def log(self, outcome: str, exception_type: str | None):
-        commit_ms = 0.0
-        if self.last_body_end is not None and self.transaction_end is not None:
-            commit_ms = max(0.0, (self.transaction_end - self.last_body_end) * 1000)
-        retry_ms = max(0.0, self.ms['transaction'] - self.body_ms - commit_ms)
-        logger.info(
-            'event=sync_assignment_timing outcome=%s attempts=%d live_overlap_ms=%d fence_ms=%d plan_ms=%d '
-            'encode_ms=%d persist_ms=%d body_ms=%d commit_ms=%d retry_ms=%d index_ms=%d donors=%d total_ms=%d%s',
-            outcome,
-            self.attempts,
-            int(self.ms['live_overlap']),
-            int(self.ms['fence']),
-            int(max(0.0, self.ms['plan'])),
-            int(self.ms['encode']),
-            int(self.ms['persist']),
-            int(self.body_ms),
-            int(commit_ms),
-            int(retry_ms),
-            int(self.ms['index']),
-            min(self.donors, 1000),
-            int((time.monotonic() - self.started) * 1000),
-            f' exception_type={exception_type}' if exception_type else '',
-        )
-
-
-@contextmanager
-def _timed(clock: '_SyncAssignmentClock | None', phase: str):
-    if clock is None:
-        yield
-        return
-    started = time.monotonic()
-    try:
-        yield
-    finally:
-        clock.add(phase, (time.monotonic() - started) * 1000)
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:
