@@ -44,6 +44,12 @@ cloud_run:
     MCP_OAUTH_CLAUDE_CLIENT_NAME: ''
     MCP_OAUTH_CLAUDE_REDIRECT_URIS: ''
     SYNC_LEDGER_FENCE_MODE: legacy
+  # Per-service env_inputs (override env_inputs for that service). Prod's deploy action gives
+  # backend-sync-backfill its own sync-jobs URL; without it the backfill service mints and accepts
+  # backend-sync's audience and rejects its own Cloud Tasks with 403 (wrong audience).
+  env_inputs_by_service:
+    backend-sync-backfill:
+      SYNC_TASKS_HANDLER_URL: '{run_url:backend-sync-backfill}/v2/sync-jobs/run'
   # Set on every staging Cloud Run service (added or overriding prod).
   env_all:
     OMI_DEPLOYMENT: staging

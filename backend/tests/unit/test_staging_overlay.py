@@ -52,6 +52,20 @@ def test_staging_composes_and_passes_the_fence(composer):
     assert composer.staging_fence_errors(staging) == []
 
 
+def test_staging_backfill_service_owns_its_sync_tasks_audience(composer):
+    # Prod's deploy gives backend-sync-backfill its own sync-jobs URL. With backend-sync's, the
+    # backfill service rejected its own Cloud Tasks: 403, wrong OIDC audience.
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    for service in ('backend-sync', 'backend-sync-backfill'):
+        env = services[service]['env']
+        own = f'https://{service}-staging-'
+        assert env['SYNC_TASKS_HANDLER_URL']['value'].startswith(own)
+        assert env['SYNC_TASKS_OIDC_AUDIENCE']['value'] == env['SYNC_TASKS_HANDLER_URL']['value']
+    assert services['backend-sync']['env']['SYNC_BACKFILL_TASKS_OIDC_AUDIENCE']['value'].startswith(
+        'https://backend-sync-backfill-staging-'
+    )
+
+
 def test_staging_sync_services_dispatch_through_cloud_tasks(composer):
     # Prod sets these per service outside runtime_env.yaml. Inline sync dispatch makes the backfill
     # lane fail closed (sync_backfill_dispatch_unavailable, upload 503) for owners not on batch.

@@ -230,6 +230,11 @@ def compose_staging(
 
     env_inputs = {name: sub(value) for name, value in (_as_config_dict(spec.get('env_inputs')) or {}).items()}
     env_all = {name: sub(value) for name, value in (_as_config_dict(spec.get('env_all')) or {}).items()}
+    # Per-service inputs, like the prod deploy action that hands each service its own handler URL.
+    env_inputs_by_service = {
+        str(service): {name: sub(value) for name, value in (_as_config_dict(values) or {}).items()}
+        for service, values in (_as_config_dict(spec.get('env_inputs_by_service')) or {}).items()
+    }
     queue_map = {str(k): str(v) for k, v in (_as_config_dict(spec.get('queue_map')) or {}).items()}
     secret_map = {str(k): str(v) for k, v in (_as_config_dict(spec.get('secret_map')) or {}).items()}
     secret_add = [str(name) for name in spec.get('secret_add') or []]
@@ -243,12 +248,13 @@ def compose_staging(
         config = cast(ConfigDict, deepcopy(raw))
         env_out: ConfigDict = {}
         dropped_env: list[str] = []
+        service_inputs = {**env_inputs, **env_inputs_by_service.get(service, {})}
         for name, raw_entry in (_as_config_dict(config.get('env')) or {}).items():
             entry = dict(_as_config_dict(raw_entry) or {})
             if 'env_var' in entry:
                 source = str(entry['env_var'])
-                if source in env_inputs:
-                    entry = {'value': env_inputs[source], 'category': entry.get('category', 'service_discovery')}
+                if source in service_inputs:
+                    entry = {'value': service_inputs[source], 'category': entry.get('category', 'service_discovery')}
                 elif entry.get('provisional'):
                     dropped_env.append(name)
                     continue
