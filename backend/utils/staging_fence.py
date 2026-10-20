@@ -66,7 +66,7 @@ _PROD_REFERENCE = re.compile(
 # prod ILBs (Parakeet, diarizer), and the prod external load balancer IPs. Dev is
 # 172.16.0.0/18 and Cloud SQL 172.20.0.0/16, so these never overlap a staging value.
 PROD_NETWORKS: tuple[ipaddress.IPv4Network, ...] = tuple(
-    ipaddress.ip_network(cidr)
+    ipaddress.IPv4Network(cidr)
     for cidr in (
         '172.16.128.0/20',
         '172.16.144.0/20',
