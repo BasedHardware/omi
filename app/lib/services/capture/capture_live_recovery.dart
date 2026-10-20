@@ -156,7 +156,9 @@ extension _CaptureLiveRecovery on CaptureController {
     final codec = state.codecByDevice[deviceId];
     final persistable = codec != null && codec.isOpusSupported();
     if (persistable) {
-      if (state.orphanBacklog.length < _orphanBacklogLimit) state.orphanBacklog.add(List<int>.from(packet));
+      // While priming is stuck, keep the newest audio: drop the oldest packet.
+      if (state.orphanBacklog.length >= _orphanBacklogLimit) state.orphanBacklog.removeAt(0);
+      state.orphanBacklog.add(List<int>.from(packet));
       if (state.orphanWalPrimed) {
         _flushOrphanBacklog(deviceId, codec);
       } else if (!state.orphanPriming) {
@@ -180,17 +182,33 @@ extension _CaptureLiveRecovery on CaptureController {
 
   /// The WAL tracks one codec; a session boundary first, exactly as a fresh
   /// pendant stream does, so orphan frames never inherit another source's codec.
+  ///
+  /// The boundary is only taken while the transport still has no listener and
+  /// no phone/call owns capture, rechecked after the await; when the WAL already
+  /// tracks this codec (the pendant was the last source) no boundary is needed.
   Future<void> _primeOrphanWal(String deviceId, BleAudioCodec codec) async {
     final state = _liveRecovery;
     state.orphanPriming = true;
     try {
       final phone = _wal.getSyncs().phone;
-      await phone.onAudioCodecChanged(codec);
+      bool orphaned() => _orphanAudioAdmitted(deviceId) && _bleBytesStream == null;
+      if (!orphaned()) {
+        state.orphanBacklog.clear();
+        return;
+      }
+      if (phone.currentCodec != codec) {
+        await phone.onAudioCodecChanged(codec);
+        if (!orphaned()) {
+          // A live start or phone session won the race; it owns the WAL now.
+          _flushOrphanBacklog(deviceId, codec);
+          return;
+        }
+      }
       final model = _activeSource?.deviceModel ?? 'Omi';
       phone.setDeviceInfo(deviceId, model);
       state.orphanSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: model);
       state.orphanWalPrimed = true;
-      if (_orphanAudioAdmitted(deviceId)) _flushOrphanBacklog(deviceId, codec);
+      _flushOrphanBacklog(deviceId, codec);
     } catch (error, stack) {
       Logger.error('[Capture] orphan audio WAL setup failed: $error\n$stack');
     } finally {
@@ -198,10 +216,17 @@ extension _CaptureLiveRecovery on CaptureController {
     }
   }
 
+  /// Writes the backlog only while the WAL still tracks this pendant's codec
+  /// and no phone/call owns capture; otherwise the packets cannot be stored
+  /// without corrupting another session and are dropped.
   void _flushOrphanBacklog(String deviceId, BleAudioCodec codec) {
     final state = _liveRecovery;
-    final source = state.orphanSource ??= BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: 'Omi');
     final phone = _wal.getSyncs().phone;
+    if (!_orphanAudioAdmitted(deviceId) || phone.currentCodec != codec) {
+      state.orphanBacklog.clear();
+      return;
+    }
+    final source = state.orphanSource ??= BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: 'Omi');
     for (final packet in state.orphanBacklog) {
       for (final frame in source.processBytes(packet)) {
         phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
@@ -279,8 +304,11 @@ extension _CaptureLiveRecovery on CaptureController {
       if (!state.deferredStart) return;
       state.deferredStart = false;
       // Replays exactly the start the pass swallowed, for any pendant and mode.
+      // A phone recording or call that owns capture now is not a reason to drop
+      // it: the reducer records the pendant as suspended and resumes it after.
       final device = _recordingDevice;
-      if (device == null || state.deviceStoppedByCaller || _capture.stagedReadModel.phase != CapturePhase.idle) {
+      final staged = _capture.stagedReadModel;
+      if (device == null || state.deviceStoppedByCaller || staged.pendantOwns || _pendantSuspension != null) {
         return;
       }
       _emitCaptureRecovery(CaptureRecoveryObservedKind.captureStartRedriven, CaptureRecoveryObservedTrigger.passEnded);

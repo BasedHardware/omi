@@ -180,6 +180,9 @@ class RecordingTransferCoordinator {
   int _cooldownGeneration = 0;
   int _periodicGeneration = 0;
   bool _periodicDrainInFlight = false;
+  int _passGeneration = 0;
+  Future<void>? _abandonedPass;
+  DateTime? _abandonedAt;
 
   /// Retire an expired OS window before any further discovery/upload stage.
   /// Returns true only while that window's own drain is running, the one
@@ -404,7 +407,9 @@ class RecordingTransferCoordinator {
     final limit = fenced ? fencedPassTimeLimit : passTimeLimit;
     // The limit sits inside the scope, so a hung stage cannot hold the capture
     // fence or `_inFlight` (which every later wake joins) past it.
-    Future<void> body() => _runPassBody(trigger).timeout(limit);
+    final generation = ++_passGeneration;
+    Future<void>? running;
+    Future<void> body() => (running = _runPassBody(trigger, generation)).timeout(limit);
     try {
       if (fenced) {
         await SyncWakeScope.run(body);
@@ -413,6 +418,12 @@ class RecordingTransferCoordinator {
       }
     } on TimeoutException {
       Logger.warning('RecordingTransferCoordinator: $trigger pass exceeded ${limit.inMinutes} min; abandoning it');
+      // The timeout ends the wait, not the work. Mark the body stale so it
+      // stops at its next stage boundary, keep the transfer keep-alive held
+      // until it really exits, and let no later pass discover or drain beside it.
+      _passGeneration++;
+      final abandoned = running;
+      if (abandoned != null) await _holdAbandonedPass(abandoned);
       try {
         _onPassTimedOut?.call(trigger, limit);
       } catch (error) {
@@ -422,9 +433,39 @@ class RecordingTransferCoordinator {
     }
   }
 
-  Future<void> _runPassBody(WakeTrigger trigger) async {
+  Future<void> _holdAbandonedPass(Future<void> abandoned) async {
+    final started = _onTransferStarted;
+    if (started != null) await started();
+    late final Future<void> tracked;
+    tracked = abandoned.catchError((Object _) {}).whenComplete(() async {
+      if (identical(_abandonedPass, tracked)) _abandonedPass = null;
+      final finished = _onTransferFinished;
+      if (finished != null) await finished();
+    });
+    _abandonedPass = tracked;
+    _abandonedAt = _clock();
+    tracked.ignore();
+  }
+
+  /// An abandoned pass that has not exited yet blocks new discovery and drain,
+  /// so two drains never run at once. A body that outlives a second time limit
+  /// is presumed dead and stops blocking.
+  bool get _abandonedPassRunning {
+    final at = _abandonedAt;
+    if (_abandonedPass == null || at == null) return false;
+    if (_clock().difference(at) <= passTimeLimit) return true;
+    _abandonedPass = null;
+    return false;
+  }
+
+  Future<void> _runPassBody(WakeTrigger trigger, int generation) async {
     final periodicGeneration = _periodicGeneration;
-    bool expired() => trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration;
+    bool expired() =>
+        generation != _passGeneration || (trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration);
+    if (_abandonedPassRunning) {
+      _scheduleRetry('an abandoned pass has not exited yet');
+      return;
+    }
     final backlogWake =
         trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected || trigger == WakeTrigger.watchdog;
     try {
@@ -484,6 +525,7 @@ class RecordingTransferCoordinator {
       _failureStreak = 0;
     } catch (error, stackTrace) {
       Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
+      if (generation != _passGeneration) return;
       _scheduleRetry('pass threw while recovering recording transfers');
     }
   }
