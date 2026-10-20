@@ -11,7 +11,7 @@ import {
 } from '@/src/lib/shared-note.mjs';
 import {
   noteTranscriptIDs,
-  presentableNoteText,
+  presentableNoteStructured,
 } from '@omi/note-shared/note-sources.mjs';
 
 const WIDTH = 1200;
@@ -76,13 +76,13 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
   );
   const note = await fetchSharedNote(id);
 
-  const title = note
-    ? presentableNoteText(
-        note.structured?.title,
-        noteTranscriptIDs(note.transcript_segments),
-      ) || DEFAULT_TITLE_MEMORY
-    : 'Notes from Omi';
-  const points = note ? previewBullets(note.structured) : [];
+  // The preview image reads the same repaired text the page shows, not raw citation debris.
+  const structured = presentableNoteStructured(
+    note?.structured,
+    noteTranscriptIDs(note?.transcript_segments),
+  );
+  const title = note ? structured?.title || DEFAULT_TITLE_MEMORY : 'Notes from Omi';
+  const points = note ? previewBullets(structured) : [];
   const minutes = note ? durationMinutes(note.started_at, note.finished_at) : null;
   const kind = meetingTypeLabel(note?.structured?.meeting_type) || 'Conversation notes';
   const meta = [kind, minutes && minutes > 0 ? formatDuration(minutes) : '']

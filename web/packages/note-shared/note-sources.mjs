@@ -39,3 +39,23 @@ export function presentableNoteText(text, transcriptIDs = []) {
 export function noteTranscriptIDs(segments = []) {
   return (segments ?? []).flatMap((segment) => (segment?.id ? [segment.id] : []));
 }
+
+/**
+ * A structured note with its display text repaired (title, overview, sections), for
+ * derived surfaces such as share metadata and preview images that read raw fields.
+ */
+export function presentableNoteStructured(structured, transcriptIDs = []) {
+  if (!structured || typeof structured !== "object") return structured;
+  return {
+    ...structured,
+    title: presentableNoteText(structured.title, transcriptIDs),
+    overview: presentableNoteText(structured.overview, transcriptIDs),
+    sections: Array.isArray(structured.sections)
+      ? structured.sections.map((section) =>
+          section && typeof section === "object"
+            ? presentableNoteSection(section, transcriptIDs)
+            : section
+        )
+      : structured.sections,
+  };
+}

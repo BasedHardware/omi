@@ -78,7 +78,7 @@ function repairPass(input, knownIDs) {
     }
     if (
       !tokens.length ||
-      /^(?:spk|speaker)[ _]\d+:?$/i.test(content) ||
+      /^(?:spk|speaker)[ _]\p{Nd}+:?$/iu.test(content) ||
       /^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$/.test(content)
     )
       return remove();
@@ -97,10 +97,11 @@ function repairPass(input, knownIDs) {
       marker
     );
   }
-  // Word boundaries are Unicode, as in Python generation and Swift (ICU): an
-  // ID or speaker label glued to CJK text is part of a word, not a citation.
+  // Word boundaries and digits are Unicode, as in Python generation and Swift
+  // (ICU): an ID or speaker label glued to CJK text is part of a word, not a
+  // citation, and `Speaker_١٢` is a speaker label.
   text = text.replace(
-    /(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\d+(?![\p{L}\p{N}_]):?[ \t]*/giu,
+    /(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*/giu,
     marker
   );
   for (;;) {

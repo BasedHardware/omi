@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   presentableNoteSection,
+  presentableNoteStructured,
   resolvableNoteSources,
 } from '@omi/note-shared/note-sources.mjs';
 
@@ -42,4 +43,22 @@ test('typed provenance keeps first place and unresolvable IDs never become chips
   );
   assert.equal(stale.body_markdown, 'Fact.');
   assert.deepEqual(stale.source_segment_ids, []);
+});
+
+test('derived share surfaces read repaired title, overview and sections', () => {
+  const structured = presentableNoteStructured(
+    {
+      title: 'Kickoff [s1]',
+      overview: 'Speaker_00: Plan agreed. (s1)',
+      sections: [{ heading: 'Decision', body_markdown: '- Ship it [s1]' }],
+      meeting_type: 'standup',
+    },
+    ['s1'],
+  );
+  assert.equal(structured.title, 'Kickoff');
+  assert.equal(structured.overview, 'Plan agreed.');
+  assert.equal(structured.sections[0].body_markdown, '- Ship it');
+  assert.deepEqual(structured.sections[0].source_segment_ids, ['s1']);
+  assert.equal(structured.meeting_type, 'standup');
+  assert.equal(presentableNoteStructured(undefined, ['s1']), undefined);
 });
