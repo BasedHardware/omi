@@ -122,7 +122,6 @@ def test_unmounted_route_reports_nothing(tmp_path):
 KNOWN = {
     'account-deletion/routers/users.py:run_account_deletion_wipe/500',
     'listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/500',
-    'listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/503',
     'sync-backfill/routers/sync.py:_run_sync_job_attempt/500',
     'sync-backfill/routers/sync.py:_run_sync_job_attempt/503',
     'sync-backfill/routers/sync.py:_run_sync_job_body/500',
@@ -150,3 +149,8 @@ def test_real_tree_has_no_new_violators(real_keys):
     assert all(k.startswith(prefix) for k in real_keys)
     found = {k.removeprefix(prefix) for k in real_keys}
     assert found <= KNOWN, sorted(found - KNOWN)
+
+
+def test_listen_finalization_route_never_answers_503(real_keys):
+    # M1 L04-3: the sync_reprocess branch answered 503 on an expected first-summary retry.
+    assert not [k for k in real_keys if 'conversation_finalization.py' in k and k.endswith('/503')]

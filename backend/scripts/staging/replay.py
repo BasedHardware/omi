@@ -50,6 +50,7 @@ if str(BACKEND_DIR) not in sys.path:
 from testing.loadgen import mirror_codec as mc  # noqa: E402
 from testing.loadgen import population as pop  # noqa: E402
 from testing.loadgen.refresh_profile import PROFILE_PATH, load_profile  # noqa: E402
+from utils.client_device import build_client_device_id  # noqa: E402
 
 TERMINAL_STATUSES = frozenset({'completed', 'partial_failure', 'failed'})
 STAGING_HOST_RE = re.compile(r'^[a-z0-9-]*staging[a-z0-9-]*\.(a\.)?run\.app$')
@@ -79,6 +80,28 @@ def check_target(url: str, *, allow_local: bool) -> str:
     if parts.scheme != 'https' or not STAGING_HOST_RE.match(host):
         raise ReplayRefused('target must be an https *-staging-* Cloud Run host')
     return url.rstrip('/')
+
+
+def check_plan_lanes(plans: list[pop.PlannedUpload], *, seed_capture: bool, unseeded_fresh: bool) -> None:
+    """Refuse a plan whose fresh uploads cannot reach the fresh lane.
+
+    The server binds a fresh upload to a device only through ``build_client_device_id`` (8 hex
+    characters) plus device-bound capture provenance. Without both, admission files it as untrusted
+    backfill and still answers 202, so the run would silently measure the wrong queue (M1 L04-1).
+    """
+    fresh = [p for p in plans if p.lane_hint == 'fresh']
+    if not fresh:
+        return
+    unbound = sum(1 for p in fresh if build_client_device_id(p.platform, p.device_hash) is None)
+    if unbound:
+        raise ReplayRefused(
+            f'{unbound} fresh uploads carry a device hash the server rejects (8 hex required); regenerate the plan'
+        )
+    if not seed_capture and not unseeded_fresh:
+        raise ReplayRefused(
+            f'plan has {len(fresh)} fresh uploads: pass --seed-capture (device-bound provenance), or '
+            '--unseeded-fresh only when the target admits legacy fresh (SYNC_LEGACY_FRESH_ENABLED)'
+        )
 
 
 def check_load_host(target: str, env: dict[str, str] | None = None) -> str:
@@ -217,10 +240,14 @@ class StagingFirestoreSeeder:
         if os.getenv('OMI_DEPLOYMENT') != 'staging' or os.getenv('FIRESTORE_DATABASE_ID') != 'staging':
             raise ReplayRefused('capture seeding requires OMI_DEPLOYMENT=staging and FIRESTORE_DATABASE_ID=staging')
         try:
-            from utils.staging_fence import assert_staging_isolation  # lane 2, contract (i)
+            from utils.staging_fence import StagingFenceError, assert_staging_isolation  # lane 2, contract (i)
         except ImportError as exc:
             raise ReplayRefused('capture seeding requires utils.staging_fence (lane 2)') from exc
-        assert_staging_isolation()
+        try:
+            assert_staging_isolation()
+        except StagingFenceError as exc:
+            # The message names variables and reason codes only, never values.
+            raise ReplayRefused(str(exc)) from exc
         from database._client import get_firestore_client
         from database import conversations as conversations_db
 
@@ -302,6 +329,7 @@ class UploadResult:
     lane: str = ''
     conversation_id: str = ''
     seeded: bool = False
+    skipped: bool = False  # a fresh upload not sent because its capture provenance could not be bound
     final_status: str = ''
     error: str = ''
 
@@ -376,9 +404,14 @@ class Replay:
         headers = self._headers(upload)
         params: dict[str, str] = {}
         if self.seeder is not None and upload.lane_hint == 'fresh':
+            # Without a bound manifest the server admits this as untrusted backfill (still 202), which
+            # would shift the planned mix onto the backfill queue. Skip it and count it instead.
             conversation_id = f'lg-cap-{uuid.uuid4().hex}'
+            device_id = build_client_device_id(upload.platform, upload.device_hash)
+            if device_id is None:
+                result.error, result.skipped = 'device_hash_invalid', True
+                return result
             try:
-                device_id = f'{upload.platform}_{upload.device_hash}'
                 await asyncio.to_thread(self.seeder.seed_user, upload.owner_id)
                 await asyncio.to_thread(
                     self.seeder.seed_capture,
@@ -404,11 +437,13 @@ class Replay:
                     result.conversation_id = conversation_id
                     result.seeded = True
                 else:
-                    result.error = f'manifest_http_{manifest.status_code}'
+                    result.error, result.skipped = f'manifest_http_{manifest.status_code}', True
+                    return result
             except ReplayRefused:
                 raise
             except Exception as exc:
-                result.error = f'seed:{type(exc).__name__}'
+                result.error, result.skipped = f'seed:{type(exc).__name__}', True
+                return result
         t0 = time.monotonic()
         try:
             response = await client.post(
@@ -498,6 +533,18 @@ def summarize_results(results: list[UploadResult]) -> dict[str, Any]:
 
     accepted = [r for r in results if r.http_status == 202]
     span = max((r.sent_s for r in results), default=0.0)
+    mismatch = sum(1 for r in accepted if r.lane and r.lane != r.lane_hint)
+    skipped = sum(1 for r in results if r.skipped)
+    # Fail closed: a run whose admitted lanes differ from the plan measured a different mix.
+    failed_checks = [
+        name
+        for name, failed in (
+            ('no_upload_accepted', not accepted),
+            ('lane_hint_mismatch', mismatch > 0),
+            ('fresh_skipped', skipped > 0),
+        )
+        if failed
+    ]
     return {
         'uploads': len(results),
         'accepted': len(accepted),
@@ -509,7 +556,9 @@ def summarize_results(results: list[UploadResult]) -> dict[str, Any]:
         'seeded_fresh': sum(1 for r in results if r.seeded),
         'upload_latency_ms': {'p50': pct(0.5), 'p95': pct(0.95), 'max': latencies[-1] if latencies else 0.0},
         'achieved_uploads_per_min': round(len(results) / (span / 60), 3) if span > 0 else 0.0,
-        'lane_hint_mismatch': sum(1 for r in accepted if r.lane and r.lane != r.lane_hint),
+        'lane_hint_mismatch': mismatch,
+        'fresh_skipped': skipped,
+        'failed_checks': failed_checks,
     }
 
 
@@ -633,6 +682,7 @@ async def _run_async(args: argparse.Namespace) -> int:
     if len(admin_key) < 16:
         raise ReplayRefused('the staging ADMIN_KEY is missing (--admin-key-secret or --admin-key-env)')
     header, plans = pop.read_plan(args.plan)
+    check_plan_lanes(plans, seed_capture=args.seed_capture, unseeded_fresh=args.unseeded_fresh)
     reader = None
     if any(f.ref.startswith('mirror:') for p in plans for f in p.files):
         secret = _secret(args, args.mirror_key_env, args.mirror_key_secret)
@@ -666,7 +716,7 @@ async def _run_async(args: argparse.Namespace) -> int:
     (out / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
     (out / 'population.json').write_text(json.dumps(population_record(results, header), indent=2, sort_keys=True))
     print(json.dumps({'event': 'replay_done', **summary}, sort_keys=True))
-    return 0 if summary['accepted'] else 1
+    return 1 if summary['failed_checks'] else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -705,6 +755,11 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument('--mirror-bucket', default='based-hardware-dev-staging-mirror')
     r.add_argument('--mirror-project', default='based-hardware-dev')
     r.add_argument('--seed-capture', action='store_true', help='device-bound fresh uploads (in-cluster, fence)')
+    r.add_argument(
+        '--unseeded-fresh',
+        action='store_true',
+        help='send fresh uploads without seeding (only when the target admits legacy fresh); mismatches still fail',
+    )
     r.add_argument('--time-scale', type=float, default=1.0)
     r.add_argument('--max-concurrency', type=int, default=16)
     r.add_argument('--poll', action='store_true')
