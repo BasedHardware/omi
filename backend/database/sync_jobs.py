@@ -388,12 +388,7 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
         if deferred and reference_time < deferred_until:
             return False
         threshold = STALE_THRESHOLD_SECONDS
-    elif (
-        status == 'queued'
-        and dispatch_mode == 'cloud_tasks'
-        and deferred
-        and reference_time < deferred_until
-    ):
+    elif status == 'queued' and dispatch_mode == 'cloud_tasks' and deferred and reference_time < deferred_until:
         # The replacement is deliberately scheduled ~31 minutes out (past the
         # preserved lock's TTL); the 30-minute queued-dispatch-stale threshold
         # would classify it dispatch-lost before it is due. Guard the window
