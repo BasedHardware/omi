@@ -34,7 +34,11 @@ from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
     privacy_owner_key,
 )
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: keep the model import-light).
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
 
 T = TypeVar('T')
 
@@ -236,7 +240,7 @@ class SimStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
         job = self.rows.get(('jobs', segment_id), {})
-        if job.get('state') not in {'leased', 'retry'}:
+        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
             return False
         if not self.customer.blocked(
             job['owner_id'],
@@ -244,10 +248,10 @@ class SimStore:
             job.get('privacy_generation'),
         ):
             return False
-        self.apply(
-            ('jobs', segment_id),
-            {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now},
-        )
+        revoked = {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now}
+        if job['state'] in PROVIDER_STATES:
+            revoked['merge_pending'] = False
+        self.apply(('jobs', segment_id), revoked)
         return True
 
     # -- Query helpers --------------------------------------------------

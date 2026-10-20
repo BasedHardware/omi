@@ -152,7 +152,8 @@ class FirestoreProviderSttOutbox:
 
         client = self._client()
         try:
-            assert_batch_write_allowed(client, client.transaction(), owner_id)
+            # Plain reads: an unstarted transaction raises 'Transaction not in progress' on real Firestore.
+            assert_batch_write_allowed(client, None, owner_id)
         except BatchPrivacyBlocked:
             return True
         return False
