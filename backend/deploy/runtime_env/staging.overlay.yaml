@@ -73,6 +73,14 @@ cloud_run:
     # Prod live-service residue the code reads with os.environ[...] (not in runtime_env.yaml;
     # value read from prod backend on ro-prod 2026-10-19).
     SUBSCRIPTION_LAUNCH_DATE: '2025-08-21'
+    # A2 Postgres job-store shadow (lead ruling 2026-10-19 14:41Z/18:05Z; lane 12). Firestore stays
+    # primary; mirror failures are counted, never raised. IAM DB auth as the service's own SA (no
+    # password). Instance staging-jobs, private IP on omi-dev-vpc-1. Kill: JOBSTORE_SHADOW_WRITES=off.
+    BATCH_JOBSTORE_MODE: shadow
+    JOBSTORE_SHADOW_WRITES: 'on'
+    JOBSTORE_PG_HOST: 172.20.207.3
+    JOBSTORE_PG_DATABASE: jobstore_staging
+    JOBSTORE_PG_USER: staging-runtime@based-hardware-dev.iam
   # Queue names: every *_QUEUE value is mapped prod name -> staging name; unmapped prod queues fail compose.
   queue_map:
     sync-jobs: staging-sync-jobs

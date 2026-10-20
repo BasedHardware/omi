@@ -68,6 +68,15 @@ def test_staging_sync_services_dispatch_through_cloud_tasks(composer):
         assert config['env']['ACCOUNT_DELETION_TASKS_QUEUE']['value'].startswith('staging-')
 
 
+def test_staging_services_run_the_a2_jobstore_shadow_as_their_own_identity(composer):
+    for config in composer.compose_staging(inputs=INPUTS)['cloud_run']['services'].values():
+        env = {key: entry['value'] for key, entry in config['env'].items()}
+        assert env['BATCH_JOBSTORE_MODE'] == 'shadow'
+        assert env['JOBSTORE_SHADOW_WRITES'] == 'on'
+        assert env['JOBSTORE_PG_DATABASE'] == 'jobstore_staging'
+        assert env['JOBSTORE_PG_USER'] == config['service_account'].removesuffix('.gserviceaccount.com')
+
+
 def test_staging_requires_the_redis_input(composer):
     with pytest.raises(composer.StagingComposeError, match='STAGING_REDIS_HOST'):
         composer.compose_staging(inputs={})

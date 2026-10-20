@@ -5,8 +5,9 @@
 # A2 Postgres job-store shadow (lead ruling 2026-10-19; lane 12). IAM DB auth: the store mints a
 # sqlservice.login token from the pod's Workload Identity (GSA staging-worker) per connection, so
 # there is no password. Instance staging-jobs (private IP on omi-dev-vpc-1). Kill without
-# redeploying semantics: JOBSTORE_SHADOW_WRITES=off. Inert until lane 12's A2 code is in the image.
+# redeploying semantics: JOBSTORE_SHADOW_WRITES=off.
 BATCH_JOBSTORE_MODE: shadow
+JOBSTORE_SHADOW_WRITES: 'on'
 JOBSTORE_PG_HOST: 172.20.207.3
 JOBSTORE_PG_DATABASE: jobstore_staging
 JOBSTORE_PG_USER: staging-worker@based-hardware-dev.iam

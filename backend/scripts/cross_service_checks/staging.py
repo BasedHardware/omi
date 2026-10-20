@@ -51,6 +51,9 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'SUBSCRIPTION_LAUNCH_DATE',
     'SYNC_DISPATCH_MODE',
     'ACCOUNT_DELETION_DISPATCH_MODE',
+    # A2 job-store shadow: staging-only (prod stays on the Firestore store).
+    'BATCH_JOBSTORE_MODE',
+    'JOBSTORE_*',
 )
 # Cloud Run flags that may differ: network placement and replica counts.
 STAGING_FLAG_ALLOWLIST: tuple[str, ...] = (
