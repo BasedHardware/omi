@@ -9,7 +9,9 @@ from pathlib import Path
 
 from feature_flag_registry import (
     REVIEW_GRACE_DAYS,
+    RAMP_REQUIRED_FROM,
     ROOT,
+    _ramp_applies_to,
     duplicate_declaration_sources,
     extract_action_declarations,
     extract_code_reads,
@@ -72,6 +74,18 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         return errors, []
     warnings: list[str] = []
     flags = {entry["key"]: entry for entry in registry["flags"]}
+    grandfathered = sum(
+        1
+        for entry in registry["flags"]
+        if _ramp_applies_to(entry) and date.fromisoformat(entry["created"]) < RAMP_REQUIRED_FROM and "ramp" not in entry
+    )
+    if grandfathered:
+        warnings.append(
+            f"WARNING: {grandfathered} grandfathered pending/undecided rollout rows lack ramp "
+            f"(created before {RAMP_REQUIRED_FROM.isoformat()})"
+        )
+    else:
+        warnings.append(f"Grandfathered pending/undecided rollout rows without ramp: 0 (cutoff {RAMP_REQUIRED_FROM})")
     alias_to_key = {alias: entry["key"] for entry in registry["flags"] for alias in entry.get("aliases", [])}
     ignored = {entry["key"] for entry in registry["ignore"]}
     retired = {entry["key"] for entry in registry["retired"]}

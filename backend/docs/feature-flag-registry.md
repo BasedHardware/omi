@@ -12,6 +12,34 @@ owns each gate, not the switch itself.
 kills it, `keep` retains an ops kill or config switch, and `undecided` means
 no terminal ruling is recorded yet.
 
+## Contributing registry rows
+
+Edit `config/feature-flags.yaml`, then regenerate this document with
+`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional
+for existing rows. It is required for `lifecycle: rollout` rows that are
+pending (`decision: pending` or `terminal: undecided`) and created on or after
+2026-10-21. Include every field below; `done_by` must be on or before
+`review_by`.
+
+- `cohorts`: ordered rollout steps, ending in the full intended cohort;
+  a single-user step such as `David-only` cannot be terminal.
+- `clean_metric`: the metric that must stay clean before expansion.
+- `expander`: the session, role, or person responsible for each expansion.
+- `done_by`: the date the ramp reaches its final cohort.
+
+Example:
+
+```yaml
+ramp:
+  cohorts: ["release-probe", "1%", "5% 3h", "25%", "100%"]
+  clean_metric: "checkout_error_rate"
+  expander: "release-owner session"
+  done_by: "2026-11-15"
+```
+
+Rows created before the cutoff stay grandfathered when `ramp` is absent;
+the checker warns and reports their count. Do not backfill plans into them.
+
 This is **not** a second classification of deployment wiring. Secret vs config
 vs `public_build` still lives only in
 [`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)
@@ -483,6 +511,10 @@ and an explicit empty literal renders as `''`.
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
+
+## Rollout ramp plans
+
+(none)
 
 ## Undeclared env flags
 
