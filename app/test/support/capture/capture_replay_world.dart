@@ -203,6 +203,10 @@ class ScriptedUploads {
   /// keep WALs retryable across phases that would otherwise auto-upload.
   bool failAll = false;
 
+  /// Sees each upload's files while they still exist (a completed upload may
+  /// delete them), e.g. to follow audio custody into the server.
+  void Function(List<File> files)? onUploadFiles;
+
   ScriptedUploads(this.clock);
 
   void enqueueOutcome(Object Function() outcome) => script.add(outcome);
@@ -228,6 +232,7 @@ class ScriptedUploads {
         claimLiveCapture = false,
         geolocation,
       }) async {
+        onUploadFiles?.call(files);
         attempts.add(
           UploadAttempt(
             at: clock.now(),

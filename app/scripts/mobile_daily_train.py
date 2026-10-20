@@ -52,6 +52,7 @@ from typing import Callable, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import mobile_capture_health as capture_health  # noqa: E402
 import mobile_store_promote as promote  # noqa: E402
 
 APP_ID = promote.APP_ID
@@ -127,6 +128,18 @@ def _gate_receipt_dt(name: str) -> datetime | None:
 
 class TrainError(Exception):
     pass
+
+
+def capture_health_hold(platform: str, *, build: str | None = None, version: str | None = None) -> str | None:
+    """Why a rollout hop must hold on capture health, or None to proceed.
+
+    Read-only PostHog check (mobile_capture_health.py), mirroring the operator
+    gate's judge per (platform, build). Android passes the exact version code;
+    iOS passes the live marketing version, resolved to its store build. Fails closed; TRAIN_CAPTURE_HEALTH_OVERRIDE=<reason> lets a hop through.
+    """
+    verdict = capture_health.check_rollout(platform, build=build, version=version)
+    log(f"{platform} capture health: {verdict.reason}")
+    return verdict.reason if verdict.hold else None
 
 
 def log(message: str) -> None:
@@ -435,7 +448,9 @@ def _phased_started_at(phased: dict[str, object]) -> datetime:
     return datetime.strptime(started, "%Y-%m-%dT%H:%M:%S%z")
 
 
-def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | None = None) -> tuple[bool, str]:
+def ios_phased_release_should_complete(
+    live_version_id: str, *, version: str | None = None, now: datetime | None = None
+) -> tuple[bool, str]:
     """Whether the live phased rollout should be released to everyone right now.
 
     True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (COMPLETE is
@@ -443,6 +458,7 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     never jumps; any other state (COMPLETE, INACTIVE, or one Apple adds later)
     is not a live rollout to advance. Anything unreadable fails closed (False
     with the reason — never True on an error).
+    The jump also waits on capture health for [version] (capture_health_hold).
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -464,6 +480,9 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     age_hours = (now - started).total_seconds() / 3600
     if age_hours < IOS_PHASED_JUMP_HOURS:
         return False, f"phased rollout is {age_hours:.1f}h old (< {IOS_PHASED_JUMP_HOURS:g}h observation window)"
+    hold = capture_health_hold("ios", version=version)
+    if hold:
+        return False, f"phased rollout is {age_hours:.1f}h old; held on capture health: {hold}"
     return True, f"phased rollout is {age_hours:.1f}h old; releasing to everyone"
 
 
@@ -795,7 +814,7 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
     live_id = _live_version_id(asc, state)
     jump_note = "phased release disabled"
     if PHASED_RELEASE:
-        should_complete, jump_reason = ios_phased_release_should_complete(live_id)
+        should_complete, jump_reason = ios_phased_release_should_complete(live_id, version=state.live_version)
         log(f"live phased rollout check: {jump_reason}")
         jump_note = jump_reason
         if should_complete:
@@ -1097,6 +1116,9 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 f"newer candidate {candidate.version} ({candidate.version_code}) waits for staged "
                 f"{staged_version} to complete; continuing the ladder"
             )
+        hold = capture_health_hold("android", build=codes[0])
+        if hold:
+            return f"android=staged {staged_version} {codes[0]} @{current:.0%} held on capture health ({hold})"
         next_hops = [hop for hop in STAGED_ROLLOUT_LADDER if hop > current + 1e-9]
         if not next_hops:
             log(f"Android production staged {staged_version} at {current:.0%} is at or past the ladder top; nothing to do")
