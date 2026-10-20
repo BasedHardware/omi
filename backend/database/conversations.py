@@ -45,7 +45,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment, timed
+from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -4197,20 +4197,16 @@ def assign_sync_conversation(
     retry_contention: bool = False,
     timing: bool = False,
 ):
-    """Atomically choose, create or append a sync conversation across workers.
-
-    ``timing`` emits one bounded sub-phase line per call (durations, counts and
-    static tokens only). It observes; it never changes the transaction.
-    """
+    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
-    clock = SyncAssignmentClock(logger) if timing else None
+    clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
     if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        with timed(clock, 'live_overlap'):
+        with clock.timed('live_overlap'):
             live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
 
     score_snapshots: dict = {}
@@ -4236,24 +4232,23 @@ def assign_sync_conversation(
 
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
-        if clock is not None:
-            clock.attempt()
+        clock.attempt()
         score_snapshots.clear()
         # Optional batch projection hooks share the exact legacy transaction.
         # Guards/plan validation may only read; after_assign may only write.
         if before_assign is not None:
-            with timed(clock, 'fence'):
+            with clock.timed('fence'):
                 before_assign(transaction)
 
         def encode(payload):
-            with timed(clock, 'encode'):
+            with clock.timed('encode'):
                 if validate_plan is not None:
                     validate_plan(transaction, payload)
                 return encode_sync_assignment_plan(
                     uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
                 )
 
-        with timed(clock, 'plan'):
+        with clock.timed('plan'):
             planned = assign_in_transaction(
                 transaction,
                 user_ref,
@@ -4269,32 +4264,24 @@ def assign_sync_conversation(
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
-            with timed(clock, 'persist'):
+            with clock.timed('persist'):
                 after_assign(transaction, planned)
-        if clock is not None:
-            clock.body_done()
+        clock.body_done()
         return planned
 
-    try:
-        with timed(clock, 'transaction'):
+    with clock.call():
+        with clock.timed('transaction'):
             result = run_with_size_limit_backstop(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
                 lambda: attempted.get('canonical'),
             )
-        with timed(clock, 'index'):
+        with clock.timed('index'):
             invalidate_people_stats_cache(uid)
             conversation = result[0]
-            donors = conversation.get('sync_merged_from') or []
-            for donor_id in donors:
+            clock.donors = len(conversation.get('sync_merged_from') or [])
+            for donor_id in conversation.get('sync_merged_from') or []:
                 _delete_conversation_search_index(uid, str(donor_id))
             _sync_conversation_search_index(uid, conversation['id'])
-    except Exception as error:
-        if clock is not None:
-            clock.log('error', type(error).__name__)
-        raise
-    if clock is not None:
-        clock.donors = len(donors)
-        clock.log('completed', None)
     return result
 
 

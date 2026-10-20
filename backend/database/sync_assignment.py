@@ -57,6 +57,7 @@ def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, r
 class SyncAssignmentClock:
     """Accumulates assign_sync_conversation sub-phases for one bounded log line.
 
+    Disabled clocks are no-ops, so the transaction body needs no branches.
     ``plan`` excludes the nested ``encode`` time. ``commit`` is the final
     commit after the last transaction body; ``retry`` is the remaining
     transaction time (failed commits, rollbacks, backoff and size retries).
@@ -64,8 +65,8 @@ class SyncAssignmentClock:
 
     PHASES = ('live_overlap', 'fence', 'plan', 'encode', 'persist', 'transaction', 'index')
 
-    def __init__(self, logger):
-        self.logger = logger
+    def __init__(self, logger, *, enabled: bool):
+        self.logger, self.enabled = logger, enabled
         self.started = time.monotonic()
         self.ms = dict.fromkeys(self.PHASES, 0.0)
         self.attempts = 0
@@ -85,12 +86,33 @@ class SyncAssignmentClock:
             self.body_ms += (now - self.attempt_started) * 1000
         self.last_body_end = now
 
-    def add(self, phase: str, elapsed_ms: float):
-        self.ms[phase] += elapsed_ms
-        if phase == 'encode':
-            self.ms['plan'] -= elapsed_ms
-        if phase == 'transaction':
-            self.transaction_end = time.monotonic()
+    @contextmanager
+    def timed(self, phase: str):
+        if not self.enabled:
+            yield
+            return
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            elapsed_ms = (time.monotonic() - started) * 1000
+            self.ms[phase] += elapsed_ms
+            if phase == 'encode':
+                self.ms['plan'] -= elapsed_ms
+            if phase == 'transaction':
+                self.transaction_end = time.monotonic()
+
+    @contextmanager
+    def call(self):
+        """Wraps the whole call; logs one line on success or failure when enabled."""
+        try:
+            yield self
+        except Exception as error:
+            if self.enabled:
+                self.log('error', type(error).__name__)
+            raise
+        if self.enabled:
+            self.log('completed', None)
 
     def log(self, outcome: str, exception_type: str | None):
         commit_ms = 0.0
@@ -115,15 +137,3 @@ class SyncAssignmentClock:
             int((time.monotonic() - self.started) * 1000),
             f' exception_type={exception_type}' if exception_type else '',
         )
-
-
-@contextmanager
-def timed(clock: 'SyncAssignmentClock | None', phase: str):
-    if clock is None:
-        yield
-        return
-    started = time.monotonic()
-    try:
-        yield
-    finally:
-        clock.add(phase, (time.monotonic() - started) * 1000)
