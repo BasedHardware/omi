@@ -70,8 +70,11 @@ def idle(job, existing, now):
 
 
 class TerminalEmptyStore:
-    def __init__(self, store):
+    def __init__(self, store, *, server_flags):
+        """Operator-only. `server_flags` is the serving role's live settings for an
+        unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
+        self.server_flags = server_flags
 
     def checked(self, tx, sid):
         return RecoveryStore(self.store).checked(
@@ -85,7 +88,9 @@ class TerminalEmptyStore:
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, sid)
-            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
             if not policy.terminal_empty_disposition or not policy.recovery_enabled:
                 raise ProjectionBlocked('terminal disposition disabled')
             existing = tx.get('results', sid)
@@ -136,7 +141,7 @@ class TerminalEmptyStore:
         return result
 
     def complete(self, sid, token, plan, uri, now):
-        _, policy = load_stage_policy(self.store, sid, 'recovery')
+        _, policy = load_stage_policy(self.store, sid, 'recovery', server_flags=self.server_flags)
         if policy is None or not policy.terminal_empty_disposition:
             return False
 

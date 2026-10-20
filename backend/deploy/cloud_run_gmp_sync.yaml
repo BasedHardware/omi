@@ -17,10 +17,14 @@ spec:
         # Sentinel: batch_metrics.py and completion_telemetry.py also query GMP
         # directly (batch, accept-to-summary, summary debt/terminal, live outcome).
         # Cost: Parakeet request seconds by caller size the GPU pool floor.
+        # Firestore reads loop (avo/firestore-reads): billed reads by caller/origin
+        # attribute ~55% of fleet reads and the leader-lease counter gates
+        # singleton_loops. #22118 dropped them; the loop then misgraded a healthy
+        # backend-sync lease holder as starvation (2026-10-20).
         - action: keep
           sourceLabels:
             - __name__
-          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|parakeet_request_seconds(_.*)?)'
+          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|parakeet_request_seconds(_.*)?|firestore_billed_reads_by_(caller|origin)_total|firestore_caller_label_overflow_total|fsr_leader_lease_total)'
         # These eagerly initialized live-STT combinations dominate empty series
         # on sync workers. Keep fallbacks from sync/summary/storage components.
         - action: drop

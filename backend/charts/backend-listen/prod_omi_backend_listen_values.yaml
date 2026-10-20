@@ -213,7 +213,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}'
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -818,11 +818,18 @@ autoscaling:
         value: 5
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
+  # D0b: CPU is the primary signal. The HPA takes the max across metrics and
+  # ignores ratios within 10% of target, so 55% acts above ~60% mean CPU. On the
+  # 2026-10-19 incident, mean listen CPU peaked at 0.56-0.65 of request while
+  # the hottest pods saturated, so a 60-70% target would never have fired.
+  targetCPUUtilizationPercentage: 55
   # targetMemoryUtilizationPercentage: 70
   # failedResponseCode: 10
-  requestsPerPod: 10
-  activeConnectionsPerPod: 22
+  # Socket guards stay as secondary metrics so a CPU dip cannot strand
+  # sockets on too few pods. Raised 10->16 and 22->35 together (D0b plan) so
+  # they bind only on connection surges, not at ordinary load.
+  requestsPerPod: 16
+  activeConnectionsPerPod: 35
 
 podDisruptionBudget:
   minAvailable: "80%"

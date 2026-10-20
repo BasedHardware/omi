@@ -811,7 +811,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":5\\,"ledger_purge_coalesce":5\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":5\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":5}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":5\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":5\\,"ledger_purge_coalesce":5\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":25\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
