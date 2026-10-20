@@ -1251,7 +1251,8 @@ async def sync_local_files_v2(
             # Legacy-dark (contract (h)): never create a legacy job. Content legacy
             # already owns is answered by the fence; anything else keeps its audio.
             ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
-            decision = legacy_dark.fence_decision(ledger_row, legacy_mode)
+            owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
+            decision = legacy_dark.fence_decision(ledger_row, legacy_mode, owner_job_present=owner_job_present)
             await run_blocking(sync_executor, _cleanup_files, paths)
             await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
             return (
@@ -2083,6 +2084,41 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     if epoch is None:
         # Sequencer off: direct work runs at once, in parallel with the drain of
         # already-sequenced entries, instead of queueing behind them.
+        if (
+            isinstance(payload, dict)
+            and payload.get('lane') == SyncLane.BACKFILL.value
+            and uid_sequencer.production_stage()
+            and uid_sequencer.enabled()
+            and not legacy_dark.sequencer_registration_allowed()
+            and isinstance(payload.get('uid'), str)
+            and isinstance(payload.get('job_id'), str)
+        ):
+            # Legacy-dark (draining/dark): an epoch-less backfill delivery can no
+            # longer migrate into the sequencer, so it must not start a second
+            # transcriber for a uid whose sequencer owner is live (M1 review L10-1).
+            try:
+                async with asyncio.timeout_at(route_deadline):
+                    registered = await run_blocking(
+                        db_executor, sync_backfill_sequencer.is_registered, payload['uid'], payload['job_id']
+                    )
+                    owner = (
+                        {}
+                        if registered
+                        else await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                    )
+            except TimeoutError:
+                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
+            if registered and legacy_dark.sequencer_dispatch_allowed():
+                # The draining sweep dispatches this job; acking keeps it the only dispatcher.
+                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
+                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
+            active_job_id = owner.get('active_job_id')
+            if isinstance(active_job_id, str) and active_job_id and active_job_id != payload['job_id']:
+                # Never 503/429 from a task target (contract d): the queue retries
+                # until the live owner finishes, the client keeps its audio.
+                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNER_ACTIVE)
+                return JSONResponse(status_code=409, content={'status': 'locked', 'reason': 'sequencer_owner_active'})
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
