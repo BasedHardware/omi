@@ -123,6 +123,9 @@ def admit(
                 'dispatch_protocol': PROTOCOL,
                 'updated_at': timestamp,
                 'created_at': timestamp,
+                # A legacy row taken over through ``adopt`` (stranded claim, contract (h));
+                # the zero-lost census reads it (scripts/legacy_dark/lost_recordings.py).
+                **({'adopted_legacy_job_id': existing.get('job_id')} if existing else {}),
                 'batch_pipeline': {
                     'protocol_version': 1,
                     'namespace': namespace,

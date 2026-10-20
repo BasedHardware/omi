@@ -901,7 +901,7 @@ export interface DailyRecapDeps {
   conversations: () => LocalConversation[]
   actionItems: () => ActionItemRecord[]
   focusSessions: (sinceMs: number) => FocusSessionRecord[]
-  memories: (limit: number) => { content: string; category: string }[]
+  memories: (from: number, to: number, limit: number) => { content: string; category: string }[]
   insights: (limit: number) => InsightRecord[]
 }
 
@@ -958,7 +958,7 @@ export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): Pro
     const convos = d.conversations().filter((c) => inWindow(c.createdAt))
     const tasks = d.actionItems().filter((t) => !t.deleted && inWindow(t.createdAt))
     const focus = d.focusSessions(from).filter((f) => inWindow(f.createdAt))
-    const memories = d.memories(10)
+    const memories = d.memories(from, to, 10)
     const observations = d.insights(30).filter((i) => inWindow(i.ts))
 
     const out: string[] = [`# ${label} Recap`, '']
@@ -1040,7 +1040,7 @@ async function bindDailyRecapProd(): Promise<DailyRecapDeps> {
     conversations: () => db.listLocalConversations(),
     actionItems: () => db.getLocalActionItems({ limit: 500 }),
     focusSessions: (sinceMs) => db.listFocusSessions(sinceMs),
-    memories: (limit) => db.recentMemories(limit),
+    memories: (from, to, limit) => db.recentMemoriesInWindow(from, to, limit),
     insights: (limit) => db.recentInsights(limit)
   }
 }
