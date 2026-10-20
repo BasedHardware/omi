@@ -153,12 +153,16 @@ impl SessionGain {
         // numpy: float32 samples * python float stays float32, clip, then a
         // truncating cast to int16.
         let g = gain as f32;
+        let (samples, odd) = pcm.as_chunks::<2>();
         let mut out = Vec::with_capacity(pcm.len());
-        for b in pcm.as_chunks::<2>().0 {
+        for b in samples {
             let s = i16::from_le_bytes(*b) as f32;
             let v = (s * g).clamp(-32768.0, 32767.0) as i16;
             out.extend_from_slice(&v.to_le_bytes());
         }
+        // listen raises on an odd-length chunk here (the window leg ends);
+        // keep the byte so the gate's sample carry stays aligned regardless.
+        out.extend_from_slice(odd);
         Some(out)
     }
 }
@@ -383,6 +387,12 @@ impl SttBuffer {
         let start = self.start.take().unwrap_or(start_sample);
         Some((std::mem::take(&mut self.buf), start))
     }
+
+    /// The partial tail listen force-flushes at session end.
+    pub fn take_rest(&mut self) -> Option<(Vec<u8>, u64)> {
+        let start = self.start.take()?;
+        (!self.buf.is_empty()).then(|| (std::mem::take(&mut self.buf), start))
+    }
 }
 
 #[cfg(test)]
@@ -433,5 +443,8 @@ mod tests {
         assert!(g.apply(&loud).is_none());
         // Digital silence is unchanged.
         assert!(SessionGain::default().apply(&[0, 0, 0, 0]).is_none());
+        // An odd trailing byte is carried through ungained.
+        let odd = SessionGain::default().apply(&[0xe8, 0x03, 0x7f]).unwrap();
+        assert_eq!(odd, vec![0xa0, 0x0f, 0x7f]); // 1000 * 4 = 0x0fa0
     }
 }

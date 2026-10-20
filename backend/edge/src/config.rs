@@ -54,6 +54,10 @@ pub struct Config {
     /// `EDGE_SHADOW_TOKEN`: when set, mirrors must send it in
     /// `x-edge-shadow-token`.
     pub shadow_token: Option<String>,
+    /// `EDGE_SHADOW_WORKER_THREADS`: threads of the separate runtime that
+    /// decodes and scores mirrored audio, so shadow CPU never runs on the
+    /// relay and health workers.
+    pub shadow_worker_threads: usize,
 }
 
 /// Websocket path of the D2 shadow ingest (not relayed).
@@ -153,6 +157,7 @@ impl Config {
             vad_model_path: get("EDGE_VAD_MODEL_PATH"),
             shadow_max_sessions: count("EDGE_SHADOW_MAX_SESSIONS", 500, 100_000)?,
             shadow_token: get("EDGE_SHADOW_TOKEN"),
+            shadow_worker_threads: count("EDGE_SHADOW_WORKER_THREADS", 2, 64)?,
         })
     }
 
@@ -231,6 +236,7 @@ mod tests {
         assert_eq!(c.vad_model_path, None);
         assert_eq!(c.shadow_max_sessions, 500);
         assert_eq!(c.shadow_token, None);
+        assert_eq!(c.shadow_worker_threads, 2);
     }
 
     #[test]

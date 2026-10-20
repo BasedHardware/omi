@@ -82,6 +82,25 @@ fn goldens_agree_with_listen() {
 }
 
 #[test]
+fn repeated_window_reports_are_counted_once() {
+    init_model();
+    let (query, messages) = fixture(FIXTURES[0]);
+    let run = |extra: bool| {
+        let mut core = ShadowCore::new(ShadowMeta::from_query(&query).unwrap(), Arc::new(Metrics::new(""))).unwrap();
+        for m in &messages {
+            core.on_message(m).unwrap();
+        }
+        if extra {
+            for m in messages.iter().filter(|m| m[0] == 3) {
+                core.on_message(m).unwrap();
+            }
+        }
+        core.finish(ShadowOutcome::Completed).compare
+    };
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
 fn wrong_profile_is_detected() {
     // Negative control: claim the plain variant for a window-lane (AGC)
     // stream. The edge then scores ungained audio, so its probabilities must

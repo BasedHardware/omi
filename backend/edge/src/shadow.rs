@@ -29,7 +29,7 @@
 //! [`PENDING_LIMIT_SECONDS`], the edge starts a standard gate on its own so
 //! its VAD load is still measured.
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -330,6 +330,8 @@ pub struct ShadowCore {
     edge_windows: VecDeque<(f32, f64)>,
     edge_base: u64,
     listen_waiting: VecDeque<(u64, f32)>,
+    /// Next listen ordinal not yet seen (repeats are ignored).
+    listen_next: u64,
     /// Capture sample just past the last chunk the edge gate scored.
     scored_until: u64,
     edge_opens: VecDeque<(Open, bool)>,
@@ -356,6 +358,7 @@ impl ShadowCore {
             edge_windows: VecDeque::new(),
             edge_base: 0,
             listen_waiting: VecDeque::new(),
+            listen_next: 0,
             scored_until: 0,
             edge_opens: VecDeque::new(),
             listen_opens: VecDeque::new(),
@@ -411,7 +414,10 @@ impl ShadowCore {
                 return Err(ShadowOutcome::Desync);
             }
         }
-        self.next_start = Some(start + samples as u64);
+        let Some(next) = start.checked_add(samples as u64) else {
+            return Err(ShadowOutcome::ProtocolError);
+        };
+        self.next_start = Some(next);
         self.summary.frames += 1;
         self.summary.audio_samples += samples as u64;
         let codec = self.meta.codec;
@@ -432,6 +438,9 @@ impl ShadowCore {
                 FrameResult::DecodeError
             }
             Ok(()) if pcm.len() / 2 != samples as usize => {
+                // Keep later windows on listen's positions: truncate or pad
+                // to listen's count (the frame's own windows may disagree).
+                pcm.resize(samples as usize * 2, 0);
                 self.summary.length_mismatches += 1;
                 FrameResult::LengthMismatch
             }
@@ -516,15 +525,20 @@ impl ShadowCore {
     }
 
     fn score(&mut self, start: u64, pcm: &[u8]) -> Result<(), ShadowOutcome> {
-        let Some((chunk, chunk_start)) = self.stt.as_mut().expect("gate started").push(pcm, start) else {
-            return Ok(());
-        };
+        match self.stt.as_mut().expect("gate started").push(pcm, start) {
+            Some((chunk, chunk_start)) => self.process(&chunk, chunk_start),
+            None => Ok(()),
+        }
+    }
+
+    /// Run one STT-buffer chunk through the edge gate and settle what it unblocks.
+    fn process(&mut self, chunk: &[u8], chunk_start: u64) -> Result<(), ShadowOutcome> {
         let started = thread_cpu_seconds();
         let out = self
             .gate
             .as_mut()
             .expect("gate started")
-            .process_chunk(&chunk, chunk_start)
+            .process_chunk(chunk, chunk_start)
             .map_err(|e| {
                 tracing::warn!(session = %self.meta.session_key, error = %e, "shadow vad failed");
                 ShadowOutcome::VadError
@@ -535,7 +549,7 @@ impl ShadowCore {
         self.summary.vad_seconds += took;
         shadow.windows[self.meta.codec.idx()].inc_by(out.probs.len() as u64);
         self.summary.edge_windows += out.probs.len() as u64;
-        self.scored_until = chunk_start + chunk.len() as u64 / 2;
+        self.scored_until = chunk_start.saturating_add(chunk.len() as u64 / 2);
 
         for p in out.probs {
             self.edge_windows.push_back((p, out.threshold));
@@ -592,6 +606,11 @@ impl ShadowCore {
         let edge_end = self.edge_base + self.edge_windows.len() as u64;
         for (i, &p) in probs.iter().enumerate() {
             let ord = first + i as u64;
+            if ord < self.listen_next {
+                // A repeated ordinal is already counted once.
+                continue;
+            }
+            self.listen_next = ord + 1;
             if ord < self.edge_base {
                 self.count(CompareResult::Unmatched, 1);
             } else if ord < edge_end {
@@ -678,7 +697,7 @@ impl ShadowCore {
                         .open_offset_seconds
                         .observe(offset as f64 / self.meta.sample_rate as f64);
                 }
-                None if last || self.scored_until >= l.chunk_start + window => {
+                None if last || self.scored_until >= l.chunk_start.saturating_add(window) => {
                     self.listen_opens.pop_front();
                     self.count_open(OpenResult::ListenOnly);
                 }
@@ -689,6 +708,13 @@ impl ShadowCore {
 
     /// Close out the session: unmatched leftovers, metrics and the summary line.
     pub fn finish(mut self, outcome: ShadowOutcome) -> Summary {
+        if outcome == ShadowOutcome::Completed {
+            // listen force-flushes its partial STT buffer at teardown; do the
+            // same so the tail windows are compared, not left unmatched.
+            if let Some((chunk, chunk_start)) = self.stt.as_mut().and_then(SttBuffer::take_rest) {
+                let _ = self.process(&chunk, chunk_start);
+            }
+        }
         let waiting = self.listen_waiting.len() as u64;
         if waiting > 0 {
             self.count(CompareResult::Unmatched, waiting);
@@ -728,6 +754,67 @@ impl ShadowCore {
             opens_edge_only = s.opens[2],
         );
         self.summary
+    }
+}
+
+/// The separate runtime shadow sessions run on, so libopus and Silero never
+/// occupy the workers that relay `/v4/listen` and answer health checks. Its
+/// worker threads bound the shadow's CPU (each builds one ORT session). The
+/// runtime lives on its own thread until the pool is dropped.
+pub struct ShadowPool {
+    handle: tokio::runtime::Handle,
+    slots: Arc<AtomicUsize>,
+    max_sessions: usize,
+    _stop: tokio::sync::oneshot::Sender<()>,
+}
+
+/// One reserved shadow session; released on drop.
+pub struct ShadowSlot(Arc<AtomicUsize>);
+
+impl Drop for ShadowSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+impl ShadowPool {
+    pub fn new(threads: usize, max_sessions: usize) -> std::io::Result<ShadowPool> {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(threads)
+            .thread_name("edge-shadow")
+            .enable_all()
+            .build()?;
+        let handle = rt.handle().clone();
+        let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+        std::thread::Builder::new()
+            .name("edge-shadow-rt".into())
+            .spawn(move || {
+                rt.block_on(async {
+                    let _ = stopped.await;
+                });
+                rt.shutdown_timeout(Duration::from_secs(1));
+            })?;
+        Ok(ShadowPool {
+            handle,
+            slots: Arc::new(AtomicUsize::new(0)),
+            max_sessions,
+            _stop: stop,
+        })
+    }
+
+    /// Reserve a session slot before the 101, so concurrent handshakes cannot
+    /// overshoot `EDGE_SHADOW_MAX_SESSIONS`.
+    pub fn reserve(&self) -> Option<ShadowSlot> {
+        self.slots
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < self.max_sessions).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| ShadowSlot(self.slots.clone()))
+    }
+
+    pub fn spawn(&self, task: impl std::future::Future<Output = ()> + Send + 'static) {
+        self.handle.spawn(task);
     }
 }
 
@@ -886,6 +973,46 @@ mod tests {
         ] {
             assert!(ShadowMeta::from_query(bad).is_err(), "{bad}");
         }
+    }
+
+    fn pcm16_core() -> ShadowCore {
+        let meta = ShadowMeta::from_query("v=1&codec=pcm16&sample_rate=16000&session=0123456789abcdef").unwrap();
+        ShadowCore::new(meta, Arc::new(Metrics::new(""))).unwrap()
+    }
+
+    #[test]
+    fn length_mismatch_keeps_listen_positions() {
+        let mut core = pcm16_core();
+        // listen says 320 samples, the payload holds 300: padded to 320.
+        core.on_message(&frame(0, 320, &[1; 600])).unwrap();
+        assert_eq!(core.pending.back().unwrap().1.len(), 640);
+        // Too long is truncated.
+        core.on_message(&frame(320, 320, &[1; 700])).unwrap();
+        assert_eq!(core.pending.back().unwrap().1.len(), 640);
+        assert_eq!(core.summary().length_mismatches, 2);
+        core.on_message(&frame(640, 320, &[1; 640])).unwrap();
+    }
+
+    #[test]
+    fn position_overflow_is_a_protocol_error() {
+        let mut core = pcm16_core();
+        assert_eq!(
+            core.on_message(&frame(u64::MAX - 10, 320, &[0; 640])),
+            Err(ShadowOutcome::ProtocolError)
+        );
+    }
+
+    #[test]
+    fn pool_slots_are_reserved_atomically_and_released() {
+        let pool = ShadowPool::new(1, 2).unwrap();
+        let a = pool.reserve().unwrap();
+        let b = pool.reserve().unwrap();
+        assert!(pool.reserve().is_none());
+        drop(a);
+        let c = pool.reserve().unwrap();
+        assert!(pool.reserve().is_none());
+        drop((b, c));
+        assert!(pool.reserve().is_some());
     }
 
     #[test]

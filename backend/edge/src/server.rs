@@ -32,7 +32,7 @@ use tokio_util::task::TaskTracker;
 use crate::config::{Config, SHADOW_PATH};
 use crate::metrics::{HandshakeResult, Metrics, ShadowHandshake};
 use crate::session::{drain_jitter, relay, SessionCtx};
-use crate::shadow::{self, ShadowCore, ShadowMeta};
+use crate::shadow::{self, ShadowCore, ShadowMeta, ShadowPool};
 use crate::silero;
 
 type Body = Full<Bytes>;
@@ -72,6 +72,8 @@ struct Shared {
     sessions: TaskTracker,
     handshake_slots: Arc<Semaphore>,
     next_id: AtomicU64,
+    /// Runtime and session slots for `/v1/shadow`; `None` when it is disabled.
+    shadow_pool: Option<ShadowPool>,
 }
 
 /// A running edge. Dropping it does not stop the server; call [`Edge::drain`].
@@ -97,7 +99,14 @@ pub fn start_with_listener(listener: TcpListener, cfg: Config, metrics: Metrics)
         .max_message_size(Some(cfg.ws_max_message_bytes))
         .max_frame_size(Some(cfg.ws_max_message_bytes));
     let stop_accepting = CancellationToken::new();
+    let shadow_pool = match &cfg.vad_model_path {
+        None => None,
+        Some(_) => ShadowPool::new(cfg.shadow_worker_threads, cfg.shadow_max_sessions)
+            .map_err(|err| tracing::error!(error = %err, "shadow runtime failed; /v1/shadow disabled"))
+            .ok(),
+    };
     let shared = Arc::new(Shared {
+        shadow_pool,
         handshake_slots: Arc::new(Semaphore::new(cfg.max_pending_handshakes)),
         cfg,
         metrics: Arc::new(metrics),
@@ -319,10 +328,13 @@ fn switching_protocols(key: &HeaderValue) -> Response<Body> {
 /// Accept a D2 mirror from listen (see `shadow`). Not relayed anywhere.
 fn shadow_upgrade(mut req: Request<Incoming>, shared: Arc<Shared>) -> Response<Body> {
     let shadow = &shared.metrics.shadow;
-    if shared.draining.load(Ordering::SeqCst) || shared.cfg.vad_model_path.is_none() || !silero::initialized() {
-        shadow.handshake(ShadowHandshake::Disabled);
-        return text(StatusCode::SERVICE_UNAVAILABLE, "shadow disabled\n");
-    }
+    let pool = match &shared.shadow_pool {
+        Some(pool) if !shared.draining.load(Ordering::SeqCst) && silero::initialized() => pool,
+        _ => {
+            shadow.handshake(ShadowHandshake::Disabled);
+            return text(StatusCode::SERVICE_UNAVAILABLE, "shadow disabled\n");
+        }
+    };
     let Some(key) = upgrade_key(&req) else {
         shadow.handshake(ShadowHandshake::InvalidRequest);
         return upgrade_required();
@@ -345,10 +357,10 @@ fn shadow_upgrade(mut req: Request<Incoming>, shared: Arc<Shared>) -> Response<B
             return resp;
         }
     };
-    if shadow.sessions_active.get() >= shared.cfg.shadow_max_sessions as i64 {
+    let Some(slot) = pool.reserve() else {
         shadow.handshake(ShadowHandshake::Overloaded);
         return overloaded();
-    }
+    };
     let core = match ShadowCore::new(meta, shared.metrics.clone()) {
         Ok(core) => core,
         Err(_) => {
@@ -359,7 +371,9 @@ fn shadow_upgrade(mut req: Request<Incoming>, shared: Arc<Shared>) -> Response<B
     shadow.handshake(ShadowHandshake::Accepted);
     let on_upgrade = hyper::upgrade::on(&mut req);
     let task_shared = shared.clone();
-    shared.sessions.spawn(async move {
+    // Tracked for drain, but run on the shadow runtime.
+    pool.spawn(shared.sessions.track_future(async move {
+        let _slot = slot;
         let Ok(upgraded) = on_upgrade.await else {
             return;
         };
@@ -372,12 +386,19 @@ fn shadow_upgrade(mut req: Request<Incoming>, shared: Arc<Shared>) -> Response<B
             task_shared.cfg.close_timeout,
         )
         .await;
-    });
+    }));
     switching_protocols(&key)
 }
 
+/// Compares every byte up to the longer input, so neither the position of a
+/// mismatch nor a length difference returns early.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    let n = a.len().max(b.len());
+    let mut diff = (a.len() != b.len()) as u8;
+    for i in 0..n {
+        diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0);
+    }
+    diff == 0
 }
 
 async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>) -> Response<Body> {
@@ -505,6 +526,15 @@ mod tests {
         for name in HOP_BY_HOP {
             assert!(out.get(*name).is_none(), "{name} forwarded");
         }
+    }
+
+    #[test]
+    fn token_compare_checks_length_and_every_byte() {
+        assert!(constant_time_eq(b"s3cret", b"s3cret"));
+        assert!(!constant_time_eq(b"s3cret", b"s3creT"));
+        assert!(!constant_time_eq(b"s3cret", b"s3cret\0"));
+        assert!(!constant_time_eq(b"", b"x"));
+        assert!(constant_time_eq(b"", b""));
     }
 
     #[test]

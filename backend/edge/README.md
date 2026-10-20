@@ -56,6 +56,7 @@ Behaviour:
 | `EDGE_VAD_MODEL_PATH` | unset | Silero VAD ONNX (listen's `backend/utils/stt/assets/silero_vad.onnx`); unset disables `/v1/shadow` (503) |
 | `EDGE_SHADOW_MAX_SESSIONS` | `500` | open shadow sessions before new mirrors get 503 |
 | `EDGE_SHADOW_TOKEN` | unset | when set, mirrors must send it as `x-edge-shadow-token` |
+| `EDGE_SHADOW_WORKER_THREADS` | `2` | threads of the separate runtime that decodes and scores mirrors (keeps shadow CPU off the relay and health workers) |
 
 Drain finishes within ready delay + spread + close timeout + 3s (23s by default:
 one second each for a session's own abort close, the final flush, and
