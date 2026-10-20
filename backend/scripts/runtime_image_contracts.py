@@ -852,10 +852,34 @@ def _github_texts() -> dict[str, str]:
     return {_repository_relative(path): path.read_text(encoding="utf-8") for path in paths}
 
 
+def _mentions_dockerfile(text: str, relative: str) -> bool:
+    # Bounded so backend/Dockerfile does not match backend/Dockerfile.desktop_backend.
+    return re.search(rf"{re.escape(relative)}(?![\w.-])", text) is not None
+
+
+def _names_deploy_target(text: str, name: str) -> bool:
+    """True when ``text`` names ``name`` as a deploy target, not as a path segment or prose.
+
+    Accepted forms: a ``service:``/``SERVICE=``-style key whose value is the name, a
+    deploy flag (``--service``, ``--gke-service``, ...), a YAML list item, a quoted
+    token, or a final path segment (``jobs/<name>"``, ``/<name>:``).
+    """
+    token = re.escape(name)
+    end = r"(?![\w.-])"
+    patterns = (
+        rf"(?im)^[ \t-]*[\w.-]*service[\w.-]*[ \t]*[:=][ \t]*[\"']?{token}[\"']?[ \t]*(?:#.*)?$",
+        rf"--(?:service|gke-service|cloud-run-service|migrate-legacy-public-binding)(?:=|[ \t]+)[\"']?{token}{end}",
+        rf"(?m)^[ \t]*-[ \t]+[\"']?{token}[\"']?[ \t]*$",
+        rf"[\"']{token}[\"']",
+        rf"/{token}(?=[\"':\s]|$)",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
 def dockerfile_shipped_by_github(dockerfile: Path) -> list[str]:
     """Workflows or composite actions that reference ``dockerfile`` (so it may be shipped)."""
     relative = _repository_relative(dockerfile)
-    return [path for path, text in _github_texts().items() if relative in text]
+    return [path for path, text in _github_texts().items() if _mentions_dockerfile(text, relative)]
 
 
 def _deploy_text(path: str) -> str:
@@ -956,14 +980,16 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
                 continue
             text = _deploy_text(deploy)
             texts.append(text)
-            deployed_as = spec.get("deployed_as", service)
-            if not re.search(rf"(?<![\w-]){re.escape(deployed_as)}(?![\w-])", text):
-                errors.append(f"service {service}: current_deploy {deploy} never names the service")
+            if not _names_deploy_target(text, spec.get("deployed_as", service)):
+                errors.append(f"service {service}: current_deploy {deploy} never names the service as a deploy target")
         # A deploy that runs an image another pipeline built (a tag reuse, an admitted image)
-        # says so; otherwise the deploy set must build the current image's Dockerfile.
-        if current in by_name and "image_built_elsewhere" not in spec:
+        # says so with a reason; otherwise the deploy set must build the current image's Dockerfile.
+        elsewhere = spec.get("image_built_elsewhere")
+        if elsewhere is not None and (not isinstance(elsewhere, str) or not elsewhere.strip()):
+            errors.append(f"service {service}: image_built_elsewhere must be a non-empty reason")
+        elif current in by_name and elsewhere is None:
             dockerfile = _repository_relative(by_name[current].dockerfile)
-            if texts and not any(dockerfile in text for text in texts):
+            if texts and not any(_mentions_dockerfile(text, dockerfile) for text in texts):
                 errors.append(f"service {service}: no current_deploy builds {current}'s {dockerfile}")
 
     for contract in by_name.values():

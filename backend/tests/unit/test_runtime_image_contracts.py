@@ -644,6 +644,27 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
             lambda p: _image_entry(p, 'backend').update({'build_only': True, 'deployment_workflows': []}),
             'build_only image backend is the current image of',
         ),
+        # Re-review false passes: path segments and prose are not deploy targets.
+        (
+            lambda p: p['services']['backend'].update({'current_deploy': ['.github/workflows/gcp_llm_gateway.yml']}),
+            'gcp_llm_gateway.yml never names the service as a deploy target',
+        ),
+        (
+            lambda p: p['services']['backend-listen'].update(
+                {'current_deploy': ['.github/workflows/gcp_llm_gateway.yml']}
+            ),
+            'gcp_llm_gateway.yml never names the service as a deploy target',
+        ),
+        (
+            lambda p: p['services']['backend'].update(
+                {'current_deploy': ['.github/workflows/desktop_backend_prod.yml']}
+            ),
+            "no current_deploy builds backend's backend/Dockerfile",
+        ),
+        (
+            lambda p: p['services']['backend'].update({'image_built_elsewhere': ''}),
+            'image_built_elsewhere must be a non-empty reason',
+        ),
     ],
 )
 def test_role_map_rejects_incomplete_or_ambiguous_maps(contracts_module, tmp_path, mutate, expected):
@@ -669,6 +690,20 @@ def test_role_target_without_release_stamp_is_rejected(contracts_module, tmp_pat
     ]
     errors = contracts_module.role_map_errors(contracts)
     assert any('target api must end with the release stamp' in error for error in errors), errors
+
+
+def test_dockerfile_and_deploy_target_matches_are_bounded(contracts_module):
+    mentions = contracts_module._mentions_dockerfile
+    assert mentions('-f backend/diarizer/Dockerfile .', 'backend/diarizer/Dockerfile')
+    assert not mentions('-f backend/diarizer/Dockerfile.batch-pipeline .', 'backend/diarizer/Dockerfile')
+    assert not mentions('file: backend/Dockerfile.desktop_backend', 'backend/Dockerfile')
+
+    names = contracts_module._names_deploy_target
+    assert names('env:\n  SERVICE: llm-gateway\n', 'llm-gateway')
+    assert names('gcloud run deploy --service=backend-sync \\', 'backend-sync')
+    assert names('"name": "projects/p/locations/l/jobs/messaging-maintenance-job",', 'messaging-maintenance-job')
+    assert not names('python backend/scripts/x.py backend/charts/backend-listen/values.yaml', 'backend-listen')
+    assert not names('# owns the full backend mutation domain', 'backend')
 
 
 def _role_errors_for_dockerfile(contracts_module, tmp_path, text, image='backend-api'):
