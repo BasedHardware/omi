@@ -428,8 +428,79 @@ def test_a_durable_hold_marker_survives_a_restart_and_clears_once_released():
     drained = []
     restarted.reoffer_marked(lambda owner_id: drained.extend(drain(restarted)))
     assert [e['segment_id'] for e in drained] == ['c2', 'c3']
+    # Still two committed rows awaiting projection at a cap of 2: the marker stays.
+    assert store.rows['merge_holds', OWNER]['held'] is True
+    project_through(store, 'c3')
+    restarted.reoffer_marked(lambda owner_id: drained.extend(drain(restarted)))
     assert store.rows['merge_holds', OWNER]['held'] is False
     assert store.held_merge_owners(50) == []
+
+
+def test_an_unready_head_over_the_cap_keeps_the_owner_held_and_marked():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(4)}
+    store, queue, leases = admitted(rows)
+    for segment in rows:
+        complete(queue, leases, segment)
+    merge = merge_for(store, depth=2)
+    assert len(drain(merge)) == 2
+    queue.enqueue(item('older', capture=500, duration=10), 500 + 10 + 7200)  # A new, older catch-up head.
+    assert [lease.item.segment_id for lease in queue.pull(NOW, 1)] == ['older']
+    assert merge.commit_next('heavy', NOW) is None
+    assert merge.held_owners == {'heavy'}
+    merge.release_hold(OWNER)
+    assert store.rows['merge_holds', OWNER]['held'] is True
+
+
+def test_the_marker_page_rotates_through_every_held_owner():
+    store = MemoryStore()
+    for key in ('a', 'b', 'c'):
+        store.rows['merge_holds', key] = {'held': True, 'held_at': NOW}
+    merge = merge_for(store)
+    assert [key for key, _ in merge.marked_page(2)] == ['a', 'b']
+    assert [key for key, _ in merge.marked_page(2)] == ['c']
+    assert [key for key, _ in merge.marked_page(2)] == ['a', 'b']
+
+
+class _FencedHeadStore(MemoryStore):
+    """Privacy flush refuses any transaction that would commit segment ``c0``."""
+
+    def run(self, body):
+        with self.lock:
+            snapshot = deepcopy(self.rows)
+            result = body(MemoryTransaction(snapshot))
+            if ('results', 'c0') in snapshot and ('results', 'c0') not in self.rows:
+                raise BatchPrivacyBlocked('fenced')
+            self.rows = snapshot
+            return result
+
+
+def test_a_fenced_catch_up_head_still_lets_the_ready_fresh_row_commit():
+    rows = {'c0': (1000, CATCH_UP), 'f': (90_000, FRESH)}
+    store, queue, leases = admitted(rows, _FencedHeadStore())
+    for segment in rows:
+        complete(queue, leases, segment)
+    merge = merge_for(store)
+    entry = merge.commit_next('heavy', NOW)
+    assert entry['segment_id'] == 'f' and entry['fresh_first'] is True
+    with pytest.raises(BatchPrivacyBlocked):
+        merge.commit_next('heavy', NOW)  # Nothing else to commit: the fence keeps strict behaviour.
+
+
+def test_every_skipped_fresh_row_is_re_verified():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(3)}
+    rows |= {'f1': (90_000, FRESH), 'f2': (90_005, FRESH), 'f3': (90_010, FRESH)}
+    store, queue, leases = admitted(rows)
+    for segment in ('c0', 'c1', 'c2', 'f3'):
+        complete(queue, leases, segment, NOW)
+    merge = merge_for(store, depth=2, wait=60)
+    assert len(drain(merge, NOW)) == 2
+    stale = store.fresh_pending(OWNER, 32)  # f1 and f2 leased when probed...
+    complete(queue, leases, 'f2', NOW + 60)  # ...then f2 became ready.
+    store.fresh_pending = lambda key, limit: stale
+    assert merge.commit_next('heavy', NOW + 60) is None
+    del store.fresh_pending
+    entry = merge.commit_next('heavy', NOW + 61)
+    assert entry['segment_id'] == 'f2' and entry['head_wait_bypass'] is True
 
 
 def test_a_stale_marker_without_pending_rows_is_cleared_without_a_drain():

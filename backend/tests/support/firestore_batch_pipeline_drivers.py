@@ -192,11 +192,11 @@ def entries():
             covered_by=('database.batch_pipeline_store.held_merge_owners',),
             reason='thin store adapter delegates unchanged query arguments to the named query builder',
             expect_observed=False,
-            body_digest='c038082dc62dd4c006580269e5a313a65a8608d032cbbfb2b265d68f75b52558',
+            body_digest='55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
         ),
         DriverEntry(
             'database.batch_pipeline_store.held_merge_owners',
-            domains={'namespace': namespaces},
+            domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
             neutrals={'limit': (50, 'bounded page size')},
         ),
         DriverEntry(

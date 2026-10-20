@@ -272,8 +272,12 @@ class SimStore:
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
-    def held_merge_owners(self, limit: int) -> list[tuple[str, str | None]]:
-        keys = sorted(key for (table, key), row in self.rows.items() if table == 'merge_holds' and row.get('held'))
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        keys = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'merge_holds' and row.get('held') and (after is None or key > after)
+        )
         owners = []
         for key in keys[:limit]:
             job = self.first_pending(key)

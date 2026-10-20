@@ -562,11 +562,13 @@ commit body:
   Privacy erase keeps `log_sequence` on the erased result so an erased
   watermark still counts; a missing watermark row never holds a commit. Every
   pump re-offers the owners it held on its 5-second maintenance tick, and the
-  serving pass re-offers its own after the projection sweep. A hold also sets a
-  durable `{namespace}_merge_holds/{owner_key}` marker (no user ID; owner purge
-  deletes it), which leader maintenance re-offers and clears once a drain no
-  longer holds, so neither a restart nor a held backlog filling the global
-  `result_ready` page can hide a held owner;
+  serving pass re-offers its own after the projection sweep. Any strict attempt
+  that finds the owner at the cap with rows pending, whatever the head's state,
+  also sets a durable `{namespace}_merge_holds/{owner_key}` marker (no user ID;
+  owner purge deletes it). Leader maintenance pages through the markers with a
+  rotating cursor, re-offers each owner, and clears a marker only once the
+  owner is below the cap or has nothing pending, so neither a restart nor a
+  held backlog filling the global `result_ready` page can hide a held owner;
 - when a catch-up row heads the owner and the strict commit does not go
   through, a non-transactional probe reads the owner's earliest pending fresh
   rows. The earliest one commits as soon as it is ready, in a second,

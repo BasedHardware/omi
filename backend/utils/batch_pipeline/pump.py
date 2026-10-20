@@ -204,12 +204,11 @@ class Pump:
                 ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
                 await self._drain_ready_owners(ready)
                 # Durable hold markers outlive the in-memory set below (restarts).
-                marked = await run_blocking(db_executor, self.scheduler.store.held_merge_owners, 50)
+                marked = await run_blocking(db_executor, self.merge.marked_page, 50)
                 for key, owner_id in marked:
                     if owner_id:
                         await self.drain_owner(owner_id)
-                    if not owner_id or owner_id not in self.merge.held_owners:
-                        await run_blocking(db_executor, self.merge.release_hold, key)
+                    await run_blocking(db_executor, self.merge.release_hold, key, force=not owner_id)
             # Every pump re-offers the owners its merge held for projection
             # depth; their rows may never surface in the 100-row page above.
             for owner_id in list(self.merge.held_owners):

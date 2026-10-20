@@ -134,10 +134,10 @@ class MemoryStore:
         ]
         return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
 
-    def held_merge_owners(self, limit):
+    def held_merge_owners(self, limit, *, after=None):
         owners = []
         for (table, key), row in sorted(self.rows.items()):
-            if table == 'merge_holds' and row.get('held') and len(owners) < limit:
+            if table == 'merge_holds' and row.get('held') and (after is None or key > after) and len(owners) < limit:
                 pending = [
                     v for (t, _), v in self.rows.items() if t == 'jobs' and v['owner_key'] == key and v['merge_pending']
                 ]

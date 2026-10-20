@@ -45,7 +45,7 @@ class Store(Protocol):
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
-    def held_merge_owners(self, limit: int) -> list[tuple[str, str | None]]: ...
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
 class FirestoreTransaction:
@@ -199,8 +199,8 @@ class FirestoreStore:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
         return fresh_pending(self.client, self.namespace, owner_key, limit)
 
-    def held_merge_owners(self, limit: int) -> list[tuple[str, str | None]]:
-        return held_merge_owners(self.client, self.namespace, limit)
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        return held_merge_owners(self.client, self.namespace, limit, after=after)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -308,15 +308,20 @@ def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict |
     return docs[0].to_dict() if docs else None
 
 
-def held_merge_owners(client: Any, namespace: str, limit: int) -> list[tuple[str, str | None]]:
+def held_merge_owners(
+    client: Any, namespace: str, limit: int, *, after: str | None = None
+) -> list[tuple[str, str | None]]:
     """Owners whose catch-up commits are held for projection depth: (owner key, owner id or None).
 
-    The marker stores no user ID; the owner's earliest pending job supplies it.
-    None means nothing is pending, so the marker is stale.
+    Ordered by owner key after ``after`` so callers can rotate through every
+    marker. The marker stores no user ID; the owner's earliest pending job
+    supplies it. None means nothing is pending, so the marker is stale.
     """
-    marks = (
-        client.collection(f'{namespace}_merge_holds').where('held', '==', True).limit(max(1, min(limit, 100))).stream()
-    )
+    collection = client.collection(f'{namespace}_merge_holds')
+    query = collection.where('held', '==', True).order_by('__name__')
+    if after is not None:
+        query = query.start_after({'__name__': collection.document(after)})
+    marks = query.limit(max(1, min(limit, 100))).stream()
     owners = []
     for mark in marks:
         job = first_pending(client, namespace, mark.id)
