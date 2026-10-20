@@ -25,11 +25,13 @@ struct SampledChatAudio {
 enum ChatVideoSamplerError: Error, LocalizedError {
   case noPicture
   case noFrames
+  case audioUnreadable
 
   var errorDescription: String? {
     switch self {
     case .noPicture: return "That file has no video to read."
     case .noFrames: return "Couldn't read frames from that video."
+    case .audioUnreadable: return "Couldn't read that video's sound. Try exporting it again."
     }
   }
 }
@@ -80,7 +82,9 @@ enum ChatVideoSampler {
     guard !frames.isEmpty else { throw ChatVideoSamplerError.noFrames }
     // The async sequence answers in request order; keep times ascending regardless.
     let order = kept.indices.sorted { kept[$0] < kept[$1] }
-    let audio = try? await exportAudio(asset: asset, duration: duration)
+    // A clip with a sound track whose audio can't be read fails visibly rather than
+    // uploading as if it were silent.
+    let audio = try await exportAudio(asset: asset, duration: duration)
     return SampledChatVideo(
       frames: order.map { frames[$0] },
       times: order.map { (kept[$0] * 100).rounded() / 100 },
@@ -99,19 +103,24 @@ enum ChatVideoSampler {
     let tracks = try await asset.loadTracks(withMediaType: .audio)
     guard let track = tracks.first else { return nil }
     guard #available(macOS 15, *) else {
-      return try wavAudio(asset: asset, track: track, duration: duration).map {
-        SampledChatAudio(data: $0, fileName: "audio.wav", mimeType: "audio/wav")
+      guard let wav = try? wavAudio(asset: asset, track: track, duration: duration) else {
+        throw ChatVideoSamplerError.audioUnreadable
       }
+      return SampledChatAudio(data: wav, fileName: "audio.wav", mimeType: "audio/wav")
     }
     guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
-    else { return nil }
+    else { throw ChatVideoSamplerError.audioUnreadable }
     let output = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-chat-video-\(UUID().uuidString).m4a")
     defer { try? FileManager.default.removeItem(at: output) }
     session.timeRange = CMTimeRange(
       start: .zero,
       duration: CMTime(seconds: min(duration, maxAudioSeconds), preferredTimescale: 600))
-    try await session.export(to: output, as: .m4a)
+    do {
+      try await session.export(to: output, as: .m4a)
+    } catch {
+      throw ChatVideoSamplerError.audioUnreadable
+    }
     return SampledChatAudio(data: try Data(contentsOf: output), fileName: "audio.m4a", mimeType: "audio/mp4")
   }
 

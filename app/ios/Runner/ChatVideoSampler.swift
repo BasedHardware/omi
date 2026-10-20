@@ -94,6 +94,12 @@ final class ChatVideoSampler {
           return
         }
         Self.exportAudio(asset: asset, duration: duration, directory: directory) { audioPath in
+          if audioPath == nil && !asset.tracks(withMediaType: .audio).isEmpty {
+            // Sound we couldn't export: Dart uploads the clip whole and the server transcribes it.
+            try? FileManager.default.removeItem(at: directory)
+            DispatchQueue.main.async { result(["audio_unsupported": true]) }
+            return
+          }
           var payload: [String: Any] = [
             "frames": ordered.map { $0.path },
             "times": ordered.map { ($0.time * 100).rounded() / 100 },
