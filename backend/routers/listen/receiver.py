@@ -10,6 +10,7 @@ import time
 import uuid
 
 from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
@@ -83,7 +84,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_backoff,
 )
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
-from utils.stt.live_recovery import select_live_replacement
+from utils.stt.live_recovery import release_session_local_exclusions, select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
 from utils.stt.soniox_capture_axis import validation_detail
 from utils.stt.soniox_idle import SonioxIdleBudget
@@ -263,11 +264,10 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
-        self.cap_admission = (
-            LiveAdmission(host.request.uid, host.request.source)
-            if stt_cap_dispatch_enabled() and not host.use_custom_stt
-            else None
-        )
+        self.cap_admission: LiveAdmission | None = None
+        if stt_cap_dispatch_configured() and not host.use_custom_stt:
+            if stt_cap_dispatch_enabled(host.request.uid, 'live'):
+                self.cap_admission = LiveAdmission(host.request.uid, host.request.source)
         self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None
         self._cap_init_lock = asyncio.Lock()
         self._cap_hold_stop = asyncio.Event()
@@ -1570,12 +1570,12 @@ class ListenReceiver(ReplayFilterMixin):
         serves: its family dialled, connected, and passed the serving gate
         after this session condemned it. Keeping it failed would pair the
         controller ledger with a receiver-side veto and exhaust the walk on
-        the next ordinary death. Providers that never re-dialled here keep
-        their session exclusion — this releases only the family now serving,
-        and the provider-level circuit breaker still owns cross-session
-        health.
+        the next ordinary death. Other providers keep their session exclusion
+        unless replay overflow alone excluded them; the provider-level circuit
+        breaker still owns cross-session health.
         """
         family = provider_for_service(serving_provider) or serving_provider
+        release_session_local_exclusions(self, family)
         released = family in self._stt_failed_providers
         self._stt_failed_providers.discard(family)
         identity = self.recovery._serving_identity if self.recovery is not None else None

@@ -132,7 +132,7 @@ class RecoveryWork:
             object.__setattr__(self, 'padded_retry', 'empty')
         elif self.padded_retry == 'empty' and not self.padded_retry_empty:
             object.__setattr__(self, 'padded_retry_empty', True)
-        if self.padded_retry not in {None, 'empty', 'skipped_oversize'}:
+        if self.padded_retry not in {None, 'empty', 'skipped_oversize', 'skipped_long_speech'}:
             raise ValueError('unsupported padded retry evidence')
         if self.padded_retry_empty and self.padded_retry != 'empty':
             raise ValueError('conflicting padded retry evidence')

@@ -198,7 +198,7 @@ def test_capped_entrypoint_preserves_backlog_without_model_or_derived_work(
     monkeypatch, entry, summary_enabled, has_summary
 ):
     monkeypatch.setenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', 'true' if summary_enabled else 'false')
-    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(pc.funded_processing, 'processing_allowed', lambda uid: False)
     now = datetime.now(timezone.utc)
     fields = dict(

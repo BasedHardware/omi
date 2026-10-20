@@ -30,10 +30,28 @@ URL_SCHEME_RE = re.compile(r"^omi-preview-[a-z0-9-]{1,63}$")
 MAX_NOTES_LENGTH = 2_000
 
 
+# Callers may hand these validators untyped Firestore or request payloads, so
+# they accept ``object`` and keep the runtime type checks as the contract.
+def _payload(value: object, message: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(message)
+    return cast(dict[str, Any], value)
+
+
+def _string(value: object, name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    return value
+
+
+def _expected_generation(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("expected_generation must be a non-negative integer")
+    return value
+
+
 def _required_string(data: object, key: str, *, max_length: int = 512) -> str:
-    if not isinstance(data, dict):
-        raise ValueError("data payload must be a dictionary")
-    value = cast(dict[str, Any], data).get(key)
+    value = _payload(data, "data payload must be a dictionary").get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{key} is required")
     normalized = value.strip()
@@ -43,9 +61,7 @@ def _required_string(data: object, key: str, *, max_length: int = 512) -> str:
 
 
 def _optional_string(data: object, key: str, *, max_length: int = 512) -> str | None:
-    if not isinstance(data, dict):
-        raise ValueError("data payload must be a dictionary")
-    value = cast(dict[str, Any], data).get(key)
+    value = _payload(data, "data payload must be a dictionary").get(key)
     if value is None:
         return None
     if not isinstance(value, str):
@@ -57,27 +73,21 @@ def _optional_string(data: object, key: str, *, max_length: int = 512) -> str | 
 
 
 def _slug(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("slug must be a string")
-    normalized = value.strip()
+    normalized = _string(value, "slug").strip()
     if not PREVIEW_SLUG_RE.fullmatch(normalized):
         raise ValueError("slug must use lowercase letters, digits, and path-safe hyphens")
     return normalized
 
 
 def _source_sha(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("source_sha must be a string")
-    normalized = value.strip()
+    normalized = _string(value, "source_sha").strip()
     if not SHA40_RE.fullmatch(normalized):
         raise ValueError("source_sha must be a full 40-character commit SHA")
     return normalized.lower()
 
 
 def _sha256(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("dmg_sha256 must be a string")
-    normalized = value.strip()
+    normalized = _string(value, "dmg_sha256").strip()
     if not SHA256_RE.fullmatch(normalized):
         raise ValueError("dmg_sha256 must be a SHA-256 digest")
     return normalized.lower()
@@ -135,11 +145,9 @@ def _generation(value: object) -> int:
     raise ValueError("pointer generation must be a non-negative integer")
 
 
-def normalize_preview_manifest(data: object) -> dict[str, Any]:
-    """Validate untrusted metadata before narrowing it to a preview manifest."""
-    if not isinstance(data, dict):
-        raise ValueError("preview manifest must be a dictionary")
-    data = cast(dict[str, Any], data)
+def normalize_preview_manifest(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and narrow a preview's immutable artifact metadata."""
+    data = _payload(data, "preview manifest must be a dictionary")
     slug = _slug(_required_string(data, "slug", max_length=63))
     source_sha = _source_sha(_required_string(data, "source_sha", max_length=40))
     app_name = _required_string(data, "app_name", max_length=128)
@@ -174,29 +182,22 @@ def normalize_preview_manifest(data: object) -> dict[str, Any]:
 
 
 def _build_preview_pointer(
-    current: object,
-    manifest: object,
+    current: dict[str, Any],
+    manifest: dict[str, Any],
     *,
-    expected_generation: object,
-    updated_at: object = None,
+    expected_generation: int | None,
+    updated_at: datetime | None = None,
 ) -> dict[str, Any]:
-    if not isinstance(current, dict):
-        raise ValueError("current pointer must be a dictionary")
-    if not isinstance(manifest, dict):
-        raise ValueError("manifest must be a dictionary")
-    current = cast(dict[str, Any], current)
-    manifest = cast(dict[str, Any], manifest)
+    current = _payload(current, "current pointer must be a dictionary")
+    manifest = _payload(manifest, "manifest must be a dictionary")
     current_generation = _generation(current.get("generation", 0))
     if expected_generation is not None:
-        if isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0:
-            raise ValueError("expected_generation must be a non-negative integer")
-        if expected_generation != current_generation:
+        if _expected_generation(expected_generation) != current_generation:
             raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
     if current.get("source_sha") == manifest["source_sha"]:
         return current
     if updated_at is not None:
-        if not isinstance(updated_at, datetime):
-            raise ValueError("updated_at must be a datetime")
+        updated_at = _datetime(updated_at)
         if updated_at.tzinfo is None or updated_at.utcoffset() is None:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
         else:
@@ -207,6 +208,12 @@ def _build_preview_pointer(
         "generation": current_generation + 1,
         "updated_at": updated_at if updated_at is not None else datetime.now(timezone.utc),
     }
+
+
+def _datetime(value: object) -> datetime:
+    if not isinstance(value, datetime):
+        raise ValueError("updated_at must be a datetime")
+    return value
 
 
 def _build_preview_delisting(current: dict[str, Any], *, slug: str, expected_generation: int) -> dict[str, Any]:
@@ -250,16 +257,14 @@ def _publish_preview_transaction(
 
 
 def publish_preview(
-    data: object,
+    data: dict[str, Any],
     *,
-    expected_generation: object = None,
+    expected_generation: int | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically register an immutable preview and advance only its slug pointer."""
-    if expected_generation is not None and (
-        isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0
-    ):
-        raise ValueError("expected_generation must be a non-negative integer")
+    if expected_generation is not None:
+        _expected_generation(expected_generation)
     manifest = normalize_preview_manifest(data)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     manifest_ref = client.collection(PREVIEW_MANIFESTS_COLLECTION).document(
@@ -295,17 +300,14 @@ def _delist_preview_transaction(
 
 
 def delist_preview(
-    slug: object,
+    slug: str,
     *,
-    expected_generation: object,
+    expected_generation: int,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically delist one mutable preview pointer, retaining immutable artifacts."""
-    if not isinstance(slug, str):
-        raise ValueError("slug must be a string")
-    normalized_slug = _slug(slug.strip())
-    if isinstance(expected_generation, bool) or not isinstance(expected_generation, int) or expected_generation < 0:
-        raise ValueError("expected_generation must be a non-negative integer")
+    normalized_slug = _slug(_string(slug, "slug").strip())
+    _expected_generation(expected_generation)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_ref = client.collection(PREVIEW_POINTERS_COLLECTION).document(normalized_slug)
     transaction = client.transaction()
@@ -329,23 +331,19 @@ def _get_manifest(slug: str, source_sha: str, *, firestore_client: Any) -> dict[
     return manifest
 
 
-def get_preview_manifest(slug: object, source_sha: object, *, firestore_client: Any = None) -> dict[str, Any] | None:
+def get_preview_manifest(slug: str, source_sha: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve one immutable preview artifact by its slug and full source SHA."""
-    if not isinstance(slug, str):
-        raise ValueError("slug must be a string")
-    if not isinstance(source_sha, str):
-        raise ValueError("source_sha must be a string")
-    normalized_slug = _slug(slug.strip())
-    normalized_sha = _source_sha(source_sha.strip())
+    slug_value = _string(slug, "slug")
+    source_sha_value = _string(source_sha, "source_sha")
+    normalized_slug = _slug(slug_value.strip())
+    normalized_sha = _source_sha(source_sha_value.strip())
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return _get_manifest(normalized_slug, normalized_sha, firestore_client=client)
 
 
-def get_current_preview(slug: object, *, firestore_client: Any = None) -> dict[str, Any] | None:
+def get_current_preview(slug: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve a slug's current pointer and its immutable preview artifact."""
-    if not isinstance(slug, str):
-        raise ValueError("slug must be a string")
-    normalized_slug = _slug(slug.strip())
+    normalized_slug = _slug(_string(slug, "slug").strip())
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_snapshot = client.collection(PREVIEW_POINTERS_COLLECTION).document(normalized_slug).get()
     if not getattr(pointer_snapshot, "exists", False):

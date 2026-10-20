@@ -969,6 +969,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - terminal failure rate elevated",
+      "owner_uid": "omi-journey-chat-fail",
+      "panel": null,
+      "pointer": "/data/4/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -1123,6 +1136,19 @@
       "owner_uid": "omi-journey-chat-success-critical",
       "panel": null,
       "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - success rate below paging floor",
+      "owner_uid": "omi-journey-chat-success-critical",
+      "panel": null,
+      "pointer": "/data/4/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3001,7 +3027,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 196
+    "query_consumers": 198
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

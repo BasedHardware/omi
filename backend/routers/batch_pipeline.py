@@ -181,7 +181,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome == 'disabled':
         raise HTTPException(status_code=503, detail='Recovery disabled for this owner')
     if outcome in {'recovered', 'reconciled'}:
-        await service.reconcile_async()
+        await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
     return {'status': outcome}
 
 

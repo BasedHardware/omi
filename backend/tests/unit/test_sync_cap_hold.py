@@ -1,5 +1,7 @@
 """Both sync versions execute process_segment; prove the last pre-STT gate."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -69,7 +71,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
 def test_hold_failure_cannot_acknowledge_audio_or_dispatch_provider(tmp_path, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: False)
     monkeypatch.setattr(cap_hold, 'hold_segment', Mock(side_effect=RuntimeError('synthetic upload failed')))
     stt = Mock()
     monkeypatch.setattr(pipeline, 'prerecorded', stt)
@@ -87,8 +89,8 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
         output.writeframes(b'\0' * 32000)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: True)
-    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
     monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
@@ -112,14 +114,14 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
         cap_recovery_checkpoint={'hold_id': 'h', 'piece': 'p', 'lease_token': 'l', 'attempt': 1, 'receipt': {}},
     )
     assert not errors
-    assert stt.call_count == (1 if enforce else 2)
+    assert stt.call_count == (1 if enforce else 0)
     assert checkpoint.call_count == (2 if enforce else 0)
     for call in stt.call_args_list:
         if enforce:
             assert call.kwargs['selected_service'] == service
         else:
             assert 'selected_service' not in call.kwargs
-    assert selection.call_count == (0 if enforce else 1)
+    selection.assert_not_called()
 
 
 @pytest.mark.parametrize('enforce', [False, True])
@@ -141,6 +143,7 @@ async def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_pat
         assert hold.call_args.args[2] == {
             'timestamp': 1792152000,
             'source': 'omi',
+            'origin': 'sync',
             'full_capture': True,
             'file_name': '1792152000.wav',
             'source_frame_map': None,
@@ -233,7 +236,7 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     assert decrypt_audio_file(uploaded[0], 'synthetic') == path.read_bytes()
     manifest = ref.create.call_args.args[0]
     assert manifest['audio_path'].startswith('chunks/synthetic/cap-held/')
-    assert json.loads(decrypt(manifest['metadata'], 'synthetic')) == meta
+    assert json.loads(decrypt(manifest['metadata'], 'synthetic')) == {**meta, 'origin': 'sync'}
     assert 'expires_at' not in manifest
     ref.create.reset_mock()
     blob.upload_from_file.side_effect = RuntimeError('synthetic unavailable')
@@ -357,8 +360,8 @@ def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force
         output.writeframes(b'\0' * 32000)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
-    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_: True)
-    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_: SimpleNamespace(reason='available'))
+    monkeypatch.setattr(pipeline, 'sync_allowed', lambda *_, **kwargs: True)
+    monkeypatch.setattr(pipeline, 'funded_allowance', lambda *_, **kwargs: SimpleNamespace(reason='available'))
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', Mock(return_value='synthetic-url'))
     monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
     monkeypatch.setattr(pipeline, 'keyterms', AsyncMock(return_value=[]))
@@ -425,3 +428,39 @@ def test_production_pipeline_result_crash_restart_and_cache_capacity_never_force
         assert persisted['provider_cache_omitted'] and 'provider_result' not in persisted
         if previous:
             assert previous['provider_result'] == 'old-ciphertext' * 50000
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'origin,lanes,checked',
+    [('live', 'live', True), ('sync', 'live', False), ('batch', 'live', False), ('live', 'sync,batch', False)],
+)
+def test_recovered_segment_rechecks_original_lane_without_reholding(
+    tmp_path, monkeypatch, ladder, origin, lanes, checked
+):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
+    allowance = Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    monkeypatch.setattr(cap, 'funded_allowance', allowance)
+    provider = Mock(side_effect=AssertionError('denied recovery reached provider'))
+    monkeypatch.setattr(pipeline, 'prerecorded', provider)
+    hold = Mock(side_effect=AssertionError('recovery must not overwrite original hold'))
+    monkeypatch.setattr(cap_hold, 'hold_segment', hold)
+    errors = []
+    result = pipeline.process_segment(
+        str(tmp_path / '1792152000.wav'),
+        'synthetic',
+        {},
+        threading.Lock(),
+        errors,
+        cap_recovery=True,
+        cap_dispatch_lane=origin,
+    )
+    assert result is False and not errors
+    assert allowance.call_count == int(checked)
+    if checked:
+        allowance.assert_called_with('synthetic', lane=origin)
+    provider.assert_not_called()
+    hold.assert_not_called()

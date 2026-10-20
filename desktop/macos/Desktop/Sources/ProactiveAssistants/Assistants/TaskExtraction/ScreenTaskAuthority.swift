@@ -108,18 +108,18 @@ struct ScreenTaskLease: Sendable {
 }
 
 enum ScreenTaskFreshFlagResponse {
-  static func enabled(_ data: Data) throws -> Bool {
-    guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      body["errorsWhileComputingFlags"] as? Bool != true,
+  static func enabled(_ data: Data) -> Bool {
+    guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return true }
+    guard body["errorsWhileComputingFlags"] as? Bool != true,
       !(body["quotaLimited"] as? [String] ?? []).contains("feature_flags")
-    else { throw ScreenTaskFailure.stopped }
+    else { return true }
     if let flags = body["featureFlags"] as? [String: Any] {
-      return flags[ScreenTaskFeature.flagName] as? Bool ?? false
+      return !ScreenTaskFeature.isKillSwitchOff(flagValue: flags[ScreenTaskFeature.flagName])
     }
     if let flags = body["flags"] as? [String: [String: Any]] {
-      return flags[ScreenTaskFeature.flagName]?["enabled"] as? Bool ?? false
+      return !ScreenTaskFeature.isKillSwitchOff(flagValue: flags[ScreenTaskFeature.flagName]?["enabled"])
     }
-    throw ScreenTaskFailure.invalidResponse
+    return true
   }
 }
 
@@ -127,9 +127,8 @@ enum ScreenTaskFreshFlagResponse {
   private static var timer: Timer?
   private static var reloadInFlight = false
   private static var lastFlagReload: TimeInterval?
-  /// Every PostHog flag reload is a billed request. Clients with the flag off (nearly all)
-  /// only need to notice a newly enabled flag, so they reload every 30 minutes; the 30 s
-  /// cadence is kept only while the flag is on, where the 55 s leases depend on it.
+  /// Every PostHog flag reload is a billed request. The 30-second cadence renews the
+  /// 55-second leases while the gate is on; an explicit kill switch can use the slow cadence.
   static let disabledReloadInterval: TimeInterval = 30 * 60
 
   static func shouldReloadFlags(enabled: Bool, now: TimeInterval, last: TimeInterval?) -> Bool {
@@ -147,7 +146,8 @@ enum ScreenTaskFreshFlagResponse {
 
   private static func reload() {
     let now = ProcessInfo.processInfo.systemUptime
-    let enabled = PostHogManager.shared.isFeatureEnabled(ScreenTaskFeature.flagName)
+    let enabled = !ScreenTaskFeature.isKillSwitchOff(
+      flagValue: PostHogManager.shared.getFeatureFlag(ScreenTaskFeature.flagName))
     if shouldReloadFlags(enabled: enabled, now: now, last: lastFlagReload) {
       lastFlagReload = now
       PostHogManager.shared.reloadFeatureFlags()

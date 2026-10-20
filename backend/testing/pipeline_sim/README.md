@@ -176,3 +176,17 @@ modeled paid calls (at most one per segment), recover 131 pieces and retain one
 `GATE_FAIL unrecovered_quarantine`; clearing the scheduling tail does not turn
 unrecovered audio into a successful gate. No shipping flag is pinned to the old
 rate to preserve a stale expectation.
+
+### Generated policy sweep (E3)
+
+`tests/unit/test_pipeline_sim_policy_invariants.py` runs a fixed-seed pairwise
+slice with injected `BatchUnitPolicy` and `ListenSessionPolicy` objects. The
+suite checks the durable per-owner result chain, no duplicate paid calls,
+privacy/deletion and stale-target fences, recorded-policy equality, and listen
+arm stability across reconnect. It also seeds a double vendor charge and
+asserts the invariant rejects it. The E1 `policy_window` golden is replayed
+from its recorded policy ID and stage inputs.
+
+Run all pairwise rows with `python scripts/policy_pairwise_sweep.py --seed 1`.
+The script prints array size, feasible and covered pair counts, simulated rows,
+and elapsed time. Nightly scheduling is pending David; no workflow is added.

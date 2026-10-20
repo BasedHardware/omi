@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from config.policy.listen import routing_mode_raw
+
 import json
 import hashlib
 import logging
 from dataclasses import replace
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
-import os
 
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
@@ -270,7 +271,7 @@ class CostHealthMixin(ABC):
         uid: str | None = None,
         reason: str | None = None,
     ) -> bool:
-        if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+        if not uid or routing_mode_raw() == 'off':
             return False
         identity = self._check_identity()
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]

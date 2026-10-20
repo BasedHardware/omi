@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import math
 from collections.abc import Mapping
+from typing import Any
 
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
 
@@ -18,9 +19,12 @@ COHORT_SALTS = {
 LEGACY_CORRELATED_COHORTS = frozenset({'first-summary', 'transcription-final-pass'})
 
 
-def cohort_bucket(uid: str, salt: str) -> float:
+def cohort_bucket(uid: str, salt: str, *, bits: int = 32) -> float:
+    # Listen deployed 64-bit buckets; batch retains its original 32-bit buckets.
+    if bits not in (32, 64):
+        raise ValueError('cohort bucket requires 32 or 64 bits')
     payload = uid if not salt else f'{salt}:{uid}'
-    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[:4], 'big') / 2**32 * 100
+    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big') / 2**bits * 100
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,58 @@ class BatchUnitPolicy(PolicyPart):
         if not values.get('batch_enabled', False):
             values['live_stt_retired'] = False
         return super().from_dict(values)
+
+
+def batch_generation_violations(policy_or_values: BatchUnitPolicy | Mapping[str, Any]) -> tuple[str, ...]:
+    """Return impossible admission combinations for generated batch policies.
+
+    Keep these relationships beside ``BatchUnitPolicy`` so the pairwise
+    generator and its constraints evolve with the immutable policy shape.
+    """
+
+    def get(key: str) -> Any:
+        if isinstance(policy_or_values, Mapping):
+            return policy_or_values[key]
+        return getattr(policy_or_values, key)
+
+    def has(*keys: str) -> bool:
+        return not isinstance(policy_or_values, Mapping) or all(key in policy_or_values for key in keys)
+
+    violations: list[str] = []
+
+    if (
+        has('retire_percent', 'batch_percent')
+        and not 0 <= float(get('retire_percent')) <= float(get('batch_percent')) <= 100
+    ):
+        violations.append('retire_percent_must_be_nested_within_batch_percent')
+    if has('batch_allowlisted', 'batch_enabled') and bool(get('batch_allowlisted')) and not bool(get('batch_enabled')):
+        violations.append('batch_allowlisted_requires_batch_enabled')
+    if (
+        has('batch_enabled', 'batch_percent', 'batch_allowlisted')
+        and bool(get('batch_enabled'))
+        and float(get('batch_percent')) == 0
+        and not bool(get('batch_allowlisted'))
+    ):
+        violations.append('zero_percent_batch_requires_allowlist')
+    if (
+        has('live_record_enabled', 'batch_enabled', 'live_admission_enabled')
+        and bool(get('live_record_enabled'))
+        and not (bool(get('batch_enabled')) and bool(get('live_admission_enabled')))
+    ):
+        violations.append('live_record_requires_batch_and_live_admission')
+    if (
+        has('live_stt_retired', 'batch_enabled', 'retire_percent')
+        and bool(get('live_stt_retired'))
+        and not (bool(get('batch_enabled')) and float(get('retire_percent')) > 0)
+    ):
+        violations.append('live_stt_retirement_requires_batch_and_positive_retire_percent')
+    if (
+        has('final_pass_authoritative', 'final_pass_enabled')
+        and bool(get('final_pass_authoritative'))
+        and not bool(get('final_pass_enabled'))
+    ):
+        violations.append('authoritative_final_pass_requires_final_pass')
+    return tuple(violations)
 
 
 def parse_percent(raw: str) -> float:
