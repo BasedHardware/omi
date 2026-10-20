@@ -170,6 +170,32 @@ describe('useChatSessions — mutations', () => {
   })
 })
 
+describe('useChatSessions — date buckets', () => {
+  it('re-buckets on rerender when the clock crosses midnight without a list change', async () => {
+    // Local calendar: session updated on Jul 13; evening of Jul 13 → Today,
+    // then after midnight Jul 14 → Yesterday. Same list, only `now` moves.
+    const sessionUpdatedAt = new Date(2026, 6, 13, 20, 0, 0).toISOString()
+    const beforeMidnight = new Date(2026, 6, 13, 21, 0, 0).getTime()
+    const afterMidnight = new Date(2026, 6, 14, 1, 0, 0).getTime()
+    let nowMs = beforeMidnight
+
+    const { client } = makeClient([session({ id: '1', updatedAt: sessionUpdatedAt })])
+    const { result, rerender } = renderHook(() =>
+      useChatSessions({ client, now: () => nowMs })
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.groupedSessions.map((g) => g.label)).toEqual(['Today'])
+    expect(result.current.groupedSessions[0].sessions.map((s) => s.id)).toEqual(['1'])
+
+    nowMs = afterMidnight
+    rerender()
+
+    expect(result.current.groupedSessions.map((g) => g.label)).toEqual(['Yesterday'])
+    expect(result.current.groupedSessions[0].sessions.map((s) => s.id)).toEqual(['1'])
+  })
+})
+
 describe('useChatSessions — filter & search', () => {
   it('toggleStarredFilter re-queries the server with starred=true', async () => {
     const { client, fns } = makeClient([

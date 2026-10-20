@@ -91,9 +91,13 @@ export function useChatSessions(options?: {
    *  getChatSessions/createChatSession). Changing it re-queries and clears the
    *  selection. Omitted/undefined ⇒ the plain main-chat session list, unchanged. */
   appId?: string | null
+  /** Clock for Today/Yesterday/This Week buckets. Defaults to `Date.now`. Injectable
+   *  so tests can cross midnight without mutating the session list. */
+  now?: () => number
 }): UseChatSessions {
   const client = options?.client ?? realClient
   const appId = options?.appId ?? null
+  const now = options?.now ?? Date.now
 
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -237,7 +241,10 @@ export function useChatSessions(options?: {
     () => filterSessions(sessions, searchQuery),
     [sessions, searchQuery]
   )
-  const groupedSessions = useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions])
+  // Group at render time with a fresh `now()`. Memoizing on `filteredSessions`
+  // alone froze the clock at the last list/search change, so a popover left open
+  // across midnight kept yesterday's chats under Today until the list changed.
+  const groupedSessions = groupSessionsByDate(filteredSessions, now())
 
   return {
     sessions,
