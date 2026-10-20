@@ -80,6 +80,7 @@
       "dependency_probe_smoke": true,
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
+        "imageio_ffmpeg": "utils.messaging.adapters.decoder imports the FFmpeg wheel inside a function reached only through lazy chat-video imports, and falls back to the system ffmpeg the pusher Dockerfile installs with apt.",
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
         "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
       }
