@@ -410,4 +410,4 @@ def test_ffmpeg_stderr_is_drained_with_a_retained_line_cap():
     assert len(kept) == video_frames._MAX_KEPT_LINES
     slow = [sys.executable, '-c', 'import time; time.sleep(30)']
     with pytest.raises(subprocess.TimeoutExpired):
-        video_frames._run_keeping(slow, re.compile(rb'x'), timeout=0.2)
+        video_frames._run_keeping(slow, re.compile(rb'x'), timeout=1.0)
