@@ -45,7 +45,23 @@ pub struct Config {
     pub worker_threads: Option<usize>,
     /// `OMI_RELEASE_SHA`: release identity exported on `omi_edge_build_info`.
     pub release_sha: String,
+    /// `EDGE_VAD_MODEL_PATH`: Silero VAD ONNX file. Unset disables the
+    /// shadow ingest path (`/v1/shadow` answers 503).
+    pub vad_model_path: Option<String>,
+    /// `EDGE_SHADOW_MAX_SESSIONS`: open shadow sessions above which new
+    /// mirrors get 503 (listen then stops mirroring that session).
+    pub shadow_max_sessions: usize,
+    /// `EDGE_SHADOW_TOKEN`: when set, mirrors must send it in
+    /// `x-edge-shadow-token`.
+    pub shadow_token: Option<String>,
+    /// `EDGE_SHADOW_WORKER_THREADS`: threads of the separate runtime that
+    /// decodes and scores mirrored audio, so shadow CPU never runs on the
+    /// relay and health workers.
+    pub shadow_worker_threads: usize,
 }
+
+/// Websocket path of the D2 shadow ingest (not relayed).
+pub const SHADOW_PATH: &str = "/v1/shadow";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ConfigError(pub String);
@@ -138,6 +154,10 @@ impl Config {
             header_read_timeout: ms("EDGE_HEADER_READ_TIMEOUT_MS", 10_000, 100, 120_000)?,
             worker_threads,
             release_sha: get("OMI_RELEASE_SHA").unwrap_or_default(),
+            vad_model_path: get("EDGE_VAD_MODEL_PATH"),
+            shadow_max_sessions: count("EDGE_SHADOW_MAX_SESSIONS", 500, 100_000)?,
+            shadow_token: get("EDGE_SHADOW_TOKEN"),
+            shadow_worker_threads: count("EDGE_SHADOW_WORKER_THREADS", 2, 64)?,
         })
     }
 
@@ -180,7 +200,7 @@ fn parse_paths(raw: &str) -> Result<Vec<String>, ConfigError> {
         if !p.starts_with('/') || p.contains('?') || p.contains(' ') {
             return Err(ConfigError(format!("EDGE_PROXY_PATHS: invalid path {p}")));
         }
-        if matches!(p, "/healthz" | "/readyz" | "/metrics") {
+        if matches!(p, "/healthz" | "/readyz" | "/metrics" | SHADOW_PATH) {
             return Err(ConfigError(format!("EDGE_PROXY_PATHS: {p} is reserved")));
         }
         paths.push(p.to_string());
@@ -213,6 +233,10 @@ mod tests {
         assert_eq!(c.max_sessions, 5_000);
         assert_eq!(c.max_pending_handshakes, 512);
         assert_eq!(c.worker_threads, None);
+        assert_eq!(c.vad_model_path, None);
+        assert_eq!(c.shadow_max_sessions, 500);
+        assert_eq!(c.shadow_token, None);
+        assert_eq!(c.shadow_worker_threads, 2);
     }
 
     #[test]
@@ -244,6 +268,8 @@ mod tests {
         assert_eq!(ok.proxy_paths, vec!["/v4/listen", "/v4/web/listen"]);
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_PROXY_PATHS", "v4/listen")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_PROXY_PATHS", "/metrics")]).is_err());
+        assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_PROXY_PATHS", "/v1/shadow")]).is_err());
+        assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_SHADOW_MAX_SESSIONS", "0")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_CLOSE_TIMEOUT_MS", "5")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_DRAIN_SPREAD_MS", "abc")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_WORKER_THREADS", "0")]).is_err());

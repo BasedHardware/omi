@@ -29,9 +29,11 @@ use tokio_tungstenite::WebSocketStream;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::config::Config;
-use crate::metrics::{HandshakeResult, Metrics};
+use crate::config::{Config, SHADOW_PATH};
+use crate::metrics::{HandshakeResult, Metrics, ShadowHandshake};
 use crate::session::{drain_jitter, relay, SessionCtx};
+use crate::shadow::{self, ShadowCore, ShadowMeta, ShadowPool};
+use crate::silero;
 
 type Body = Full<Bytes>;
 
@@ -70,6 +72,8 @@ struct Shared {
     sessions: TaskTracker,
     handshake_slots: Arc<Semaphore>,
     next_id: AtomicU64,
+    /// Runtime and session slots for `/v1/shadow`; `None` when it is disabled.
+    shadow_pool: Option<ShadowPool>,
 }
 
 /// A running edge. Dropping it does not stop the server; call [`Edge::drain`].
@@ -95,7 +99,14 @@ pub fn start_with_listener(listener: TcpListener, cfg: Config, metrics: Metrics)
         .max_message_size(Some(cfg.ws_max_message_bytes))
         .max_frame_size(Some(cfg.ws_max_message_bytes));
     let stop_accepting = CancellationToken::new();
+    let shadow_pool = match &cfg.vad_model_path {
+        None => None,
+        Some(_) => ShadowPool::new(cfg.shadow_worker_threads, cfg.shadow_max_sessions)
+            .map_err(|err| tracing::error!(error = %err, "shadow runtime failed; /v1/shadow disabled"))
+            .ok(),
+    };
     let shared = Arc::new(Shared {
+        shadow_pool,
         handshake_slots: Arc::new(Semaphore::new(cfg.max_pending_handshakes)),
         cfg,
         metrics: Arc::new(metrics),
@@ -237,6 +248,7 @@ async fn handle(req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>) -
             );
             resp
         }
+        (_, SHADOW_PATH) => shadow_upgrade(req, shared),
         _ if shared.cfg.proxy_paths.iter().any(|p| p == path) => proxy(req, peer, shared).await,
         _ => text(StatusCode::NOT_FOUND, "not found\n"),
     };
@@ -279,20 +291,121 @@ fn overloaded() -> Response<Body> {
     resp
 }
 
-async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>) -> Response<Body> {
-    let metrics = &shared.metrics;
+/// The client's `Sec-WebSocket-Key` if this is a valid version-13 upgrade.
+fn upgrade_key(req: &Request<Incoming>) -> Option<HeaderValue> {
     let headers = req.headers();
-    let key = headers.get(header::SEC_WEBSOCKET_KEY).cloned();
     let is_upgrade = req.method() == Method::GET
         && header_has_token(headers, header::CONNECTION, "upgrade")
         && header_has_token(headers, header::UPGRADE, "websocket");
     let version_ok = headers.get(header::SEC_WEBSOCKET_VERSION).map(|v| v.as_bytes()) == Some(b"13");
-    let Some(key) = key.filter(|_| is_upgrade && version_ok) else {
+    headers
+        .get(header::SEC_WEBSOCKET_KEY)
+        .cloned()
+        .filter(|_| is_upgrade && version_ok)
+}
+
+fn upgrade_required() -> Response<Body> {
+    let mut resp = text(StatusCode::UPGRADE_REQUIRED, "websocket upgrade required\n");
+    resp.headers_mut()
+        .insert(header::SEC_WEBSOCKET_VERSION, HeaderValue::from_static("13"));
+    resp
+}
+
+fn switching_protocols(key: &HeaderValue) -> Response<Body> {
+    let mut resp = Response::new(Full::new(Bytes::new()));
+    *resp.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+    let h = resp.headers_mut();
+    h.insert(header::CONNECTION, HeaderValue::from_static("Upgrade"));
+    h.insert(header::UPGRADE, HeaderValue::from_static("websocket"));
+    let accept = derive_accept_key(key.as_bytes());
+    h.insert(
+        header::SEC_WEBSOCKET_ACCEPT,
+        HeaderValue::from_str(&accept).expect("base64 is a valid header"),
+    );
+    resp
+}
+
+/// Accept a D2 mirror from listen (see `shadow`). Not relayed anywhere.
+fn shadow_upgrade(mut req: Request<Incoming>, shared: Arc<Shared>) -> Response<Body> {
+    let shadow = &shared.metrics.shadow;
+    let pool = match &shared.shadow_pool {
+        Some(pool) if !shared.draining.load(Ordering::SeqCst) && silero::initialized() => pool,
+        _ => {
+            shadow.handshake(ShadowHandshake::Disabled);
+            return text(StatusCode::SERVICE_UNAVAILABLE, "shadow disabled\n");
+        }
+    };
+    let Some(key) = upgrade_key(&req) else {
+        shadow.handshake(ShadowHandshake::InvalidRequest);
+        return upgrade_required();
+    };
+    if let Some(token) = &shared.cfg.shadow_token {
+        let sent = req.headers().get("x-edge-shadow-token").map(|v| v.as_bytes());
+        if !sent.is_some_and(|s| constant_time_eq(s, token.as_bytes())) {
+            shadow.handshake(ShadowHandshake::Unauthorized);
+            return text(StatusCode::UNAUTHORIZED, "unauthorized\n");
+        }
+    }
+    let meta = match ShadowMeta::from_query(req.uri().query().unwrap_or("")) {
+        Ok(meta) => meta,
+        Err(reason) => {
+            shadow.handshake(ShadowHandshake::InvalidRequest);
+            let mut resp = text(StatusCode::BAD_REQUEST, "bad shadow request\n");
+            if let Ok(v) = HeaderValue::from_str(reason) {
+                resp.headers_mut().insert("x-edge-shadow-error", v);
+            }
+            return resp;
+        }
+    };
+    let Some(slot) = pool.reserve() else {
+        shadow.handshake(ShadowHandshake::Overloaded);
+        return overloaded();
+    };
+    let core = match ShadowCore::new(meta, shared.metrics.clone()) {
+        Ok(core) => core,
+        Err(_) => {
+            shadow.handshake(ShadowHandshake::InvalidRequest);
+            return text(StatusCode::BAD_REQUEST, "bad shadow request\n");
+        }
+    };
+    shadow.handshake(ShadowHandshake::Accepted);
+    let on_upgrade = hyper::upgrade::on(&mut req);
+    let task_shared = shared.clone();
+    // Tracked for drain, but run on the shadow runtime.
+    pool.spawn(shared.sessions.track_future(async move {
+        let _slot = slot;
+        let Ok(upgraded) = on_upgrade.await else {
+            return;
+        };
+        let ws =
+            WebSocketStream::from_raw_socket(TokioIo::new(upgraded), Role::Server, Some(task_shared.ws_config)).await;
+        shadow::serve(
+            ws,
+            core,
+            task_shared.close_sessions.clone(),
+            task_shared.cfg.close_timeout,
+        )
+        .await;
+    }));
+    switching_protocols(&key)
+}
+
+/// Compares every byte up to the longer input, so neither the position of a
+/// mismatch nor a length difference returns early.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    let n = a.len().max(b.len());
+    let mut diff = (a.len() != b.len()) as u8;
+    for i in 0..n {
+        diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0);
+    }
+    diff == 0
+}
+
+async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>) -> Response<Body> {
+    let metrics = &shared.metrics;
+    let Some(key) = upgrade_key(&req) else {
         metrics.handshake(HandshakeResult::InvalidRequest);
-        let mut resp = text(StatusCode::UPGRADE_REQUIRED, "websocket upgrade required\n");
-        resp.headers_mut()
-            .insert(header::SEC_WEBSOCKET_VERSION, HeaderValue::from_static("13"));
-        return resp;
+        return upgrade_required();
     };
 
     let path_and_query = req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
@@ -340,18 +453,9 @@ async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>
         .upstream_connect_seconds
         .observe(connect_started.elapsed().as_secs_f64());
 
-    let mut resp = Response::new(Full::new(Bytes::new()));
-    *resp.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
-    let h = resp.headers_mut();
-    h.insert(header::CONNECTION, HeaderValue::from_static("Upgrade"));
-    h.insert(header::UPGRADE, HeaderValue::from_static("websocket"));
-    let accept = derive_accept_key(key.as_bytes());
-    h.insert(
-        header::SEC_WEBSOCKET_ACCEPT,
-        HeaderValue::from_str(&accept).expect("base64 is a valid header"),
-    );
+    let mut resp = switching_protocols(&key);
     if let Some(proto) = up_resp.headers().get(header::SEC_WEBSOCKET_PROTOCOL) {
-        h.insert(header::SEC_WEBSOCKET_PROTOCOL, proto.clone());
+        resp.headers_mut().insert(header::SEC_WEBSOCKET_PROTOCOL, proto.clone());
     }
 
     let id = shared.next_id.fetch_add(1, Ordering::Relaxed);
@@ -422,6 +526,15 @@ mod tests {
         for name in HOP_BY_HOP {
             assert!(out.get(*name).is_none(), "{name} forwarded");
         }
+    }
+
+    #[test]
+    fn token_compare_checks_length_and_every_byte() {
+        assert!(constant_time_eq(b"s3cret", b"s3cret"));
+        assert!(!constant_time_eq(b"s3cret", b"s3creT"));
+        assert!(!constant_time_eq(b"s3cret", b"s3cret\0"));
+        assert!(!constant_time_eq(b"", b"x"));
+        assert!(constant_time_eq(b"", b""));
     }
 
     #[test]

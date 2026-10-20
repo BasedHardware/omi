@@ -6,12 +6,16 @@
 //!   per frame);
 //! - the whole exporter stays inside [`SERIES_BUDGET`] (checked by a test).
 use prometheus::{
-    Encoder, Histogram, HistogramOpts, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts, Registry, TextEncoder,
+    Counter, CounterVec, Encoder, Histogram, HistogramOpts, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts,
+    Registry, TextEncoder,
 };
+
+use crate::codec::Codec;
+use crate::gate::Variant;
 
 /// Upper bound on exported series (including histogram buckets). The GMP
 /// limit per target is 10,000 samples; the edge should stay tiny.
-pub const SERIES_BUDGET: usize = 120;
+pub const SERIES_BUDGET: usize = 200;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -131,6 +135,224 @@ impl SessionOutcome {
     }
 }
 
+/// Result of an upgrade request on the shadow ingest path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShadowHandshake {
+    Accepted,
+    /// Bad upgrade, version, codec, rate or session key; the caller got 4xx.
+    InvalidRequest,
+    /// `EDGE_SHADOW_TOKEN` is set and the request did not carry it.
+    Unauthorized,
+    /// `EDGE_SHADOW_MAX_SESSIONS` reached; 503.
+    Overloaded,
+    /// No VAD model configured (`EDGE_VAD_MODEL_PATH` unset), or draining; 503.
+    Disabled,
+}
+
+impl ShadowHandshake {
+    pub const ALL: [ShadowHandshake; 5] = [
+        ShadowHandshake::Accepted,
+        ShadowHandshake::InvalidRequest,
+        ShadowHandshake::Unauthorized,
+        ShadowHandshake::Overloaded,
+        ShadowHandshake::Disabled,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ShadowHandshake::Accepted => "accepted",
+            ShadowHandshake::InvalidRequest => "invalid_request",
+            ShadowHandshake::Unauthorized => "unauthorized",
+            ShadowHandshake::Overloaded => "overloaded",
+            ShadowHandshake::Disabled => "disabled",
+        }
+    }
+}
+
+/// How a shadow session ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShadowOutcome {
+    /// listen closed the mirror (session over, or listen stopped mirroring).
+    Completed,
+    /// Frames were not contiguous (listen dropped mirror frames); comparison stopped.
+    Desync,
+    /// A message did not parse; the edge closed the mirror.
+    ProtocolError,
+    /// Silero failed; the edge closed the mirror.
+    VadError,
+    /// The edge drained (SIGTERM) and closed the mirror.
+    Drained,
+}
+
+impl ShadowOutcome {
+    pub const ALL: [ShadowOutcome; 5] = [
+        ShadowOutcome::Completed,
+        ShadowOutcome::Desync,
+        ShadowOutcome::ProtocolError,
+        ShadowOutcome::VadError,
+        ShadowOutcome::Drained,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ShadowOutcome::Completed => "completed",
+            ShadowOutcome::Desync => "desync",
+            ShadowOutcome::ProtocolError => "protocol_error",
+            ShadowOutcome::VadError => "vad_error",
+            ShadowOutcome::Drained => "drained",
+        }
+    }
+}
+
+/// Per mirrored frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameResult {
+    /// Decoded to the same sample count listen reported.
+    Decoded,
+    /// The edge could not decode a frame listen decoded (scored as silence).
+    DecodeError,
+    /// Decoded, but to a different sample count than listen's.
+    LengthMismatch,
+}
+
+impl FrameResult {
+    pub const ALL: [FrameResult; 3] = [
+        FrameResult::Decoded,
+        FrameResult::DecodeError,
+        FrameResult::LengthMismatch,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FrameResult::Decoded => "decoded",
+            FrameResult::DecodeError => "decode_error",
+            FrameResult::LengthMismatch => "length_mismatch",
+        }
+    }
+}
+
+/// One listen VAD window against the edge's window with the same ordinal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompareResult {
+    AgreeSpeech,
+    AgreeSilence,
+    EdgeSpeechOnly,
+    ListenSpeechOnly,
+    /// From a listen gate the edge is not aligned with (a later gate after
+    /// failover, or one that started mid-frame).
+    NotComparable,
+    /// No edge window to compare (evicted, or never scored).
+    Unmatched,
+}
+
+impl CompareResult {
+    pub const ALL: [CompareResult; 6] = [
+        CompareResult::AgreeSpeech,
+        CompareResult::AgreeSilence,
+        CompareResult::EdgeSpeechOnly,
+        CompareResult::ListenSpeechOnly,
+        CompareResult::NotComparable,
+        CompareResult::Unmatched,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CompareResult::AgreeSpeech => "agree_speech",
+            CompareResult::AgreeSilence => "agree_silence",
+            CompareResult::EdgeSpeechOnly => "edge_speech_only",
+            CompareResult::ListenSpeechOnly => "listen_speech_only",
+            CompareResult::NotComparable => "not_comparable",
+            CompareResult::Unmatched => "unmatched",
+        }
+    }
+    pub fn idx(self) -> usize {
+        self as usize
+    }
+}
+
+/// Gate opens (SILENCE -> SPEECH) matched between listen and the edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenResult {
+    /// Both opened within 2 s; the offset goes to `omi_edge_shadow_gate_open_offset_seconds`.
+    Matched,
+    ListenOnly,
+    EdgeOnly,
+    NotComparable,
+}
+
+impl OpenResult {
+    pub const ALL: [OpenResult; 4] = [
+        OpenResult::Matched,
+        OpenResult::ListenOnly,
+        OpenResult::EdgeOnly,
+        OpenResult::NotComparable,
+    ];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            OpenResult::Matched => "matched",
+            OpenResult::ListenOnly => "listen_only",
+            OpenResult::EdgeOnly => "edge_only",
+            OpenResult::NotComparable => "not_comparable",
+        }
+    }
+    pub fn idx(self) -> usize {
+        self as usize
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    Decode,
+    Vad,
+}
+
+impl Stage {
+    pub const ALL: [Stage; 2] = [Stage::Decode, Stage::Vad];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Stage::Decode => "decode",
+            Stage::Vad => "vad",
+        }
+    }
+}
+
+/// Shadow (D2) series. Every child is cached; the frame path indexes arrays.
+pub struct ShadowMetrics {
+    pub sessions_active: IntGauge,
+    sessions_total: Vec<IntCounter>,
+    handshakes_total: Vec<IntCounter>,
+    /// [codec][frame result]
+    frames: Vec<[IntCounter; 3]>,
+    /// [codec]
+    pub audio_seconds: Vec<Counter>,
+    /// [codec]
+    pub windows: Vec<IntCounter>,
+    /// [codec][variant][compare result]
+    compare: Vec<[[IntCounter; 6]; 2]>,
+    pub prob_abs_diff: Histogram,
+    opens: [IntCounter; 4],
+    pub open_offset_seconds: Histogram,
+    /// [stage]
+    processing_seconds: [Counter; 2],
+}
+
+impl ShadowMetrics {
+    pub fn session_ended(&self, outcome: ShadowOutcome) {
+        self.sessions_total[ShadowOutcome::ALL.iter().position(|o| *o == outcome).unwrap()].inc();
+    }
+    pub fn handshake(&self, result: ShadowHandshake) {
+        self.handshakes_total[ShadowHandshake::ALL.iter().position(|r| *r == result).unwrap()].inc();
+    }
+    pub fn frame(&self, codec: Codec, result: FrameResult) {
+        self.frames[codec.idx()][FrameResult::ALL.iter().position(|r| *r == result).unwrap()].inc();
+    }
+    pub fn compare(&self, codec: Codec, variant: Variant, result: CompareResult, n: u64) {
+        self.compare[codec.idx()][variant.idx()][result.idx()].inc_by(n);
+    }
+    pub fn open(&self, result: OpenResult, n: u64) {
+        self.opens[result.idx()].inc_by(n);
+    }
+    pub fn processing(&self, stage: Stage, seconds: f64) {
+        self.processing_seconds[stage as usize].inc_by(seconds);
+    }
+}
+
 /// Cached per-direction counters handed to a relay pump.
 #[derive(Clone)]
 pub struct DirectionCounters {
@@ -156,6 +378,7 @@ pub struct Metrics {
     directions: [DirectionCounters; 2],
     pub upstream_connect_seconds: Histogram,
     pub session_seconds: Histogram,
+    pub shadow: ShadowMetrics,
 }
 
 /// Release SHA as a bounded label value: 7-40 lowercase hex, else "unknown".
@@ -259,6 +482,139 @@ impl Metrics {
         .unwrap();
         reg(Box::new(session_seconds.clone()));
 
+        let shadow = {
+            let gauge = IntGauge::new(
+                "omi_edge_shadow_sessions_active",
+                "Shadow mirror sessions currently open",
+            )
+            .unwrap();
+            reg(Box::new(gauge.clone()));
+            let sessions_vec = IntCounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_sessions_total",
+                    "Shadow mirror sessions by how they ended",
+                ),
+                &["outcome"],
+            )
+            .unwrap();
+            reg(Box::new(sessions_vec.clone()));
+            let handshakes_vec = IntCounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_handshakes_total",
+                    "Upgrade requests on the shadow path by result",
+                ),
+                &["result"],
+            )
+            .unwrap();
+            reg(Box::new(handshakes_vec.clone()));
+            let frames_vec = IntCounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_frames_total",
+                    "Mirrored client frames by decode result",
+                ),
+                &["codec", "result"],
+            )
+            .unwrap();
+            reg(Box::new(frames_vec.clone()));
+            let audio_vec = CounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_audio_seconds_total",
+                    "Mirrored audio, seconds, as listen decoded it",
+                ),
+                &["codec"],
+            )
+            .unwrap();
+            reg(Box::new(audio_vec.clone()));
+            let windows_vec = IntCounterVec::new(
+                Opts::new("omi_edge_shadow_vad_windows_total", "Silero windows scored by the edge"),
+                &["codec"],
+            )
+            .unwrap();
+            reg(Box::new(windows_vec.clone()));
+            let compare_vec = IntCounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_window_compare_total",
+                    "listen VAD windows compared with the edge window of the same ordinal",
+                ),
+                &["codec", "variant", "result"],
+            )
+            .unwrap();
+            reg(Box::new(compare_vec.clone()));
+            let prob_abs_diff = Histogram::with_opts(
+                HistogramOpts::new(
+                    "omi_edge_shadow_prob_abs_diff",
+                    "Absolute difference of edge and listen speech probability per compared window",
+                )
+                .buckets(vec![1e-6, 1e-5, 1e-4, 1e-3, 0.01, 0.05, 0.1, 0.25, 0.5]),
+            )
+            .unwrap();
+            reg(Box::new(prob_abs_diff.clone()));
+            let opens_vec = IntCounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_gate_opens_total",
+                    "Gate opens matched between listen and the edge",
+                ),
+                &["result"],
+            )
+            .unwrap();
+            reg(Box::new(opens_vec.clone()));
+            let open_offset_seconds = Histogram::with_opts(
+                HistogramOpts::new(
+                    "omi_edge_shadow_gate_open_offset_seconds",
+                    "Absolute offset between matched listen and edge gate opens",
+                )
+                .buckets(vec![0.0, 0.016, 0.032, 0.064, 0.128, 0.256, 0.512, 1.0, 2.0]),
+            )
+            .unwrap();
+            reg(Box::new(open_offset_seconds.clone()));
+            let processing_vec = CounterVec::new(
+                Opts::new(
+                    "omi_edge_shadow_processing_seconds_total",
+                    "CPU time (thread clock) the edge spent decoding and scoring mirrored audio",
+                ),
+                &["stage"],
+            )
+            .unwrap();
+            reg(Box::new(processing_vec.clone()));
+
+            ShadowMetrics {
+                sessions_active: gauge,
+                sessions_total: ShadowOutcome::ALL
+                    .iter()
+                    .map(|o| sessions_vec.with_label_values(&[o.as_str()]))
+                    .collect(),
+                handshakes_total: ShadowHandshake::ALL
+                    .iter()
+                    .map(|r| handshakes_vec.with_label_values(&[r.as_str()]))
+                    .collect(),
+                frames: Codec::ALL
+                    .iter()
+                    .map(|c| FrameResult::ALL.map(|r| frames_vec.with_label_values(&[c.as_str(), r.as_str()])))
+                    .collect(),
+                audio_seconds: Codec::ALL
+                    .iter()
+                    .map(|c| audio_vec.with_label_values(&[c.as_str()]))
+                    .collect(),
+                windows: Codec::ALL
+                    .iter()
+                    .map(|c| windows_vec.with_label_values(&[c.as_str()]))
+                    .collect(),
+                compare: Codec::ALL
+                    .iter()
+                    .map(|c| {
+                        Variant::ALL.map(|v| {
+                            CompareResult::ALL
+                                .map(|r| compare_vec.with_label_values(&[c.as_str(), v.as_str(), r.as_str()]))
+                        })
+                    })
+                    .collect(),
+                prob_abs_diff,
+                opens: OpenResult::ALL.map(|r| opens_vec.with_label_values(&[r.as_str()])),
+                open_offset_seconds,
+                processing_seconds: Stage::ALL.map(|s| processing_vec.with_label_values(&[s.as_str()])),
+            }
+        };
+
         Metrics {
             registry,
             sessions_active,
@@ -268,6 +624,7 @@ impl Metrics {
             directions,
             upstream_connect_seconds,
             session_seconds,
+            shadow,
         }
     }
 
@@ -317,6 +674,19 @@ mod tests {
             "release_sha",
             ["0123456789ab".to_string(), "unknown".to_string()].into(),
         );
+        // Shadow labels. `outcome` and `result` are shared names across
+        // metrics, so their allowed sets are the union of the enums.
+        m.get_mut("outcome")
+            .unwrap()
+            .extend(ShadowOutcome::ALL.iter().map(|o| o.as_str().to_string()));
+        let result = m.get_mut("result").unwrap();
+        result.extend(ShadowHandshake::ALL.iter().map(|r| r.as_str().to_string()));
+        result.extend(FrameResult::ALL.iter().map(|r| r.as_str().to_string()));
+        result.extend(CompareResult::ALL.iter().map(|r| r.as_str().to_string()));
+        result.extend(OpenResult::ALL.iter().map(|r| r.as_str().to_string()));
+        m.insert("codec", Codec::ALL.iter().map(|c| c.as_str().to_string()).collect());
+        m.insert("variant", Variant::ALL.iter().map(|v| v.as_str().to_string()).collect());
+        m.insert("stage", Stage::ALL.iter().map(|s| s.as_str().to_string()).collect());
         m
     }
 
@@ -344,6 +714,33 @@ mod tests {
         }
         m.upstream_connect_seconds.observe(0.01);
         m.session_seconds.observe(30.0);
+        let s = &m.shadow;
+        for o in ShadowOutcome::ALL {
+            s.session_ended(o);
+        }
+        for r in ShadowHandshake::ALL {
+            s.handshake(r);
+        }
+        for c in Codec::ALL {
+            for r in FrameResult::ALL {
+                s.frame(c, r);
+            }
+            for v in Variant::ALL {
+                for r in CompareResult::ALL {
+                    s.compare(c, v, r, 1);
+                }
+            }
+            s.windows[c.idx()].inc();
+            s.audio_seconds[c.idx()].inc_by(0.5);
+        }
+        for r in OpenResult::ALL {
+            s.open(r, 1);
+        }
+        for st in Stage::ALL {
+            s.processing(st, 0.001);
+        }
+        s.prob_abs_diff.observe(0.001);
+        s.open_offset_seconds.observe(0.02);
 
         let text = m.render();
         let lines = series(&text);

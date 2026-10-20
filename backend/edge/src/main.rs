@@ -20,6 +20,16 @@ fn main() -> ExitCode {
         }
     };
 
+    match &cfg.vad_model_path {
+        Some(path) => {
+            if let Err(err) = omi_edge::silero::init(path) {
+                tracing::error!(error = %err, "failed to load the VAD model");
+                return ExitCode::from(2);
+            }
+        }
+        None => tracing::info!("EDGE_VAD_MODEL_PATH unset; shadow ingest disabled"),
+    }
+
     let mut builder = tokio::runtime::Builder::new_multi_thread();
     builder.enable_all();
     if let Some(n) = cfg.worker_threads {
