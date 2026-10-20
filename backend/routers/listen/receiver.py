@@ -140,6 +140,7 @@ from utils.stt.streaming import (
 from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
     custom_stt_clock_origin,
@@ -319,6 +320,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
@@ -897,6 +899,11 @@ class ListenReceiver(ReplayFilterMixin):
         if callable(start_transcription):
             start_transcription()
 
+    def edge_shadow_tap(self) -> Any:
+        """A tap for a newly built VAD gate when the session is mirrored (D2), else None."""
+        mirror = edge_shadow.session_mirror(self)
+        return mirror.tap() if mirror is not None else None
+
     def initialize_decoders(self) -> None:
         request = self.host.request
         if self.host.is_multi_channel:
@@ -1320,6 +1327,7 @@ class ListenReceiver(ReplayFilterMixin):
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
+                edge_shadow.attach_tap(self.vad_gate, self)
 
             parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(
@@ -2387,6 +2395,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
+        shadow = edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()
@@ -2464,6 +2473,8 @@ class ListenReceiver(ReplayFilterMixin):
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        if shadow is not None:  # D2 edge shadow copy, fire-and-forget
+                            shadow.frame(start_sample, end_sample - start_sample, data)
                         if not self.host.use_custom_stt and self.recovery_enabled:
                             self._live_birth.note(start_sample, end_sample)
                         source_map = self.host.state.source_position_map
@@ -2520,6 +2531,8 @@ class ListenReceiver(ReplayFilterMixin):
             self.host.state.close_code = 1011
         finally:
             frame_timer.stop()
+            if shadow is not None:
+                shadow.close()
             self.client_closing = True
             self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
