@@ -212,17 +212,21 @@ async def test_finalizer_reloads_contention_inside_attempt_and_defers_without_bu
 
 
 @pytest.mark.parametrize(
-    'conversation_language,user_language,expected',
+    'conversation_language,user_language,source,live_record,expected',
     [
-        ('', 'en', True),  # blank conversation language falls back to the user's, as the escape does
-        (None, 'de-DE', True),
-        ('en', None, True),
-        ('', '', None),  # no language at all keeps the legacy route
-        ('', 'vi', None),
+        # Blank conversation language falls back to the user's, as the escape does.
+        ('', 'en', 'desktop', True, True),
+        (None, 'de-DE', 'desktop', True, True),
+        ('en', None, 'desktop', True, True),
+        ('', '', 'desktop', True, None),  # no language at all keeps the legacy route
+        ('', 'vi', 'desktop', True, None),
+        ('vi', 'en', 'desktop', True, None),  # a set conversation language wins over the user's
+        ('', 'en', 'omi', True, False),  # only desktop uploads are record-origin
+        ('', 'en', 'desktop', False, False),  # and only with the live record lane on
     ],
 )
 async def test_desktop_record_origin_uses_the_escape_language(
-    monkeypatch, conversation_language, user_language, expected
+    monkeypatch, conversation_language, user_language, source, live_record, expected
 ):
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
@@ -260,12 +264,12 @@ async def test_desktop_record_origin_uses_the_escape_language(
         paths=['a.bin'],
         lane='fresh',
         recording_age_seconds=60,
-        source='desktop',
+        source=source,
         should_lock=False,
         conversation_id='record',
         client_device_id='mac-1',
         client_platform='macos',
-        policy=SimpleNamespace(live_record_enabled=True),
+        policy=SimpleNamespace(live_record_enabled=live_record),
     )
     if expected is None:
         assert outcome is None and not bindings
